@@ -73,7 +73,7 @@ my-plugin/
 
 上面的 v2 manifest 可以只包含声明式能力。`tools` 本身是工具展示和执行策略元数据，不会执行 Bundle 代码；需要动态工具或生命周期中间件时，再添加 [`extension`](extensions.md#最小-bundle)，由 Bundle 内的入口注册同名工具。这样 Skill、MCP、Hook 与可执行扩展共用同一份安装生命周期。
 
-内置 `app-builder` 的 `read_runtime_api`、`configure_plugin`、`verify_plugin` 在其清单中声明，由 runtime 原生 adapter 实现，以复用后端访问、安装审批和完整快照校验。它们仅在内置市场来源的构建器已安装且声明对应工具时可用，调用事件携带构建器归属；同 ID 的本地或第三方包不能取得这些工具。明确选择插件时，宿主从经过权限过滤的目录直接加载其工具 schema，不必先调用 `search_tools`。
+内置 `app-builder` 与 `plugin-builder` 的 `read_runtime_api`、`configure_plugin`、`verify_plugin` 在其清单中声明，由 runtime 原生 adapter 实现，以复用后端访问、安装审批和完整快照校验。它们仅在内置市场来源的构建器已安装且声明对应工具时可用，调用事件携带本次选择的构建器归属；同 ID 的本地或第三方包不能取得这些工具。明确选择插件时，宿主从经过权限过滤的目录直接加载其工具 schema，不必先调用 `search_tools`。
 
 字段规则：
 
@@ -89,7 +89,7 @@ my-plugin/
 
 ### Renderer UI：宿主组件与沙箱页面
 
-插件配置表单使用 `renderer.capabilities.plugin.details` + `tree`，直接显示在所属插件详情页，不声明 `navigation` 或创建侧栏页面。schema v2 的 `field` 可声明 `secret: true` 配置 API Key；该字段禁止 `defaultValue`，仅限详情页。宿主渲染密码输入框，支持留空保留、替换和清除，提交时将密钥修改从普通 `values` 中分离，在调用 action handler 前保存到系统加密凭据库。密钥不进入普通 Plugin state 或读取响应，只有字段名称级别的 `configuredSecrets`；仅有密钥的表单无需 `data` 或 `state` capability。worker 用 `context.secrets.get(name)` 读取本插件声明的凭据，未配置返回 `null`。完整示例见[构建器配置表单指南](../../../plugins/app-builder/skills/create-plugin-in-chat/references/plugin-settings.md)。
+插件配置表单使用 `renderer.capabilities.plugin.details` + `tree`，直接显示在所属插件详情页，不声明 `navigation` 或创建侧栏页面。schema v2 的 `field` 可声明 `secret: true` 配置 API Key；该字段禁止 `defaultValue`，仅限详情页。宿主渲染密码输入框，支持留空保留、替换和清除，提交时将密钥修改从普通 `values` 中分离，在调用 action handler 前保存到系统加密凭据库。密钥不进入普通 Plugin state 或读取响应，只有字段名称级别的 `configuredSecrets`；仅有密钥的表单无需 `data` 或 `state` capability。worker 用 `context.secrets.get(name)` 读取本插件声明的凭据，未配置返回 `null`。完整示例见[构建器配置表单指南](../../../plugins/plugin-builder/skills/create-plugin-in-chat/references/plugin-settings.md)。
 
 需要在 Setsuna 宿主界面中显示配置或状态时，Bundle 可以在 manifest 的 `extension` 对象内增加 `rendererUi`。它必须声明 `ui`；使用 runtime 状态时还要声明 `state`。每个 contribution 选择一种模式：`reactApp` 提供独立 React/Vite 项目、多文件 TSX、路由与 package 安装，详见[React 自定义应用](react-apps.md)；`tree` 使用宿主组件；`document` 加载 Bundle 的 HTML/CSS/JS，自由页面拥有独立的浏览器 origin；`webpage: { "url": "https://www.baidu.com/" }` 在 `renderer.plugin.page` 中直接打开原生浏览器页面。已有网站优先使用 `webpage`，点击 `navigation.label` 生成的侧栏入口即可打开，不经过 iframe 嵌套，也不受网站的 iframe 嵌入策略影响。网页显示完整浏览器导航条，复用浏览器的登录、下载、扩展和设置；新标签页链接、带网址的 `window.open()` 和新窗口表单在当前网页内跳转，保留表单数据并支持后退。网页不获得 Plugin action 或 runtime bridge。
 
@@ -369,7 +369,7 @@ GitHub / GitHub Enterprise 的可选 OpenAI App ID 通过兼容数据映射为 g
 
 应用根目录的 `plugins/` 是内置精选市场源，打包时随应用发布，与 OpenAI 仓库目录一起显示。Plugin Management renderer service 通过 `GET /v1/features/plugin-management` 获取不含本地路径、Hook 可执行命令或凭据的聚合投影；投影包含已安装插件、市场、extension 状态，以及详情页需要的 Tool、Skill、MCP、Hook、连接器和 resource 描述。点击安装后只向 `POST /v1/features/plugin-management/marketplace/:pluginId/install` 提交市场 ID。runtime 区分内置目录和仓库缓存后找到 Bundle，并复制到 Electron `userData/runtime/plugins/<plugin-id>`；安装目录完全由 Setsuna 管理。
 
-普通用户从随应用发布的市场卡片一键安装，不需要下载或解压 Bundle。页面标题栏提供“用对话创建插件”和“导入本地插件”：前者会选中默认安装的 `app-builder`（应用构建器）插件，其 `app-builder.create-plugin-in-chat` Skill 指导模型调用 `configure_plugin` 创建或更新受管 Plugin；后者用于导入已经准备好的开发 Bundle 目录。能力页使用 Electron 原生目录选择器，主进程把用户选中的路径提交给 runtime 的受保护 Plugin Management operation；通用 renderer runtime proxy 明确拒绝该路径。内部开发工具 `install_plugin_bundle` 仍可执行目录侧载。模型发起的创建、更新、侧载和卸载始终需要审批。安装后：
+普通用户从随应用发布的市场卡片一键安装，不需要下载或解压 Bundle。页面标题栏提供“用对话创建插件”和“导入本地插件”：前者会选中内置的 `plugin-builder`（插件构建器），其 `plugin-builder.create-plugin-in-chat` Skill 指导模型调用 `configure_plugin` 创建或更新受管 Plugin；后者用于导入已经准备好的开发 Bundle 目录。能力页使用 Electron 原生目录选择器，主进程把用户选中的路径提交给 runtime 的受保护 Plugin Management operation；通用 renderer runtime proxy 明确拒绝该路径。内部开发工具 `install_plugin_bundle` 仍可执行目录侧载。模型发起的创建、更新、侧载和卸载始终需要审批。安装后：
 
 - Bundle 被复制到 runtime 数据目录，运行不依赖原始目录继续存在。
 - Skills 会出现在技能页并标记为 Plugin 来源。
@@ -458,7 +458,7 @@ CLI 连接器的 `command` 也用于工具调用归属：runtime 按本轮已安
 
 ### 应用创建入口
 
-`app-builder` 是随应用打包的必备内置插件。每次 runtime 启动时自动补齐缺失安装，并更新到当前应用附带的较新版本；忽略旧版 `default-plugins.json` 的一次性安装标记，保留用户编辑或禁用的 Skill。内置市场来源的构建器不提供卸载入口，底层存储同时拒绝 API、AI 工具等路径的卸载请求；同 ID 的用户本地包仍可正常移除。
+`app-builder` 和 `plugin-builder` 是随应用提供的必备内置构建器，无需用户安装。前者服务侧栏应用创建与修改，后者服务能力页的插件创建。Runtime 在后台同步内置内容；仅相关能力的读取等待同步，核心就绪和普通对话不依赖它，关闭时取消同步并排空已开始的写入。同步会自动补齐缺失内容，并更新到当前应用附带的较新版本；忽略旧版 `default-plugins.json` 的一次性安装标记，保留用户编辑或禁用的 Skill。内置市场来源的构建器不提供卸载入口，底层存储同时拒绝 API、AI 工具等路径的卸载请求；同 ID 的用户本地包仍可正常移除。
 
 构建器通过 `ui-design`、`ui-base`、`ui-patterns` 三个资源提供系统设计规范、沙箱基础 CSS 和表格/表单/ECharts 模板。Skill 在生成界面前引导模型使用 `read_plugin_resource` 读取；Markdown 按界面语言切换，CSS 通过现有 `--setsuna-*` 主题变量适配宿主。生成应用将所需样式复制到自己的 CSS resource，不依赖跨插件运行时引用；这套默认规范不限制用户明确指定的风格，也不会改写已有应用。
 

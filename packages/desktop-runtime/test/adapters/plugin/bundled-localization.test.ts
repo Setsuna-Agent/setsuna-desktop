@@ -1,4 +1,4 @@
-import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
+import { pluginMentionText, type RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -18,6 +18,7 @@ import { FileExtensionStateStore } from '../../../src/extensions/file-extension-
 import { ExtensionManager } from '../../../src/extensions/extension-manager.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
+import { runtimePluginSelectionContext } from '../../../src/loop/context/runtime-plugin-selection-context.js';
 
 const roots: string[] = [];
 const catalogRoot = path.resolve('plugins');
@@ -32,10 +33,17 @@ describe('bundled content localization', () => {
     const { root, marketplace, plugins, skills, language } = await fixture();
     await Promise.all([installDefaultPlugins(root, marketplace), installDefaultPlugins(root, marketplace)]);
     const installed = (await plugins.listPlugins()).plugins;
-    expect(installed).toEqual([expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace' })]);
+    expect(installed).toEqual([
+      expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace' }),
+      expect.objectContaining({ id: 'plugin-builder', installationSource: 'marketplace' }),
+    ]);
+    for (const builder of installed) {
+      const selected = await runtimePluginSelectionContext(pluginMentionText(builder), plugins, 'zh-CN', []);
+      expect(selected.skillIds).toEqual([`${builder.id}.create-plugin-in-chat`]);
+    }
     expect(installed[0].tools?.map((tool) => tool.name)).toEqual(['read_runtime_api', 'configure_plugin', 'verify_plugin']);
     expect(installed[0].resources.map((resource) => resource.id)).toEqual([
-      'plugin-settings-guide', 'ui-design', 'ui-base', 'ui-patterns', 'ui-component-guide', 'ui-components', 'ui-icons', 'react-app-guide', 'openui-guide',
+      'ui-design', 'ui-base', 'ui-patterns', 'ui-component-guide', 'ui-components', 'ui-icons', 'react-app-guide', 'openui-guide',
     ]);
     for (const resource of installed[0].resources) {
       expect(await plugins.readResource('app-builder', resource.id)).toMatchObject({
@@ -49,6 +57,12 @@ describe('bundled content localization', () => {
     const english = await skills.getSkill(skillId);
     expect(english?.content).toContain('Creating a sidebar app does not require a project.');
     expect(english?.name).not.toMatch(han);
+    expect(await skills.getSkill('plugin-builder.create-plugin-in-chat')).toMatchObject({
+      name: 'Create Plugin in Chat', content: expect.stringContaining('This Skill belongs to Plugin Builder.'),
+    });
+    expect(await plugins.readResource('plugin-builder', 'plugin-settings-guide')).toMatchObject({
+      text: await readFile(path.join(catalogRoot, 'plugin-builder/skills/create-plugin-in-chat/references/plugin-settings.en-US.md'), 'utf8'),
+    });
     expect(await plugins.readResource('app-builder', 'ui-design')).toMatchObject({
       text: await readFile(path.join(catalogRoot, 'app-builder/skills/create-plugin-in-chat/references/ui-design.en-US.md'), 'utf8'),
     });
@@ -59,7 +73,9 @@ describe('bundled content localization', () => {
     await installDefaultPlugins(root, marketplace);
     expect(await skills.getSkill(skillId)).toMatchObject({ content: '# My builder', enabled: false });
     const indexBefore = await readFile(path.join(root, 'plugins.json'), 'utf8');
-    await expect(plugins.removePlugin('app-builder')).rejects.toThrow('Built-in plugin cannot be uninstalled');
+    for (const id of ['app-builder', 'plugin-builder']) {
+      await expect(plugins.removePlugin(id)).rejects.toThrow('Built-in plugin cannot be uninstalled');
+    }
     expect(await readFile(path.join(root, 'plugins.json'), 'utf8')).toBe(indexBefore);
     expect(await skills.getSkill(skillId)).toMatchObject({ content: '# My builder', enabled: false });
   });
@@ -81,7 +97,7 @@ describe('bundled content localization', () => {
     const skillPath = 'skills/create-plugin-in-chat/SKILL.md';
     await writeFile(path.join(builder.installPath, skillPath), '# Older builder: use an iframe.');
     await installDefaultPlugins(root, marketplace);
-    expect((await plugins.listPlugins()).plugins[0]).toMatchObject({ version: '1.5.8' });
+    expect((await plugins.listPlugins()).plugins[0]).toMatchObject({ version: '1.6.0' });
     expect(await plugins.readResource('app-builder', 'ui-base')).toMatchObject({
       text: await readFile(path.join(catalogRoot, 'app-builder', stylesheet), 'utf8'),
     });
@@ -95,7 +111,8 @@ describe('bundled content localization', () => {
     await writeFile(path.join(root, 'default-plugins.json'), JSON.stringify({ installedIds: ['app-builder'] }));
     await installDefaultPlugins(root, marketplace);
     expect((await plugins.listPlugins()).plugins).toEqual([
-      expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace', version: '1.5.8' }),
+      expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace', version: '1.6.0' }),
+      expect.objectContaining({ id: 'plugin-builder', installationSource: 'marketplace', version: '1.0.0' }),
     ]);
   });
 

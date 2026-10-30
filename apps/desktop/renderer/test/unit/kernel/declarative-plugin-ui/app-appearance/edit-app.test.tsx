@@ -8,7 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { DeclarativePluginSidebarEntry } from '../../../../../src/kernel/declarative-plugin-ui/DeclarativePluginSidebarEntry.js';
 import { pluginAppAppearanceKey } from '../../../../../src/kernel/declarative-plugin-ui/app-appearance/preferences.js';
 import { usePluginAppAppearance } from '../../../../../src/kernel/declarative-plugin-ui/app-appearance/usePluginAppAppearance.js';
-import { isAppAvatarPresetKey } from '../../../../../src/kernel/declarative-plugin-ui/app-appearance/app-avatar-presets.js';
+import { isIconAvatarPresetKey } from '../../../../../src/shared/ui/icon-avatars/presets.js';
 import { websiteIconToAvatar } from '../../../../../src/shared/branding/websiteIcon.js';
 
 vi.mock('../../../../../src/shared/branding/websiteIcon.js', () => ({ websiteIconToAvatar: vi.fn() }));
@@ -112,7 +112,7 @@ describe('edit sidebar app', () => {
     const migrated = first.result.current.appearance;
     expect(migrated.name).toBe('工作笔记');
     expect(migrated.avatar.type).toBe('preset');
-    if (migrated.avatar.type === 'preset') expect(isAppAvatarPresetKey(migrated.avatar.key)).toBe(true);
+    if (migrated.avatar.type === 'preset') expect(isIconAvatarPresetKey(migrated.avatar.key)).toBe(true);
     expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual(migrated);
     const second = renderHook(() => usePluginAppAppearance(plugin.id, contribution.id));
     expect(second.result.current.appearance).toEqual(migrated);

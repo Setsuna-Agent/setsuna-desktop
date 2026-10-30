@@ -306,11 +306,15 @@ export async function activateBuiltinRuntimeFeatures(
       provideHostCapability(
         pluginManagementRuntimeHostCapability,
         Object.freeze({
-          catalogRevision: () => runtime.pluginStore.catalogRevision(),
+          catalogRevision: async () => {
+            await runtime.installDefaultPlugins();
+            return runtime.pluginStore.catalogRevision();
+          },
           readConnectorStatuses: ({ pluginId }) => readPluginConnectorStatuses(pluginId, runtime.pluginStore, runtime.mcpControl),
-          getInstalledItem: ({ itemId, kind, pluginId }) => (
-            runtime.pluginStore.readItemContent(pluginId, kind, itemId)
-          ),
+          getInstalledItem: async ({ itemId, kind, pluginId }) => {
+            await runtime.installDefaultPlugins();
+            return runtime.pluginStore.readItemContent(pluginId, kind, itemId);
+          },
           getMarketplaceItem: ({ itemId, kind, pluginId }) => (
             runtime.pluginMarketplace.readItemContent(pluginId, kind, itemId)
           ),
@@ -319,7 +323,10 @@ export async function activateBuiltinRuntimeFeatures(
           listExtensions: () => runtime.extensionManager.listStatuses(),
           listHooks: (input) => runtime.hookManagement.list(input),
           listMarketplace: (options) => runtime.pluginMarketplace.listPlugins(options),
-          listPlugins: () => runtime.pluginStore.listPlugins(),
+          listPlugins: async () => {
+            await runtime.installDefaultPlugins();
+            return runtime.pluginStore.listPlugins();
+          },
           readRendererUiState: (input) => runtime.extensionManager.readRendererUiState(input),
           requestRuntimeApi: (input, signal) => runtime.extensionManager.requestRuntimeApi(input, signal),
           runRendererUiAction: (input, signal) => (
@@ -330,7 +337,10 @@ export async function activateBuiltinRuntimeFeatures(
             runtime.pluginStore.readTrustedRendererUiDocument(pluginId, contributionId)
           ),
           deleteStandaloneHook: (input) => runtime.hookManagement.deleteStandalone(input),
-          remove: ({ pluginId }) => runtime.pluginStore.removePlugin(pluginId),
+          remove: async ({ pluginId }) => {
+            await runtime.installDefaultPlugins();
+            return runtime.pluginStore.removePlugin(pluginId);
+          },
           setHookState: (input) => runtime.hookManagement.setState(input),
           setExtensionTrust: ({ pluginId, trusted }) => (
             runtime.pluginStore.setExtensionTrust(pluginId, trusted)

@@ -6,7 +6,7 @@ import {
   writePluginAppAppearance,
   type PluginAppAppearance,
 } from './preferences.js';
-import { fallbackAppAvatar, randomAppAvatar } from './app-avatar-presets.js';
+import { fallbackAvatar, randomAvatar } from '../../../shared/ui/icon-avatars/presets.js';
 
 const CHANGE_EVENT = 'setsuna:plugin-app-appearance-changed';
 
@@ -33,7 +33,7 @@ export function usePluginAppAppearance(pluginId: string, contributionId: string)
   const raw = useSyncExternalStore(subscribe, getSnapshot, () => null);
   const appearance = useMemo(() => {
     const saved = parsePluginAppAppearance(raw);
-    return { ...saved, avatar: saved.avatar ?? fallbackAppAvatar(key) };
+    return { ...saved, avatar: saved.avatar ?? fallbackAvatar(key) };
   }, [key, raw]);
   const save = useCallback((next: PluginAppAppearance): boolean => {
     if (!writePluginAppAppearance(browserLocalStorage(), key, next)) return false;
@@ -44,7 +44,7 @@ export function usePluginAppAppearance(pluginId: string, contributionId: string)
     // Re-read after mount so sidebar/page subscribers never allocate competing defaults.
     // Old agent presets are rejected by parsing and migrate without losing names or uploads.
     const saved = parsePluginAppAppearance(readBrowserStorageValue(key));
-    if (!saved.avatar) save({ ...saved, avatar: randomAppAvatar() });
+    if (!saved.avatar) save({ ...saved, avatar: randomAvatar() });
   }, [key, raw, save]);
   return { appearance, save };
 }

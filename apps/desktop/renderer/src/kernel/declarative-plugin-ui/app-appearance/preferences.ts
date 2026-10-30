@@ -1,13 +1,8 @@
-import { normalizeBrandIconConfig, type BrandIconConfig } from '@setsuna-desktop/contracts';
-import { isAppAvatarPresetKey, type AppAvatarColor } from './app-avatar-presets.js';
+import { normalizeIconAvatarAppearance, type IconAvatarAppearance } from '../../../shared/ui/icon-avatars/appearance.js';
 import { writeStorageValue } from '../../../shared/preferences/browserStorage.js';
-import { normalizeIconColor } from '../../../shared/ui/icon-colors.js';
 
-export type PluginAppAppearance = Readonly<{
+export type PluginAppAppearance = IconAvatarAppearance & Readonly<{
   name?: string;
-  avatar?: BrandIconConfig;
-  /** An explicit tint overrides preset colors; uploaded images keep their original pixels. */
-  avatarColor?: AppAvatarColor;
 }>;
 
 export const PLUGIN_APP_NAME_MAX_LENGTH = 100;
@@ -38,11 +33,8 @@ function normalizePluginAppAppearance(value: unknown): PluginAppAppearance {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const record = value as Record<string, unknown>;
   const name = typeof record.name === 'string' ? record.name.trim() : '';
-  const avatar = normalizeBrandIconConfig(record.avatar);
-  const avatarColor = normalizeIconColor(record.avatarColor);
   return {
+    ...normalizeIconAvatarAppearance(record),
     ...(name && name.length <= PLUGIN_APP_NAME_MAX_LENGTH ? { name } : {}),
-    ...(avatar && (avatar.type === 'custom' || isAppAvatarPresetKey(avatar.key)) ? { avatar } : {}),
-    ...(avatarColor ? { avatarColor } : {}),
   };
 }

@@ -2,6 +2,7 @@ import { NotificationToolHost } from '../adapters/tool/notification-tool-host.js
 import { QuickJsToolProgramRuntime } from '../adapters/tool-program/quickjs-tool-program-runtime.js';
 import { PullRequestToolHost } from '../adapters/tool/pull-request-tool-host.js';
 import path from 'node:path';
+import { APP_BUILDER_PLUGIN_ID, PLUGIN_BUILDER_PLUGIN_ID } from '@setsuna-desktop/contracts';
 import { createFeatureEvent } from '@setsuna-desktop/feature-core/events';
 import { usageRecordedEvent } from '@setsuna-desktop/feature-usage/contracts';
 import { UsageTrackingModelClient } from '../adapters/model/usage-tracking-model-client.js';
@@ -25,7 +26,7 @@ import { NativeBridgeProxyFetch } from '../adapters/network/native-bridge-proxy-
 import { FilePluginBundleStore } from '../adapters/plugin/file-plugin-bundle-store.js';
 import { FilePluginDraftStore } from '../adapters/plugin/file-plugin-draft-store.js';
 import { FilePluginMarketplace } from '../adapters/plugin/file-plugin-marketplace.js';
-import { installDefaultPlugins } from '../adapters/plugin/install-default-plugins.js';
+import { createBuiltinPluginInitializer } from '../adapters/plugin/install-default-plugins.js';
 import { CompositePluginMarketplace } from '../adapters/plugin/composite-plugin-marketplace.js';
 import { RepositoryPluginMarketplace } from '../adapters/plugin/repository-plugin-marketplace.js';
 import { createWorkspaceSearchEngine } from '../adapters/search/create-workspace-search-engine.js';
@@ -150,7 +151,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     getLanguage: async () => (await configStore.getConfig()).desktopSettings?.interfaceLanguage ?? 'zh-CN',
     bundledPluginsDir: builtinPluginsDir,
   });
-  const skillRegistry = new SkillMcpDependencyCoordinator(fileSkillRegistry, mcpStore, mcpControl);
   const extensionState = new FileExtensionStateStore(runtimeDataDir);
   const extensionSecrets = new ExtensionSecretStore(extensionState, nativeBridge);
   const pluginStore = new FilePluginBundleStore(
@@ -166,6 +166,12 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   );
   const pluginDraftStore = new FilePluginDraftStore(path.join(runtimeDataDir, 'plugin-drafts'));
   const bundledPluginMarketplace = new FilePluginMarketplace(builtinPluginsDir, pluginStore);
+  const builtinPlugins = createBuiltinPluginInitializer(runtimeDataDir, bundledPluginMarketplace);
+  // Ordinary chats must not wait for peripheral authoring content.
+  const isBuilderId = (id: string) => id === APP_BUILDER_PLUGIN_ID || id === PLUGIN_BUILDER_PLUGIN_ID;
+  const skillRegistry = new SkillMcpDependencyCoordinator(fileSkillRegistry, mcpStore, mcpControl, async (skillIds) => {
+    if (!skillIds || skillIds.some((id) => isBuilderId(id.split('.')[0]))) await builtinPlugins.ensureReady();
+  });
   const pluginMarketplace = new CompositePluginMarketplace(
     bundledPluginMarketplace,
     new RepositoryPluginMarketplace(path.join(runtimeDataDir, 'plugin-repositories', 'openai-plugins'), pluginStore, networkProxyFetch.forRoute()),
@@ -257,7 +263,9 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     backgroundShellProcesses,
     new SkillManagementToolHost(skillRegistry, skillRegistry),
     memoryToolHost,
-  ]);
+  ], async (context) => {
+    if (context.features?.plugins !== false && context.selectedPluginIds?.some(isBuilderId)) await builtinPlugins.ensureReady();
+  });
   const agentLoop = new AgentLoop({
     toolProgramRuntime: new QuickJsToolProgramRuntime(),
     attachmentStore,
@@ -342,7 +350,8 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     policyAmendmentStore,
     pluginStore,
     pluginMarketplace,
-    installDefaultPlugins: () => installDefaultPlugins(runtimeDataDir, bundledPluginMarketplace),
+    installDefaultPlugins: builtinPlugins.ensureReady,
+    stopBuiltinPlugins: builtinPlugins.stop,
     projectWorkflow,
     reviewControl,
     reviewRuntimeHost,

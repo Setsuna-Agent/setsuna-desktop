@@ -42,6 +42,8 @@ Notifications Feature 激活只注册认证 route、工具、实时完成事件�
 
 React 自定义应用的 service 构造和 Workspace Dependencies 绑定仅保存路径与 capability，不扫描应用、加载 SDK/Vite 或准备依赖。pnpm/Vite 只在获批安装、更新或信任任务中按需运行；打开读取绑定哈希的缓存。`plugin-react-app-startup.test.ts` 对比空应用与已安装应用在工具链挂起、失败时的 runtime health 耗时，验证就绪不调用包准备；service 生命周期测试覆盖挂起任务及排队任务的取消清理。
 
+应用构建器与插件构建器随应用内置，内容同步在后台执行，不参与 runtime ready。插件目录读取和显式使用构建器的请求共享同一同步任务；普通对话不等待它。退出时取消目录扫描，并排空已开始的安装事务，防止迟到结果再次写入或注册。`builtin-builders-startup.test.ts` 对比正常、挂起和失败同步时的健康检查与对话列表读取耗时，并验证关闭后不再安装迟到的目录结果。
+
 ### 3. 启动 runtime 子进程
 
 `apps/desktop/main/src/runtime/host.ts`：

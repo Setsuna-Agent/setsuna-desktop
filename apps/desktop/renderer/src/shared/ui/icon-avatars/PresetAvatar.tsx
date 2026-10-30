@@ -1,12 +1,12 @@
 import type { BrandIconConfig } from '@setsuna-desktop/contracts';
 import type { SettingsPluginIconProps } from '@setsuna-desktop/renderer-contracts/settings';
 import { useState } from 'react';
-import { IconAvatar } from '../../../shared/ui/IconAvatar.js';
-import { APP_AVATAR_PRESETS, type AppAvatarColor } from './app-avatar-presets.js';
+import { IconAvatar } from '../IconAvatar.js';
+import { ICON_AVATAR_PRESETS, type AvatarColor } from './presets.js';
 
-export function PluginAppAvatar({ avatar, color, className, variant = 'menu' }: Readonly<{
+export function PresetAvatar({ avatar, color, className, variant = 'menu' }: Readonly<{
   avatar: BrandIconConfig;
-  color?: AppAvatarColor;
+  color?: AvatarColor;
   className?: string;
   variant?: SettingsPluginIconProps['variant'];
 }>) {
@@ -16,6 +16,6 @@ export function PluginAppAvatar({ avatar, color, className, variant = 'menu' }: 
       className={['desktop-icon-avatar-image', `desktop-icon-avatar-size--${variant}`, className].filter(Boolean).join(' ')}
       onError={() => setFailedImage(avatar.dataUrl)} />;
   }
-  const preset = APP_AVATAR_PRESETS.find((item) => avatar.type === 'preset' && item.key === avatar.key) ?? APP_AVATAR_PRESETS[0];
+  const preset = ICON_AVATAR_PRESETS.find((item) => avatar.type === 'preset' && item.key === avatar.key) ?? ICON_AVATAR_PRESETS[0];
   return <IconAvatar Icon={preset.Icon} color={color ?? preset.color} className={className} variant={variant} />;
 }

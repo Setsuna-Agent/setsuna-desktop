@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { RuntimeApiToolHost } from '../../../src/adapters/tool/runtime-api-tool-host.js';
-import { installedAppBuilder } from '../../support/app-builder.js';
+import { installedAppBuilder, installedPluginBuilder } from '../../support/app-builder.js';
 
 it('lets the authoring agent inspect projects without a bound project while keeping its tool read-only', async () => {
   const request = vi.fn(async () => ({ ok: true, status: 200, data: { projects: [{ id: 'existing' }] } }));
@@ -15,14 +15,13 @@ it('lets the authoring agent inspect projects without a bound project while keep
   expect(request).toHaveBeenCalledTimes(1);
 });
 
-it('attributes backend reads to the installed builder and revokes them after removal or disablement', async () => {
+it.each([installedAppBuilder(), installedPluginBuilder()])('attributes backend reads to $id and rejects untrusted replacements or disablement', async (builder) => {
   const request = vi.fn(async () => ({ ok: true, status: 200, data: {} }));
-  const builder = installedAppBuilder();
   const listPlugins = vi.fn(async () => ({ plugins: [builder] }));
   const host = new RuntimeApiToolHost({ request }, { listPlugins });
   const context = { threadId: 'chat' };
   expect(await host.toolRuntimeProfile('read_runtime_api', context)).toMatchObject({
-    plugin: { id: 'app-builder', name: builder.name, icon: builder.icon }, supportsParallel: true,
+    plugin: { id: builder.id, name: builder.name, icon: builder.icon }, supportsParallel: true,
   });
   for (const source of ['local', 'repository'] as const) {
     listPlugins.mockResolvedValueOnce({ plugins: [{ ...builder, installationSource: source }] });
@@ -31,7 +30,7 @@ it('attributes backend reads to the installed builder and revokes them after rem
   expect(await host.listTools({ ...context, features: { plugins: false } })).toEqual([]);
   listPlugins.mockResolvedValue({ plugins: [] });
   expect(await host.listTools(context)).toEqual([]);
-  await expect(host.runTool('read_runtime_api', { path: '/v1/projects' }, context)).rejects.toThrow('App Builder tool unavailable');
+  await expect(host.runTool('read_runtime_api', { path: '/v1/projects' }, context)).rejects.toThrow('Builder tool unavailable');
   expect(request).not.toHaveBeenCalled();
 });
 

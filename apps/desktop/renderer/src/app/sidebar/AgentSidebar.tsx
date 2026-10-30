@@ -24,6 +24,7 @@ import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { AppSidebar } from '../../shared/ui/AppSidebar.js';
 import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
+import { SidebarCollapsibleContent } from './SidebarCollapsibleContent.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 import { SidebarMenuOpenContext } from './SidebarMenuContext.js';
 import { SidebarProjectHoverCard } from './SidebarProjectHoverCard.js';
@@ -307,7 +308,7 @@ function ProjectSection({
   return (
     <section className="desktop-agent-sidebar__group">
       <div className="desktop-agent-sidebar__section-head">
-        <Button variant="ghost" className="desktop-agent-sidebar__section-title-button" type="button" onClick={onToggleProjectsCollapsed}>
+        <Button variant="ghost" className="desktop-agent-sidebar__section-title-button" type="button" aria-expanded={!projectsCollapsed} onClick={onToggleProjectsCollapsed}>
           <span>{t('sidebar.projects')}</span>
           <ChevronDown className={`desktop-agent-sidebar__section-toggle ${projectsCollapsed ? 'is-collapsed' : ''}`} size={13} />
         </Button>
@@ -324,10 +325,10 @@ function ProjectSection({
           </ShortcutTooltip>
         </div>
       </div>
-      {!projectsCollapsed ? (
+      <SidebarCollapsibleContent open={!projectsCollapsed}>
         <div className="desktop-agent-sidebar__project-list">
           <div className="project-list sidebar-reorder-list" ref={reorder.rootRef}>
-            {projects.length ? (
+            {projectsCollapsed ? null : projects.length ? (
               order.items.map((project) => {
                 const projectThreads = threadsByProjectId.get(project.id) ?? [];
                 const unpinnedThreads = projectThreads.filter((thread) => !pinnedThreadIds.has(thread.id));
@@ -392,27 +393,29 @@ function ProjectSection({
                         />
                       </div>
                     </SidebarProjectHoverCard>
-                    {shouldShowChildren ? (
-                      projectThreads.length ? (
-                        <SidebarThreadList
-                          menuThreadId={threadActionMenuId}
-                          project={project}
-                          runningThreadId={runningThreadId}
-                          selectedThreadId={isActiveProject ? activeThreadId : null}
-                          threads={unpinnedThreads}
-                          variant="project"
-                          onArchive={onArchiveThread}
-                          threadMenu={threadMenu}
-                          onOpenInNewWindow={onOpenThreadInNewWindow}
-                          onRename={onRenameThread}
-                          onSelect={onSelectThread}
-                          onToggleMenu={onToggleThreadActions}
-                          onTogglePin={onToggleThreadPin}
-                        />
-                      ) : (
-                        <div className="desktop-agent-sidebar__empty desktop-agent-sidebar__empty--nested">{t('sidebar.emptyChats')}</div>
-                      )
-                    ) : null}
+                    <SidebarCollapsibleContent open={shouldShowChildren}>
+                      <div className="desktop-agent-project__children">
+                        {projectThreads.length ? (
+                          <SidebarThreadList
+                            menuThreadId={threadActionMenuId}
+                            project={project}
+                            runningThreadId={runningThreadId}
+                            selectedThreadId={isActiveProject ? activeThreadId : null}
+                            threads={unpinnedThreads}
+                            variant="project"
+                            onArchive={onArchiveThread}
+                            threadMenu={threadMenu}
+                            onOpenInNewWindow={onOpenThreadInNewWindow}
+                            onRename={onRenameThread}
+                            onSelect={onSelectThread}
+                            onToggleMenu={onToggleThreadActions}
+                            onTogglePin={onToggleThreadPin}
+                          />
+                        ) : (
+                          <div className="desktop-agent-sidebar__empty desktop-agent-sidebar__empty--nested">{t('sidebar.emptyChats')}</div>
+                        )}
+                      </div>
+                    </SidebarCollapsibleContent>
                   </div>
                 );
               })
@@ -421,7 +424,7 @@ function ProjectSection({
             )}
           </div>
         </div>
-      ) : null}
+      </SidebarCollapsibleContent>
     </section>
   );
 }
@@ -595,8 +598,8 @@ function GlobalThreadSection({
           </Button>
         </div>
       </div>
-      {!sessionsCollapsed ? (
-        globalThreads.length ? (
+      <SidebarCollapsibleContent open={!sessionsCollapsed}>
+        {sessionsCollapsed ? null : globalThreads.length ? (
           <SidebarThreadList
             menuThreadId={threadActionMenuId}
             runningThreadId={runningThreadId}
@@ -615,8 +618,8 @@ function GlobalThreadSection({
           <div className="app-sidebar__list">
             <div className="desktop-agent-sidebar__empty">{t('sidebar.emptyGlobalChats')}</div>
           </div>
-        )
-      ) : null}
+        )}
+      </SidebarCollapsibleContent>
     </section>
   );
 }

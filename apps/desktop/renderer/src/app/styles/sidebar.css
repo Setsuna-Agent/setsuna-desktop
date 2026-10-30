@@ -276,9 +276,14 @@
 
 .desktop-agent-project-node {
   display: grid;
-  gap: var(--desktop-agent-row-gap);
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   position: relative;
+}
+
+.desktop-agent-project__children {
+  /* 间距放在折叠内容内，避免收起后留下空隙或在卸载时跳动。 */
+  padding-top: var(--desktop-agent-row-gap);
 }
 
 .desktop-agent-session-list {

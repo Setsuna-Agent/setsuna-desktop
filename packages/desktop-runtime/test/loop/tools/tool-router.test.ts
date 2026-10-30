@@ -8,10 +8,27 @@ import {
 } from '../../../src/loop/tools/tool-router.js';
 import type { ToolResultStore } from '../../../src/ports/tool-result-store.js';
 import type { RuntimeToolExecutionContext, ToolHost } from '../../../src/ports/tool-host.js';
+import { RuntimeApiToolHost } from '../../../src/adapters/tool/runtime-api-tool-host.js';
+import { installedAppBuilder, installedPluginBuilder } from '../../support/app-builder.js';
 
 const RUNTIME_PROVIDED_NAMES = [READ_TOOL_RESULT_TOOL_NAME];
 
 describe('RuntimeToolRouter', () => {
+  it.each(['app-builder', 'plugin-builder'])('loads shared native tools for the selected %s and records its identity', async (id) => {
+    const plugins = { listPlugins: async () => ({ plugins: [installedAppBuilder(), installedPluginBuilder()] }) };
+    const toolHost = new RuntimeApiToolHost({ request: async () => ({ ok: true, status: 200, data: {} }) }, plugins);
+    const runToolCall = vi.fn(async () => ({ content: 'done', processed: true, status: 'success' as const }));
+    const router = await RuntimeToolRouter.create({
+      toolHost, pluginStore: plugins, context: runtimeToolContext(), selectedPluginIds: [id],
+      approvalPolicy: 'on-request', orchestrator: { runToolCall } as unknown as ToolOrchestrator,
+    });
+    expect(router.tools.map((tool) => tool.name)).toContain('read_runtime_api');
+    expect(router.catalogToolDefinitions[0].source?.plugins?.map((plugin) => plugin.id)).toEqual([id]);
+    await router.runToolCall({ id: 'read', name: 'read_runtime_api', arguments: '{}' }, { path: '/v1/projects' });
+    const invocation = runToolCall.mock.calls[0] as unknown as Parameters<ToolOrchestrator['runToolCall']>;
+    expect(invocation[4]?.plugin?.id).toBe(id);
+  });
+
   it('loads explicitly selected plugin tools without search while preserving permission and lifecycle filters', async () => {
     const plugin = { id: 'app-builder', name: 'App Builder' };
     const names = ['read_runtime_api', 'configure_plugin', 'verify_plugin'];

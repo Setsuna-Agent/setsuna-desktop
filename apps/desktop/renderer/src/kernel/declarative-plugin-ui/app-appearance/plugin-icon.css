@@ -1,0 +1,16 @@
+.plugin-icon-edit-button {
+  flex-shrink: 0;
+  min-width: 0;
+  height: auto;
+  border: 0;
+  padding: 0;
+}
+
+.plugin-icon-dialog {
+  display: grid;
+  gap: 22px;
+}
+
+.plugin-icon-dialog__reset {
+  margin-right: auto;
+}

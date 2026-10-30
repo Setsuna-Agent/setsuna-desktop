@@ -1,0 +1,18 @@
+{
+  "en-US": {
+    "插件构建器": "Plugin Builder",
+    "通过对话创建或更新 Skill、MCP、Hook、可执行工具、对话卡片和插件配置。": "Create or update Skills, MCP servers, Hooks, executable tools, conversation cards, and plugin configuration from chat.",
+    "插件": "Plugins",
+    "创作": "Creation",
+    "create-plugin-in-chat": "Create Plugin in Chat",
+    "通过对话创建或更新 Setsuna 插件，包括 Skill、MCP、Hook、可执行工具、对话卡片和详情页配置表单。生成完整 Plugin Bundle 并调用 configure_plugin。": "Create or update Setsuna plugins from chat, including Skills, MCP servers, Hooks, executable tools, conversation cards, and Plugin details forms. Generate a complete plugin bundle and call configure_plugin.",
+    "插件配置与密钥字段": "Plugin settings and secret fields",
+    "对话交互卡片": "Conversation cards",
+    "读取集成所需的 Setsuna 后端接口与数据。": "Read Setsuna backend APIs and data needed for integrations.",
+    "提交完整插件包，创建或更新插件能力。": "Create or update plugin capabilities from a complete bundle.",
+    "验证已安装插件的工具、配置操作和后端接口。": "Verify installed plugin tools, configuration actions, and backend APIs."
+  },
+  "zh-CN": {
+    "create-plugin-in-chat": "对话创建插件"
+  }
+}

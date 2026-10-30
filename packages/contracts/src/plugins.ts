@@ -57,10 +57,17 @@ export const OPENAI_VISION_RECOGNITION_TOOL_NAME = 'analyze_image';
 export const WEB_SEARCH_PLUGIN_ID = 'web-search';
 export const WEB_SEARCH_TOOL_NAME = 'web_search';
 export const APP_BUILDER_PLUGIN_ID = 'app-builder';
+export const PLUGIN_BUILDER_PLUGIN_ID = 'plugin-builder';
+
+/** Only the bundled authoring plugins can provide native bundle tools. */
+export function isBuiltinBuilderPlugin(plugin: Pick<RuntimePluginSummary, 'id' | 'installationSource'>): boolean {
+  return (plugin.id === APP_BUILDER_PLUGIN_ID || plugin.id === PLUGIN_BUILDER_PLUGIN_ID)
+    && plugin.installationSource === 'marketplace';
+}
 
 /** Required host components; same-ID local/repository bundles remain user-managed. */
 export function isRequiredBuiltinPlugin(plugin: Pick<RuntimePluginSummary, 'id' | 'installationSource'>): boolean {
-  return plugin.id === APP_BUILDER_PLUGIN_ID && plugin.installationSource === 'marketplace';
+  return isBuiltinBuilderPlugin(plugin);
 }
 
 export type RuntimePluginSkill = {

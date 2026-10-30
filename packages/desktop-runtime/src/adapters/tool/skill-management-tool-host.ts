@@ -17,6 +17,7 @@ import type {
 } from '../../ports/tool-host.js';
 import { skillContentVersion } from '../../shared/skill-content-version.js';
 import { recordInput } from '../../shared/unknown.js';
+import { abortable, throwIfAborted } from '../../loop/core/runtime-turn-errors.js';
 
 const configureSkillToolName = 'configure_skill';
 const readSkillToolName = 'read_skill';
@@ -222,10 +223,12 @@ export class SkillManagementToolHost implements ToolHost {
     };
   }
 
-  async runTool(name: string, input: unknown, _context?: ToolExecutionContext): Promise<ToolExecutionResult> {
+  async runTool(name: string, input: unknown, context?: ToolExecutionContext): Promise<ToolExecutionResult> {
     if (name === readSkillToolName) {
       const { skillId, contentVersion, offset } = readSkillInput(input);
-      const skill = await this.skillRegistry.getSkill(skillId);
+      throwIfAborted(context?.signal);
+      const read = this.skillRegistry.getSkill(skillId);
+      const skill = await (context?.signal ? abortable(read, context.signal) : read);
       if (!skill) throw new Error(`Skill not found: ${skillId}`);
       if (!skill.enabled) throw new Error(`Skill is disabled: ${skillId}`);
       const currentContentVersion = skill.contentVersion ?? skillContentVersion(skill.content);

@@ -4,6 +4,26 @@ import { CompositeToolHost } from '../../../src/adapters/tool/composite-tool-hos
 import type { ToolExecutionContext, ToolHost } from '../../../src/ports/tool-host.js';
 
 describe('CompositeToolHost', () => {
+  it('cancels a waiting turn while keeping shared preparation available to another turn', async () => {
+    let finishPreparation!: () => void;
+    const preparation = new Promise<void>((resolve) => { finishPreparation = resolve; });
+    let listings = 0;
+    const host = new CompositeToolHost([
+      promptHost('builder_tool', 'Builder', () => { listings += 1; }),
+    ], () => preparation);
+    const controller = new AbortController();
+    const waiting = host.listTools({ threadId: 'cancelled', signal: controller.signal });
+    const rejected = expect(waiting).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort();
+    await rejected;
+    expect(listings).toBe(0);
+
+    const other = host.listTools({ threadId: 'other' });
+    finishPreparation();
+    await expect(other).resolves.toEqual([expect.objectContaining({ name: 'builder_tool' })]);
+    expect(listings).toBe(1);
+  });
+
   it('includes prompt text only for hosts with advertised tools', async () => {
     const direct = promptHost('direct_tool', 'Direct tool policy');
     const secondary = promptHost('secondary_tool', 'Secondary tool policy');

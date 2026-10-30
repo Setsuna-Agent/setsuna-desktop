@@ -21,11 +21,11 @@ describe('runtime server REST skills and capabilities', () => {
     await harness.close();
   });
 
-  it('rejects uninstalling the built-in app builder through the backend API', async () => {
-    await expect(harness.runtimeFetch('/v1/features/plugin-management/installed/app-builder', { method: 'DELETE' }))
+  it.each(['app-builder', 'plugin-builder'])('provides %s as a built-in and rejects uninstalling it', async (pluginId) => {
+    await expect(harness.runtimeFetch(`/v1/features/plugin-management/installed/${pluginId}`, { method: 'DELETE' }))
       .rejects.toThrow('Built-in plugin cannot be uninstalled');
     expect(await harness.runtimeFetch('/v1/features/plugin-management')).toMatchObject({
-      plugins: expect.arrayContaining([expect.objectContaining({ id: 'app-builder', installationSource: 'marketplace' })]),
+      plugins: expect.arrayContaining([expect.objectContaining({ id: pluginId, installationSource: 'marketplace' })]),
     });
   });
 
@@ -316,7 +316,7 @@ describe('runtime server REST skills and capabilities', () => {
         preservedMcpServers: [],
       });
       await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
-        plugins: [expect.objectContaining({ id: 'app-builder' })],
+        plugins: [expect.objectContaining({ id: 'app-builder' }), expect.objectContaining({ id: 'plugin-builder' })],
       });
       await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
         marketplace: expect.arrayContaining([expect.objectContaining({ id: 'context7-docs', installed: false })]),

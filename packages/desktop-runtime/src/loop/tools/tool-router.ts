@@ -126,6 +126,7 @@ export class RuntimeToolRouter {
   }
 
   static async create(options: RuntimeToolRouterOptions): Promise<RuntimeToolRouter> {
+    options = { ...options, context: { ...options.context, selectedPluginIds: options.selectedPluginIds } };
     const allTools = await options.toolHost.listTools(options.context);
     const profiles = new Map<string, ToolRuntimeProfile>();
     const catalogTools: RuntimeToolDefinition[] = [];

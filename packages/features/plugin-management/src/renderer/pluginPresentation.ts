@@ -41,7 +41,7 @@ export function pluginIconProps(
   installed?: RuntimePluginSummary,
 ): SettingsPluginIconProps {
   const active = installed ?? ('installedAt' in plugin ? plugin : undefined);
-  // Catalog IDs can differ from installation IDs. Appearance belongs to the installed app.
+  // Catalog IDs can differ from installation IDs. User icons belong to the installed plugin.
   const primaryApp = active?.extension?.rendererUi?.contributions.find((item) => item.slot === 'renderer.plugin.page');
   return {
     name: active?.icon ?? plugin.icon,

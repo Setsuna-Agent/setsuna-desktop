@@ -192,14 +192,14 @@ describe('runtime factory tool wiring', () => {
     }
   });
 
-  it('creates and updates a managed local Plugin through the chat tool', async () => {
+  it.each(['app-builder', 'plugin-builder'])('creates and updates a managed bundle with the built-in %s', async (pluginId) => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-plugin-tool-test-'));
     const runtime = createRuntimeFactory({
       dataDir,
       extensionWorkerEntryPath: path.resolve('packages/desktop-runtime/src/extensions/extension-worker-entry.ts'),
       extensionWorkerExecArgv: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href],
     });
-    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const context = { threadId: 'thread_1', turnId: 'turn_1', selectedPluginIds: [pluginId] };
     const input = {
       manifest: {
         id: 'factory-plugin',
@@ -220,13 +220,14 @@ describe('runtime factory tool wiring', () => {
     };
 
     try {
-      await runtime.installDefaultPlugins();
       await expect(runtime.toolHost.listTools(context)).resolves.toEqual(
         expect.arrayContaining([
           expect.objectContaining({ name: 'configure_plugin' }),
           expect.objectContaining({ name: 'verify_plugin' }),
         ]),
       );
+      expect(await runtime.toolHost.toolRuntimeProfile('configure_plugin', context)).toMatchObject({ plugin: { id: pluginId } });
+      expect(await runtime.toolHost.toolRuntimeProfile('verify_plugin', context)).toMatchObject({ plugin: { id: pluginId } });
       await expect(runtime.toolHost.approvalForTool?.('configure_plugin', input, context)).resolves.toMatchObject({
         reason: expect.stringContaining('授权当前完整包哈希'),
       });

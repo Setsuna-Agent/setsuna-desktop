@@ -1,11 +1,11 @@
 import type { BrandIconConfig, RuntimePluginAppReference, RuntimePluginSummary } from '@setsuna-desktop/contracts';
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { readBrowserStorageValue } from '../../../shared/preferences/browserStorage.js';
-import { fallbackAppAvatar, type AppAvatarColor } from './app-avatar-presets.js';
+import { fallbackAvatar, type AvatarColor } from '../../../shared/ui/icon-avatars/presets.js';
 import { parsePluginAppAppearance, pluginAppAppearanceKey } from './preferences.js';
 import { subscribePluginAppAppearances } from './usePluginAppAppearance.js';
 
-export type PluginAppCandidate = RuntimePluginAppReference & { avatar: BrandIconConfig; avatarColor?: AppAvatarColor };
+export type PluginAppCandidate = RuntimePluginAppReference & { avatar: BrandIconConfig; avatarColor?: AvatarColor };
 
 /** Same trusted page contributions and appearance preferences used by the sidebar. */
 export function usePluginAppCatalog(plugins: readonly RuntimePluginSummary[]): PluginAppCandidate[] {
@@ -23,7 +23,7 @@ export function usePluginAppCatalog(plugins: readonly RuntimePluginSummary[]): P
       const appearance = parsePluginAppAppearance(preferences[index] ?? null);
       return { ...page, name: appearance.name ?? page.name,
         ...(appearance.avatarColor ? { avatarColor: appearance.avatarColor } : {}),
-        avatar: appearance.avatar ?? fallbackAppAvatar(pluginAppAppearanceKey(page.pluginId, page.contributionId)) };
+        avatar: appearance.avatar ?? fallbackAvatar(pluginAppAppearanceKey(page.pluginId, page.contributionId)) };
     });
   }, [pages, raw]);
 }

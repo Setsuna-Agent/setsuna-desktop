@@ -193,7 +193,7 @@ export function PluginDetail({
               </ui.Button>
             )}
             className="sd-detail__header"
-            leading={<ui.PluginIcon {...pluginIconProps(marketplacePlugin ?? plugin, installedPlugin)} variant="list" />}
+            leading={<ui.PluginIcon {...pluginIconProps(marketplacePlugin ?? plugin, installedPlugin)} editable={Boolean(installedPlugin)} variant="list" />}
             subtitle={subtitle}
             title={plugin.name}
           />

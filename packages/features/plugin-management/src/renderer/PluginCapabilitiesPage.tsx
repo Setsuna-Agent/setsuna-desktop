@@ -1,5 +1,5 @@
 import { TextField, Button as UiButton, useConfirm, usePageSessionState, usePageScrollRestoration } from '@setsuna-desktop/renderer-ui';
-import { APP_BUILDER_PLUGIN_ID } from '@setsuna-desktop/contracts';
+import { PLUGIN_BUILDER_PLUGIN_ID } from '@setsuna-desktop/contracts';
 
 import type {
   RuntimePluginMarketplaceItem,
@@ -291,12 +291,8 @@ export function PluginCapabilitiesPage({
                   id: 'chat-plugin',
                   disabled: Boolean(pendingAction),
                   onSelect: () => void run('create', async () => {
-                    const installed = await service.refreshInstalled();
-                    if (!installed.plugins.some((plugin) => plugin.id === APP_BUILDER_PLUGIN_ID)) {
-                      await service.installMarketplace({ pluginId: APP_BUILDER_PLUGIN_ID });
-                      await capabilitiesRefresh.refresh(['skills']);
-                    }
-                    capabilities.openPluginChat(APP_BUILDER_PLUGIN_ID);
+                    await service.refreshInstalled();
+                    capabilities.openPluginChat(PLUGIN_BUILDER_PLUGIN_ID);
                   }),
                   title: t('feature.pluginManagement.createChat'),
                 },

@@ -12,11 +12,11 @@ export function useSidebarThreadNavigation({
   const navigatingRef = useRef(false);
   const navigate = useCallback(async (direction: -1 | 1) => {
     if (navigatingRef.current) return;
-    // Only mounted sidebar rows participate: collapsed groups and “show more” rows
-    // stay out of navigation. Read on each key press so expansion never needs a second state model.
+    // Closing groups remain mounted for their exit animation but are already inert.
+    // Read on each key press so expansion never needs a second state model.
     const threadIds = [...document.querySelectorAll<HTMLElement>(
       '.desktop-agent-sidebar:not([aria-hidden="true"]) [data-sidebar-thread-id]',
-    )].map((row) => row.dataset.sidebarThreadId!);
+    )].filter((row) => !row.closest('[inert]')).map((row) => row.dataset.sidebarThreadId!);
     const index = currentThreadId ? threadIds.indexOf(currentThreadId) : -1;
     const threadId = threadIds[index + direction];
     if (!threadId) return;

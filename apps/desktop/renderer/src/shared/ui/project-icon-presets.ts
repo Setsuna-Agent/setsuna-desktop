@@ -6,7 +6,7 @@ import {
   FileSpreadsheet, FileText, Film, Fish, FlaskConical, FolderClosed, FolderKanban, Gamepad2,
   GitBranch, Globe2, GraduationCap, Guitar, HardDrive, Headphones, House, Image, Languages,
   Laptop, Layers, Leaf, Lightbulb, ListChecks, Map, Megaphone, Monitor, Mountain, Music2,
-  Network, NotebookPen, Origami, Package, Palette, PawPrint, PenTool, Presentation, Puzzle,
+  Network, NotebookPen, Origami, Package, Palette, PawPrint, PenTool, Presentation, Box,
   Rocket, Sailboat, Satellite, Search, Server, ShieldCheck, ShoppingBag, Smartphone,
   Sprout, SquareTerminal, Store, Tablet, Target, Telescope, Tent, TreePalm, Umbrella,
   Wallet, Watch, Wifi, Workflow, Wrench,
@@ -53,7 +53,7 @@ export const PROJECT_ICON_COMPONENTS = {
   bot: Bot,
   binary: Binary,
   bug: Bug,
-  puzzle: Puzzle,
+  puzzle: Box, // Retain the stored key so existing project icons also switch to Box.
   layers: Layers,
   workflow: Workflow,
   cog: Cog,

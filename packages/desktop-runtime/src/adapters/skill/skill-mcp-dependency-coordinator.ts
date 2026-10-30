@@ -27,9 +27,11 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
     private readonly skills: SkillRegistry,
     private readonly mcpStore: McpStore,
     private readonly mcpClient: SkillMcpClient,
+    private readonly prepare?: (skillIds?: readonly string[]) => Promise<void>,
   ) {}
 
   async listSkills(): Promise<RuntimeSkillList> {
+    await this.prepare?.();
     const [list, servers] = await Promise.all([this.skills.listSkills(), this.mcpStore.listServerInputs()]);
     return { ...list, skills: await Promise.all(list.skills.map((skill) => this.enrichSkill(skill, servers))) };
   }
@@ -39,11 +41,13 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
   }
 
   async getSkill(skillId: string): Promise<RuntimeSkillDetail | null> {
+    await this.prepare?.([skillId]);
     const skill = await this.skills.getSkill(skillId);
     return skill ? this.enrichSkill(skill) : null;
   }
 
   async updateSkill(skillId: string, patch: RuntimeSkillPatch): Promise<RuntimeSkillDetail> {
+    await this.prepare?.([skillId]);
     return this.enrichSkill(await this.skills.updateSkill(skillId, patch));
   }
 
@@ -55,6 +59,7 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
     skillIds?: string[],
     activation?: SkillActivationContext,
   ): Promise<SkillPromptContextSnapshot> {
+    await this.prepare?.(skillIds ?? []);
     const snapshot = await this.skills.resolvePromptContext(skillIds, activation);
     if (!snapshot.selectedInjections.length) return snapshot;
     const servers = await this.mcpStore.listServerInputs();

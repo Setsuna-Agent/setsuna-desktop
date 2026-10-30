@@ -1,4 +1,5 @@
 import type { RuntimeMessage, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import { abortable, throwIfAborted } from '../../loop/core/runtime-turn-errors.js';
 import type {
   ToolExecutionContext,
   ToolExecutionResult,
@@ -10,9 +11,13 @@ import type {
 export class CompositeToolHost implements ToolHost {
   private readonly toolNamesByContext = new WeakMap<ToolExecutionContext, Map<ToolHost, Set<string>>>();
 
-  constructor(private readonly hosts: ToolHost[]) {}
+  constructor(private readonly hosts: ToolHost[], private readonly prepare?: (context: ToolExecutionContext) => Promise<void>) {}
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    throwIfAborted(context.signal);
+    const preparation = this.prepare?.(context);
+    // Cancel this caller's wait without stopping preparation shared by other turns.
+    if (preparation) await (context.signal ? abortable(preparation, context.signal) : preparation);
     const toolGroups = await Promise.all(this.hosts.map((host) => host.listTools(context)));
     assertUniqueToolNames(toolGroups);
     this.toolNamesByContext.set(context, new Map(this.hosts.map((host, index) => [
