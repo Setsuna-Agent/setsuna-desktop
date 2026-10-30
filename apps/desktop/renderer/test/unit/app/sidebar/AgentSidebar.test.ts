@@ -95,7 +95,7 @@ describe('AgentSidebar project actions', () => {
         [projects[1]!.id, [{ ...threads[0]!, id: 'collapsed-chat' }]],
       ]),
     };
-    render(createElement(I18nProvider, { initialLocale: 'zh-CN', messageCatalog }, createElement(AgentSidebar, props)));
+    const view = render(createElement(I18nProvider, { initialLocale: 'zh-CN', messageCatalog }, createElement(AgentSidebar, props)));
     const pressArrow = async (code: 'ArrowUp' | 'ArrowDown') => {
       const event = new KeyboardEvent('keydown', { key: code, code, altKey: true, bubbles: true, cancelable: true });
       // happy-dom reports Alt alone as AltGraph, unlike actual Alt+Arrow keyboard input.
@@ -125,6 +125,38 @@ describe('AgentSidebar project actions', () => {
     await pressArrow('ArrowUp');
     expect(onOpenThread).toHaveBeenLastCalledWith('pinned');
     expect(onOpenThread).not.toHaveBeenCalledWith('collapsed-chat');
+
+    // A closing project's rows must stop participating before their exit animation finishes.
+    view.rerender(createElement(I18nProvider, { initialLocale: 'zh-CN', messageCatalog }, createElement(AgentSidebar, {
+      ...props, collapsedProjectIds: new Set(projects.map((project) => project.id)),
+    })));
+    await pressArrow('ArrowDown');
+    expect(onOpenThread).toHaveBeenLastCalledWith('global');
+    await pressArrow('ArrowUp');
+    expect(onOpenThread).toHaveBeenLastCalledWith('pinned');
+    view.rerender(createElement(I18nProvider, { initialLocale: 'zh-CN', messageCatalog }, createElement(AgentSidebar, props)));
+    await pressArrow('ArrowDown');
+    expect(onOpenThread).toHaveBeenLastCalledWith('thread-1');
+
+    await pressArrow('ArrowUp');
+    view.rerender(createElement(I18nProvider, { initialLocale: 'zh-CN', messageCatalog }, createElement(AgentSidebar, {
+      ...props, projectsCollapsed: true,
+    })));
+    await pressArrow('ArrowDown');
+    expect(onOpenThread).toHaveBeenLastCalledWith('global');
+    await pressArrow('ArrowUp');
+    expect(onOpenThread).toHaveBeenLastCalledWith('pinned');
+    view.rerender(createElement(I18nProvider, { initialLocale: 'zh-CN', messageCatalog }, createElement(AgentSidebar, {
+      ...props, projectsCollapsed: true, sessionsCollapsed: true,
+    })));
+    const callsWithGroupsClosed = onOpenThread.mock.calls.length;
+    await pressArrow('ArrowDown');
+    expect(onOpenThread).toHaveBeenCalledTimes(callsWithGroupsClosed);
+    view.rerender(createElement(I18nProvider, { initialLocale: 'zh-CN', messageCatalog }, createElement(AgentSidebar, {
+      ...props, projectsCollapsed: true,
+    })));
+    await pressArrow('ArrowDown');
+    expect(onOpenThread).toHaveBeenLastCalledWith('global');
   });
 
   it('renders the shared project creation and editing entries', () => {

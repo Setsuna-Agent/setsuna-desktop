@@ -3,6 +3,7 @@ import { Button } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown } from 'lucide-react';
 import { useMemo, useState, type ComponentProps } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { SidebarCollapsibleContent } from './SidebarCollapsibleContent.js';
 import { SidebarThreadList } from './SidebarThreadList.js';
 
 export function PinnedThreadSection({ projects, threads, ...listProps }: {
@@ -29,9 +30,9 @@ export function PinnedThreadSection({ projects, threads, ...listProps }: {
           <ChevronDown className={`desktop-agent-sidebar__section-toggle ${collapsed ? 'is-collapsed' : ''}`} size={13} />
         </Button>
       </div>
-      {!collapsed ? (
+      <SidebarCollapsibleContent open={!collapsed}>
         <SidebarThreadList {...listProps} projectsById={projectsById} threads={threads} variant="pinned" />
-      ) : null}
+      </SidebarCollapsibleContent>
     </section>
   );
 }
