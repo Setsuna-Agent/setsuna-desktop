@@ -29,7 +29,7 @@ type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 
 export type RuntimeSamplingModelContext = {
   messages: RuntimeMessage[];
-  modelRequest: Pick<ModelRequest, 'model' | 'providerId'>;
+  modelRequest: Pick<ModelRequest, 'model' | 'providerId' | 'maxOutputTokens'>;
   snapshot: RuntimeModelRequestStepSnapshot;
   toolChoice: ModelRequest['toolChoice'];
   toolRouter: RuntimeToolRouter | null;

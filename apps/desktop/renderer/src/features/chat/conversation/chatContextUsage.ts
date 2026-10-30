@@ -1,5 +1,6 @@
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
   isRuntimeInlineMessageAttachment,
   type RuntimeConfigState,
   type RuntimeContextCompactionNotice,
@@ -129,7 +130,7 @@ export function activeModelContextBudget(
     ?? DEFAULT_CONTEXT_TOKENS;
   return {
     maxContextTokens,
-    reservedOutputTokens: Math.min(Math.max(0, Math.floor(model?.maxOutputTokens ?? 0)), Math.floor(maxContextTokens * 0.15)),
+    reservedOutputTokens: Math.min(Math.max(0, Math.floor(model?.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS)), Math.floor(maxContextTokens * 0.15)),
   };
 }
 

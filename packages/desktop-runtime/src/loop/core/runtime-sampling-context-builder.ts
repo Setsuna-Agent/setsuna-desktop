@@ -8,6 +8,7 @@ import { selectedPluginIdsForInput } from '../context/runtime-plugin-selection-c
 import { currentTurnSkillActivationText } from '../context/runtime-skill-activation-context.js';
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
   cloneRuntimeSkillReferences,
   isRuntimeInputMessageAttachment,
   type ModelRequest,
@@ -70,7 +71,7 @@ export type RuntimeSamplingStepContext = {
   tokenCalibrationMessages?: RuntimeMessage[];
   responseLanguage: RuntimeInterfaceLanguage;
   messages: RuntimeMessage[];
-  modelRequest: Pick<ModelRequest, 'model' | 'providerId'>;
+  modelRequest: Pick<ModelRequest, 'model' | 'providerId' | 'maxOutputTokens'>;
   modelHistoryWarnings?: string[];
   runtimeConfig: RuntimeConfigState | null | undefined;
   snapshot: RuntimeModelRequestStepSnapshot;
@@ -427,6 +428,17 @@ export class RuntimeSamplingContextBuilder {
       .map(({ role, source, trust, sourcePath, content }) => ({ role, source, trust, sourcePath, content })));
     const toolChoice = tools?.length ? (await toolRouter?.toolChoice(messages) ?? 'auto') : undefined;
     const mcpServerKeys = await this.mcpServerKeysForSnapshot();
+    const contextWindow = samplingContextWindowForRequest({
+      messages: modelRequestMessages(messages),
+      tools,
+      reservedOutputTokens,
+      maxOutputTokens: modelForSampling.model?.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+      budget: {
+        ...contextBudget,
+        // A new summary starts a new estimation baseline; the previous request's correction no longer applies.
+        inputTokenAdjustment: contextTokenCalibration?.adjustment(contextModelIdentity(modelForSampling.request, stepRuntimeConfig), compactedConversationMessages) ?? 0,
+      },
+    });
     const snapshot: RuntimeModelRequestStepSnapshot = {
       threadId,
       turnId,
@@ -447,16 +459,7 @@ export class RuntimeSamplingContextBuilder {
       mcpServerCount: mcpServerKeys.length,
       permissionProfile: toolContext.permissionProfile,
       ...(toolContext.sandboxWorkspaceWrite ? { sandboxWorkspaceWrite: toolContext.sandboxWorkspaceWrite } : {}),
-      contextWindow: samplingContextWindowForRequest({
-        messages: modelRequestMessages(messages),
-        tools,
-        reservedOutputTokens,
-        budget: {
-          ...contextBudget,
-          // A new summary starts a new estimation baseline; the previous request's correction no longer applies.
-          inputTokenAdjustment: contextTokenCalibration?.adjustment(contextModelIdentity(modelForSampling.request, stepRuntimeConfig), compactedConversationMessages) ?? 0,
-        },
-      }),
+      contextWindow,
       promptManifest: compiledPrompt.manifest,
       featureKeys: Object.keys(toolContext.features ?? {}).sort(),
       worldState: {
@@ -477,7 +480,8 @@ export class RuntimeSamplingContextBuilder {
       tokenCalibrationMessages: compactedConversationMessages,
       responseLanguage,
       messages,
-      modelRequest: modelForSampling.request,
+      // Send the captured limit so later provider config reads cannot enlarge this request's budget.
+      modelRequest: { ...modelForSampling.request, maxOutputTokens: contextWindow.maxOutputTokens },
       ...(normalizedConversation.warnings.length
         ? { modelHistoryWarnings: normalizedConversation.warnings }
         : {}),
