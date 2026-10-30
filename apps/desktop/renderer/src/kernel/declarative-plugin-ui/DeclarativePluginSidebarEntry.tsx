@@ -5,7 +5,7 @@ import { Blocks, Pencil, RefreshCw, SquarePen, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { PluginAppAppearanceDialog } from './app-appearance/PluginAppAppearanceDialog.js';
-import { PluginAppAvatar } from './app-appearance/PluginAppAvatar.js';
+import { PresetAvatar } from '../../shared/ui/icon-avatars/PresetAvatar.js';
 import { usePluginAppAppearance } from './app-appearance/usePluginAppAppearance.js';
 import { resolveRuntimePluginUiText, useDeclarativePluginUiData } from './useDeclarativePluginUiData.js';
 import { DeletePluginAppDialog } from './DeletePluginAppDialog.js';
@@ -62,7 +62,7 @@ export function DeclarativePluginSidebarEntry({ active, contribution, entryId, m
           <Button variant="ghost" className={`app-navigation__button${active ? ' is-active' : ''}`}
             {...order.buttonProps}
             onClick={onOpen} aria-label={label} aria-current={active ? 'page' : undefined} type="button">
-            <PluginAppAvatar avatar={appearance.avatar} color={appearance.avatarColor}
+            <PresetAvatar avatar={appearance.avatar} color={appearance.avatarColor}
               className={!appearance.avatarColor || appearance.avatarColor === 'text' ? 'app-navigation__icon--default' : undefined} />
           </Button>
         </Dropdown>

@@ -1,18 +1,18 @@
 import type { BrandIconConfig } from '@setsuna-desktop/contracts';
 import { useEffect, useRef, useState } from 'react';
-import { brandIconMaxSizeLabel, readBrandIconFile } from '../../../shared/branding/brandIconUpload.js';
-import { websiteIconToAvatar } from '../../../shared/branding/websiteIcon.js';
-import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { brandIconMaxSizeLabel, readBrandIconFile } from '../../branding/brandIconUpload.js';
+import { websiteIconToAvatar } from '../../branding/websiteIcon.js';
+import { useI18n } from '../../i18n/I18nProvider.js';
 
 type CustomAvatar = Extract<BrandIconConfig, { type: 'custom' }>;
 type AvatarSource = 'upload' | 'website';
 
-export function usePluginAppAvatarDraft(initialAvatar: BrandIconConfig) {
+export function useIconAvatarDraft(initialAvatar?: BrandIconConfig) {
   const { t } = useI18n();
   const mounted = useRef(true);
   const pending = useRef(false);
   const [avatar, setAvatar] = useState(initialAvatar);
-  const [customAvatar, setCustomAvatar] = useState<CustomAvatar | undefined>(initialAvatar.type === 'custom' ? initialAvatar : undefined);
+  const [customAvatar, setCustomAvatar] = useState<CustomAvatar | undefined>(initialAvatar?.type === 'custom' ? initialAvatar : undefined);
   const [loading, setLoading] = useState<AvatarSource | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorRevision, setErrorRevision] = useState(0);

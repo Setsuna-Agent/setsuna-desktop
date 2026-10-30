@@ -24,7 +24,7 @@ import type { RendererPluginRuntime } from '../renderer-plugins/runtime.js';
 import { RendererOwnedSlotsProvider } from '../renderer-plugins/RendererKernelProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { DeclarativePluginSidebarEntry } from './DeclarativePluginSidebarEntry.js';
-import { PluginAppAvatar } from './app-appearance/PluginAppAvatar.js';
+import { PresetAvatar } from '../../shared/ui/icon-avatars/PresetAvatar.js';
 import { usePluginAppAppearance } from './app-appearance/usePluginAppAppearance.js';
 import { DeclarativePluginUiView } from './DeclarativePluginUiView.js';
 import { SandboxedPluginUiView } from './SandboxedPluginUiView.js';
@@ -350,7 +350,7 @@ function DeclarativePluginPage({
   return (
     <main className={`declarative-plugin-page${fullPage ? ' declarative-plugin-page--app' : ''}`}>
       {!fullPage ? <header className="declarative-plugin-page__header">
-        <PluginAppAvatar avatar={appearance.avatar} color={appearance.avatarColor} variant="list" />
+        <PresetAvatar avatar={appearance.avatar} color={appearance.avatarColor} variant="list" />
         <div>
           <h1>{label}</h1>
           {plugin.description ? <p>{plugin.description}</p> : null}

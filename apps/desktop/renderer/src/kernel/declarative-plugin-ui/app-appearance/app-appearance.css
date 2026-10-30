@@ -16,53 +16,9 @@
   min-width: 0;
 }
 
-.plugin-app-appearance__name label,
-.plugin-app-appearance__avatars legend {
+.plugin-app-appearance__name label {
   color: var(--sd-color-text-muted);
   font-size: 12px;
-}
-
-.plugin-app-appearance__avatars {
-  min-width: 0;
-  margin: 0;
-  border: 0;
-  padding: 0;
-}
-
-.plugin-app-appearance__avatars legend {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-  padding: 0;
-}
-
-.plugin-app-appearance__presets {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
-  gap: 6px;
-  margin-bottom: 14px;
-}
-
-.plugin-app-appearance__choice {
-  justify-content: center;
-  min-height: 44px;
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-md);
-  padding: 6px;
-}
-
-.plugin-app-appearance__choice[aria-pressed='true'] {
-  border-color: var(--sd-color-accent);
-  background: var(--sd-color-surface-muted);
-}
-
-.plugin-app-appearance__image-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 .plugin-app-appearance__plugin-link {

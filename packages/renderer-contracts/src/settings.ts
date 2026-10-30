@@ -246,8 +246,10 @@ export type SettingsPluginIconProps = Readonly<{
   name?: string;
   iconImage?: Readonly<{ light: string; dark?: string }>;
   pluginId?: string;
-  /** Primary installed app whose host-owned avatar also represents this Plugin. */
+  /** Primary installed app whose avatar is used until the Plugin has its own override. */
   appContributionId?: string;
+  /** Installed-plugin detail headers may open the host-owned icon editor. */
+  editable?: boolean;
   variant?: 'card' | 'detail' | 'inline' | 'installed' | 'list' | 'menu';
 }>;
 

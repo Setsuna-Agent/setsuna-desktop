@@ -3,17 +3,17 @@ import {
   ChartColumn, ChartLine, ChartPie, ClipboardList, CodeXml, Coffee, CreditCard,
   Database, Dumbbell, FileCode2, FileSpreadsheet, FileText, FolderOpen, Globe2,
   GraduationCap, Headphones, House, Images, Languages, LayoutDashboard, ListChecks,
-  Mail, Map, MessageSquare, Music2, Navigation, NotebookPen, Package, Plane, Puzzle,
+  Mail, Map, MessageSquare, Music2, Navigation, NotebookPen, Package, Plane, Box,
   Rocket, Search, ShieldCheck, ShoppingBag, SquareKanban, SquareTerminal, Table2,
   Target, Timer, Truck, Utensils,
   type LucideIcon,
 } from 'lucide-react';
-import { ICON_PALETTE, type IconColor } from '../../../shared/ui/icon-colors.js';
+import { ICON_PALETTE, type IconColor } from '../icon-colors.js';
 
-type AppAvatarPreset = Readonly<{ key: string; Icon: LucideIcon; color: IconColor }>;
+type IconAvatarPreset = Readonly<{ key: string; Icon: LucideIcon; color: IconColor }>;
 
-/** App-specific glyphs: keep this catalog independent from agent identity avatars. */
-export const APP_AVATAR_PRESETS = [
+/** App and plugin glyphs: keep this catalog independent from agent identity avatars. */
+export const ICON_AVATAR_PRESETS = [
   { key: 'notebook', Icon: NotebookPen, color: ICON_PALETTE.blue },
   { key: 'table', Icon: Table2, color: ICON_PALETTE.green },
   { key: 'chart-column', Icon: ChartColumn, color: ICON_PALETTE.orange },
@@ -60,24 +60,24 @@ export const APP_AVATAR_PRESETS = [
   { key: 'mail', Icon: Mail, color: ICON_PALETTE.blue },
   { key: 'message', Icon: MessageSquare, color: ICON_PALETTE.green },
   { key: 'rocket', Icon: Rocket, color: ICON_PALETTE.red },
-  { key: 'puzzle', Icon: Puzzle, color: ICON_PALETTE.purple },
+  { key: 'puzzle', Icon: Box, color: ICON_PALETTE.purple }, // Preserve saved avatar selections.
   { key: 'shield', Icon: ShieldCheck, color: ICON_PALETTE.green },
-] as const satisfies readonly AppAvatarPreset[];
+] as const satisfies readonly IconAvatarPreset[];
 
-export type AppAvatarColor = IconColor;
+export type AvatarColor = IconColor;
 
-export function isAppAvatarPresetKey(key: string): boolean {
-  return APP_AVATAR_PRESETS.some((preset) => preset.key === key);
+export function isIconAvatarPresetKey(key: string): boolean {
+  return ICON_AVATAR_PRESETS.some((preset) => preset.key === key);
 }
 
-export function randomAppAvatar() {
-  const preset = APP_AVATAR_PRESETS[Math.floor(Math.random() * APP_AVATAR_PRESETS.length)] ?? APP_AVATAR_PRESETS[0];
+export function randomAvatar() {
+  const preset = ICON_AVATAR_PRESETS[Math.floor(Math.random() * ICON_AVATAR_PRESETS.length)] ?? ICON_AVATAR_PRESETS[0];
   return { type: 'preset' as const, key: preset.key };
 }
 
 /** Stable fallback while preferences initialize, including when storage is unavailable. */
-export function fallbackAppAvatar(seed: string) {
+export function fallbackAvatar(seed: string) {
   let hash = 0;
   for (let index = 0; index < seed.length; index += 1) hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
-  return { type: 'preset' as const, key: (APP_AVATAR_PRESETS[hash % APP_AVATAR_PRESETS.length] ?? APP_AVATAR_PRESETS[0]).key };
+  return { type: 'preset' as const, key: (ICON_AVATAR_PRESETS[hash % ICON_AVATAR_PRESETS.length] ?? ICON_AVATAR_PRESETS[0]).key };
 }

@@ -1,6 +1,6 @@
 import {
   AppWindow, BookOpenText, Braces, Eye, FileText,
-  FolderLock, FolderX, Globe, ListTodo, Puzzle, ScanSearch,
+  FolderLock, FolderX, Globe, ListTodo, Box, ScanSearch,
   ScrollText, ShieldAlert, Sparkles, type LucideIcon,
 } from 'lucide-react';
 import { ICON_PALETTE, type IconColor } from './icon-colors.js';
@@ -9,6 +9,7 @@ type PluginIconPreset = Readonly<{ Icon: LucideIcon; color: IconColor }>;
 
 const pluginIconPresets = {
   'app-builder': { Icon: AppWindow, color: ICON_PALETTE.purple },
+  'plugin-builder': { Icon: Box, color: ICON_PALETTE.purple },
   context7: { Icon: Braces, color: ICON_PALETTE.green },
   'openai-docs': { Icon: BookOpenText, color: 'text' },
   pdf: { Icon: FileText, color: ICON_PALETTE.red },
@@ -32,7 +33,7 @@ const pluginIconById: Partial<Record<string, PluginIconName>> = {
   'openai-vision-recognition': 'vision-recognition',
 };
 
-const fallbackPluginIcon: PluginIconPreset = { Icon: Puzzle, color: ICON_PALETTE.purple };
+const fallbackPluginIcon: PluginIconPreset = { Icon: Box, color: ICON_PALETTE.purple };
 
 export function resolvePluginIconPreset(name?: string, pluginId?: string): PluginIconPreset {
   return findPreset(name) ?? findPreset(pluginId) ?? findPreset(pluginIconById[pluginId ?? '']) ?? fallbackPluginIcon;

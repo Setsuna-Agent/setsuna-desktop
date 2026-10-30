@@ -1,7 +1,7 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import { LoaderCircle } from 'lucide-react';
 import { Fragment } from 'react';
-import { PluginAppAvatar } from '../../../kernel/declarative-plugin-ui/app-appearance/PluginAppAvatar.js';
+import { PresetAvatar } from '../../../shared/ui/icon-avatars/PresetAvatar.js';
 import { BrowserFavicon } from '../../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceEntryIcon } from '../../workspace/WorkspaceEntryIcon.js';
@@ -48,7 +48,7 @@ export function ChatMentionCommandMenu({
               onMouseDown={(event) => { event.preventDefault(); onSelect(item); }}
               onMouseMove={() => onHover(index)}
             >
-              {app ? <PluginAppAvatar avatar={app.avatar} color={app.avatarColor} variant="inline" className="chat-command-menu__item-icon" />
+              {app ? <PresetAvatar avatar={app.avatar} color={app.avatarColor} variant="inline" className="chat-command-menu__item-icon" />
                 : entry ? <WorkspaceEntryIcon className="chat-command-menu__item-icon" path={entry.path} type={entry.kind} />
                 : <span className="chat-command-menu__item-icon"><BrowserFavicon faviconUrl={tab?.faviconUrl ?? null} loading={false} /></span>}
               <span className="chat-command-menu__item-main">

@@ -1,17 +1,34 @@
 import { isRuntimePluginIconDataUrl } from '@setsuna-desktop/contracts';
 import type { SettingsPluginIconProps } from '@setsuna-desktop/renderer-contracts/settings';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { IconAvatar } from './IconAvatar.js';
 import { resolvePluginIconPreset } from './plugin-icon-presets.js';
+import { usePluginIconAppearance } from '../preferences/usePluginIconAppearance.js';
+import { PresetAvatar } from './icon-avatars/PresetAvatar.js';
+import type { IconColor } from './icon-colors.js';
+
+type PluginIconProps = Omit<SettingsPluginIconProps, 'appContributionId' | 'editable'>;
+export type PluginIconFallback = (color?: IconColor) => ReactNode;
+
+/** User overrides follow the installed identity across settings, mentions and tool runs. */
+export function PluginIcon({ renderDefault, ...props }: PluginIconProps & { renderDefault?: PluginIconFallback }) {
+  const { appearance } = usePluginIconAppearance(props.pluginId);
+  if (appearance.avatar) {
+    return <PresetAvatar avatar={appearance.avatar} color={appearance.avatarColor}
+      className={props.className} variant={props.variant ?? 'card'} />;
+  }
+  return renderDefault ? renderDefault(appearance.avatarColor) : <DefaultPluginIcon {...props} color={appearance.avatarColor} />;
+}
 
 /** Repository artwork stays inert; missing or failed images use a color-and-glyph avatar. */
-export function PluginIcon({
+export function DefaultPluginIcon({
   className,
   name,
   iconImage,
   pluginId,
   variant = 'card',
-}: Omit<SettingsPluginIconProps, 'appContributionId'>) {
+  color,
+}: PluginIconProps & { color?: IconColor }) {
   const [failedImages, setFailedImages] = useState<readonly string[]>([]);
   const light = isRuntimePluginIconDataUrl(iconImage?.light) && !failedImages.includes(iconImage.light) ? iconImage.light : undefined;
   const dark = isRuntimePluginIconDataUrl(iconImage?.dark) && !failedImages.includes(iconImage.dark) ? iconImage.dark : undefined;
@@ -20,7 +37,7 @@ export function PluginIcon({
 
   if (!imageSource) {
     const preset = resolvePluginIconPreset(name, pluginId);
-    return <IconAvatar Icon={preset.Icon} color={preset.color} className={classes} variant={variant} />;
+    return <IconAvatar Icon={preset.Icon} color={color ?? preset.color} className={classes} variant={variant} />;
   }
 
   return (

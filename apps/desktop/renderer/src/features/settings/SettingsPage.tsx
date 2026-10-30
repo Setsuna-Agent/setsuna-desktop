@@ -10,7 +10,7 @@ import {
   type SettingsPageEntryDescriptor,
 } from '@setsuna-desktop/renderer-contracts/settings';
 import {
-  Puzzle,
+  Box,
 } from 'lucide-react';
 import { startTransition, Suspense, useCallback, useMemo, useState } from 'react';
 import {
@@ -289,7 +289,7 @@ function SettingsPageButton({
   page: SettingsPageEntryDescriptor;
   translate: ReturnType<typeof useI18n>['t'];
 }>) {
-  const Icon = page.metadata.icon ?? Puzzle;
+  const Icon = page.metadata.icon ?? Box;
   return (
     <Button variant="ghost" className={active ? 'is-active' : ''} type="button" onClick={onSelect}>
       <Icon size={14} />
