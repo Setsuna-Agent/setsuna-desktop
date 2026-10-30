@@ -1,4 +1,4 @@
-import { Button, usePageSessionState } from '@setsuna-desktop/renderer-ui';
+import { Button, SettingsPageNavigationProvider, type SettingsPageNavigation } from '@setsuna-desktop/renderer-ui';
 import type {
   RuntimeConfigState,
   RuntimeThread,
@@ -12,7 +12,7 @@ import {
 import {
   Puzzle,
 } from 'lucide-react';
-import { startTransition, Suspense, useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { startTransition, Suspense, useCallback, useMemo, useState } from 'react';
 import {
   RendererOwnedKeyedSlot,
   useRendererOwnedKeyedEntries,
@@ -31,6 +31,7 @@ import { TaskModelSettings } from './sections/TaskModelSettings.js';
 import { StorageSettings } from './storage/StorageSettings.js';
 import type {
   RuntimePreferenceInput,
+  SettingsPageLocation,
   SettingsSectionId,
 } from './settings-types.js';
 import { KeyboardShortcutsSettings } from './shortcuts/KeyboardShortcutsSettings.js';
@@ -69,7 +70,8 @@ const settingsSectionGroups = [
 export function SettingsPage({
   archivedThreads,
   config,
-  initialSection,
+  location,
+  onNavigate,
   onSaveRuntimePreferences,
   onDeleteAllArchivedThreads,
   onDeleteArchivedThread,
@@ -77,7 +79,8 @@ export function SettingsPage({
 }: {
   archivedThreads: RuntimeThreadSummary[];
   config: RuntimeConfigState | null;
-  initialSection?: SettingsSectionId;
+  location: SettingsPageLocation;
+  onNavigate(location: SettingsPageLocation): void;
   onSaveRuntimePreferences: (input: RuntimePreferenceInput) => Promise<void>;
   onDeleteAllArchivedThreads: (threadIds: string[]) => Promise<void>;
   onDeleteArchivedThread: (threadId: string) => Promise<void>;
@@ -87,21 +90,18 @@ export function SettingsPage({
   const pages = useRendererOwnedKeyedEntries(settingsPageSlot)
     .filter((entry) => entry.metadata.location === 'settings')
     .sort(compareSettingsPages);
-  // Explicit navigation wins over the last section; ordinary returns restore it.
-  const [rememberedSection, setActiveSection] = usePageSessionState<SettingsSectionId>('settings:section', 'general');
-  const [requestedSection, setRequestedSection] = useState(initialSection);
-  const activeSection = requestedSection ?? rememberedSection;
-  useLayoutEffect(() => {
-    if (initialSection) setActiveSection(initialSection);
-  }, [initialSection, setActiveSection]);
   // Feature 分区多为 lazy chunk；用 transition 切换，首次加载期间保留当前分区，
   // 而不是让路由级 Suspense 把整页替换成加载态。
   const selectSection = useCallback((section: SettingsSectionId) => {
-    startTransition(() => { setRequestedSection(undefined); setActiveSection(section); });
-  }, [setActiveSection]);
-  const selectedPage = pages.find((entry) => entry.metadata.sectionId === activeSection)
+    startTransition(() => onNavigate({ sectionId: section, path: [] }));
+  }, [onNavigate]);
+  const selectedPage = pages.find((entry) => entry.metadata.sectionId === location.sectionId)
     ?? pages.find((entry) => entry.metadata.sectionId === 'general');
   const resolvedSection = selectedPage?.metadata.sectionId ?? 'general';
+  const pageNavigation = useMemo<SettingsPageNavigation>(() => ({
+    path: location.sectionId === resolvedSection ? location.path : [],
+    navigate: (path) => startTransition(() => onNavigate({ sectionId: resolvedSection, path })),
+  }), [location, onNavigate, resolvedSection]);
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
   // Descendant layout effects run before an ancestor ref attaches. Publishing
   // the viewport node ensures restoration also subscribes on the first visit.
@@ -163,7 +163,7 @@ export function SettingsPage({
     : undefined;
 
   return (
-    <>
+    <SettingsPageNavigationProvider value={pageNavigation}>
       <SettingsSidebar
         activeSection={resolvedSection}
         pages={pages}
@@ -208,7 +208,7 @@ export function SettingsPage({
           </Suspense>
         </section>
       </main>
-    </>
+    </SettingsPageNavigationProvider>
   );
 }
 

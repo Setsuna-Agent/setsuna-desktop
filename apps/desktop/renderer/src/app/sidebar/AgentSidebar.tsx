@@ -1,6 +1,6 @@
 import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
 import { useConfirm } from '@setsuna-desktop/renderer-ui';
-import { ResizeHandle, Button } from '@setsuna-desktop/renderer-ui';
+import { ResizeHandle, Button, useNativeDragPreview } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import {
   Archive,
@@ -30,6 +30,8 @@ import { SidebarProjectHoverCard } from './SidebarProjectHoverCard.js';
 import { SidebarThreadList } from './SidebarThreadList.js';
 import { PinnedThreadSection } from './PinnedThreadSection.js';
 import { useSidebarNavigationHint } from './useSidebarNavigationHint.js';
+import { SidebarOrderProvider, useSidebarOrder } from './SidebarOrderProvider.js';
+import { useSidebarReorder } from './useSidebarReorder.js';
 
 const isProjectActionTarget = (target: EventTarget | null) =>
   target instanceof HTMLElement && Boolean(target.closest('.desktop-agent-project__actions'));
@@ -236,7 +238,9 @@ export function AgentSidebar({
       />
     </AppSidebar>
   );
-  return <SidebarMenuOpenContext.Provider value={menuOpen}>{sidebar}</SidebarMenuOpenContext.Provider>;
+  return <SidebarOrderProvider>
+    <SidebarMenuOpenContext.Provider value={menuOpen}>{sidebar}</SidebarMenuOpenContext.Provider>
+  </SidebarOrderProvider>;
 }
 
 function ProjectSection({
@@ -296,6 +300,9 @@ function ProjectSection({
 }) {
   const { t } = useI18n();
   const [menuPoint, setMenuPoint] = useState<{ projectId: string; x: number; y: number } | null>(null);
+  const order = useSidebarOrder('projects', projects);
+  const reorder = useSidebarReorder(order.items.map((project) => project.id), order.move);
+  const dragPreview = useNativeDragPreview();
 
   return (
     <section className="desktop-agent-sidebar__group">
@@ -319,9 +326,9 @@ function ProjectSection({
       </div>
       {!projectsCollapsed ? (
         <div className="desktop-agent-sidebar__project-list">
-          <div className="project-list">
+          <div className="project-list sidebar-reorder-list" ref={reorder.rootRef}>
             {projects.length ? (
-              projects.map((project) => {
+              order.items.map((project) => {
                 const projectThreads = threadsByProjectId.get(project.id) ?? [];
                 const unpinnedThreads = projectThreads.filter((thread) => !pinnedThreadIds.has(thread.id));
                 const isActiveProject = project.id === activeProjectId;
@@ -330,9 +337,9 @@ function ProjectSection({
                 const shouldShowChildren = !isProjectCollapsed && (isForceExpandedProject || isActiveProject || projectThreads.length > 0);
 
                 return (
-                  <div className="desktop-agent-project-node" key={project.id}>
+                  <div className="desktop-agent-project-node" key={project.id} {...reorder.rowProps(project.id)}>
                     <SidebarProjectHoverCard
-                      disabled={projectActionMenuId === project.id}
+                      disabled={projectActionMenuId === project.id || reorder.dragging}
                       project={project}
                       threadCount={projectThreads.length}
                       onEditProject={onEditProject}
@@ -351,6 +358,12 @@ function ProjectSection({
                           className="desktop-agent-project__select"
                           type="button"
                           aria-expanded={!isProjectCollapsed}
+                          draggable={projects.length > 1}
+                          onDragStart={(event) => {
+                            reorder.start(event, project.id);
+                            dragPreview.start(event);
+                          }}
+                          onDragEnd={() => { dragPreview.end(); reorder.end(); }}
                           onClick={() => onToggleProjectCollapsed(project.id)}
                           onKeyDown={(event) => {
                             if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;

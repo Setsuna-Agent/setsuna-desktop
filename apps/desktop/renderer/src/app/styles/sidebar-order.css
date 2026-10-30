@@ -1,0 +1,23 @@
+.sidebar-reorder-list {
+  position: relative;
+}
+
+.desktop-agent-project__select[draggable='true'] {
+  cursor: grab;
+}
+
+.sd-drag-preview .desktop-agent-project__select {
+  gap: 8px;
+}
+
+.sidebar-reorder-list > [data-reordering] {
+  border-radius: var(--app-radius-md);
+  background: var(--sd-drag-placeholder);
+  outline: 1px dashed var(--sd-drag-outline);
+  outline-offset: -1px;
+  opacity: 1;
+}
+
+.sidebar-reorder-list > [data-reordering] > * {
+  opacity: 0;
+}

@@ -11,7 +11,7 @@ const draft: AppNavigationLocation = { view: 'chat', threadId: null, projectId: 
 const appDraft: AppNavigationLocation = { ...draft, draftId: '2' };
 const threadA: AppNavigationLocation = { view: 'chat', threadId: 'thread-a', projectId: 'project-a' };
 const threadB: AppNavigationLocation = { view: 'chat', threadId: 'thread-b', projectId: null };
-const settings: AppNavigationLocation = { view: 'settings' };
+const settings: AppNavigationLocation = { view: 'settings', sectionId: 'general', path: [] };
 const plugin: AppNavigationLocation = { view: 'plugin', viewKey: 'plugin.example.page' };
 
 function setup(initialLocation = draft) {

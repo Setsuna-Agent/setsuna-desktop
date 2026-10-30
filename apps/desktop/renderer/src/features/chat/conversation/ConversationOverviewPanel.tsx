@@ -12,7 +12,7 @@ import { UsageFeatureConversationSummary } from '../../../composition/UsageFeatu
 import { localFeatureReviewChangeStats } from '../../../composition/review-feature-adapter.js';
 import type { DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
 import { FileDiff } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { ChangeCountText } from './ChangeCountText.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
@@ -38,6 +38,7 @@ export function ConversationOverviewPanel({
   reviewError: string | null;
 }) {
   const { t } = useI18n();
+  const panelRef = useRef<HTMLElement>(null);
   const projectId = currentThread?.projectId || activeProject?.id;
   const panelTitle = (!currentThread || currentThread.projectId ? activeProject?.name : undefined) || t('conversation.overview.title');
   const changeStats = reviewState?.isGitRepository
@@ -53,10 +54,10 @@ export function ConversationOverviewPanel({
   const reviewFailed = Boolean(activeProject && !reviewState && reviewError);
 
   return (
-    <section className="chat-conversation-overview-panel" aria-label={panelTitle}>
+    <section ref={panelRef} className="chat-conversation-overview-panel" aria-label={panelTitle}>
       <div className="chat-conversation-overview-panel__header">
         <span title={panelTitle}>{panelTitle}</span>
-        {projectId ? <TerminalFeatureActions projectId={projectId} projectName={panelTitle} /> : null}
+        {projectId ? <TerminalFeatureActions projectId={projectId} projectName={panelTitle} menuAnchorRef={panelRef} /> : null}
       </div>
       <div className="chat-conversation-overview-panel__actions">
         <Button variant="ghost"

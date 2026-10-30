@@ -71,7 +71,9 @@ export function useNativeDragPreview() {
 /** Preview a vertical reorder without changing the persisted order or remounting native drag sources. */
 export function useDragReorderPreview(
   root: RefObject<HTMLElement>,
-  { draggedId, beforeId, orderKey }: { draggedId: string | null; beforeId?: string | null; orderKey: string },
+  { draggedId, beforeId, orderKey, itemSelector = '[data-reorder-id]' }: {
+    draggedId: string | null; beforeId?: string | null; orderKey: string; itemSelector?: string;
+  },
 ) {
   const reduce = useReducedMotion();
   const animations = useRef(new Map<HTMLElement, AnimationPlaybackControls>());
@@ -82,7 +84,8 @@ export function useDragReorderPreview(
     const committed = previousOrder.current !== orderKey;
     previousOrder.current = orderKey;
     if (!draggedId && !hadPreview.current) return;
-    const rows = Array.from(root.current?.querySelectorAll<HTMLElement>('[data-reorder-id]') ?? []);
+    // Nested sortable groups can limit measurement to their own direct children.
+    const rows = Array.from(root.current?.querySelectorAll<HTMLElement>(itemSelector) ?? []);
     const source = rows.find((row) => row.dataset.reorderId === draggedId);
     hadPreview.current = Boolean(source);
     for (const [row, animation] of animations.current) {
@@ -103,7 +106,7 @@ export function useDragReorderPreview(
       animations.current.get(row)?.stop();
       animations.current.set(row, animate(row, { y }, reduce || committed ? { duration: 0 } : SPRING_LAYOUT));
     }
-  }, [root, draggedId, beforeId, orderKey, reduce]);
+  }, [root, draggedId, beforeId, orderKey, itemSelector, reduce]);
 
   useEffect(() => {
     const active = animations.current;

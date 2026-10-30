@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserSettingsNavigationProvider } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { TerminalActionsHostProvider, type TerminalActionsHost } from '../../composition/TerminalWorkspaceFeatureBoundary.js';
+import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
 import {
   shellOverlaySlot,
   shellSidebarSlot,
@@ -12,7 +13,7 @@ import {
   BROWSER_HOME_URL,
   type BrowserReloadMode,
 } from '@setsuna-desktop/feature-browser/contracts';
-import type { SettingsSectionId } from '../../features/settings/settings-types.js';
+import type { SettingsPageLocation } from '../../features/settings/settings-types.js';
 import type { DesktopAppController } from '../controller/useDesktopAppController.js';
 import type { ConversationOverviewVisibility } from '../types.js';
 import {
@@ -105,11 +106,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
   const [selectedPluginViewKey, setSelectedPluginViewKey] = useState<string | null>(null);
   const pluginPageRefresh = usePluginPageRefreshRequests();
-  // 记录下一次进入设置页时应定位到的分区；普通入口会先清空，避免上一次的直达请求残留。
-  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSectionId | null>(null);
-  useEffect(() => {
-    if (activeView !== 'settings') setSettingsInitialSection(null);
-  }, [activeView]);
+  // Keep section and subpage together so history restores one committed destination.
+  const [settingsLocation, setSettingsLocation] = useState<SettingsPageLocation>({ sectionId: 'general', path: [] });
   const [runtimeActivityOpen, setRuntimeActivityOpen] = useState(false);
   const [focusComposerRequest, setFocusComposerRequest] = useState(0);
   const [findInChatRequest, setFindInChatRequest] = useState(0);
@@ -157,7 +155,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       ? { view: activeView, pluginId: selectedCapabilitiesPluginId }
       : activeView === 'plugin'
         ? { view: activeView, viewKey: selectedPluginViewKey }
-        : { view: activeView };
+        : activeView === 'settings'
+          ? { view: activeView, ...settingsLocation }
+          : { view: activeView };
   const openHistoryLocation = useCallback(async (location: AppNavigationLocation) => {
     if (location.view === 'chat') {
       if (location.threadId) {
@@ -174,6 +174,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     }
     if (location.view === 'capabilities') setSelectedCapabilitiesPluginId(location.pluginId);
     if (location.view === 'plugin') setSelectedPluginViewKey(location.viewKey);
+    if (location.view === 'settings') setSettingsLocation({ sectionId: location.sectionId, path: location.path });
     await navigation.changeView(location.view);
   }, [activeProjectId, currentThread, navigation, newThreadDraftId, runtime.projects]);
   const reportHistoryError = useCallback((error: unknown) => {
@@ -209,11 +210,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setActiveView('plugin');
   }, [setActiveView]);
   const openSettings = useCallback(() => {
-    setSettingsInitialSection(null);
     setActiveView('settings');
   }, [setActiveView]);
   const openModelSettings = useCallback(() => {
-    setSettingsInitialSection('model-provider');
+    setSettingsLocation({ sectionId: 'model-provider', path: [] });
     setActiveView('settings');
   }, [setActiveView]);
   const openFilesPanel = useCallback(async () => {
@@ -440,15 +440,22 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   useAppKeyboardShortcuts(shortcutHandlers);
   useSecondaryRoutePrefetch();
   const browserSettingsNavigation = useMemo(() => ({
-    openSettings: (section: string) => { setSettingsInitialSection(section); setActiveView('settings'); },
+    openSettings: (sectionId: string, path: readonly string[] = []) => {
+      setSettingsLocation({ sectionId, path });
+      setActiveView('settings');
+    },
     openPage: (url: string) => { workspacePanels.openBrowserPanel(url); setActiveView('chat'); },
   }), [setActiveView, workspacePanels.openBrowserPanel]);
   const terminalActionsHost = useMemo<TerminalActionsHost>(() => ({
-    projects: runtime.projects,
+    projects: runtime.projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      iconNode: <ProjectIcon icon={project.icon} size={16} />,
+    })),
     platform: window.setsunaDesktop?.desktop.platform ?? '',
     runAction: workspacePanels.canRunTerminalAction ? workspacePanels.runTerminalAction : undefined,
     openTerminal: workspacePanels.canRunTerminalAction ? () => workspacePanels.openDesktopPanel('bottom', 'terminal') : undefined,
-    openSettings: () => { setSettingsInitialSection('environments'); setActiveView('settings'); },
+    openSettings: () => { setSettingsLocation({ sectionId: 'environments', path: [] }); setActiveView('settings'); },
   }), [runtime.projects, workspacePanels.canRunTerminalAction, workspacePanels.runTerminalAction,
     workspacePanels.openDesktopPanel, setActiveView]);
   useEffect(() => window.setsunaDesktop?.browser.onOpenNewTab(({ url, tabId }) => {
@@ -611,7 +618,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
             fileWorkspace={fileWorkspace}
             activeView={routeId}
             selectedCapabilitiesPluginId={selectedCapabilitiesPluginId}
-            settingsInitialSection={settingsInitialSection}
+            settingsLocation={settingsLocation}
+            onSettingsNavigate={setSettingsLocation}
             chatActions={chatActions}
             onForkThread={navigation.forkThread}
             composerKey={composerKey}

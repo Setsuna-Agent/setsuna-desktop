@@ -88,6 +88,20 @@
   stroke-width: 1.7;
 }
 
+.app-navigation__button > .desktop-icon-avatar {
+  background: transparent;
+}
+
+.app-navigation__button > .app-navigation__icon--default {
+  color: inherit;
+}
+
+.app-navigation__button > .desktop-icon-avatar svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.7;
+}
+
 .app-navigation__button[draggable='true'] {
   cursor: grab;
 }

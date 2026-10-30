@@ -259,8 +259,7 @@
   opacity: 0.8;
 }
 
-.desktop-capabilities-tabs,
-.desktop-capabilities-breadcrumb {
+.desktop-capabilities-tabs {
   --desktop-capabilities-navigation-control-height: 26px;
   --desktop-capabilities-navigation-font-size: 12px;
   --desktop-capabilities-navigation-line-height: 18px;
@@ -281,54 +280,6 @@
 
 .app-topbar__route-slot .desktop-capabilities-tabs {
   width: 100%;
-}
-
-.desktop-capabilities-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  min-width: 0;
-  color: var(--app-text-muted);
-}
-
-.desktop-capabilities-breadcrumb button {
-  flex: 0 0 auto;
-  height: var(--desktop-capabilities-navigation-control-height);
-  padding: 0 var(--desktop-capabilities-navigation-padding-inline);
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text-muted);
-  background: transparent;
-  font: inherit;
-  cursor: pointer;
-}
-
-.desktop-capabilities-breadcrumb button:hover {
-  color: var(--app-text);
-  border-color: var(--desktop-agent-panel-border);
-  background: var(--desktop-agent-control-hover-bg);
-}
-
-.desktop-capabilities-breadcrumb button:focus-visible {
-  outline: 0;
-  border-radius: var(--app-radius-xs);
-  box-shadow: var(--app-focus-ring);
-}
-
-.desktop-capabilities-breadcrumb svg {
-  flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
-  stroke-width: 1.8;
-}
-
-.desktop-capabilities-breadcrumb > span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--app-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-tabs {

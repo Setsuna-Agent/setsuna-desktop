@@ -93,7 +93,6 @@
 }
 
 .desktop-settings-panel .chat-user-settings__content {
-  /* Exposed so full-bleed children (subpage header) can offset the viewport padding. */
   --settings-content-padding-top: 24px;
   --settings-content-padding-inline: 42px;
 
@@ -183,31 +182,6 @@
 
 .sd-settings-page { min-width: 0; }
 .sd-settings-page__content { width: min(720px, 100%); margin-inline: auto; }
-/* Subpage header spans the whole settings viewport and stays pinned while the page scrolls. */
-.sd-settings-page__breadcrumbs {
-  --settings-breadcrumb-control-size: 24px;
-
-  position: sticky;
-  /* Sticky offsets are measured inside the scroller's padding; cancel it so the header stays flush. */
-  top: calc(-1 * var(--settings-content-padding-top, 0px));
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  margin: calc(-1 * var(--settings-content-padding-top, 0px)) calc(-1 * var(--settings-content-padding-inline, 0px)) 30px;
-  padding-inline: 12px;
-  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
-  background: var(--app-bg);
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 20px;
-}
-.sd-settings-page__breadcrumbs > svg { flex-shrink: 0; }
-/* Controls share one box height so text, chevrons and icons center on the same axis. */
-.sd-settings-page__breadcrumbs > .sd-button { height: var(--settings-breadcrumb-control-size); min-height: 0; padding: 0 4px; font-size: 12px; line-height: 20px; }
-.sd-settings-page__breadcrumbs > .sd-icon-button { width: var(--settings-breadcrumb-control-size); padding: 0; }
-.sd-settings-page__breadcrumbs > [aria-current] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text); }
 
 .desktop-settings-panel .chat-user-settings__section {
   display: grid;

@@ -3,10 +3,11 @@
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { composeRendererMessages } from '@setsuna-desktop/feature-core/renderer';
 import { runtimeActivityRendererFeature } from '@setsuna-desktop/feature-runtime-activity/renderer';
-import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
-import { createElement, createRef, type ComponentProps, type ReactNode } from 'react';
+import { act, cleanup, fireEvent, render as renderUi, renderHook, screen, within } from '@testing-library/react';
+import { createElement, createRef, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentSidebar } from '../../../../src/app/sidebar/AgentSidebar.js';
+import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 import { hostMessages } from '../../../../src/shared/i18n/messages.js';
 import { PINNED_THREADS_STORAGE_KEY, usePinnedThreads } from '../../../../src/app/sidebar/usePinnedThreads.js';
@@ -15,6 +16,7 @@ import { useAppKeyboardShortcuts } from '../../../../src/app/controller/useAppKe
 import { useSidebarThreadNavigation } from '../../../../src/app/controller/useSidebarThreadNavigation.js';
 
 const messageCatalog = composeRendererMessages(hostMessages, [{ module: runtimeActivityRendererFeature }]);
+const render = (element: ReactElement) => renderUi(element, { wrapper: ToastProvider });
 
 afterEach(() => {
   cleanup();

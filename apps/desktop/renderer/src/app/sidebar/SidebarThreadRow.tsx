@@ -12,6 +12,7 @@ import { SidebarThreadTitle } from './SidebarThreadTitle.js';
 import { SidebarThreadWorktreeBadge } from './SidebarThreadWorktreeBadge.js';
 import { SidebarThreadAutomationBadge } from './SidebarThreadAutomationBadge.js';
 import { useSidebarThreadDrag } from './useSidebarThreadDrag.js';
+import type { SidebarReorder } from './useSidebarReorder.js';
 import { PullRequestsFeatureThreadBadge } from '../../composition/PullRequestsFeatureBoundary.js';
 
 export function SidebarThreadRow({
@@ -22,6 +23,7 @@ export function SidebarThreadRow({
   running = false,
   selected,
   thread,
+  reorder,
   variant,
   onArchive,
   onOpenInNewWindow,
@@ -37,6 +39,7 @@ export function SidebarThreadRow({
   running?: boolean;
   selected: boolean;
   thread: RuntimeThreadSummary;
+  reorder?: SidebarReorder;
   variant: 'global' | 'project' | 'pinned';
   onArchive: (thread: RuntimeThreadSummary) => void;
   onOpenInNewWindow: (threadId: string) => void;
@@ -46,9 +49,9 @@ export function SidebarThreadRow({
   onTogglePin: (thread: RuntimeThreadSummary) => void;
 }) {
   const { t } = useI18n();
-  const threadDrag = useSidebarThreadDrag(thread);
+  const threadDrag = useSidebarThreadDrag(thread, reorder);
   const sidebarMenuOpen = useContext(SidebarMenuOpenContext);
-  const hoverDisabled = sidebarMenuOpen || menuOpen || threadDrag.dragging;
+  const hoverDisabled = sidebarMenuOpen || menuOpen || threadDrag.dragging || Boolean(reorder?.dragging);
   // 线程列表快照包含整个 runtime 的活动状态；在经过防抖的侧边栏快照尚未更新时，
   // 当前打开线程仍可回退使用显式属性。
   const isRunning = running || Boolean(thread.activeTurnId);
@@ -131,12 +134,13 @@ export function SidebarThreadRow({
   return (
     <div
       className={className}
+      {...reorder?.rowProps(thread.id)}
       data-dragging={threadDrag.dragging || undefined}
       onContextMenu={handleContextMenu}
       onMouseEnter={() => setHovered(!hoverDisabled)}
       onMouseLeave={() => setHovered(false)}
     >
-      <SidebarThreadHoverCard disabled={menuOpen || threadDrag.dragging} project={project} thread={thread}>
+      <SidebarThreadHoverCard disabled={hoverDisabled} project={project} thread={thread}>
         <Button variant="ghost"
           className="desktop-agent-session__select"
           data-sidebar-thread-id={thread.id}

@@ -1,3 +1,5 @@
+@import './sidebar-order.css';
+
 .desktop-agent-sidebar {
   --desktop-agent-row-start: 8px;
   --desktop-agent-content-start: 16px;
@@ -401,7 +403,7 @@
 .desktop-agent-session:has(.desktop-agent-session__pr):is(:hover, .is-menu-open, :has(:focus-visible), :has([data-state='open'])) .desktop-agent-session__select { padding-right: calc(var(--desktop-agent-row-action-size) * 2 + 32px); }
 .desktop-agent-session:has(.desktop-agent-session__pr[data-state='open']) { background: var(--desktop-agent-sidebar-hover-bg); }
 
-.desktop-agent-session[data-dragging] {
+.desktop-agent-session[data-dragging]:not([data-reordering]) {
   opacity: 0.45;
 }
 
@@ -409,7 +411,8 @@
   cursor: grabbing;
 }
 
-.sd-drag-preview .desktop-agent-session__select {
+.sd-drag-preview .desktop-agent-session__select,
+.sd-drag-preview .desktop-agent-project__select {
   height: 36px;
   padding: 6px 10px;
   font: 13px / 20px var(--app-font-family);

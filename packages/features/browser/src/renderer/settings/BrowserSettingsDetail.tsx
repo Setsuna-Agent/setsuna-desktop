@@ -15,6 +15,10 @@ const detailTitles = {
 } as const;
 export type BrowserSettingsDetailKind = keyof typeof detailTitles;
 
+export function isBrowserSettingsDetailKind(value: string | undefined): value is BrowserSettingsDetailKind {
+  return value !== undefined && Object.hasOwn(detailTitles, value);
+}
+
 export function BrowserSettingsDetail({ kind, onBack, ...props }: BrowserSettingsContentProps & {
   kind: BrowserSettingsDetailKind; onBack(): void;
 }) {
