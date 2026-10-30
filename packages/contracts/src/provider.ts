@@ -108,10 +108,13 @@ export type RuntimeModelRequestContextWindow = {
   autoCompactTokenLimit: number;
   compactionHash?: string;
   compactionSummaryMessageIds: string[];
+  /** Input estimate plus the output reserve used by the compaction policy. */
   estimatedTokens: number;
   messageTokens?: number;
   toolDefinitionTokens?: number;
   reservedOutputTokens?: number;
+  /** Actual request output limit after fitting the input into the context window. */
+  maxOutputTokens?: number;
   maxContextTokens: number;
   maxContextTokensK: number;
   messageCount: number;

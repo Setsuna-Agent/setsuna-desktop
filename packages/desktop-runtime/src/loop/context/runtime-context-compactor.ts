@@ -1,5 +1,6 @@
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
   MODEL_REQUEST_TOTAL_TIMEOUT_MS,
   RUNTIME_PROVIDER_METADATA_MAX_BYTES,
   runtimeJsonByteLength,
@@ -12,7 +13,7 @@ import {
   type RuntimeEvent,
   type RuntimeMessage,
   type RuntimeMessageProviderMetadata,
-  type RuntimeModelRequestStepSnapshot,
+  type RuntimeModelRequestContextWindow,
   type RuntimeThread,
   type RuntimeToolDefinition,
   type RuntimeUsage,
@@ -632,7 +633,7 @@ export function contextCompactionBudgetForConfig(
   };
 }
 
-/** Reserve the continuation's output separately from the summarizer's generation budget. */
+/** Compaction reserves continuation space; each request separately caps output to the remaining window. */
 export function reservedOutputTokensForConfig(
   config: RuntimeConfigState | null | undefined,
   modelOverride?: RuntimeConfigState['providers'][number]['models'][number],
@@ -641,7 +642,7 @@ export function reservedOutputTokensForConfig(
     ?? config?.providers.find((item) => item.enabled);
   const model = modelOverride ?? provider?.models.find((item) => item.enabled) ?? provider?.models[0];
   const contextWindow = contextCompactionBudgetForConfig(config, model)?.maxContextTokens ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS;
-  return Math.min(Math.max(0, Math.floor(model?.maxOutputTokens ?? 0)), Math.floor(contextWindow * 0.15));
+  return Math.min(Math.max(0, Math.floor(model?.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS)), Math.floor(contextWindow * 0.15));
 }
 
 function positiveRuntimeInt(value: unknown): number | undefined {
@@ -650,19 +651,29 @@ function positiveRuntimeInt(value: unknown): number | undefined {
 
 export function samplingContextWindowForRequest({
   budget,
+  maxOutputTokens,
   messages,
   reservedOutputTokens = 0,
   tools = [],
 }: {
   budget?: RuntimeContextCompactionBudget;
+  maxOutputTokens?: number;
   messages: RuntimeMessage[];
   reservedOutputTokens?: number;
   tools?: RuntimeToolDefinition[];
-}): RuntimeModelRequestStepSnapshot['contextWindow'] {
+}): RuntimeModelRequestContextWindow {
   const usage = runtimeContextTokenUsageForMessages(messages, budget);
   const toolDefinitionTokens = estimateRuntimeToolDefinitionTokens(tools);
   const normalizedOutputReserve = Math.max(0, Math.floor(reservedOutputTokens));
   const estimatedTokens = usage.usedTokens + toolDefinitionTokens + normalizedOutputReserve;
+  if (maxOutputTokens !== undefined) {
+    // Leave room for provider framing beyond the calibrated message/tool estimate.
+    const availableOutputTokens = Math.floor(usage.maxContextTokens - usage.usedTokens - toolDefinitionTokens - 1_024);
+    if (availableOutputTokens <= 0) {
+      throw new Error('The model input leaves no output space in the configured context window after compaction. Reduce the input or increase the context window.');
+    }
+    maxOutputTokens = Math.min(maxOutputTokens, availableOutputTokens);
+  }
   const compactionSummaryMessageIds = messages
     .filter((message) => message.contextCompaction)
     .map((message) => message.id);
@@ -674,6 +685,7 @@ export function samplingContextWindowForRequest({
     messageTokens: usage.usedTokens,
     toolDefinitionTokens,
     reservedOutputTokens: normalizedOutputReserve,
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     maxContextTokens: usage.maxContextTokens,
     maxContextTokensK: usage.maxContextTokensK,
     messageCount: messages.length,
