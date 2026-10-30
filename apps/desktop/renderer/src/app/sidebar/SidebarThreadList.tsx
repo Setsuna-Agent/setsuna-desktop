@@ -1,9 +1,11 @@
 import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { SidebarThreadRow } from './SidebarThreadRow.js';
+import { useSidebarOrder } from './SidebarOrderProvider.js';
+import { useSidebarReorder } from './useSidebarReorder.js';
 
 const PROJECT_CONVERSATION_BATCH_SIZE = 5;
 const GLOBAL_CONVERSATION_BATCH_SIZE = 20;
@@ -64,11 +66,14 @@ export function SidebarThreadList({
   const batchSize = variant === 'project'
     ? PROJECT_CONVERSATION_BATCH_SIZE
     : GLOBAL_CONVERSATION_BATCH_SIZE;
-  // 侧栏按创建时间倒序展示；显式重排，避免依赖 listThreads 的全局顺序保持不变。
-  // 稳定排序：创建时间相同时保留上游顺序（store 已按 id 做 tie-break）。
-  const orderedThreads = variant === 'pinned'
+  // Creation time remains the default until this group is manually reordered.
+  const defaultThreads = useMemo(() => variant === 'pinned'
     ? threads
-    : [...threads].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    : [...threads].sort((left, right) => right.createdAt.localeCompare(left.createdAt)), [threads, variant]);
+  const scope = variant === 'project' ? `threads:project:${project?.id ?? ''}` : `threads:${variant}`;
+  const order = useSidebarOrder(scope, defaultThreads);
+  const orderedThreads = order.items;
+  const reorder = useSidebarReorder(orderedThreads.map((thread) => thread.id), order.move);
   const minimumVisibleCount = minimumSidebarVisibleCount(
     orderedThreads,
     batchSize,
@@ -81,7 +86,7 @@ export function SidebarThreadList({
   const remainingCount = orderedThreads.length - visibleThreads.length;
 
   return (
-    <div className={variant === 'project' ? 'desktop-agent-session-list' : 'app-sidebar__list'}>
+    <div ref={reorder.rootRef} className={`sidebar-reorder-list ${variant === 'project' ? 'desktop-agent-session-list' : 'app-sidebar__list'}`}>
       {visibleThreads.map((thread) => (
         <SidebarThreadRow
           key={thread.id}
@@ -91,6 +96,7 @@ export function SidebarThreadList({
           running={runningThreadId === thread.id}
           selected={selectedThreadId === thread.id}
           thread={thread}
+          reorder={reorder}
           variant={variant}
           onArchive={onArchive}
           threadMenu={threadMenu}
