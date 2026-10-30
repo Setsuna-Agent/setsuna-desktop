@@ -22,6 +22,7 @@ import {
 import {
   Archive,
   Bot,
+  FlaskConical,
   HardDrive,
   Info,
   Keyboard,
@@ -69,6 +70,7 @@ const CORE_SETTINGS_PAGES = Object.freeze([
   ['archives', 'data-management', 200, 'settings.section.archives', Archive],
   ['storage', 'data-management', 300, 'storage.title', HardDrive],
   ['runtime', 'system', 100, 'settings.section.runtime', Wrench],
+  ['experimental', 'system', 150, 'settings.section.experimental', FlaskConical],
   ['about', 'system', 200, 'settings.section.about', Info],
 ] as const);
 

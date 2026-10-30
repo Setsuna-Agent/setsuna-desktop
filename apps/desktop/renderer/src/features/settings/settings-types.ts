@@ -8,6 +8,7 @@ export type CoreSettingsSectionId =
   | 'archives'
   | 'storage'
   | 'runtime'
+  | 'experimental'
   | 'about';
 
 export type SettingsSectionId = CoreSettingsSectionId | (string & {});

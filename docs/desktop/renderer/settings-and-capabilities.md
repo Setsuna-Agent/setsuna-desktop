@@ -39,7 +39,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 | 模型与用量（`models-and-usage`） | 模型服务、专用模型、用量分析 |
 | 工作环境（`workspace`） | 环境、浏览器、电脑控制、代理服务器 |
 | 数据管理（`data-management`） | 同步、归档对话、存储空间 |
-| 系统（`system`） | 高级设置、关于 |
+| 系统（`system`） | 高级设置、实验性功能、关于 |
 
 “存储空间”是设置侧栏“数据管理”组中的独立页面，点击后直接进入管理视图。`StorageUsageOverview` 用分段占用条和分类图例展示实际文件大小；历史对话、缓存与日志使用独立选择弹窗。历史对话可按最后更新时间、归档状态和标题筛选，切换筛选清空旧选择，避免删除不可见的目标。`useStorageManagement` 负责按需加载和操作状态；清理前使用共享确认对话框，批量删除遇到跨窗口取消会停止后续操作，关联附件沿用原有 owner 清理。部分失败保留未完成选择，刷新实际占用。只有进入存储空间页面或手动刷新才触发扫描。
 
@@ -50,6 +50,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 | `GeneralSettings.tsx` | 主题、字体、缩放、外观与 Windows 关闭窗口行为 |
 | `PersonalizationSettings.tsx` | Global prompt、Setsuna style |
 | `RuntimeSettings.tsx` | Approval、permission、developer features、runtime 行为 |
+| `ExperimentalSettings.tsx` | 实验功能开关，以及触发时机、结果使用、用量与关闭行为说明 |
 | `TaskModelSettings.tsx` | 标题、代码审查、审批审查与上下文压缩等宿主任务的模型选择 |
 | `ArchivedThreadsSettings.tsx` | 归档线程管理 |
 | `StorageSettings.tsx` | 分类磁盘占用、历史对话及附件、缓存和日志清理 |
@@ -63,6 +64,8 @@ WebDAV Sync 也是独立 renderer Feature，并通过 `registerSettingsPage(cont
 Network Proxy 同样通过 Settings page Slot 提供完整“代理服务器”页面，状态订阅、编辑动作、文案与 scoped CSS 位于 `packages/features/network-proxy/src/renderer`。Model Provider Feature 通过宿主 capability 读取代理服务器公开投影；宿主设置页不直接调用代理 bridge，也不拥有代理 section。preload 子桥类型由 Feature contract 贡献，renderer 不接触端口、凭据或本地文件。
 
 `shared/ui/SettingsViewUi.tsx` 是 Settings View 的宿主设计系统入口。它把 `@setsuna-desktop/renderer-ui` 的基础控件和宿主设置页布局样式注入 Feature，统一 focus、disabled、danger/primary、密度与可访问性；Feature 只为预览卡片、业务结果等特有 presentation 写 scoped CSS，并使用 `tokens.css` 公开的 `--sd-*` 语义 token。完整页面默认由宿主渲染标题；需要把 Feature 状态动作放进标题栏时，contribution 声明 `pageHeading: 'view'`，再使用注入的 `ui.PageHeading`，不能用正文定位或负 margin 模拟标题 action。
+
+“实验性功能”是设置侧栏“系统”组中的独立页面，其中“后台上下文压缩”开关保存 `features.backgroundContextCompaction`，默认关闭。简短说明后提供主题色“查看详情”按钮，点击共享 Dialog 展示触发时机、结果使用、用量与限制、关闭行为四部分，明确后台任务在自动压缩阈值的约 80% 开始尝试、结果需校验后使用、原始聊天记录保留、无效结果仍可能产生模型用量，以及关闭后仍会按需自动压缩。沿用共享 runtime 偏好保存链路，保留其他 feature flags；保存完成后生效，失败使用 Toast 且保持已确认状态。关闭会通过 ConfigStore 订阅取消后台候选。专用模型页只负责选择压缩模型。
 
 ### Provider settings
 
