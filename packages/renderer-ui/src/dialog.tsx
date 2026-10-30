@@ -35,7 +35,7 @@ export function Dialog({ open = true, title, description, headerActions, childre
   return <Primitive.Root open={open} onOpenChange={(next) => { if (!next && dismissible) onClose(); }}>
     <Primitive.Portal container={overlayContainer()}>
       <Primitive.Overlay className="sd-dialog-overlay" />
-      <Primitive.Content asChild aria-label={label} {...(!description ? { 'aria-describedby': undefined } : {})}
+      <Primitive.Content asChild aria-modal="true" aria-label={label} {...(!description ? { 'aria-describedby': undefined } : {})}
         onOpenAutoFocus={(event) => {
           // Explicit field autoFocus is already respected by Radix; otherwise focus the surface.
           event.preventDefault();

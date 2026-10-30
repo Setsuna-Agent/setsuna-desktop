@@ -1,7 +1,7 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import { shellSidebarAvatarSlot } from '@setsuna-desktop/renderer-contracts/shell';
-import { Info, Moon, Sun } from 'lucide-react';
-import { useCallback, useState, type RefObject } from 'react';
+import { Info, Keyboard, Moon, Sun } from 'lucide-react';
+import { lazy, Suspense, useCallback, useState, type RefObject } from 'react';
 import appIcon from '../../../../../../assets/build/icon.png';
 import { RuntimeActivityFeatureMenuItem } from '../../composition/RuntimeActivityFeatureBoundary.js';
 import { RendererOwnedSingleSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
@@ -12,6 +12,10 @@ import { AppTooltip } from '../../shared/ui/primitives.js';
 import { AboutDialog } from '../layout/AboutDialog.js';
 import { AppNavigationIcon } from '../layout/AppNavigationIcon.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
+
+const KeyboardShortcutsDialog = lazy(async () => ({
+  default: (await import('../layout/KeyboardShortcutsDialog.js')).KeyboardShortcutsDialog,
+}));
 
 export function SidebarUserMenu({
   settingsActive,
@@ -30,9 +34,15 @@ export function SidebarUserMenu({
   const { toggleWithTransition } = useThemeTransition();
   const resolvedTheme = useResolvedThemeMode();
   const themeToggleLabel = t(resolvedTheme === 'dark' ? 'sidebar.switchToLightTheme' : 'sidebar.switchToDarkTheme');
-  const [aboutOpen, setAboutOpen] = useState(false);
+  const [activeDialog, setActiveDialog] = useState<'about' | 'shortcuts' | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const openDialog = (dialog: 'about' | 'shortcuts') => {
+    closeMenu();
+    // Restore the dialog to a persistent trigger rather than its unmounted menu item.
+    runtimeActivityTriggerRef.current?.focus();
+    setActiveDialog(dialog);
+  };
 
   return (
     <div className="app-navigation__footer">
@@ -89,17 +99,19 @@ export function SidebarUserMenu({
             onOpenRuntimeActivity();
           }}
         />
-        <Button variant="ghost" type="button" role="menuitem" onClick={() => {
-          closeMenu();
-          // Restore the dialog to a persistent trigger rather than its unmounted menu item.
-          runtimeActivityTriggerRef.current?.focus();
-          setAboutOpen(true);
-        }}>
+        <Button variant="ghost" type="button" role="menuitem" onClick={() => openDialog('shortcuts')}>
+          <Keyboard size={13} />
+          {t('settings.section.shortcuts')}
+        </Button>
+        <Button variant="ghost" type="button" role="menuitem" onClick={() => openDialog('about')}>
           <Info size={13} />
           {t('shell.menu.about')}
         </Button>
       </SidebarFloatingMenu>
-      {aboutOpen ? <AboutDialog onClose={() => setAboutOpen(false)} /> : null}
+      {activeDialog === 'about' ? <AboutDialog onClose={() => setActiveDialog(null)} /> : null}
+      {activeDialog === 'shortcuts' ? <Suspense fallback={null}>
+        <KeyboardShortcutsDialog onClose={() => setActiveDialog(null)} />
+      </Suspense> : null}
     </div>
   );
 }

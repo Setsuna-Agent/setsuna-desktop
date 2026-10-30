@@ -14,24 +14,16 @@ import {
 import {
   KEYBOARD_SHORTCUT_GROUPS,
   keyboardShortcutCommand,
-  keyboardShortcutCommands,
   type KeyboardShortcutCommand,
   type KeyboardShortcutCommandId,
-  type KeyboardShortcutGroup,
 } from '../../../shared/shortcuts/keyboardShortcutCommands.js';
+import { searchKeyboardShortcuts } from '../../../shared/shortcuts/keyboardShortcutSearch.js';
 import { useKeyboardShortcuts } from '../../../shared/shortcuts/KeyboardShortcutsProvider.js';
 import { Button } from '../../../shared/ui/primitives.js';
 
 type RecordingTarget = {
   commandId: KeyboardShortcutCommandId;
   index: number | null;
-};
-
-const groupLabelKeys: Record<KeyboardShortcutGroup, MessageKey> = {
-  general: 'shortcuts.group.general',
-  navigation: 'shortcuts.group.navigation',
-  chat: 'shortcuts.group.chat',
-  workspace: 'shortcuts.group.workspace',
 };
 
 const captureErrorKeys: Record<KeyboardShortcutCaptureError, MessageKey> = {
@@ -57,16 +49,8 @@ export function KeyboardShortcutsSettings() {
   const [query, setQuery] = useState('');
   const [recordingTarget, setRecordingTarget] = useState<RecordingTarget | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const matchingCommands = useMemo(() => keyboardShortcutCommands.filter((command) => {
-    if (!normalizedQuery) return true;
-    const searchable = [
-      t(command.labelKey),
-      t(command.descriptionKey),
-      ...bindingsFor(command.id).map((binding) => formatKeyboardShortcutBinding(binding, platform)),
-    ].join(' ').toLocaleLowerCase();
-    return searchable.includes(normalizedQuery);
-  }), [bindingsFor, normalizedQuery, platform, t]);
+  const matchingCommands = useMemo(() => searchKeyboardShortcuts(query, { bindingsFor, platform, translate: t }),
+    [bindingsFor, platform, query, t]);
 
   useEffect(() => {
     setShortcutRecording(Boolean(recordingTarget));
@@ -188,7 +172,7 @@ export function KeyboardShortcutsSettings() {
         if (!commands.length) return null;
         return (
           <section className="settings-shortcuts__group" key={group}>
-            <h2>{t(groupLabelKeys[group])}</h2>
+            <h2>{t(`shortcuts.group.${group}`)}</h2>
             <div className="settings-shortcuts__list">
               {commands.map((command) => {
                 const commandRecordingTarget = recordingTarget?.commandId === command.id

@@ -1,0 +1,122 @@
+.app-shortcuts-dialog {
+  height: 560px;
+}
+
+.app-shortcuts-dialog .sd-dialog__header {
+  padding-bottom: 12px;
+}
+
+.app-shortcuts-dialog .sd-dialog__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  /* Put insets on the children so the list scrollbar reaches the dialog edge. */
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-shortcuts__search {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 32px;
+  margin-inline: var(--sd-dialog-gutter);
+  padding-inline: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-full);
+  color: var(--app-text-muted);
+}
+
+.app-shortcuts__search > svg {
+  flex-shrink: 0;
+}
+
+.app-shortcuts__search > .sd-field,
+.app-shortcuts__search > .sd-field:focus {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+}
+
+.app-shortcuts__list {
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--sd-dialog-gutter) 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.app-shortcuts__list:focus-visible {
+  outline: 2px solid var(--app-focus-outline);
+  outline-offset: -2px;
+  border-radius: var(--app-radius-sm);
+}
+
+.app-shortcuts__group + .app-shortcuts__group {
+  margin-top: 12px;
+}
+
+.app-shortcuts__group h2 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.app-shortcuts__group dl,
+.app-shortcuts__row dd {
+  margin: 0;
+}
+
+.app-shortcuts__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 30px;
+  padding-block: 4px;
+  color: var(--app-text-secondary);
+  line-height: 20px;
+}
+
+.app-shortcuts__row dt {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.app-shortcuts__row dd {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 60%;
+}
+
+.app-shortcuts__row kbd {
+  padding: 0 7px;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-muted);
+  color: var(--app-text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.app-shortcuts__empty {
+  margin: 16px 0;
+  color: var(--app-text-muted);
+  text-align: center;
+}
