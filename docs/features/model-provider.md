@@ -44,7 +44,9 @@ AgentLoop / Review / Vision / Thread title / Memory
 | `provider-catalog.ts` | 窄注册表筛选 Pi built-in 厂商/方案/模型，并恢复预置模型 compat metadata |
 | `remote-model-catalog.ts` / `remote-model-catalog-data.ts` | 远程目录校验、按厂商更新、缓存恢复及内存合并 |
 | `model-discovery.ts` | 模型列表、能力解析、请求取消和超时上限 |
-| `responses-compactor.ts` | 唯一保留的窄原生协议调用：`/responses/compact` |
+| `pi-request-preparation.ts` / `pi-provider-stream.ts` | 普通采样和原生压缩共享的 defaults、回放转换、兼容参数及 Pi stream |
+| `responses-native-compactor.ts` | V2 trigger、完整原始事件收集与按连接身份缓存的协议选择 |
+| `responses-compactor.ts` / `responses-compaction-result.ts` | 独立 `/responses/compact` 兼容路径、canonical output 校验与 usage |
 | `model-request-timeout.ts` | 单次请求总超时与取消 |
 | `provider-request-headers.ts` | 合并用户请求头或厂商预置，填入应用版本和会话 ID |
 
@@ -121,7 +123,7 @@ API Key 输入框右侧提供复制按钮，优先复制当前输入，否则复
 - `source`：Setsuna provider ID/kind、model、endpoint fingerprint。
 - `semanticFingerprint`：由 runtime 在 assistant 完成时绑定。
 - `assistantReplay.blocks`：text、thinking/signature、tool call/item ID。
-- `openAiResponsesCompaction.items`：Responses compact opaque replacement。
+- `openAiResponsesCompaction.items`：完整 Responses replacement；可选 `mode` 区分 V2 trigger 和独立 compact，缺省兼容旧数据。
 
 只有 source 和 semantic fingerprint 都匹配时才恢复签名或 native item；否则退回 portable text/thinking/tool calls。历史 v2 Anthropic/Responses envelope 仍只读兼容。
 
@@ -138,17 +140,25 @@ OpenCode Go 的默认请求头在 Feature contracts 中定义为 `User-Agent: se
 ## Compaction
 
 所有协议支持 portable summary；显式配置压缩任务模型时只走该模型的摘要路径。
-否则 OpenAI Responses 优先尝试原生 compact，成功时不额外调用文本摘要模型：
+否则 OpenAI Responses 优先尝试 V2 原生压缩，成功时不额外调用文本摘要模型：
 
-1. 把真实待替换旧窗口转成 Responses input。
-2. POST `{baseUrl}/responses/compact`。
-3. 只接受恰好一个可回放 `compaction` item。
-4. 写入 v3 `openAiResponsesCompaction`。
+1. 普通采样和压缩共用 `preparePiRequest`、`streamForProvider`，携带当前完整指令、工具、附件和回放状态。
+2. 在实际 Responses payload 的 input 最后追加 `compaction_trigger`，取消普通回答的输出格式和工具选择约束。
+3. 通过 Pi 原始事件 hook 收集压缩项和 usage，必须有 `response.completed` 且恰好一个可回放 `compaction` item。
+4. 写入 v3 `openAiResponsesCompaction`，V2 模式由 runtime 保留预算内的用户原文。
 5. 同 replay boundary 才原生续写。新的原生检查点记录归档原文 ID；边界变化时 runtime
    先恢复原文，再按新模型窗口决定是否生成文本摘要。已有 portable summary 保持可跨模型使用。
 
-原生接口不可用或结果无法装入窗口/持久化上限时退回 portable summary。摘要生成预算包含
-reasoning tokens，按实际摘要模型的输入、窗口及输出上限计算；最终保存的文本长度单独限制。
+仅明确的协议不支持才降级到 `{baseUrl}/responses/compact`。独立接口复用 Pi 的
+`convertResponsesMessages`，首次降级使用 V2 已捕获的 input，之后完整保存和回放返回的 canonical window。
+包含 `configuration_update` 的历史不使用独立接口；不静默删除动态配置。协议能力缓存按 provider、model、endpoint、
+凭据、请求头及代理配置身份隔离，仅请求时建立，没有启动探测。
+
+鉴权、限流、传输错误、残缺流及非法结果直接失败；明确的 context overflow 返回独立状态，由 runtime
+采用完整分批摘要，不污染能力缓存。usage 在结果校验之前报告，即使候选最终丢弃也保留实际消耗。
+整个压缩操作共享取消和 15 分钟截止时间，协议切换或追加批次不重置截止时间。
+摘要生成预算包含 reasoning tokens，按实际摘要模型的输入、窗口及输出上限计算；最终保存的文本长度单独限制。
+设计、实施阶段与真实供应商评测门槛见 [上下文压缩执行方案](../designs/current/context-compaction.md)。
 
 ## 新增协议或 Provider
 
@@ -166,6 +176,7 @@ reasoning tokens，按实际摘要模型的输入、窗口及输出上限计算�
 - `packages/features/model-provider/test/renderer/provider-catalog.test.ts`
 - `packages/features/model-provider/test/runtime/pi-stream-bridge.test.ts`
 - `packages/features/model-provider/test/runtime/responses-compactor.test.ts`
+- `packages/features/model-provider/test/runtime/responses-native-compactor.test.ts`
 - `packages/desktop-runtime/test/integration/runtime-server/rest-config-models.test.ts`
 - `packages/desktop-runtime/test/adapters/model/image-asset-resolving-model-client.test.ts`
 - `packages/contracts/test/message-metadata.test.ts`

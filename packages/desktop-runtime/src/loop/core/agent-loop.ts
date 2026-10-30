@@ -46,6 +46,8 @@ import {
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { RuntimeCompactionTurnCoordinator } from '../context/runtime-compaction-turn-coordinator.js';
 import { RuntimeContextCompactor } from '../context/runtime-context-compactor.js';
+import { ContextCompactionCommitter } from '../context/context-compaction-commit.js';
+import { RuntimeBackgroundCompaction } from '../context/runtime-background-compaction.js';
 import { runtimeEnvironmentResolver } from '../context/runtime-environment-resolver.js';
 import { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 import { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
@@ -80,7 +82,6 @@ export class AgentLoop {
   private readonly featureControls = new RuntimeAgentFeatureControls();
   private readonly modelStreamEvents: RuntimeModelStreamEventPublisher;
   private readonly inputGuard: RuntimeModelInputGuard;
-  private readonly contextCompactor: RuntimeContextCompactor;
   private readonly compactionTurns: RuntimeCompactionTurnCoordinator;
   private readonly hooks: RuntimeHookCoordinator;
   private readonly queuedTurns: RuntimeQueuedTurnCoordinator;
@@ -137,11 +138,12 @@ export class AgentLoop {
       toolExecutor: this.toolExecutor,
       extensions: options.extensionManager,
     });
-    this.contextCompactor = new RuntimeContextCompactor({
+    const contextCompactor = new RuntimeContextCompactor({
       clock: options.clock,
       debugTrace: options.debugTrace,
       ids: options.ids,
       modelClient: options.modelClient,
+      windows: new ContextCompactionCommitter(options.threadStore, this.eventWriter),
       appendEvent: (threadId, event) => this.appendAndPublishWithResult(threadId, event),
       onCompacted: (threadId) => this.hooks.queueSessionStartSource(threadId, 'compact'),
       runCompactHooks: (input) => this.hooks.runCompactHooks(input),
@@ -151,7 +153,8 @@ export class AgentLoop {
       attachmentStore: options.attachmentStore,
       clock: options.clock,
       configStore: options.configStore,
-      contextCompactor: this.contextCompactor,
+      contextCompactor,
+      backgroundCompaction: new RuntimeBackgroundCompaction({ compactor: contextCompactor, configStore: options.configStore, eventBus: options.eventBus }),
       debugTrace: options.debugTrace,
       environmentResolver,
       ids: options.ids,
@@ -193,7 +196,7 @@ export class AgentLoop {
     this.compactionTurns = new RuntimeCompactionTurnCoordinator({
       clock: options.clock,
       configStore: options.configStore,
-      contextCompactor: this.contextCompactor,
+      samplingContexts: this.samplingContexts,
       ids: options.ids,
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,
@@ -313,9 +316,11 @@ export class AgentLoop {
    * Cancelled tasks remain registered until their terminal writes finish, so they block too.
    */
   prepareDataMigration(additionalPendingMutations = 0): RuntimeDataMigrationReadiness {
+    this.samplingContexts.cancelBackgroundCompactions();
     const registeredTasks = this.turnTasks.registeredTaskCount();
     const pendingMutations = Math.max(0, additionalPendingMutations)
       + this.threadMutationAdmissions.count()
+      + this.samplingContexts.pendingCompactions()
       + this.featureControls.memory.pendingBackgroundTaskCount();
     const ready = !this.shuttingDown
       && !this.dataMigrationPreparing
@@ -339,32 +344,24 @@ export class AgentLoop {
     this.options.approvalGate?.rejectPending?.(error);
     this.toolExecutor.shutdown(error);
     const memoryDrained = this.featureControls.memory.shutdown(timeoutMs);
+    const compactionDrained = this.samplingContexts.shutdown(timeoutMs);
     await Promise.allSettled(tasks.map((task) =>
       this.turnTermination.publishCancelledOnce(task.threadId, task.turnId, task.taskKind, reason, { marker: true }),
     ));
     const drained = await this.turnTasks.drain(timeoutMs);
     // Drain Goal observers before flushing so accounting cannot arrive after shutdown.
     if (drained) await this.featureControls.goals.waitForSettlements();
-    const backgroundDrained = await memoryDrained;
+    const backgroundDrained = (await Promise.all([memoryDrained, compactionDrained])).every(Boolean);
     await this.eventWriter.flushAll();
     return drained && backgroundDrained;
   }
 
-  /**
-   * 启动时回扫近期 idle 线程，补抽历史对话的长期记忆候选。
-   * 这是本地 runtime 对记忆启动第一阶段的轻量实现：负责候选选择和提取，
-   * 真正的全局 stage1/phase2 状态机仍由后续 storage/consolidation 层承接。
-   */
+  /** Delegates idle-thread extraction to the Memory Feature. */
   async runMemoryStartupExtraction(): Promise<{ claimed: number; extracted: number }> {
     return this.featureControls.memory.runStartupExtraction();
   }
 
-  /**
-   * 启动一轮异步对话。线程忙碌或队列被编辑时只持久化输入并返回 queued 成功态；
-   * 真正启动的轮次仍在后台执行。
-   * @param threadId 目标线程 ID。
-   * @param input 用户输入、附件、skill 选择和客户端消息 ID。
-   */
+  /** Busy threads persist input in the queue; admitted turns execute asynchronously. */
   async startTurn(threadId: string, input: SendTurnInput, execution: { unattended?: boolean } = {}): Promise<StartTurnResponse> {
     // Only trusted runtime callers can supply execution policy; it is never parsed from HTTP input.
     if (execution.unattended) return this.startPreparedTurn(threadId, 'regular', () => this.turnRuns.createRegular(threadId, input, execution));
@@ -875,6 +872,7 @@ export class AgentLoop {
 
   /** History rewrites must wait for terminal writes, including tasks already hidden by cancellation. */
   async cancelThreadTurnsAndWait(threadId: string): Promise<void> {
+    await this.samplingContexts.cancelBackgroundCompaction(threadId);
     for (;;) {
       const task = this.turnTasks.registeredForThread(threadId);
       if (!task) break;

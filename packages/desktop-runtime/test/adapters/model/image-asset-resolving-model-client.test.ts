@@ -11,6 +11,19 @@ const ONE_PIXEL_PNG = Buffer.from(
 const IMAGE_INPUT_FALLBACK_NOTICE = '图片视觉检查未能完成：模型供应商拒绝了图片输入。本轮将跳过视觉检查，并基于其余文本和工具结果继续。\n\n';
 
 describe('image asset resolving model client', () => {
+  it('never retries a checkpoint without its image evidence after image input rejection', async () => {
+    const stream = vi.fn(async function* (): AsyncGenerator<ModelStreamEvent> {
+      yield await Promise.reject<ModelStreamEvent>(new Error('Image input is not supported'));
+    });
+    const compactConversation = vi.fn<NonNullable<ModelClient['compactConversation']>>(async () => { throw new Error('Image input is not supported'); });
+    const client = new ImageAssetResolvingModelClient({ stream, compactConversation }, { read: vi.fn() });
+    const request = { ...imageRequest(ONE_PIXEL_PNG), usageContext: { source: 'compaction' as const, threadId: 'thread', turnId: 'turn' } };
+    await expect(client.stream(request).next()).rejects.toThrow('Image input is not supported');
+    await expect(client.compactConversation(request)).rejects.toThrow('Image input is not supported');
+    expect(stream).toHaveBeenCalledOnce();
+    expect(compactConversation).toHaveBeenCalledOnce();
+  });
+
   it('applies saved compression changes to the next request including managed tool images', async () => {
     const data = await largePng();
     const inner = new CapturingModelClient();

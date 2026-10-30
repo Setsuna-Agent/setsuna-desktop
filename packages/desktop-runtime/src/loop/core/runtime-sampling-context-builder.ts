@@ -1,4 +1,6 @@
-import type { ContextTokenCalibration } from '../context/context-token-calibration.js';
+import { contextModelIdentity, type ContextTokenCalibration } from '../context/context-token-calibration.js';
+import { createHash } from 'node:crypto';
+import type { RuntimeBackgroundCompaction } from '../context/runtime-background-compaction.js';
 import { projectToolResultWorkingSet, restoreToolObservations } from '../context/tool-result-working-set.js';
 import { RUN_CODE_TOOL_NAME } from '../tools/programmatic-tool.js';
 import { SEARCH_TOOLS_TOOL_NAME } from '../tools/deferred-tools.js';
@@ -46,7 +48,7 @@ import {
 } from '../context/context-compaction.js';
 import { compileRuntimePrompt } from '../context/prompt-compiler.js';
 import { buildRuntimeAttachmentContext, messagesForModel } from '../context/runtime-attachment-context.js';
-import type { RuntimeContextCompactor } from '../context/runtime-context-compactor.js';
+import type { RuntimeContextCompactor, RuntimeContextCompactionInput } from '../context/runtime-context-compactor.js';
 import {
   contextCompactionBudgetForConfig,
   reservedOutputTokensForConfig,
@@ -65,6 +67,7 @@ import { runtimeConfigForTurn } from './runtime-turn-policy.js';
 
 export type RuntimeSamplingStepContext = {
   conversationMessages: RuntimeMessage[];
+  tokenCalibrationMessages?: RuntimeMessage[];
   responseLanguage: RuntimeInterfaceLanguage;
   messages: RuntimeMessage[];
   modelRequest: Pick<ModelRequest, 'model' | 'providerId'>;
@@ -75,6 +78,8 @@ export type RuntimeSamplingStepContext = {
   toolContext: RuntimeToolExecutionContext;
   toolRouter: RuntimeToolRouter | null;
   tools?: RuntimeToolDefinition[];
+  precomputeCompaction?: (messages: RuntimeMessage[]) => void;
+  settleCompactionUsage?: () => Promise<void>;
 };
 
 type RuntimeSamplingContextBuilderOptions = {
@@ -83,6 +88,7 @@ type RuntimeSamplingContextBuilderOptions = {
   clock: Clock;
   configStore?: ConfigStore;
   contextCompactor: Pick<RuntimeContextCompactor, 'compactMessagesBeforeModelRequest'>;
+  backgroundCompaction?: RuntimeBackgroundCompaction;
   debugTrace?: RuntimeDebugTraceSink;
   environmentResolver: RuntimeEnvironmentResolver;
   ids: IdGenerator;
@@ -126,6 +132,11 @@ export class RuntimeSamplingContextBuilder {
     });
   }
 
+  pendingCompactions(): number { return this.options.backgroundCompaction?.pendingCount() ?? 0; }
+  cancelBackgroundCompaction(threadId: string): Promise<void> { return this.options.backgroundCompaction?.cancel(threadId) ?? Promise.resolve(); }
+  cancelBackgroundCompactions(): void { this.options.backgroundCompaction?.cancelAll(); }
+  shutdown(timeoutMs: number): Promise<boolean> { return this.options.backgroundCompaction?.shutdown(timeoutMs) ?? Promise.resolve(true); }
+
   async build({
     contextTokenCalibration,
     loadedToolNames,
@@ -144,6 +155,7 @@ export class RuntimeSamplingContextBuilder {
     turnModel,
     toolAccess = 'all',
     unattended,
+    forceCompaction = false,
   }: {
     loadedToolNames?: Set<string>;
     contextTokenCalibration?: ContextTokenCalibration;
@@ -162,6 +174,7 @@ export class RuntimeSamplingContextBuilder {
     turnModel?: RuntimeResolvedTurnModel;
     toolAccess?: 'all' | 'read-only' | 'none';
     unattended?: boolean;
+    forceCompaction?: boolean;
   }): Promise<RuntimeSamplingStepContext> {
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = runtimeConfigForTurn(latestRuntimeConfig ?? runtimeConfig ?? null, unattended);
@@ -176,7 +189,7 @@ export class RuntimeSamplingContextBuilder {
     const orderedConversationMessages = normalizedConversation.messages;
     const debugTraceEnabled = runtimeDebugTraceEnabled(this.options.debugTrace);
     const snapshotThread = await (this.options.threadStore.getSamplingState
-      ? this.options.threadStore.getSamplingState(threadId)
+      ? this.options.threadStore.getSamplingState(threadId).catch(() => this.options.threadStore.getThread(threadId))
       : this.options.threadStore.getThread(threadId)).catch(() => null);
     if (debugTraceEnabled) {
       appendRuntimeDebugTraceSafely(this.options.debugTrace, {
@@ -320,7 +333,7 @@ export class RuntimeSamplingContextBuilder {
     );
     const contextBudget = {
       ...contextCompactionBudgetForConfig(stepRuntimeConfig, modelForSampling.model),
-      inputTokenAdjustment: contextTokenCalibration?.adjustment(modelForSampling.request, orderedConversationMessages) ?? 0,
+      inputTokenAdjustment: contextTokenCalibration?.adjustment(contextModelIdentity(modelForSampling.request, stepRuntimeConfig), orderedConversationMessages) ?? 0,
     };
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,
@@ -358,20 +371,45 @@ export class RuntimeSamplingContextBuilder {
       threadId,
       conversationTokenLimit: Math.max(1, (contextBudget?.autoCompactTokenLimit ?? contextBudget?.maxContextTokens ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS) - reservedTokens),
     });
-    const compactedConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
+    const compactionInput: RuntimeContextCompactionInput = {
       unattended,
-      contextBudget: { ...contextBudget, inputTokenAdjustment: contextTokenCalibration?.adjustment(modelForSampling.request, workingMessages) ?? 0 },
+      contextBudget: { ...contextBudget, inputTokenAdjustment: contextTokenCalibration?.adjustment(contextModelIdentity(modelForSampling.request, stepRuntimeConfig), workingMessages) ?? 0 },
       conversationModel: modelForSampling.request,
-      force: false,
+      force: forceCompaction,
+      requestContextKey: stepRuntimeConfig?.features?.backgroundContextCompaction === true ? createHash('sha256').update(JSON.stringify({
+        fragments: fragments.map(({ role, source, content }) => ({ role, source, content })),
+        tools, thinkingOptions, supportsImages: activeModelSupportsImages,
+      })).digest('hex') : undefined,
+      prepareRequest: async (history, options) => ({
+        ...modelForSampling.request,
+        ...thinkingOptions,
+        tools,
+        maxOutputTokens: reservedOutputTokens,
+        messages: compileRuntimePrompt({
+          fragments,
+          conversationMessages: await messagesForModel(history, {
+            resolvedAttachments: attachmentContext.resolvedAttachments,
+            supportsImages: options?.supportsImages ?? activeModelSupportsImages,
+          }),
+          createdAt: this.options.clock.now().toISOString(),
+        }).messages,
+      }),
       messages: workingMessages,
       transcriptMessages: sourceMessages,
       reservedTokens,
+      sourceSnapshot: {
+        messages: snapshotThread?.messages ?? thread.messages,
+        sourceMessageIds: conversationMessages.map((message) => message.id),
+      },
       runtimeConfig: stepRuntimeConfig,
       signal,
       thread,
       threadId,
       turnId,
-    });
+    };
+    const compactedConversationMessages = this.options.backgroundCompaction
+      ? await this.options.backgroundCompaction.beforeRequest(compactionInput)
+      : await this.options.contextCompactor.compactMessagesBeforeModelRequest(compactionInput);
     const providerConversationMessages = await messagesForModel(compactedConversationMessages, {
       resolvedAttachments: attachmentContext.resolvedAttachments,
       supportsImages: activeModelSupportsImages,
@@ -416,7 +454,7 @@ export class RuntimeSamplingContextBuilder {
         budget: {
           ...contextBudget,
           // A new summary starts a new estimation baseline; the previous request's correction no longer applies.
-          inputTokenAdjustment: contextTokenCalibration?.adjustment(modelForSampling.request, compactedConversationMessages) ?? 0,
+          inputTokenAdjustment: contextTokenCalibration?.adjustment(contextModelIdentity(modelForSampling.request, stepRuntimeConfig), compactedConversationMessages) ?? 0,
         },
       }),
       promptManifest: compiledPrompt.manifest,
@@ -429,9 +467,14 @@ export class RuntimeSamplingContextBuilder {
         threadUpdatedAt: snapshotThread?.updatedAt ?? thread.updatedAt,
       },
     };
+    if (goalCompletionPending) void this.options.backgroundCompaction?.cancel(threadId);
+    else if (!forceCompaction && taskKind !== 'compact') this.options.backgroundCompaction?.start({
+      ...compactionInput, messages: compactedConversationMessages,
+    });
     return {
       // Keep the next step's source canonical even if a later sampling snapshot cannot be read.
       conversationMessages: restoreToolObservations(compactedConversationMessages, sourceMessages),
+      tokenCalibrationMessages: compactedConversationMessages,
       responseLanguage,
       messages,
       modelRequest: modelForSampling.request,
@@ -444,7 +487,31 @@ export class RuntimeSamplingContextBuilder {
       toolContext,
       toolRouter,
       tools,
+      ...(this.options.backgroundCompaction && taskKind !== 'compact' && !goalCompletionPending ? {
+        precomputeCompaction: (history: RuntimeMessage[]) => this.precomputeAfterTurn(compactionInput, history),
+      } : {}),
+      ...(this.options.backgroundCompaction && stepGoal?.status === 'active' ? {
+        settleCompactionUsage: () => this.options.backgroundCompaction!.settleTurn(threadId, turnId),
+      } : {}),
     };
+  }
+
+  private precomputeAfterTurn(input: RuntimeContextCompactionInput, history: RuntimeMessage[]): void {
+    this.options.backgroundCompaction?.start({ ...input, messages: history }, async (signal) => {
+      // Read completed canonical bodies after the final answer is durable, without awaiting this in the turn.
+      const current = await this.options.threadStore.getThread(input.threadId);
+      if (!current) throw new Error('Thread was removed before background compaction.');
+      signal.throwIfAborted();
+      const sourceIds = new Set(history.map((message) => message.id));
+      const source = current.messages.filter((message) => sourceIds.has(message.id));
+      const messages = await projectToolResultWorkingSet({
+        messages: source, transcriptMessages: source, store: this.options.toolResultStore, threadId: input.threadId,
+        conversationTokenLimit: Math.max(1, (input.contextBudget?.autoCompactTokenLimit
+          ?? input.contextBudget?.maxContextTokens ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS) - (input.reservedTokens ?? 0)),
+      });
+      return { ...input, signal, messages, transcriptMessages: source, thread: current,
+        sourceSnapshot: { messages: current.messages, sourceMessageIds: source.map((message) => message.id) } };
+    });
   }
 
   private async mcpServerKeysForSnapshot(): Promise<string[]> {

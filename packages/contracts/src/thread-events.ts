@@ -142,6 +142,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
   }
 
   if (event.type === 'thread.context_cleared') {
+    delete next.contextUsageBaseline;
     delete next.fileChangeStates;
     delete next.fileChangeGroups;
     next.contextCompaction = undefined;
@@ -170,6 +171,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
   }
 
   if (event.type === 'thread.context_compacted') {
+    delete next.contextUsageBaseline;
     const pendingHookRuns = next.pendingHookRuns;
     next.contextCompaction = {
       seq: event.seq,
@@ -185,12 +187,17 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
       usedTokens: event.payload.notice.compactedTokens,
     };
     // 压缩事件带的是新的模型窗口，reducer 负责把旧可见历史降级为 transcript。
-    next.messages = mergeCompactedMessages(next.messages, event.payload.messages);
+    next.messages = mergeCompactedMessages(next.messages, event.payload.messages, event.payload.sourceMessageIds);
     if (pendingHookRuns?.length) {
       next.pendingHookRuns = pendingHookRuns;
       attachPendingHookRunsToMessages(next, event.createdAt);
     }
     refreshThreadSummary(next);
+    return next;
+  }
+
+  if (event.type === 'thread.context_usage_calibrated') {
+    next.contextUsageBaseline = structuredClone(event.payload.baseline);
     return next;
   }
 

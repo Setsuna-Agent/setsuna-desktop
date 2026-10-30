@@ -13,10 +13,12 @@ import {
 } from '@setsuna-desktop/contracts';
 import { bindProviderMetadataToSemanticMessage } from '../../utils/runtime-message-semantic-fingerprint.js';
 import { neutralizePromptClosingTags } from './prompt-utils.js';
+import { nativeCompactionTokens } from './native-compaction-tokens.js';
+import { isTaskInput } from './runtime-skill-activation-context.js';
 
 export const CONTEXT_COMPACTION_MAX_TOKENS = DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS;
 export const CONTEXT_COMPACTION_MAX_TOKENS_K = CONTEXT_COMPACTION_MAX_TOKENS / 1000;
-export const COMPACTION_SUMMARY_MAX_TOKENS = 4096;
+export const COMPACTION_SUMMARY_MAX_TOKENS = 16_384;
 export const COMPACTION_SUMMARY_MIN_OUTPUT_TOKENS = 256;
 export const COMPACTION_SUMMARY_CONTEXT_OVERHEAD_TOKENS = 128;
 
@@ -64,7 +66,7 @@ export type RuntimeContextCompactionBudget = {
   autoCompactTokenLimit?: number;
   maxContextTokens?: number;
   reservedTokens?: number;
-  /** Provider-reported input beyond the local estimate; invalid after replacing the history. */
+  /** Provider-reported input minus the local estimate; invalid after replacing the history. */
   inputTokenAdjustment?: number;
 };
 
@@ -75,7 +77,7 @@ export type RuntimeContextCompactionBudget = {
  */
 export function runtimeContextTokenUsageForMessages(messages: RuntimeMessage[], budget?: RuntimeContextCompactionBudget): RuntimeContextTokenUsage {
   const normalizedBudget = normalizeRuntimeContextCompactionBudget(budget);
-  const usedTokens = estimateRuntimeMessageTokens(messages) + normalizedBudget.reservedTokens + normalizedBudget.inputTokenAdjustment;
+  const usedTokens = Math.max(0, estimateRuntimeMessageTokens(messages) + normalizedBudget.reservedTokens + normalizedBudget.inputTokenAdjustment);
   return {
     autoCompactTokenLimit: normalizedBudget.autoCompactTokenLimit,
     maxContextTokens: normalizedBudget.maxContextTokens,
@@ -95,36 +97,38 @@ export function runtimeContextTokenUsageForMessages(messages: RuntimeMessage[], 
  */
 export function createRuntimeContextCompactionCandidate({
   activeTurnId,
+  allowCompletedTail = false,
   budget,
   force = false,
   keepRecentMessages = DEFAULT_KEEP_RECENT_MESSAGES,
   messages,
 }: {
   activeTurnId?: string;
+  allowCompletedTail?: boolean;
   budget?: RuntimeContextCompactionBudget;
   force?: boolean;
   keepRecentMessages?: number;
   messages: RuntimeMessage[];
 }): RuntimeContextCompactionCandidate | null {
   const normalizedBudget = normalizeRuntimeContextCompactionBudget(budget);
-  const originalTokens = estimateRuntimeMessageTokens(messages) + normalizedBudget.inputTokenAdjustment;
+  const originalTokens = Math.max(0, estimateRuntimeMessageTokens(messages) + normalizedBudget.inputTokenAdjustment);
   const conversationTokenLimit = Math.max(1, normalizedBudget.autoCompactTokenLimit - normalizedBudget.reservedTokens);
   if (!force && originalTokens <= conversationTokenLimit) return null;
-  // Both manual and automatic compaction need a usable handoff plus its wrapper.
+  const targetContextTokens = compactedContextTargetTokens(originalTokens, conversationTokenLimit);
+  // Both retention and the handoff must fit the target, leaving room for useful continuation.
   const summaryReserve = Math.min(COMPACTION_SUMMARY_MAX_TOKENS,
-    Math.max(COMPACTION_SUMMARY_MIN_OUTPUT_TOKENS, Math.floor(conversationTokenLimit / 4)));
-  const retainedTokenLimit = Math.max(0, conversationTokenLimit - summaryReserve - COMPACTION_SUMMARY_CONTEXT_OVERHEAD_TOKENS);
-  const taskMessageIds = retainedTaskMessageIds(messages, activeTurnId, conversationTokenLimit);
+    Math.max(COMPACTION_SUMMARY_MIN_OUTPUT_TOKENS, Math.floor(targetContextTokens / 4)));
+  const retainedTokenLimit = Math.max(0, targetContextTokens - summaryReserve - COMPACTION_SUMMARY_CONTEXT_OVERHEAD_TOKENS);
+  const taskMessageIds = retainedTaskMessageIds(messages, activeTurnId, targetContextTokens);
   const isPinned = (message: RuntimeMessage) => messagePinnedAcrossCompaction(message) || taskMessageIds.has(message.id);
 
   // 只用模型可见消息计算切分点，transcript-only 历史不会重新进入 prompt。
   const eligibleIndexes = messages
     .map((message, index) => (messageEligibleForCompaction(message) ? index : -1))
     .filter((index) => index >= 0);
-  const tailScope = compactableTailScope(messages, eligibleIndexes, retainedTokenLimit, messages.filter(isPinned));
+  const tailScope = compactableTailScope(messages, eligibleIndexes, retainedTokenLimit, messages.filter(isPinned), allowCompletedTail);
   if (eligibleIndexes.length <= 1 && !tailScope) return null;
 
-  const targetContextTokens = compactedContextTargetTokens(originalTokens, conversationTokenLimit);
   const minKeepCount = tailScope ? 0 : 1;
   let keepCount = Math.min(Math.max(minKeepCount, keepRecentMessages), Math.max(minKeepCount, eligibleIndexes.length - 1));
   let recentStart = recentStartForKeepCount(eligibleIndexes, keepCount, messages);
@@ -134,7 +138,8 @@ export function createRuntimeContextCompactionCandidate({
   let recentMessages = messages.slice(recentStart);
   // 工具结果可能单条就撑爆窗口；这种情况下继续固定保留最近 8 条会让 mid-turn 压缩无效。
   // Automatic compaction also needs space for the new handoff and pinned task instructions.
-  while (keepCount > minKeepCount && estimateRuntimeMessageTokens([...pinnedMessages, ...recentMessages]) > retainedTokenLimit) {
+  while (keepCount > minKeepCount && (estimateRuntimeMessageTokens([...pinnedMessages, ...recentMessages]) > retainedTokenLimit
+    || !olderMessages.some(messageHasContextValue))) {
     keepCount -= 1;
     recentStart = recentStartForKeepCount(eligibleIndexes, keepCount, messages);
     olderRegion = messages.slice(0, recentStart);
@@ -269,8 +274,8 @@ export function materializeRuntimeContextCompaction({
 }
 
 function compactedContextTargetTokens(originalTokens: number, maxTokens: number): number {
-  const ratioTarget = Math.max(1, Math.ceil(originalTokens / COMPACTED_CONTEXT_TARGET_RATIO_DIVISOR));
-  return Math.min(maxTokens, ratioTarget);
+  const ratioTarget = Math.max(1_024, Math.ceil(originalTokens / COMPACTED_CONTEXT_TARGET_RATIO_DIVISOR));
+  return Math.min(Math.floor(maxTokens * 0.6), ratioTarget);
 }
 
 function normalizeRuntimeContextCompactionBudget(budget?: RuntimeContextCompactionBudget): Required<RuntimeContextCompactionBudget> {
@@ -278,7 +283,8 @@ function normalizeRuntimeContextCompactionBudget(budget?: RuntimeContextCompacti
   const defaultAutoLimit = Math.max(1, Math.floor(maxContextTokens * AUTO_COMPACT_TOKEN_LIMIT_RATIO));
   const autoCompactTokenLimit = Math.min(maxContextTokens, positiveInt(budget?.autoCompactTokenLimit) ?? defaultAutoLimit);
   const reservedTokens = positiveInt(budget?.reservedTokens) ?? 0;
-  const inputTokenAdjustment = positiveInt(budget?.inputTokenAdjustment) ?? 0;
+  const inputTokenAdjustment = typeof budget?.inputTokenAdjustment === 'number' && Number.isFinite(budget.inputTokenAdjustment)
+    ? Math.ceil(budget.inputTokenAdjustment) : 0;
   return { autoCompactTokenLimit, maxContextTokens, reservedTokens, inputTokenAdjustment };
 }
 
@@ -352,8 +358,10 @@ function pairedToolExchanges(messages: RuntimeMessage[]): Array<{
   return exchanges;
 }
 
-function compactableTailScope(messages: RuntimeMessage[], eligibleIndexes: number[], retainedTokenLimit: number, pinnedMessages: RuntimeMessage[]): string | null {
+function compactableTailScope(messages: RuntimeMessage[], eligibleIndexes: number[], retainedTokenLimit: number, pinnedMessages: RuntimeMessage[], allowCompletedTail: boolean): string | null {
   const last = messages[eligibleIndexes[eligibleIndexes.length - 1] ?? -1];
+  // A completed final answer is stable evidence for post-turn precomputation; an open call is not.
+  if (allowCompletedTail && last?.role === 'assistant' && last.status === 'complete' && !last.toolCalls?.length) return 'latest_assistant';
   // 保留最新用户意图很重要；但最新工具输出可以被摘要替代，否则超大工具结果会反复撑爆窗口。
   if (last?.role === 'tool') return 'latest_tool';
   // 最新文本输入和固定保留消息共同占用预算，必须为完整摘要留出空间。
@@ -401,6 +409,8 @@ export function reserveRuntimeContextCompactionBudget(
 
 function estimateMessageTokens(message: RuntimeMessage): number {
   if (message.visibility === 'transcript') return 0;
+  const compacted = nativeCompactionTokens(message.providerMetadata);
+  if (compacted !== undefined) return compacted;
   // Display-only artifacts (for example generated image data URLs) are persisted for
   // the transcript, but model adapters deliberately omit them from requests. Counting
   // their Base64 payload here would immediately trigger a false context compaction.
@@ -529,7 +539,7 @@ function nativeReasoningReplayCharacters(message: RuntimeMessage): number {
 }
 
 export function estimateTextTokens(value: string): number {
-  return Math.ceil(value.length / APPROX_CHARS_PER_TOKEN);
+  return Math.ceil(Buffer.byteLength(value, 'utf8') / APPROX_CHARS_PER_TOKEN);
 }
 
 function messageHasContextValue(message: RuntimeMessage): boolean {
@@ -566,12 +576,11 @@ function messagePinnedAcrossCompaction(message: RuntimeMessage): boolean {
 /** Keep the active request and its latest corrections verbatim within a bounded share of the window. */
 function retainedTaskMessageIds(messages: RuntimeMessage[], activeTurnId: string | undefined, conversationTokenLimit: number): Set<string> {
   const selected = new Set<string>();
-  if (!activeTurnId) return selected;
-  const inputs = messages.filter((message) => message.turnId === activeTurnId && message.role === 'user'
-    && message.visibility !== 'transcript' && !message.contextCompaction);
-  let remaining = Math.min(20_000, Math.floor(conversationTokenLimit / 4));
-  const [request, ...corrections] = inputs;
-  for (const message of [request, ...corrections.reverse()]) {
+  const inputs = messages.filter((message) => isTaskInput(message) && message.visibility !== 'transcript');
+  let remaining = Math.min(20_000, Math.floor(conversationTokenLimit / 3));
+  const current = inputs.filter((message) => activeTurnId && message.turnId === activeTurnId);
+  const older = inputs.filter((message) => !current.includes(message));
+  for (const message of [...current.reverse(), ...older.reverse()]) {
     if (!message) continue;
     const tokens = estimateRuntimeMessageTokens([message]);
     if (tokens > remaining) continue;

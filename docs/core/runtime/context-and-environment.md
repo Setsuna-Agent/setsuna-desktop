@@ -222,10 +222,12 @@ Review 不是另一个绕过 thread event 的执行器。
 - `context-compaction.ts`
 - `runtime-context-compactor.ts`
 - `runtime-compaction-turn-coordinator.ts`
+- `context-compaction-commit.ts` / `context-window-snapshot.ts`
+- `context-compaction-batches.ts` / `context-token-calibration.ts`
 
 ### 触发
 
-- 根据字符数估算 token。
+- 文本按 UTF-8 字节估算，图片与原生 replacement 分别计量；V2 opaque 内容采用独立比例，不能按 metadata JSON 字节数计算模型窗口。
 - 未配置模型窗口时统一使用 256K token 默认值，与模型采样 adapter 和压缩请求一致。
 - 每次 sampling 前检查。
 - 用户也可显式 compact。
@@ -237,7 +239,7 @@ Review 不是另一个绕过 thread event 的执行器。
 
 - Transcript-only message 不计入模型窗口。
 - Runtime system prompt 不被压缩。
-- 当前轮次的用户请求和最新补充在保留预算内使用原文；重发沿用消息 ID，但模型侧副本归属新轮次，避免被当作旧历史摘要。
+- 真实用户请求和修正在保留预算内使用原文，优先当前轮次及最新输入；runtime 注入和协作报告不混作用户要求。
 - 保留最近的模型可见消息。
 - 不能拆开 assistant tool call 与对应 tool result。
 - 中间有 steer 时仍按同一工具 transaction 处理。
@@ -247,19 +249,24 @@ Review 不是另一个绕过 thread event 的执行器。
 
 所有 provider 支持 portable summary；显式配置压缩任务模型时只调用该模型。
 
-Portable summary 按实际摘要模型窗口给输入、输出和思考留出预算。历史超过该预算时分批处理，
+Portable summary 读取完整源内容，不再先按每条消息固定字符数截断；工具工作集引用先从持久 transcript 恢复正文。
+按实际摘要模型窗口给输入、输出和思考留出预算。历史超过该预算时分批处理，
 后一批携带前一批的完整交接摘要；最近保留消息也计入输入预算，单条过大的工具记录可以跨批。
-每批单独记录用量并允许一次生成重试，取消或失败不提交部分压缩结果；全部成功且通过窗口检查后，
+支持图片的摘要模型接收带来源关联的图片批次；文本模型保留资源引用与未验证状态。
+每批单独记录用量，残缺或超长摘要允许一次生成重试，传输/鉴权错误不触发额外生成。
+图片格式重试保留原图；压缩不得在图片被拒绝后静默移除图片。取消或失败不提交部分压缩结果；全部成功且通过窗口检查后，
 才写入一次压缩事件。模型列表未提供的窗口参数不写成假定的供应商能力，未知模型使用统一默认值。
 
 未显式配置压缩任务模型时，OpenAI Responses 优先：
 
-- 把真实旧模型窗口发送 `/responses/compact`。
-- 保存完整 replacement native items。
+- 共用普通采样的真实指令、工具、附件和 Pi 转换，向 `/responses` 的 input 末尾追加 `compaction_trigger`。
+- 仅在 `response.completed` 后接收唯一完整压缩项；V2 保留预算内的用户原文，不重复拼回已经被压缩的 assistant/tool 尾部。
+- 明确不支持 V2 才尝试 `/responses/compact`，完整保存其 canonical replacement，不能拆出 opaque 项后裁剪其他返回项。
+- 原生输入明确超出窗口时转入完整分批交接；该情况不缓存为协议不支持。鉴权、限流、网络、残缺流或非法结果不会触发静默降级。
 
 Native items 只在 provider/协议/model/endpoint/semantic fingerprint 都兼容时回放。
 原生成功时无需另做文本摘要；检查点引用已有 transcript 中的原文 ID，边界变化时先恢复原文，
-再按新模型的预算决定是否重新压缩。原生接口不可用、结果过大或原文无法归档时使用文本摘要。
+再按新模型的预算决定是否重新压缩。明确不支持原生接口、有效结果不能满足目标窗口或原文无法归档时使用文本摘要。
 不能从 native replacement 反推 portable summary；旧版已经保存的文本摘要仍可直接跨模型回放。
 侧聊快照复制时展开原生检查点，避免继承对主聊归档原文的依赖；复制后的原文保持 model-only，
 由侧聊按自身预算生成摘要。删除或截断原文时，事件投影递归解除受影响的检查点并恢复剩余历史。
@@ -270,6 +277,37 @@ Native items 只在 provider/协议/model/endpoint/semantic fingerprint 都兼�
 - 新 summary message 模型可见。
 - Notice 记录原始/压缩 token、保留消息数和触发范围。
 - Lifecycle 通过 events 写入。
+
+手动与自动压缩均通过 `RuntimeSamplingContextBuilder` 构建当前请求。保留原文与摘要共同受目标预算约束，
+提交前计入动态指令、工具及输出预留，并留出下一步增长空间。整个压缩操作（含协议降级与所有批次）共享 15 分钟截止时间和取消信号。
+
+`ContextCompactionCommitter` 在捕获前刷入流式事件，记录持久源历史的内容版本、覆盖 ID 和检查点身份。
+SQLite 在线程写入队列中重新校验前缀、改写序号、取消状态和追加后缀预算，只有成功持久化才发布事件。
+普通追加不使候选过期，期间新增的修正与工具结果保留；删除、回滚、编辑或替换检查点会拒绝旧候选。
+`thread.context_compacted.sourceMessageIds` 限定替换范围；旧事件缺省仍按整窗口语义回放。
+
+`thread.context_usage_calibrated` 持久化模型/连接身份、请求历史前缀指纹及实际 input usage 与本地估算的差值。
+匹配前缀上的新增历史按增量估算；跨 turn 和重启继续有效，换模型/连接或改写前缀后失效。
+缓存 token 不重复加到窗口，候选被丢弃时已发生的模型用量仍单独计入账本。
+本地估算仍是启发式，不能代替真实供应商续跑评测。执行与验收状态见
+[上下文压缩执行方案](../../designs/current/context-compaction.md)。
+
+### 后台预计算
+
+`RuntimeBackgroundCompaction` 复用 compactor 的 `prepare` / `install`，由
+设置页“实验性功能 → 后台上下文压缩”写入 `features.backgroundContextCompaction` 显式开启，默认关闭。达到硬阈值的 80% 时，
+在采样前的稳定窗口或最终回答落盘后生成候选；每线程最多一个，全 runtime 最多两个并发生成。
+正常采样不等待后台生成；下一次采样先安装已完成的兼容候选，达到硬阈值才等待正在生成的同一候选。
+原始消息、未完成请求和 UI 压缩状态在预计算期间不变，失败只影响该候选。
+
+安装前除历史版本外，还校验实际指令、工具、模型参数和供应商私密配置的哈希。
+配置提交、历史改写、取消或关闭会中止关联工作；同一失败窗口不反复预计算，候选与请求共用 15 分钟时限。
+已完成的长最终回答可以进入摘要，未完成工具调用不能作为可丢弃尾部。
+删除线程先取消并等待后台 usage 写入；迁移准备取消候选并把未结束生成计入 pending mutations。
+关闭同时排空 turn、memory 和压缩，再刷事件 writer。
+
+Goal 的最终回答仍先发布，Goal 轮次结算等待其后台 usage 完成，确保计量水位不越过尚未记录的消耗。
+启动只建立轻量协调器与订阅，不读取历史、不探测模型、不调度压缩。
 
 ## Debug trace
 

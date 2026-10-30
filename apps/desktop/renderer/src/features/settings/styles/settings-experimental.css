@@ -1,0 +1,44 @@
+.desktop-settings-panel .experimental-settings__details-link {
+  margin-inline-start: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--app-primary);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .experimental-settings__details-link:hover {
+  color: var(--app-primary-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.desktop-settings-panel .experimental-settings__details-link:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+}
+
+.experimental-settings__details {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+}
+
+.experimental-settings__details dt {
+  margin-bottom: 4px;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.experimental-settings__details dd {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}

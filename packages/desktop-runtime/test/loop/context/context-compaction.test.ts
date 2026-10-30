@@ -23,7 +23,7 @@ describe('runtime context compaction', () => {
     expect(candidate.pinnedMessages.map((message) => message.id)).toEqual(['policy', 'request']);
     expect(candidate.olderMessages).toContainEqual(latest);
     expect(candidate.recentMessages).toEqual([]);
-    expect(compactionSummaryTokenLimit(candidate)).toBeGreaterThanOrEqual(850);
+    expect(compactionSummaryTokenLimit(candidate)).toBeGreaterThanOrEqual(256);
     const result = materializeRuntimeContextCompaction({ candidate, id: 'summary', createdAt: latest.createdAt, summary: 'Continue the current task.' });
     expect(result.messages.find((message) => message.id === 'request')).toEqual(request);
     expect(result.messages.find((message) => message.id === 'policy')).toEqual(policy);
@@ -66,7 +66,7 @@ describe('runtime context compaction', () => {
       id: 'compact_1',
       role: 'user',
       contextCompaction: {
-        compactedMessageCount: 4,
+        compactedMessageCount: 2,
         maxContextTokens: 256000,
         keptRecentMessageCount: 8,
         maxContextTokensK: 256,
@@ -85,7 +85,8 @@ describe('runtime context compaction', () => {
       'compact_1',
       ...messages.slice(4).map((message) => message.id),
     ]);
-    expect(result?.messages.slice(0, 4).every((message) => message.visibility === 'transcript')).toBe(true);
+    expect(result?.messages.slice(0, 4).filter((message) => message.role === 'assistant').every((message) => message.visibility === 'transcript')).toBe(true);
+    expect(result?.messages.filter((message) => messages.some((original) => original.id === message.id && original.role === 'user')).every((message) => message.visibility !== 'transcript')).toBe(true);
     expect(result?.messages.slice(5).every((message) => message.visibility !== 'transcript')).toBe(true);
     expect(result?.messages[4].content).toContain('model generated summary');
   });
@@ -119,7 +120,7 @@ describe('runtime context compaction', () => {
         })
       : null;
 
-    expect(result?.notice.compactedMessageCount).toBe(2);
+    expect(result?.notice.compactedMessageCount).toBe(1);
     expect(result?.messages.map((message) => message.id)).toEqual([
       'archived_user',
       'msg_0',
@@ -128,7 +129,8 @@ describe('runtime context compaction', () => {
       ...messages.slice(3).map((message) => message.id),
     ]);
     expect(result?.messages[0]).toMatchObject({ id: 'archived_user', visibility: 'transcript' });
-    expect(result?.messages[1]).toMatchObject({ id: 'msg_0', visibility: 'transcript' });
+    expect(result?.messages[1]).toMatchObject({ id: 'msg_0', role: 'user' });
+    expect(result?.messages[1]?.visibility).not.toBe('transcript');
     expect(result?.messages[2]).toMatchObject({ id: 'msg_1', visibility: 'transcript' });
   });
 
@@ -158,7 +160,7 @@ describe('runtime context compaction', () => {
       },
       {
         id: 'old_user',
-        role: 'user',
+        role: 'assistant',
         content: 'Old user context',
         createdAt: '2026-06-25T00:00:01.000Z',
         status: 'complete',
@@ -261,7 +263,8 @@ describe('runtime context compaction', () => {
 
     const candidate = createRuntimeContextCompactionCandidate({ messages });
     expect(candidate?.recentMessages).toHaveLength(0);
-    expect(candidate?.olderMessages.map((message) => message.id)).toEqual(['user_1', 'assistant_1', 'tool_1']);
+    expect(candidate?.olderMessages.map((message) => message.id)).toEqual(['assistant_1', 'tool_1']);
+    expect(candidate?.pinnedMessages.map((message) => message.id)).toContain('user_1');
     expect(candidate?.triggerScopes).toEqual(['total', 'latest_tool']);
   });
 
@@ -269,7 +272,7 @@ describe('runtime context compaction', () => {
     const messages: RuntimeMessage[] = [
       {
         id: 'old_user',
-        role: 'user',
+        role: 'assistant',
         content: 'Inspect both files.',
         createdAt: '2026-06-25T00:00:00.000Z',
         status: 'complete',
@@ -325,7 +328,7 @@ describe('runtime context compaction', () => {
     const messages: RuntimeMessage[] = [
       {
         id: 'old_user',
-        role: 'user',
+        role: 'assistant',
         content: 'Inspect both files.',
         createdAt: '2026-06-25T00:00:00.000Z',
         status: 'complete',
@@ -705,9 +708,11 @@ describe('runtime context compaction', () => {
       : null;
 
     expect(candidate?.recentMessages).toHaveLength(0);
-    expect(candidate?.olderMessages.map((message) => message.id)).toEqual(['user_1', 'assistant_1', 'steer_1']);
+    expect(candidate?.olderMessages.map((message) => message.id)).toEqual(['assistant_1', 'steer_1']);
+    expect(candidate?.pinnedMessages.map((message) => message.id)).toContain('user_1');
     expect(candidate?.triggerScopes).toEqual(['total', 'latest_input']);
-    expect(result?.messages.slice(0, 3).every((message) => message.visibility === 'transcript')).toBe(true);
+    expect(result?.messages.find((message) => message.id === 'user_1')?.visibility).not.toBe('transcript');
+    expect(result?.messages.filter((message) => ['assistant_1', 'steer_1'].includes(message.id)).every((message) => message.visibility === 'transcript')).toBe(true);
     expect(result?.messages[3]).toMatchObject({
       id: 'compact_1',
       role: 'user',
@@ -723,7 +728,7 @@ describe('protocol-aware context compaction', () => {
     const messages: RuntimeMessage[] = [
       {
         id: 'old_user',
-        role: 'user',
+        role: 'assistant',
         content: 'Inspect both files.',
         createdAt: '2026-07-23T00:00:00.000Z',
         status: 'complete',

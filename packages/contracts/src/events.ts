@@ -25,6 +25,7 @@ import type {
 } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 import type { WorkspaceFileChangeAction } from './workspace.js';
+import type { RuntimeContextUsageBaseline } from './thread-context.js';
 
 export type RuntimeTaskKind = 'regular' | 'compact' | 'review' | 'goal' | 'user_shell' | 'subagent';
 
@@ -48,6 +49,7 @@ export const RUNTIME_EVENT_TYPES = [
   'thread.context_cleared',
   'thread.context_compacting',
   'thread.context_compacted',
+  'thread.context_usage_calibrated',
   'turn.input_queued',
   'turn.input_updated',
   'turn.inputs_reordered',
@@ -148,7 +150,13 @@ export type CoreRuntimeEvent =
         usedTokens?: number;
       }
     >
-  | RuntimeEventBase<'thread.context_compacted', { messages: RuntimeMessage[]; notice: NonNullable<RuntimeMessage['contextCompaction']> }>
+  | RuntimeEventBase<'thread.context_compacted', {
+      messages: RuntimeMessage[];
+      notice: NonNullable<RuntimeMessage['contextCompaction']>;
+      /** New events replace only captured messages. Omitted for legacy whole-window events. */
+      sourceMessageIds?: string[];
+    }>
+  | RuntimeEventBase<'thread.context_usage_calibrated', { baseline: RuntimeContextUsageBaseline }>
   | RuntimeEventBase<'turn.input_queued', { input: RuntimeQueuedTurnInput }>
   | RuntimeEventBase<'turn.input_updated', { input: RuntimeQueuedTurnInput }>
   | RuntimeEventBase<'turn.inputs_reordered', { inputIds: string[] }>

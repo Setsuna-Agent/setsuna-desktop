@@ -65,6 +65,8 @@ export function projectRuntimeTurnActivity(
 }
 
 export function eventCanUseDelayedCheckpoint(event: StoredThreadEvent): boolean {
+  // Calibration is recoverable model telemetry, not a history/lifecycle boundary.
+  if (event.type === 'thread.context_usage_calibrated') return true;
   // Every event is committed immediately. Only the rebuildable full snapshot is batched;
   // lifecycle boundaries and history mutations still establish an immediate checkpoint.
   return !event.type.startsWith('thread.')

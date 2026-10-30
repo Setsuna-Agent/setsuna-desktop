@@ -5,6 +5,7 @@ import type {
   PendingStoredThreadEvent,
   StoredThreadEvent,
   RuntimeMessagePage,
+  RuntimeMessage,
   RuntimeMessagePageQuery,
   RuntimeFileChangeOperation,
   RuntimeFileChangePreviewInput,
@@ -73,6 +74,14 @@ export type RuntimeTurnActivityProjection = {
 /** Sampling needs message/attachment state, not the diagnostic history of every prior request. */
 export type RuntimeThreadSamplingState = Pick<RuntimeThread, 'messages' | 'kind' | 'lastSeq' | 'messageCount' | 'updatedAt'>;
 
+export type ContextWindowSnapshot = { messageIds: string[]; fingerprint: string; checkpointIds: string[]; mutationSeq?: number };
+export type PendingContextCompactionEvent = Extract<PendingStoredThreadEvent, { type: 'thread.context_compacted' }>;
+export type ContextCompactionCommitOptions = {
+  signal?: AbortSignal;
+  /** Synchronous final budget check under the same write queue as prefix validation. */
+  acceptsWindow?: (messages: readonly RuntimeMessage[]) => boolean;
+};
+
 export type ThreadStore = {
   listThreads(query?: ThreadStoreQuery): Promise<RuntimeThreadSummary[]>;
   getThread(threadId: string): Promise<RuntimeThread | null>;
@@ -95,6 +104,8 @@ export type ThreadStore = {
   truncateMessagesAfter(threadId: string, messageId: string, includeSelf?: boolean): Promise<RuntimeThread>;
   clearThreadMessages(threadId: string): Promise<RuntimeThread>;
   appendEvent(threadId: string, event: PendingStoredThreadEvent): Promise<StoredThreadEvent>;
+  /** Validate the captured window inside the write queue; a stale candidate is a normal non-commit. */
+  commitContextCompaction?(threadId: string, expected: ContextWindowSnapshot, event: PendingContextCompactionEvent, options?: ContextCompactionCommitOptions): Promise<StoredThreadEvent | null>;
   appendEvents?(
     threadId: string,
     events: readonly PendingStoredThreadEvent[],

@@ -11,4 +11,6 @@ export type ConfigStore = {
   getActiveProviderConfig(): Promise<RuntimeProviderConfig | null>;
   /** 对只模拟当前供应商的聚焦测试存储而言，此项可选。 */
   getProviderConfig?(providerId: string): Promise<RuntimeProviderConfig | null>;
+  /** Invalidates request-scoped background work after a committed configuration change. */
+  subscribe?(listener: () => void): () => void;
 };

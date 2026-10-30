@@ -23,7 +23,7 @@ export class BindableModelClient implements ModelClient {
 
   compactConversation(request: ModelCompactionRequest) {
     const compact = this.requireDelegate().compactConversation;
-    if (!compact) throw new Error('The active model provider does not support native compaction.');
+    if (!compact) return Promise.resolve({ kind: 'unsupported' as const });
     return compact.call(this.delegate, request);
   }
 

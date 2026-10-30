@@ -17,6 +17,9 @@ import type {
   ThreadEventPageQuery,
   ThreadStorePatch,
   ThreadStoreQuery,
+  ContextWindowSnapshot,
+  PendingContextCompactionEvent,
+  ContextCompactionCommitOptions,
 } from '../ports/thread-store.js';
 import {
   managedGeneratedImageAssetIds,
@@ -122,6 +125,10 @@ export class EventCoordinatedThreadStore implements ThreadStore {
 
   appendEvent(threadId: string, event: PendingStoredThreadEvent) {
     return this.afterPendingEvents(threadId, () => this.inner.appendEvent(threadId, event));
+  }
+
+  commitContextCompaction(threadId: string, expected: ContextWindowSnapshot, event: PendingContextCompactionEvent, options?: ContextCompactionCommitOptions) {
+    return this.afterPendingEvents(threadId, () => this.inner.commitContextCompaction?.(threadId, expected, event, options) ?? Promise.resolve(null));
   }
 
   appendEvents(threadId: string, events: readonly PendingStoredThreadEvent[]) {

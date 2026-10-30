@@ -6,15 +6,16 @@ import type { ThreadStore } from '../../ports/thread-store.js';
 import { isAbortError } from '../core/runtime-turn-errors.js';
 import { resolveRuntimeTurnModel, type RuntimeResolvedTurnModel } from '../core/runtime-thread-model.js';
 import type { RuntimeTurnTerminationCoordinator } from '../lifecycle/runtime-turn-termination-coordinator.js';
+import type { RuntimeSamplingContextBuilder } from '../core/runtime-sampling-context-builder.js';
 import { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
 import { createRuntimeContextCompactionCandidate, reserveRuntimeContextCompactionBudget } from './context-compaction.js';
 import { nativeCompactionMatchesModel, restoreNativeCompactionHistory } from './context-compaction-history.js';
-import { contextCompactionBudgetForConfig, HookStoppedTurnError, reservedOutputTokensForConfig, type RuntimeContextCompactor } from './runtime-context-compactor.js';
+import { contextCompactionBudgetForConfig, HookStoppedTurnError, reservedOutputTokensForConfig } from './runtime-context-compactor.js';
 
 type RuntimeCompactionTurnCoordinatorOptions = {
   clock: Clock;
   configStore?: ConfigStore;
-  contextCompactor: Pick<RuntimeContextCompactor, 'compactMessagesBeforeModelRequest'>;
+  samplingContexts: Pick<RuntimeSamplingContextBuilder, 'build'>;
   ids: IdGenerator;
   threadStore: ThreadStore;
   turnTasks: RuntimeTurnTaskRegistry;
@@ -91,22 +92,20 @@ export class RuntimeCompactionTurnCoordinator {
     });
     try {
       // Manual and automatic compaction share hooks, validation, persistence and debug tracing.
-      await this.options.contextCompactor.compactMessagesBeforeModelRequest({
-        force,
-        messages: thread.messages,
+      await this.options.samplingContexts.build({
+        forceCompaction: force,
+        conversationMessages: thread.messages,
+        hookContextMessages: [],
+        skillIds: thread.defaultSkillIds ?? [],
+        responseLanguage: runtimeConfig?.desktopSettings?.interfaceLanguage ?? 'zh-CN',
+        taskKind: 'compact',
+        turnModel,
+        thinkingOptions: { thinking: turnModel?.model.thinkingEnabled === true, reasoningEffort: turnModel?.model.defaultThinkingEffort },
         thread,
         threadId,
         turnId,
         signal,
         runtimeConfig,
-        contextBudget: contextCompactionBudgetForConfig(runtimeConfig, turnModel?.model),
-        reservedTokens: reservedOutputTokensForConfig(runtimeConfig, turnModel?.model),
-        conversationModel: turnModel
-          ? {
-              providerId: turnModel.binding.providerId,
-              model: turnModel.binding.modelCode,
-            }
-          : undefined,
       });
       await this.publishCompleted(threadId, turnId);
       return (await this.options.threadStore.getThread(threadId)) ?? thread;

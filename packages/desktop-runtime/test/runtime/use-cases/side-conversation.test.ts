@@ -51,8 +51,10 @@ describe('side conversations', () => {
         } },
       });
       const compacted = await loop.compactThreadContext(side.id);
-      expect(requests).toHaveLength(1);
-      expect(requests[0]!.messages.map((message) => message.content).join('\n')).toContain('Original requirement');
+      expect(requests.length).toBeGreaterThan(1);
+      const sources = ['untrusted_older_history', 'retained_recent_context'].map((tag) => requests
+        .map((request) => request.messages[1]!.content.split(`<${tag}>\n`)[1]!.split(`\n</${tag}>`)[0]).join('')).join('\n');
+      for (const message of original) expect(sources).toContain(message.content);
       expect(compacted.messages.some((message) => message.contextCompaction?.source === 'local')).toBe(true);
       expect(await runtime.threadStore.getThread(parent.id)).toEqual(before);
     } finally {

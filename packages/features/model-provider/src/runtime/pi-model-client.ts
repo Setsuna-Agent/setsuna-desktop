@@ -1,21 +1,5 @@
+import type { Provider } from '@earendil-works/pi-ai';
 import {
-  stream as streamAnthropic,
-  type AnthropicEffort,
-} from '@earendil-works/pi-ai/api/anthropic-messages';
-import { stream as streamOpenAiCompletions } from '@earendil-works/pi-ai/api/openai-completions';
-import { stream as streamOpenAiResponses } from '@earendil-works/pi-ai/api/openai-responses';
-import { normalizeContext, type TranscriptContext } from '@earendil-works/pi-ai/utils/transcript';
-import type {
-  AnthropicOptions,
-  AssistantMessageEvent,
-  Model,
-  ModelThinkingLevel,
-  OpenAICompletionsOptions,
-  OpenAIResponsesOptions,
-  Provider,
-} from '@earendil-works/pi-ai';
-import {
-  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
   type ModelCompactionRequest,
   type ModelCompactionResult,
   type ModelRequest,
@@ -28,11 +12,8 @@ import type {
 } from '../contracts/index.js';
 import { runWithModelTimeout, streamWithModelTimeout } from './model-request-timeout.js';
 import {
-  createPiModel,
   createPiReplayContext,
   providerReplayDecisions,
-  toPiContext,
-  type PiApi,
 } from './pi-context.js';
 import {
   bridgePiStream,
@@ -40,20 +21,21 @@ import {
 } from './pi-stream-bridge.js';
 import {
   nextPiCompatibilityRetry,
-  piOpenAiRequestPayload,
-  piResponseFormatPayload,
-  withKnownPiRequestCompatibility,
-  type PiModelRequest,
 } from './pi-request-compatibility.js';
 import { builtinCatalogProviderIdForConfig, getBuiltinCatalogProvider } from './provider-catalog.js';
 import { applyProviderRequestHeaders } from './provider-request-headers.js';
 import { recoverIncompletePiStream } from './pi-stream-recovery.js';
 import { ModelRequestDiagnostics } from './model-request-diagnostics.js';
 
+import { preparePiRequest } from './pi-request-preparation.js';
+import { streamForProvider } from './pi-provider-stream.js';
+import type { ResponsesCompactionProtocol } from './responses-native-compactor.js';
+
 const EMPTY_API_KEY = 'setsuna-no-provider-api-key';
 const LOCAL_SMOKE_MODEL = 'local-runtime-smoke';
 
 export class PiModelClient implements ModelProviderSamplingService {
+  private readonly compactionProtocols = new Map<string, ResponsesCompactionProtocol>();
   constructor(
     private readonly host: ModelProviderRuntimeHost,
     private readonly providers?: readonly Provider[],
@@ -69,16 +51,13 @@ export class PiModelClient implements ModelProviderSamplingService {
         return;
       }
 
-      const modelId = provider.activeModel?.code || request.model;
-      const compatibilityModel = createPiModel(provider, modelId, { providers: this.providers });
-      let currentRequest = withKnownPiRequestCompatibility(
-        withProviderDefaults(request, provider, modelId),
-        compatibilityModel,
-      );
+      let prepared = preparePiRequest(provider, request, this.providers);
+      const compatibilityModel = prepared.model;
+      let currentRequest = prepared.request;
       while (true) {
         let emitted = false;
         try {
-          for await (const event of this.streamConfigured(provider, currentRequest, diagnostics)) {
+          for await (const event of this.streamConfigured(provider, prepared, diagnostics)) {
             emitted = true;
             diagnostics.observe(event);
             yield event;
@@ -91,6 +70,7 @@ export class PiModelClient implements ModelProviderSamplingService {
           if (!retryRequest) throw error;
           diagnostics.record('model.compatibility_retry');
           currentRequest = retryRequest;
+          prepared = preparePiRequest(provider, currentRequest, this.providers);
         }
       }
     } catch (error) {
@@ -104,15 +84,16 @@ export class PiModelClient implements ModelProviderSamplingService {
   async compactConversation(request: ModelCompactionRequest): Promise<ModelCompactionResult> {
     const provider = await this.resolveRequestProvider(request);
     if (!provider || provider.provider !== 'openai-responses') {
-      throw new Error('Native remote compaction is only supported by OpenAI Responses providers.');
+      return { kind: 'unsupported' };
     }
     const model = provider.activeModel?.code || request.model;
-    const { compactOpenAiResponsesConversation } = await import('./responses-compactor.js');
+    const { compactNativeResponses } = await import('./responses-native-compactor.js');
     return runWithModelTimeout(
-      (signal) => compactOpenAiResponsesConversation(
+      (signal) => compactNativeResponses(
         { ...request, model, signal },
         provider,
         this.providerFetch(provider, request.sessionId),
+        this.compactionProtocols,
         this.providers,
       ),
       request.signal,
@@ -121,17 +102,11 @@ export class PiModelClient implements ModelProviderSamplingService {
 
   private async *streamConfigured(
     provider: ModelProviderRuntimeConfig,
-    request: PiModelRequest,
+    prepared: ReturnType<typeof preparePiRequest>,
     diagnostics: ModelRequestDiagnostics,
   ): AsyncGenerator<ModelStreamEvent> {
-    const replayContext = createPiReplayContext(provider, request.model, this.providers);
+    const { model, context, replayContext, request } = prepared;
     this.publishProviderReplayDebug(request, replayContext);
-    const model = createPiModel(provider, request.model, {
-      forceAdaptiveThinking: request.anthropicThinkingMode === 'adaptive' || usesAdaptiveAnthropicThinking(request),
-      providers: this.providers,
-    });
-    // Direct provider/API streams require prompts and tools in transcript system messages.
-    const context = normalizeContext(toPiContext(request, replayContext));
     diagnostics.record('provider.ready', {
       thinking: request.thinking, reasoningEffort: request.reasoningEffort,
       maxOutputTokens: request.maxOutputTokens,
@@ -226,141 +201,6 @@ function isBuiltInLocalSmokeProvider(provider: ModelProviderRuntimeConfig): bool
     && !provider.apiKey.trim();
 }
 
-function streamForProvider(
-  model: Model<PiApi>,
-  context: TranscriptContext,
-  input: PiModelRequest & Readonly<{ apiKey: string; fetch: typeof fetch; signal: AbortSignal }>,
-  catalogProvider?: Provider,
-): AsyncIterable<AssistantMessageEvent> {
-  const common = {
-    apiKey: input.apiKey,
-    fetch: input.fetch,
-    signal: input.signal,
-    // Pi retries transient request failures with abortable backoff before emitting
-    // output, preserving this sampling step and its already-completed tool results.
-    maxRetries: 3,
-    maxTokens: input.maxOutputTokens,
-    // 同一任务的工具续跑及后续轮次共享缓存亲和性；不能使用每轮变化的 turnId。
-    sessionId: input.sessionId,
-    ...(typeof input.temperature === 'number' ? { temperature: input.temperature } : {}),
-  };
-  // A catalog upgrade can change a provider's protocol (e.g. Kimi Code). Keep
-  // saved connections on their configured API instead of invoking the new adapter.
-  const builtinProvider = catalogProvider?.id === model.provider
-    && getBuiltinCatalogProvider(model.provider)?.getModels().some((candidate) => candidate.api === model.api)
-    ? catalogProvider
-    : undefined;
-  if (model.api === 'openai-responses') {
-    const typedModel = model as Model<'openai-responses'>;
-    const options = {
-      ...common,
-      toolChoice: openAiResponsesToolChoice(input.toolChoice),
-      reasoningEffort: reasoningEffort(input),
-      reasoningSummary: input.thinking ? 'auto' : null,
-      onPayload: (payload) => piOpenAiRequestPayload(payload, input, typedModel),
-    } satisfies OpenAIResponsesOptions;
-    return builtinProvider
-      ? builtinProvider.stream(typedModel, context, options)
-      : streamOpenAiResponses(typedModel, context, options);
-  }
-  if (model.api === 'anthropic-messages') {
-    const typedModel = model as Model<'anthropic-messages'>;
-    const options = {
-      ...common,
-      toolChoice: anthropicToolChoice(input.toolChoice),
-      ...anthropicThinkingOptions(input, typedModel),
-      cacheRetention: input.stepSnapshot ? 'short' : 'none',
-      onPayload: (payload) => piResponseFormatPayload(payload, input, 'anthropic-messages'),
-    } satisfies AnthropicOptions;
-    return builtinProvider
-      ? builtinProvider.stream(typedModel, context, options)
-      : streamAnthropic(typedModel, context, options);
-  }
-  const typedModel = model as Model<'openai-completions'>;
-  const options = {
-    ...common,
-    toolChoice: openAiCompletionsToolChoice(input.toolChoice),
-    reasoningEffort: reasoningEffort(input),
-    onPayload: (payload) => piOpenAiRequestPayload(payload, input, typedModel),
-  } satisfies OpenAICompletionsOptions;
-  return builtinProvider
-    ? builtinProvider.stream(typedModel, context, options)
-    : streamOpenAiCompletions(typedModel, context, options);
-}
-
-function withProviderDefaults(
-  request: ModelRequest,
-  provider: ModelProviderRuntimeConfig,
-  model: string,
-): ModelRequest {
-  const configuredModel = provider.activeModel;
-  const thinking = request.thinking === true && configuredModel?.thinkingEnabled === true;
-  const defaultEffort = configuredModel?.defaultThinkingEffort
-    || configuredModel?.thinkingEfforts.find((effort) => effort.trim());
-  return {
-    ...request,
-    model,
-    sessionId: request.sessionId ?? request.stepSnapshot?.threadId,
-    maxOutputTokens: request.maxOutputTokens
-      ?? configuredModel?.maxOutputTokens
-      ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
-    thinking,
-    reasoningEffort: thinking ? request.reasoningEffort || defaultEffort : undefined,
-  };
-}
-
-function reasoningEffort(
-  request: Pick<ModelRequest, 'thinking' | 'reasoningEffort'>,
-): OpenAICompletionsOptions['reasoningEffort'] {
-  if (!request.thinking || !request.reasoningEffort) return undefined;
-  // Pi accepts wire values at runtime; its narrower type must not silently
-  // discard user-configured levels such as `none` or a gateway-specific value.
-  return (request.reasoningEffort.trim() || undefined) as OpenAICompletionsOptions['reasoningEffort'];
-}
-
-function anthropicThinkingOptions(
-  request: PiModelRequest,
-  model: Model<'anthropic-messages'>,
-): Partial<AnthropicOptions> {
-  if (request.anthropicThinkingMode === 'default') return {};
-  if (!request.thinking) return { thinkingEnabled: false };
-  if (model.compat?.forceAdaptiveThinking === true) {
-    const effort = anthropicAdaptiveEffort(request.reasoningEffort, model);
-    return { thinkingEnabled: true, ...(effort ? { effort } : {}) };
-  }
-  const maxTokens = request.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS;
-  if (maxTokens <= 1_024) return { thinkingEnabled: false };
-  const budget = anthropicThinkingBudget(request.reasoningEffort, maxTokens);
-  return {
-    thinkingEnabled: true,
-    ...(budget ? { thinkingBudgetTokens: budget } : {}),
-  };
-}
-
-function anthropicAdaptiveEffort(
-  effort: unknown,
-  model: Model<'anthropic-messages'>,
-): AnthropicEffort | undefined {
-  const normalized = typeof effort === 'string' ? effort.trim().toLowerCase() : '';
-  if (!normalized || normalized === 'adaptive' || normalized === 'auto') return undefined;
-  const mapped = model.thinkingLevelMap?.[normalized as ModelThinkingLevel];
-  if (typeof mapped === 'string') {
-    const mappedEffort = mapped.toLowerCase();
-    if (mappedEffort === 'minimal' || mappedEffort === 'low') return 'low';
-    return mappedEffort === 'medium' || mappedEffort === 'high'
-      || mappedEffort === 'xhigh' || mappedEffort === 'max'
-      ? mappedEffort
-      : undefined;
-  }
-  const candidate = normalized;
-  if (candidate === 'minimal' || candidate === 'low') return 'low';
-  if (candidate === 'medium') return 'medium';
-  if (candidate === 'high') return 'high';
-  // Match Pi's adaptive Anthropic clamp: extended levels require an explicit
-  // model mapping and otherwise fall back to the provider's highest base tier.
-  return candidate === 'xhigh' || candidate === 'max' ? 'high' : undefined;
-}
-
 function safeNetworkErrorCode(error: unknown, depth = 0): string | undefined {
   if (!error || typeof error !== 'object' || depth > 3) return undefined;
   const record = error as Record<string, unknown>;
@@ -368,47 +208,6 @@ function safeNetworkErrorCode(error: unknown, depth = 0): string | undefined {
     return record.code.toUpperCase();
   }
   return safeNetworkErrorCode(record.cause, depth + 1);
-}
-
-function usesAdaptiveAnthropicThinking(request: ModelRequest): boolean {
-  if (!request.thinking || typeof request.reasoningEffort !== 'string') return false;
-  const effort = request.reasoningEffort.trim().toLowerCase();
-  return effort === 'adaptive' || effort === 'auto';
-}
-
-function anthropicThinkingBudget(effort: unknown, maxTokens: number): number | undefined {
-  const normalized = typeof effort === 'string' ? effort.trim().toLowerCase() : '';
-  if (!normalized || normalized === 'adaptive' || normalized === 'auto') return undefined;
-  const mapped = {
-    minimal: 1_024,
-    low: 2_048,
-    medium: 4_096,
-    high: 8_192,
-    xhigh: 16_384,
-  }[normalized];
-  const requested = normalized === 'max' ? maxTokens - 1 : mapped ?? positiveInt(normalized);
-  if (!requested) return undefined;
-  return Math.max(1_024, Math.min(requested, maxTokens - 1));
-}
-
-function openAiCompletionsToolChoice(choice: ModelRequest['toolChoice']): OpenAICompletionsOptions['toolChoice'] {
-  if (!choice || choice === 'auto' || choice === 'none') return choice;
-  return { type: 'function', function: { name: choice.name } };
-}
-
-function openAiResponsesToolChoice(choice: ModelRequest['toolChoice']): OpenAIResponsesOptions['toolChoice'] {
-  if (!choice || choice === 'auto' || choice === 'none') return choice;
-  return { type: 'function', name: choice.name };
-}
-
-function anthropicToolChoice(choice: ModelRequest['toolChoice']): AnthropicOptions['toolChoice'] {
-  if (!choice || choice === 'auto' || choice === 'none') return choice;
-  return { type: 'tool', name: choice.name };
-}
-
-function positiveInt(value: unknown): number | undefined {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
 }
 
 async function* localSmokeStream(): AsyncGenerator<ModelStreamEvent> {

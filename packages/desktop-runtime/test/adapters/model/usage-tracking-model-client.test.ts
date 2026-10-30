@@ -121,6 +121,22 @@ describe('UsageTrackingModelClient', () => {
     expect(fixture.records[0]).toMatchObject({ source: 'compaction', result: 'success', totalTokens: 7 });
     expect(compactConversation.mock.calls[0]?.[0]).not.toHaveProperty('usageContext');
   });
+
+  it('records observed native usage once when the resulting checkpoint is rejected', async () => {
+    const fixture = tracked({
+      async *stream() { yield { type: 'done' }; },
+      async compactConversation(input) {
+        input.onUsage?.({ inputTokens: 120, outputTokens: 30, totalTokens: 150 });
+        throw new Error('Invalid replacement window');
+      },
+    });
+    const onUsage = vi.fn();
+    await expect(fixture.client.compactConversation?.({ ...request, onUsage, usageContext: { ...request.usageContext!, source: 'compaction' } }))
+      .rejects.toThrow('Invalid replacement window');
+    expect(onUsage).toHaveBeenCalledOnce();
+    expect(fixture.records).toHaveLength(1);
+    expect(fixture.records[0]).toMatchObject({ source: 'compaction', result: 'error', totalTokens: 150, requestCount: 1 });
+  });
 });
 
 function tracked(inner: ModelClient, monotonicNow = () => 0) {

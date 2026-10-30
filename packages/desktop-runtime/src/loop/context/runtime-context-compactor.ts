@@ -1,9 +1,12 @@
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+  MODEL_REQUEST_TOTAL_TIMEOUT_MS,
   RUNTIME_PROVIDER_METADATA_MAX_BYTES,
   runtimeJsonByteLength,
   sanitizeRuntimeJsonObject,
+  mergeCompactedMessages,
   type PendingRuntimeEvent,
+  type ModelCompactionResult,
   type ModelRequest,
   type RuntimeConfigState,
   type RuntimeEvent,
@@ -20,6 +23,7 @@ import type { RuntimeCompactHookTrigger } from '../../hooks/runtime-hooks.js';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ModelClient } from '../../ports/model-client.js';
+import type { ContextWindowSnapshot, PendingContextCompactionEvent } from '../../ports/thread-store.js';
 import {
   appendRuntimeDebugTraceSafely,
   runtimeDebugTraceEnabled,
@@ -48,6 +52,9 @@ import { contextCompactionRequest, contextCompactionRequestBudget, type ContextC
 import { nextContextCompactionBatch } from './context-compaction-batches.js';
 import { nativeCompactionMatchesModel, restoreNativeCompactionHistory } from './context-compaction-history.js';
 import { restoreToolObservations } from './tool-result-working-set.js';
+import { nativeCompactionCandidate } from './context-compaction-native.js';
+import { nativeCompactionTokens } from './native-compaction-tokens.js';
+import type { ContextCompactionCommitter, CompactionSourceSnapshot } from './context-compaction-commit.js';
 
 type GeneratedContextCompactionSummary = {
   source: 'local' | 'remote';
@@ -55,11 +62,13 @@ type GeneratedContextCompactionSummary = {
   providerMetadata?: RuntimeMessageProviderMetadata;
   omittedProviderMetadata?: RuntimeMessageProviderMetadata;
   nativeSourceMessageIds?: string[];
+  candidate?: RuntimeContextCompactionCandidate;
 };
 
 type NativeContextCompactionArtifact = {
   providerMetadata?: RuntimeMessageProviderMetadata;
   omittedProviderMetadata?: RuntimeMessageProviderMetadata;
+  mode?: Extract<ModelCompactionResult, { kind: 'native' }>['mode'];
 };
 
 type RuntimeContextCompactorOptions = {
@@ -72,6 +81,7 @@ type RuntimeContextCompactorOptions = {
     event: PendingRuntimeEvent,
   ): Promise<RuntimeEvent | null | void>;
   onCompacted(threadId: string): void;
+  windows?: ContextCompactionCommitter;
   runCompactHooks(input: {
     unattended?: boolean;
     eventName: 'PreCompact' | 'PostCompact';
@@ -90,6 +100,8 @@ type RuntimeCompactionDebugContext = {
   turnId: string;
 };
 
+type PrepareCompactionRequest = (messages: RuntimeMessage[], options?: { supportsImages?: boolean }) => Promise<ModelRequest>;
+
 type CompactionSamplingInput = {
   candidate: RuntimeContextCompactionCandidate;
   threadId: string;
@@ -99,15 +111,20 @@ type CompactionSamplingInput = {
   debugContext?: RuntimeCompactionDebugContext;
   runtimeConfig?: RuntimeConfigState | null;
   conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>;
+  messages?: RuntimeMessage[];
+  transcriptMessages?: readonly RuntimeMessage[];
+  prepareRequest?: PrepareCompactionRequest;
 };
 
-type RuntimeContextCompactionInput = {
+export type RuntimeContextCompactionInput = {
   contextBudget?: RuntimeContextCompactionBudget;
   conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>;
+  prepareRequest?: PrepareCompactionRequest;
   force: boolean;
   messages: RuntimeMessage[];
   /** Canonical bodies for persistence; messages may contain temporary working-set references. */
   transcriptMessages?: readonly RuntimeMessage[];
+  sourceSnapshot?: CompactionSourceSnapshot;
   reservedTokens?: number;
   runtimeConfig: RuntimeConfigState | null | undefined;
   signal: AbortSignal;
@@ -115,24 +132,49 @@ type RuntimeContextCompactionInput = {
   threadId: string;
   turnId: string;
   unattended?: boolean;
+  /** Fingerprint of the actual instructions, tools and model options captured for this step. */
+  requestContextKey?: string;
+};
+
+export type PreparedContextCompaction = {
+  input: RuntimeContextCompactionInput;
+  capturedWindow?: ContextWindowSnapshot;
+  event: PendingContextCompactionEvent;
+  messages: RuntimeMessage[];
+  summary: GeneratedContextCompactionSummary;
+  candidate: RuntimeContextCompactionCandidate;
+  debugContext?: RuntimeCompactionDebugContext;
 };
 
 /** 管理上下文窗口策略、摘要生成及压缩事件投影。 */
 export class RuntimeContextCompactor {
   constructor(private readonly options: RuntimeContextCompactorOptions) {}
 
-  async compactMessagesBeforeModelRequest({
-    contextBudget, conversationModel, force, messages, transcriptMessages, reservedTokens = 0,
-    runtimeConfig, signal, thread, threadId, turnId, unattended,
-  }: RuntimeContextCompactionInput): Promise<RuntimeMessage[]> {
+  async compactMessagesBeforeModelRequest(input: RuntimeContextCompactionInput): Promise<RuntimeMessage[]> {
+    const prepared = await this.prepare(input);
+    if (!prepared) return restoreNativeCompactionHistory(input.messages, (message) => Boolean(input.conversationModel
+      && nativeCompactionMatchesModel(message, input.runtimeConfig, input.conversationModel)));
+    const installed = await this.install(prepared, { ...input, signal: prepared.input.signal });
+    if (!installed) throw new Error('Context changed or exceeded the budget while compacting; the candidate was discarded and current history was retained.');
+    return installed;
+  }
+
+  /** Generate a validated candidate without changing the active window. Background work stays silent. */
+  async prepare(input: RuntimeContextCompactionInput, background = false): Promise<PreparedContextCompaction | null> {
+    let {
+      contextBudget, conversationModel, prepareRequest, force, messages, transcriptMessages, sourceSnapshot, reservedTokens = 0,
+      runtimeConfig, signal, thread, threadId, turnId, unattended,
+    } = input;
     messages = restoreNativeCompactionHistory(messages, (message) => Boolean(conversationModel && nativeCompactionMatchesModel(message, runtimeConfig, conversationModel)));
-    // 先持久化摘要和可恢复正文，再请求模型；临时工具引用只进入模型窗口。
     const budget = reserveRuntimeContextCompactionBudget(
       contextBudget ?? contextCompactionBudgetForConfig(runtimeConfig),
       reservedTokens,
     );
-    const candidate = createRuntimeContextCompactionCandidate({ budget, force, messages, activeTurnId: turnId });
-    if (!candidate) return messages;
+    let candidate = createRuntimeContextCompactionCandidate({ budget, force: force || background, messages, activeTurnId: turnId, allowCompletedTail: background });
+    if (!candidate) return null;
+    if (background) candidate.triggerScopes = ['background'];
+    signal = AbortSignal.any([signal, AbortSignal.timeout(MODEL_REQUEST_TOTAL_TIMEOUT_MS)]);
+    const capturedWindow = await this.options.windows?.capture(threadId, messages, sourceSnapshot);
     const trigger = compactHookTrigger(force);
     const preCompact = await this.options.runCompactHooks({
       eventName: 'PreCompact',
@@ -144,7 +186,7 @@ export class RuntimeContextCompactor {
       turnId,
     });
     if (preCompact.shouldStop) throw new HookStoppedTurnError(preCompact.stopReason || 'PreCompact hook stopped execution');
-    const compactingEvent = await this.publishContextCompacting(
+    const compactingEvent = background ? undefined : await this.publishContextCompacting(
       threadId,
       turnId,
       force,
@@ -160,8 +202,11 @@ export class RuntimeContextCompactor {
         }
       : undefined;
     const summary = await this.generateContextCompactionSummary({
-      candidate, threadId, turnId, signal, debugContext, runtimeConfig, conversationModel,
+      candidate, messages, prepareRequest, transcriptMessages, threadId, turnId,
+      signal,
+      debugContext, runtimeConfig, conversationModel,
     });
+    candidate = summary.candidate ?? candidate;
     const result = materializeRuntimeContextCompaction({
       candidate,
       createdAt: this.options.clock.now().toISOString(),
@@ -174,16 +219,11 @@ export class RuntimeContextCompactor {
     });
     throwIfAborted(signal);
     if ((!force && result.notice.compactedRequestTokens! >= candidate.originalTokens + candidate.reservedTokens)
+      || result.notice.compactedTokens > candidate.targetContextTokens
       || result.notice.compactedRequestTokens! >= candidate.autoCompactTokenLimit) {
       throw new Error('Context compaction did not free enough space; original history was retained.');
     }
-    const metadataWarningEvent = await this.publishProviderMetadataWarning(
-      threadId,
-      turnId,
-      summary.omittedProviderMetadata,
-    );
-    advanceDebugAnchor(debugContext, metadataWarningEvent);
-    const compactedEvent = await this.options.appendEvent(threadId, {
+    const compactionEvent: PendingContextCompactionEvent = {
       id: this.options.ids.id('event'),
       threadId,
       turnId,
@@ -192,8 +232,25 @@ export class RuntimeContextCompactor {
       // Working-set references belong only to model requests. Compaction replaces messages
       // by ID in durable history, so restore their bodies before writing even archived entries.
       payload: { ...result, messages: restoreToolObservations(result.messages, transcriptMessages ?? thread.messages) },
-    });
+    };
+    return { input: { ...input, signal }, capturedWindow, event: compactionEvent, messages: result.messages, summary, candidate, debugContext };
+  }
+
+  /** Install only at a sampling boundary. The store owns final prefix and suffix validation. */
+  async install(prepared: PreparedContextCompaction, current: RuntimeContextCompactionInput): Promise<RuntimeMessage[] | null> {
+    const { capturedWindow, summary, candidate, debugContext } = prepared;
+    const { signal, thread, threadId, turnId, runtimeConfig, unattended, force } = current;
+    throwIfAborted(signal);
+    const compactionEvent = { ...prepared.event, turnId };
+    const compactedEvent = capturedWindow && this.options.windows
+      ? await this.options.windows.commit(threadId, capturedWindow, compactionEvent, signal)
+      : await this.options.appendEvent(threadId, compactionEvent);
+    if (capturedWindow && !compactedEvent) {
+      throwIfAborted(signal);
+      return null;
+    }
     advanceDebugAnchor(debugContext, compactedEvent);
+    advanceDebugAnchor(debugContext, await this.publishProviderMetadataWarning(threadId, turnId, summary.omittedProviderMetadata));
     this.options.onCompacted(threadId);
     this.traceCompaction(debugContext, 'context.compaction.completed', {
       metadataPersisted: Boolean(summary.providerMetadata),
@@ -209,11 +266,14 @@ export class RuntimeContextCompactor {
       runtimeConfig,
       signal,
       thread,
-      trigger,
+      trigger: compactHookTrigger(force),
       turnId,
     });
     if (postCompact.shouldStop) throw new HookStoppedTurnError(postCompact.stopReason || 'PostCompact hook stopped execution');
-    return result.messages;
+    // The candidate may have been generated before another completed tool exchange/user correction.
+    const messages = await this.options.windows?.currentMessages(threadId) ?? current.messages;
+    throwIfAborted(signal);
+    return mergeCompactedMessages(messages, prepared.messages, capturedWindow?.messageIds);
   }
 
   /**
@@ -222,7 +282,7 @@ export class RuntimeContextCompactor {
    * 每次模型调用结束即记录用量，不依赖摘要校验或压缩提交是否成功。
    */
   async generateContextCompactionSummary({
-    candidate, threadId, turnId, signal, debugContext, runtimeConfig, conversationModel,
+    candidate, messages, prepareRequest, transcriptMessages, threadId, turnId, signal, debugContext, runtimeConfig, conversationModel,
   }: {
     candidate: RuntimeContextCompactionCandidate;
     threadId: string;
@@ -231,37 +291,40 @@ export class RuntimeContextCompactor {
     debugContext?: RuntimeCompactionDebugContext;
     runtimeConfig?: RuntimeConfigState | null;
     conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>;
+    messages?: RuntimeMessage[];
+    transcriptMessages?: readonly RuntimeMessage[];
+    prepareRequest?: PrepareCompactionRequest;
   }): Promise<GeneratedContextCompactionSummary> {
     const publishUsage = async (usage: RuntimeUsage): Promise<void> => {
       const event = await this.publishContextCompactionUsage(threadId, turnId, usage);
       advanceDebugAnchor(debugContext, event);
     };
-    const samplingInput = { candidate, threadId, turnId, publishUsage, signal, debugContext, runtimeConfig, conversationModel };
+    const sourceMessages = messages ?? [...candidate.olderMessages, ...candidate.pinnedMessages, ...candidate.recentMessages];
+    const samplingInput = { candidate, messages: sourceMessages, prepareRequest, transcriptMessages, threadId, turnId, publishUsage, signal, debugContext, runtimeConfig, conversationModel };
     const provider = runtimeConfig?.providers.find((item) => item.id === (conversationModel?.providerId ?? runtimeConfig.activeProviderId));
     // An explicit task model selects portable compaction. Native-only checkpoints require all
     // source messages to survive transcript archival, including on a later provider switch.
     const useNative = !runtimeConfig?.taskModels?.contextCompaction
       && (!provider || provider.provider === 'openai-responses')
-      && !candidate.olderMessages.some((message) => message.visibility === 'model');
+      && !sourceMessages.some((message) => message.visibility === 'model');
     const nativeArtifact: NativeContextCompactionArtifact = useNative ? await this.generateNativeContextCompaction(samplingInput) : {};
     if (nativeArtifact.providerMetadata) {
-      const nativeTokens = Math.ceil(runtimeJsonByteLength(sanitizeRuntimeJsonObject(nativeArtifact.providerMetadata) ?? {}) / 4) + 256;
-      const available = candidate.autoCompactTokenLimit - candidate.reservedTokens
-        - estimateRuntimeMessageTokens([...candidate.pinnedMessages, ...candidate.recentMessages]);
+      const nativeTokens = nativeCompactionTokens(nativeArtifact.providerMetadata) ?? Infinity;
+      const replacementCandidate = nativeCompactionCandidate(candidate, sourceMessages, nativeArtifact.mode, nativeTokens);
+      const available = candidate.targetContextTokens
+        - estimateRuntimeMessageTokens([...replacementCandidate.pinnedMessages, ...replacementCandidate.recentMessages]);
       if (nativeTokens < available) {
         return {
           source: 'remote',
           text: 'Earlier context is preserved in provider-native compaction state.',
           providerMetadata: nativeArtifact.providerMetadata,
-          nativeSourceMessageIds: candidate.olderMessages.filter((message) => message.visibility !== 'transcript').map((message) => message.id),
+          candidate: replacementCandidate,
+          nativeSourceMessageIds: sourceMessages.filter((message) => message.visibility !== 'transcript').map((message) => message.id),
         };
       }
       nativeArtifact.omittedProviderMetadata = nativeArtifact.providerMetadata;
     }
-    const portableSummary = await this.generatePortableContextCompactionSummary({
-      ...samplingInput,
-      candidate: { ...candidate, olderMessages: restoreNativeCompactionHistory(candidate.olderMessages) },
-    });
+    const portableSummary = await this.generatePortableContextCompactionSummary(samplingInput);
     return {
       source: 'local',
       text: portableSummary,
@@ -273,7 +336,16 @@ export class RuntimeContextCompactor {
 
   private async generatePortableContextCompactionSummary(input: CompactionSamplingInput): Promise<string> {
     const budget = contextCompactionRequestBudget(input);
-    let source = compactionSummarySource(input.candidate);
+    // Summary input needs original evidence; retention budgets still measure the working window.
+    const sourceCandidate = {
+      ...input.candidate,
+      olderMessages: restoreToolObservations(restoreNativeCompactionHistory(input.candidate.olderMessages), input.transcriptMessages ?? []),
+      recentMessages: restoreToolObservations(input.candidate.recentMessages, input.transcriptMessages ?? []),
+    };
+    const history = [...sourceCandidate.olderMessages, ...sourceCandidate.pinnedMessages, ...sourceCandidate.recentMessages];
+    const sourceIds = new Set(history.map((message) => message.id));
+    const prepared = await input.prepareRequest?.(history, { supportsImages: budget.supportsImages });
+    let source = compactionSummarySource(sourceCandidate, prepared?.messages.filter((message) => sourceIds.has(message.id)), budget.supportsImages);
     let summary = '';
     do {
       throwIfAborted(input.signal);
@@ -284,7 +356,7 @@ export class RuntimeContextCompactor {
         ...input, budget, source: batch.source, previousSummary: summary,
       });
       source = batch.remaining;
-    } while (source.olderHistory || source.recentContext);
+    } while (source.olderHistory || source.recentContext || source.images?.length);
     return summary;
   }
 
@@ -305,6 +377,7 @@ export class RuntimeContextCompactor {
       });
       let usage: RuntimeUsage | undefined;
       let completed = false;
+      let receivedResponse = false;
       let finishReason: string | undefined;
       try {
         for await (const item of this.options.modelClient.stream({
@@ -318,6 +391,7 @@ export class RuntimeContextCompactor {
           output.consume(item);
           if (item.type === 'done') { completed = true; finishReason = item.finishReason; }
         }
+        receivedResponse = true;
         throwIfAborted(signal);
         if (!completed || (finishReason !== undefined && finishReason !== 'stop')) {
           throw new Error(`Context compaction response was incomplete (${finishReason ?? 'stream closed'}; generation limit ${request.maxOutputTokens} tokens${output.text().trim() ? '' : '; no summary text'}).`);
@@ -333,7 +407,8 @@ export class RuntimeContextCompactor {
           error: compactionDebugError(error), olderMessageCount: candidate.olderMessages.length,
           outcome: 'error', recentMessageCount: candidate.recentMessages.length,
         });
-        if (signal?.aborted) throw error;
+        // Transport and authentication failures are not a request to regenerate a summary.
+        if (signal?.aborted || !receivedResponse) throw error;
         if (attempt === 1) throw new Error(`Context compaction failed; original history was retained. ${compactionDebugError(error)}`, { cause: error });
       } finally {
         // Usage belongs to the model call, including incomplete and cancelled attempts.
@@ -347,7 +422,7 @@ export class RuntimeContextCompactor {
    * 原生结果只在原供应商边界回放；跨模型交接从归档原文重新生成，不猜测 opaque 内容。
    */
   private async generateNativeContextCompaction({
-    candidate, threadId, turnId, publishUsage, signal, debugContext, conversationModel,
+    candidate, messages, prepareRequest, threadId, turnId, publishUsage, signal, debugContext, conversationModel,
   }: CompactionSamplingInput): Promise<NativeContextCompactionArtifact> {
     if (!this.options.modelClient.compactConversation) {
       this.traceCompaction(debugContext, 'context.compaction.native', {
@@ -364,17 +439,20 @@ export class RuntimeContextCompactor {
     });
     let usage: RuntimeUsage | undefined;
     try {
+      const request = prepareRequest
+        ? await prepareRequest(messages ?? candidate.olderMessages)
+        : { ...(conversationModel ?? { model: 'context-compaction' }), messages: messages ?? candidate.olderMessages };
       const result = await this.options.modelClient.compactConversation({
         // Provider-native compaction stays on the current conversation model because
         // its opaque metadata is only replayable by that provider/model pair.
-        ...(conversationModel ?? { model: 'context-compaction' }),
+        ...request,
         sessionId: threadId,
         usageContext: { threadId, turnId, source: 'compaction' },
         // Native compact must see the real model window, including exact provider envelopes.
-        messages: candidate.olderMessages,
+        onUsage: (observed) => { usage = observed; },
         signal,
       });
-      usage = result.usage;
+      usage = result.usage ?? usage;
       throwIfAborted(signal);
       if (result.kind !== 'native') {
         this.traceCompaction(debugContext, 'context.compaction.native', {
@@ -392,6 +470,7 @@ export class RuntimeContextCompactor {
         recentMessageCount: candidate.recentMessages.length,
       });
       return {
+        mode: result.mode,
         ...(metadataFits ? { providerMetadata: result.providerMetadata } : {}),
         ...(!metadataFits ? { omittedProviderMetadata: result.providerMetadata } : {}),
       };
@@ -402,8 +481,7 @@ export class RuntimeContextCompactor {
         outcome: 'error',
         recentMessageCount: candidate.recentMessages.length,
       });
-      if (signal?.aborted) throw error;
-      return {};
+      throw error;
     } finally {
       if (usage) await publishUsage(usage);
     }

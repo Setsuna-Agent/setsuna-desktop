@@ -26,8 +26,7 @@ describe('Responses native compactor', () => {
     });
     expect(JSON.parse(String(init?.body))).toMatchObject({
       model: 'gpt-test',
-      instructions: 'policy',
-      input: [{ role: 'user', content: 'hello' }],
+      input: [{ role: 'system', content: 'policy' }, { role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
     });
     expect(result).toMatchObject({
       kind: 'native',
@@ -69,11 +68,10 @@ describe('Responses native compactor', () => {
           { type: 'input_image', image_url: 'data:image/png;base64,dXNlci1pbWFnZQ==', detail: 'auto' },
         ],
       },
-      { type: 'function_call_output', call_id: 'call-1', output: 'rendered' },
       {
-        role: 'user',
-        content: [
-          { type: 'input_text', text: 'Image output from tool render:' },
+        type: 'function_call_output', call_id: 'call-1',
+        output: [
+          { type: 'input_text', text: 'rendered' },
           { type: 'input_image', image_url: 'data:image/png;base64,dG9vbC1pbWFnZQ==', detail: 'auto' },
         ],
       },
@@ -157,9 +155,8 @@ describe('Responses native compactor', () => {
     }, providerFixture(), fetchImpl);
 
     const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
-    expect(body.input).toEqual([{
+    expect(body.input).toMatchObject([{
       type: 'message',
-      id: 'msg_setsuna_0',
       role: 'assistant',
       status: 'completed',
       content: [{ type: 'output_text', text: 'Visible answer', annotations: [] }],
@@ -227,6 +224,7 @@ function providerFixture(): ModelProviderRuntimeConfig {
     enabled: true,
     maxOutputTokens: 8_192,
     thinkingEnabled: false,
+    supportsImages: true,
     thinkingEfforts: [],
   };
   return {

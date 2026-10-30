@@ -3,6 +3,8 @@ import type { RuntimeMessageProviderMetadata } from './message-metadata.js';
 import type { RuntimeMessage } from './threads.js';
 import type { RuntimeUsage, RuntimeUsageContext } from './usage.js';
 
+export const MODEL_REQUEST_TOTAL_TIMEOUT_MS = 15 * 60 * 1000;
+
 export type ModelResponseFormat = {
   type: 'json';
   name?: string;
@@ -29,9 +31,16 @@ export type ModelRequest = {
   signal?: AbortSignal;
 };
 
-export type ModelCompactionRequest = Pick<ModelRequest, 'model' | 'providerId' | 'sessionId' | 'usageContext' | 'messages' | 'signal'>;
+/** The same prepared request as sampling; native compaction needs instructions, tools and replay state. */
+export type ModelCompactionRequest = Omit<ModelRequest, 'responseFormat'> & {
+  /** Observe billable usage even if validation or installation later fails. */
+  onUsage?: (usage: RuntimeUsage) => void;
+};
 
 export type ModelCompactionResult =
+  | { kind: 'unsupported'; usage?: RuntimeUsage }
+  /** The full native window cannot be accepted; use lossless batching, without caching lack of support. */
+  | { kind: 'context_limit'; usage?: RuntimeUsage }
   | {
       kind: 'summary';
       summary: string;
@@ -39,6 +48,8 @@ export type ModelCompactionResult =
     }
   | {
       kind: 'native';
+      /** Missing on legacy clients means a standalone replacement of the submitted history. */
+      mode?: 'responses-v2' | 'responses-compact';
       providerMetadata: RuntimeMessageProviderMetadata;
       usage?: RuntimeUsage;
     };

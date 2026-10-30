@@ -39,3 +39,12 @@ export type RuntimeThreadContextCompactionState = {
   tokensUntilCompaction?: number;
   usedTokens?: number;
 };
+
+/** Last measured request anchored to an unchanged history prefix; billing totals are separate. */
+export type RuntimeContextUsageBaseline = {
+  modelKey: string;
+  messageIds: string[];
+  checkpointIds: string[];
+  fingerprint: string;
+  adjustment: number;
+};

@@ -25,6 +25,7 @@ import type { MessageKey } from '../../shared/i18n/messages.js';
 import { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 import { GeneralSettings } from './sections/GeneralSettings.js';
 import { BrowserLinkSettings } from './sections/BrowserLinkSettings.js';
+import { ExperimentalSettings } from './sections/ExperimentalSettings.js';
 import { PersonalizationSettings } from './sections/PersonalizationSettings.js';
 import { RuntimeAdvancedSettings, RuntimePolicySettings } from './sections/RuntimeSettings.js';
 import { TaskModelSettings } from './sections/TaskModelSettings.js';
@@ -132,6 +133,12 @@ export function SettingsPage({
     ) : resolvedSection === 'personalization' ? (
       config ? (
         <PersonalizationSettings config={config} onSavePreferences={onSaveRuntimePreferences} />
+      ) : (
+        <EmptyState title={t('settings.configUnavailable')} />
+      )
+    ) : resolvedSection === 'experimental' ? (
+      config ? (
+        <ExperimentalSettings config={config} onSave={onSaveRuntimePreferences} />
       ) : (
         <EmptyState title={t('settings.configUnavailable')} />
       )

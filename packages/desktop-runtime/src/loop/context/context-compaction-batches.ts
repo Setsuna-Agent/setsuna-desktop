@@ -26,15 +26,20 @@ export function nextContextCompactionBatch(input: {
     if (fits(sourcePrefix(source, middle))) low = middle;
     else high = middle - 1;
   }
-  const count = batchBoundary(source, low);
-  if (count === 0) {
+  const count = low === length ? low : batchBoundary(source, low);
+  const batch = sourcePrefix(source, count);
+  let imageCount = 0;
+  while (imageCount < (source.images?.length ?? 0)
+    && fits({ ...batch, images: source.images!.slice(0, imageCount + 1) })) imageCount += 1;
+  if (count === 0 && imageCount === 0) {
     throw new Error(`Context compaction has insufficient input budget on ${budget.modelRequest.model}; original history was retained.`);
   }
   return {
-    source: sourcePrefix(source, count),
+    source: { ...batch, images: source.images?.slice(0, imageCount) },
     remaining: {
       olderHistory: source.olderHistory.slice(count),
       recentContext: source.recentContext.slice(Math.max(0, count - source.olderHistory.length)),
+      images: source.images?.slice(imageCount),
     },
   };
 }

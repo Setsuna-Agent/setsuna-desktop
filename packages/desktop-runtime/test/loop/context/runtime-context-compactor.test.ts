@@ -21,6 +21,19 @@ import { InMemoryConversationDebugTraceStore } from '@setsuna-desktop/feature-co
 import { CapturingUsageStore } from '../../support/agent-loop/shared.js';
 
 describe('RuntimeContextCompactor', () => {
+  it('summarizes canonical tool evidence instead of persisting only an evictable working-set reference', async () => {
+    const candidate = compactionCandidate();
+    const original: RuntimeMessage = {
+      id: 'observation', role: 'tool', createdAt: '2026-07-11T00:00:00Z', content: 'Verified original evidence',
+      toolResultRef: { resultId: 'result', originalEstimatedTokens: 5000, visibleTokens: 5000, visibleTokenLimit: 5000, locallyTruncated: false },
+    };
+    candidate.olderMessages = [{ ...original, content: '[Stored tool observation]\nresult_id: result' }];
+    const client = new CompactionModelClient([{ type: 'text_delta', text: 'Preserved original evidence.' }, { type: 'done', finishReason: 'stop' }]);
+    await createCompactor(client).generateContextCompactionSummary({ ...summaryInput(candidate), transcriptMessages: [original] });
+    expect(client.request!.messages[1]!.content).toContain(original.content);
+    expect(client.request!.messages[1]!.content).not.toContain('[Stored tool observation]');
+  });
+
   it.each([
     { model: 'claude-haiku-5-5', effort: 'minimal', expectedEffort: 'low', rejectThinking: false },
     { model: 'custom-compaction-alias', effort: 'high', expectedEffort: 'high', rejectThinking: true },
@@ -165,13 +178,13 @@ describe('RuntimeContextCompactor', () => {
     await expect(compactor.compactMessagesBeforeModelRequest({
       force: true, messages, thread: compactionThread(messages), threadId: 'thread_1', turnId: 'turn_1',
       runtimeConfig: config, signal: controller.signal,
-    })).rejects.toThrow(outcome === 'cancel' ? 'Batch failed' : 'original history was retained');
-    expect(requests).toBe(outcome === 'cancel' ? 2 : 3);
+    })).rejects.toThrow('Batch failed');
+    expect(requests).toBe(2);
     expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(false);
     expect(messages).toEqual(original);
     expect(usageStore.records).toHaveLength(requests);
     expect(usageStore.records.slice(1).map((record) => record.result)).toEqual(
-      outcome === 'cancel' ? ['cancelled'] : ['error', 'error'],
+      outcome === 'cancel' ? ['cancelled'] : ['error'],
     );
     expect(usageStore.records.slice(1).every((record) => record.totalTokens === undefined)).toBe(true);
   });
@@ -179,7 +192,8 @@ describe('RuntimeContextCompactor', () => {
   it('batches a single large tool-call record and retained context without dropping either source', async () => {
     const config = contextCompactionTaskModelConfig();
     config.providers[1]!.models[0]!.contextWindowTokens = 4_000;
-    const candidate = { ...compactionCandidate(), autoCompactTokenLimit: 100_000 };
+    const candidate = { ...compactionCandidate(), maxContextTokens: 200_000, maxContextTokensK: 200,
+      autoCompactTokenLimit: 100_000, targetContextTokens: 50_000 };
     const calls = Array.from({ length: 20 }, (_, i) => ({
       id: `call_${i}`, name: 'read_file', arguments: `argument ${i} ${'🧪'.repeat(500)} end ${i}`,
     }));
@@ -428,7 +442,7 @@ describe('RuntimeContextCompactor', () => {
 
   it('keeps history intact when the summary provider fails', async () => {
     const modelClient: ModelClient = {
-      compactConversation: async () => { throw new Error('native compaction unsupported'); },
+      compactConversation: async () => ({ kind: 'unsupported' }),
       stream: async function* () {
         yield await Promise.reject<ModelStreamEvent>(new Error('summary provider unavailable'));
       },
@@ -440,7 +454,7 @@ describe('RuntimeContextCompactor', () => {
     await expect(createCompactor(modelClient, events).compactMessagesBeforeModelRequest({
       force: true, messages, thread, threadId: thread.id, turnId: 'turn_1', runtimeConfig: null,
       signal: new AbortController().signal,
-    })).rejects.toThrow('original history was retained');
+    })).rejects.toThrow('summary provider unavailable');
     expect(events.map((event) => event.type)).toEqual(['thread.context_compacting']);
     expect(thread.messages).toEqual(messages);
   });
@@ -668,7 +682,7 @@ function compactionCandidate(): RuntimeContextCompactionCandidate {
     pinnedMessages: [],
     recentMessages: [],
     reservedTokens: 0,
-    targetContextTokens: 8,
+    targetContextTokens: 640,
     triggerScopes: ['manual'],
   };
 }
@@ -677,8 +691,8 @@ function compactionMessages(): RuntimeMessage[] {
   return [
     {
       id: 'message_older',
-      role: 'user',
-      content: 'An older goal that must be summarized.',
+      role: 'assistant',
+      content: 'Earlier verified progress that must be summarized.',
       createdAt: '2026-07-11T00:00:00.000Z',
       status: 'complete',
     },

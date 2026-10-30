@@ -7,6 +7,7 @@ import type {
 import type { EventBus } from '../../ports/event-bus.js';
 import type { RuntimeDebugTraceSink } from '../../ports/runtime-debug-trace.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
+import type { ContextWindowSnapshot, PendingContextCompactionEvent, ContextCompactionCommitOptions } from '../../ports/thread-store.js';
 import { RuntimeStreamMetricsCollector } from './runtime-stream-metrics.js';
 
 type PendingEvent = PendingStoredThreadEvent;
@@ -58,6 +59,22 @@ export class RuntimeEventWriter {
       savedEvent = await this.persistAndPublishOne(event);
     });
     return savedEvent;
+  }
+
+  /** A stale/cancelled candidate is discarded without poisoning the event writer. */
+  async commitCompaction(threadId: string, expected: ContextWindowSnapshot, event: PendingContextCompactionEvent, options?: ContextCompactionCommitOptions): Promise<StoredThreadEvent | null> {
+    this.throwIfFailed();
+    const pending = this.takeBatch(threadId);
+    let saved: StoredThreadEvent | null = null;
+    await this.enqueueWrite(threadId, async () => {
+      await this.persistAndPublish(pending);
+      saved = await this.threadStore.commitContextCompaction?.(threadId, expected, event, options) ?? null;
+      if (saved) {
+        this.eventBus.publish(saved);
+        this.streamMetrics.recordPersisted(saved);
+      }
+    });
+    return saved;
   }
 
   /** Persists a small domain transaction before publishing any member. */

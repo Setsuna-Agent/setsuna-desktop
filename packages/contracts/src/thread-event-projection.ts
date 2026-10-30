@@ -210,11 +210,16 @@ export function cloneMemoryCitation(citation: NonNullable<RuntimeMessage['memory
  * @param previousMessages 压缩前的线程消息列表。
  * @param compactedMessages 压缩事件给出的新消息窗口。
  */
-export function mergeCompactedMessages(previousMessages: RuntimeMessage[], compactedMessages: RuntimeMessage[]): RuntimeMessage[] {
+export function mergeCompactedMessages(previousMessages: RuntimeMessage[], compactedMessages: RuntimeMessage[], sourceMessageIds?: readonly string[]): RuntimeMessage[] {
   const compactedIds = new Set(compactedMessages.map((message) => message.id));
+  const capturedIds = sourceMessageIds ? new Set(sourceMessageIds) : undefined;
+  const appended = capturedIds ? previousMessages.filter((message) => !capturedIds.has(message.id)
+    && !compactedIds.has(message.id) && message.visibility !== 'transcript') : [];
+  const appendedIds = new Set(appended.map((message) => message.id));
   // 保留用户可见历史为 transcript，同时用压缩结果替换模型可见窗口。
-  const archivedMessages = previousMessages.filter((message) => !compactedIds.has(message.id) && message.visibility !== 'model').map(cloneTranscriptMessage);
-  return [...archivedMessages, ...compactedMessages.map(cloneMessage)];
+  const archivedMessages = previousMessages.filter((message) => !compactedIds.has(message.id)
+    && !appendedIds.has(message.id) && message.visibility !== 'model').map(cloneTranscriptMessage);
+  return [...archivedMessages, ...compactedMessages.map(cloneMessage), ...appended.map(cloneMessage)];
 }
 
 export function cloneTranscriptMessage(message: RuntimeMessage): RuntimeMessage {

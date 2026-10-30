@@ -82,6 +82,7 @@ export type RuntimeMessageProviderMetadata = {
   };
 
   openAiResponsesCompaction?: {
+    mode?: 'responses-v2' | 'responses-compact';
     responseId?: string;
     items: RuntimeJsonObject[];
   };
@@ -222,6 +223,7 @@ function normalizeV3ResponsesCompaction(
   const items = sanitizeResponsesItems(compaction.items, 'compaction');
   if (!items?.length) return undefined;
   return {
+    ...(compaction.mode === 'responses-v2' || compaction.mode === 'responses-compact' ? { mode: compaction.mode } : {}),
     ...(typeof compaction.responseId === 'string' && compaction.responseId
       ? { responseId: compaction.responseId }
       : {}),
