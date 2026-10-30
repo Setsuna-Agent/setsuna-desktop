@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useTerminalActions } from '../../../src/renderer/actions/useTerminalActions.js';
-import { useTerminalActionDraft } from '../../../src/renderer/actions/useTerminalActionDraft.js';
+import { useTerminalActionEditor } from '../../../src/renderer/actions/useTerminalActionEditor.js';
 import { terminalActionsStorageKey } from '../../../src/renderer/actions/storage.js';
 
 const toast = vi.hoisted(() => ({ error: vi.fn() }));
@@ -31,37 +31,39 @@ it('shares project actions and the selected action across panels and restores co
   expect(second.result.current.selected?.id).toBe(action.id);
 });
 
-it('keeps edits and deletions in the settings draft until saved, including after a storage failure', () => {
+it('keeps failed writes open and commits one action without changing its identity or selection', () => {
   const source = renderHook(() => useTerminalActions('project', translate));
   act(() => { source.result.current.add({ name: 'Start', command: 'pnpm dev' }); });
   const saved = source.result.current.actions[0]!;
-  const editor = renderHook(() => useTerminalActionDraft(source.result.current.actions, source.result.current.replace));
-  act(() => { editor.result.current.update({ ...saved, name: 'Test', command: 'pnpm test', icon: 'flask', platform: 'win32' }); });
+  const editor = renderHook(() => useTerminalActionEditor(source.result.current.actions, source.result.current.replace));
+  act(() => { editor.result.current.open(saved); });
+  const changed = { ...saved, name: 'Test', command: 'pnpm test', icon: 'flask', platform: 'win32' } as const;
   expect(source.result.current.selected).toEqual(saved);
   const write = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new Error('Full'); });
-  act(() => { expect(editor.result.current.save()).toBe(false); });
-  expect(editor.result.current.actions[0]?.command).toBe('pnpm test');
+  act(() => { expect(editor.result.current.save(changed)).toBe(false); });
+  expect(editor.result.current.editing?.action.id).toBe(saved.id);
   expect(source.result.current.selected).toEqual(saved);
   write.mockRestore();
-  act(() => { expect(editor.result.current.save()).toBe(true); });
-  expect(source.result.current.selected).toMatchObject({ name: 'Test', icon: 'flask', platform: 'win32' });
+  act(() => { expect(editor.result.current.save(changed)).toBe(true); });
+  expect(source.result.current.selected).toEqual(changed);
+  expect(editor.result.current.editing).toBeNull();
   editor.rerender();
-  act(() => { editor.result.current.remove(saved.id); });
-  expect(source.result.current.actions).toHaveLength(1);
-  act(() => { editor.result.current.save(); });
+  act(() => { editor.result.current.open(changed); });
+  act(() => { expect(editor.result.current.remove()).toBe(true); });
   expect(source.result.current.selected).toBeNull();
 });
 
-it('rejects a stale settings draft instead of removing newly added actions from another panel', () => {
+it('rejects saving or deleting from a stale editor instead of losing changes from another panel', () => {
   const source = renderHook(() => useTerminalActions('project', translate));
   act(() => { source.result.current.add({ name: 'Start', command: 'pnpm dev' }); });
   const saved = source.result.current.actions[0]!;
-  const editor = renderHook(() => useTerminalActionDraft(source.result.current.actions, source.result.current.replace));
-  act(() => { editor.result.current.remove(saved.id); });
+  const editor = renderHook(() => useTerminalActionEditor(source.result.current.actions, source.result.current.replace));
+  act(() => { editor.result.current.open(saved); });
   act(() => { source.result.current.add({ name: 'Test', command: 'pnpm test' }); });
-  act(() => { expect(editor.result.current.save()).toBe(false); });
+  act(() => { expect(editor.result.current.save({ ...saved, command: 'pnpm start' })).toBe(false); });
+  act(() => { expect(editor.result.current.remove()).toBe(false); });
   expect(source.result.current.actions.map((action) => action.name)).toEqual(['Start', 'Test']);
-  expect(editor.result.current.actions).toEqual([]);
+  expect(editor.result.current.editing?.action).toEqual(saved);
   expect(toast.error).toHaveBeenCalledWith('feature.terminal.actions.changedElsewhere');
 });
 

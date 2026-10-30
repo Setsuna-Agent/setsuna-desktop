@@ -4,18 +4,19 @@ import {
   clearTerminalRestoreBuffer,
   type TerminalWorkspacePanelHost,
 } from '@setsuna-desktop/feature-terminal/renderer';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { useI18n } from '../shared/i18n/I18nProvider.js';
 
 export type { TerminalWorkspacePanelHost };
 export { TerminalActionsHostProvider, type TerminalActionsHost } from '@setsuna-desktop/feature-terminal/renderer';
 
-export function TerminalFeatureActions({ projectId, projectName }: {
+export function TerminalFeatureActions({ projectId, projectName, menuAnchorRef }: {
   projectId: string;
   projectName: string;
+  menuAnchorRef?: RefObject<HTMLElement>;
 }) {
   const { t } = useI18n();
-  return <TerminalActions key={projectId} project={{ id: projectId, name: projectName }} translate={t} />;
+  return <TerminalActions key={projectId} project={{ id: projectId, name: projectName }} translate={t} menuAnchorRef={menuAnchorRef} />;
 }
 
 export function TerminalWorkspaceFeatureBoundary({

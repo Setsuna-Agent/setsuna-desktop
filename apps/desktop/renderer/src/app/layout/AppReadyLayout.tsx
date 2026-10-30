@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserSettingsNavigationProvider } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { TerminalActionsHostProvider, type TerminalActionsHost } from '../../composition/TerminalWorkspaceFeatureBoundary.js';
+import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
 import {
   shellOverlaySlot,
   shellSidebarSlot,
@@ -446,7 +447,11 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     openPage: (url: string) => { workspacePanels.openBrowserPanel(url); setActiveView('chat'); },
   }), [setActiveView, workspacePanels.openBrowserPanel]);
   const terminalActionsHost = useMemo<TerminalActionsHost>(() => ({
-    projects: runtime.projects,
+    projects: runtime.projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      iconNode: <ProjectIcon icon={project.icon} size={16} />,
+    })),
     platform: window.setsunaDesktop?.desktop.platform ?? '',
     runAction: workspacePanels.canRunTerminalAction ? workspacePanels.runTerminalAction : undefined,
     openTerminal: workspacePanels.canRunTerminalAction ? () => workspacePanels.openDesktopPanel('bottom', 'terminal') : undefined,

@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { TerminalActions } from '../../../src/renderer/actions/TerminalActions.js';
 import { TerminalActionsHostProvider } from '../../../src/renderer/actions/context.js';
 import { TerminalActionSettingsPage } from '../../../src/renderer/actions/TerminalActionSettingsPage.js';
@@ -17,16 +18,17 @@ vi.mock('@setsuna-desktop/renderer-ui', async (importOriginal) => ({
 const t: RendererTranslate = (key, params) => params?.name ? `${key}:${params.name}` : key;
 const project = { id: 'project', name: 'Example' };
 const settingsUi = {
+  Button,
   PageLayout: ({ parent, children }) => <section>
     {parent ? <button onClick={parent.onBack}>Back</button> : null}{children}
   </section>,
   Section: ({ children }) => <section>{children}</section>,
-  Group: ({ children }) => <div>{children}</div>,
+  Group: ({ title, children }) => <div>{title}{children}</div>,
   NavigationRow: ({ label, onClick }) => <button onClick={onClick}>{label}</button>,
 } satisfies Partial<SettingsViewUi>;
 
 afterEach(async () => {
-  cleanup(); localStorage.clear(); toast.error.mockClear();
+  cleanup(); localStorage.clear(); vi.restoreAllMocks(); toast.error.mockClear();
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 });
 
@@ -85,41 +87,63 @@ it('carries an unsaved quick action into environment settings and persists its s
     expect.objectContaining({ name: 'Check', command: 'echo "check"\npnpm test', icon: 'rocket', platform: 'win32' }),
   ]));
   expect(runAction).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Check' }));
   await user.click(screen.getByRole('button', { name: 'feature.terminal.actions.delete' }));
   expect(readTerminalActions(project.id).actions).toHaveLength(1);
-  await user.click(screen.getByRole('button', { name: 'feature.terminal.actions.save' }));
+  let confirmation = screen.getByRole('dialog', { name: 'feature.terminal.actions.deleteConfirm:Check' });
+  await user.click(within(confirmation).getByRole('button', { name: 'feature.terminal.actions.cancel' }));
+  expect(readTerminalActions(project.id).actions).toHaveLength(1);
+  await user.click(screen.getByRole('button', { name: 'feature.terminal.actions.delete' }));
+  confirmation = screen.getByRole('dialog', { name: 'feature.terminal.actions.deleteConfirm:Check' });
+  await user.click(within(confirmation).getByRole('button', { name: 'feature.terminal.actions.delete' }));
+  expect(readTerminalActions(project.id).actions).toEqual([]);
   expect(readTerminalActions(project.id).selectedId).toBeNull();
 });
 
-it('starts an empty project with an unsaved action, discards it on return, and saves only completed fields', async () => {
+it('creates and edits individual actions, discards cancelled fields, and keeps a failed save open for retry', async () => {
   const user = userEvent.setup();
   render(<TerminalActionsHostProvider host={{ projects: [project], platform: 'darwin', openSettings: vi.fn() }}>
     <TerminalActionSettingsPage sectionId="environments" translate={t} ui={settingsUi as SettingsViewUi} />
   </TerminalActionsHostProvider>);
 
   await user.click(screen.getByRole('button', { name: project.name }));
+  const add = await screen.findByRole('button', { name: 'feature.terminal.actions.add' });
+  expect(screen.queryByRole('textbox')).toBeNull();
+  await user.click(add);
   const name = await screen.findByRole<HTMLInputElement>('textbox', { name: 'feature.terminal.actions.name' });
   expect(name.value).toBe('');
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'feature.terminal.actions.save' }).disabled).toBe(true);
   fireEvent.change(name, { target: { value: 'Unsaved' } });
-  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await user.click(screen.getByRole('button', { name: 'feature.terminal.actions.cancel' }));
   expect(localStorage.getItem(terminalActionsStorageKey(project.id))).toBeNull();
 
-  await user.click(screen.getByRole('button', { name: project.name }));
+  await user.click(screen.getByRole('button', { name: 'feature.terminal.actions.add' }));
   const freshName = await screen.findByRole<HTMLInputElement>('textbox', { name: 'feature.terminal.actions.name' });
   expect(freshName.value).toBe('');
   fireEvent.change(freshName, { target: { value: 'Start' } });
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'feature.terminal.actions.save' }).disabled).toBe(true);
   fireEvent.change(screen.getByRole('textbox', { name: 'feature.terminal.actions.script' }), { target: { value: 'pnpm dev' } });
   expect(readTerminalActions(project.id).actions).toEqual([]);
+  const write = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new Error('Full'); });
+  await user.click(screen.getByRole('button', { name: 'feature.terminal.actions.save' }));
+  expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'feature.terminal.actions.name' }).value).toBe('Start');
+  expect(readTerminalActions(project.id).actions).toEqual([]);
+  expect(toast.error).toHaveBeenCalledWith('feature.terminal.actions.saveFailed');
+  write.mockRestore();
   await user.click(screen.getByRole('button', { name: 'feature.terminal.actions.save' }));
   const saved = readTerminalActions(project.id).actions;
   expect(saved).toEqual([expect.objectContaining({ name: 'Start', command: 'pnpm dev', icon: 'settings', platform: 'all' })]);
 
   await user.click(screen.getByRole('button', { name: 'Back' }));
   await user.click(screen.getByRole('button', { name: project.name }));
+  await user.click(await screen.findByRole('button', { name: 'Start' }));
   const savedName = await screen.findByRole<HTMLInputElement>('textbox', { name: 'feature.terminal.actions.name' });
   expect(savedName.value).toBe('Start');
+  fireEvent.change(screen.getByRole('textbox', { name: 'feature.terminal.actions.script' }), { target: { value: 'pnpm start' } });
+  await user.click(screen.getByRole('button', { name: 'feature.terminal.actions.cancel' }));
+  expect(readTerminalActions(project.id).actions).toEqual(saved);
+  await user.click(screen.getByRole('button', { name: 'Start' }));
+  expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'feature.terminal.actions.script' }).value).toBe('pnpm dev');
   fireEvent.change(screen.getByRole('textbox', { name: 'feature.terminal.actions.script' }), { target: { value: 'pnpm start' } });
   await user.click(screen.getByRole('button', { name: 'feature.terminal.actions.save' }));
   expect(readTerminalActions(project.id).actions).toEqual([{ ...saved[0], command: 'pnpm start' }]);

@@ -1,19 +1,25 @@
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Dropdown, IconButton, useToast } from '@setsuna-desktop/renderer-ui';
 import { Ellipsis, Plus, Settings, SquareTerminal } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import { TerminalActionDialog } from './TerminalActionDialog.js';
 import { TerminalActionIcon } from './TerminalActionIcon.js';
 import { useTerminalActionsHost, type TerminalActionProject } from './context.js';
 import { useTerminalActions } from './useTerminalActions.js';
+import { useTerminalActionMenuPosition } from './useTerminalActionMenuPosition.js';
 import './actions.css';
 
-export function TerminalActions({ project, translate: t }: { project: TerminalActionProject; translate: RendererTranslate }) {
+export function TerminalActions({ project, translate: t, menuAnchorRef }: {
+  project: TerminalActionProject;
+  translate: RendererTranslate;
+  menuAnchorRef?: RefObject<HTMLElement>;
+}) {
   const host = useTerminalActionsHost();
   const actions = useTerminalActions(project.id, t);
   const toast = useToast();
   const [adding, setAdding] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuPosition = useTerminalActionMenuPosition(menuAnchorRef, menuOpen);
   const [running, setRunning] = useState(false);
   const launching = useRef(false);
   const available = actions.actions.filter((action) => action.platform === 'all' || action.platform === host?.platform);
@@ -28,7 +34,8 @@ export function TerminalActions({ project, translate: t }: { project: TerminalAc
   };
 
   return <div className="feature-terminal-actions">
-    <Dropdown placement="bottomRight" open={menuOpen} onOpenChange={setMenuOpen}
+    <Dropdown ref={menuPosition.triggerRef} placement={menuPosition.placement} align={menuPosition.align}
+      open={menuOpen} onOpenChange={setMenuOpen}
       className="feature-terminal-actions-menu"
       onCloseAutoFocus={(event) => { if (adding) event.preventDefault(); }}
       menu={{ selectedKeys: selected ? [selected.id] : [], items: [
@@ -50,7 +57,7 @@ export function TerminalActions({ project, translate: t }: { project: TerminalAc
       disabled={!host?.runAction || running} onClick={() => { void run(); }}>
       <TerminalActionIcon icon={selected.icon} size={15} />
     </IconButton> : null}
-    {adding ? <TerminalActionDialog translate={t} onSave={actions.add} onClose={() => setAdding(false)}
+    {adding ? <TerminalActionDialog mode="quick" translate={t} onSave={actions.add} onClose={() => setAdding(false)}
       onOpenSettings={(draft) => host?.openProjectSettings(project, draft)} /> : null}
   </div>;
 }

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type { TerminalAction } from '../../contracts/index.js';
 
-export type TerminalActionProject = Readonly<{ id: string; name: string }>;
+export type TerminalActionProject = Readonly<{ id: string; name: string; iconNode?: ReactNode }>;
 export type TerminalActionsHost = Readonly<{
   projects: readonly TerminalActionProject[];
   platform: string;
