@@ -9,3 +9,8 @@ script = ""
 name = "Server Start"
 icon = "run"
 command = "pnpm dev"
+
+[[actions]]
+name = "pnpm i"
+icon = "tool"
+command = "pnpm i"
