@@ -129,6 +129,7 @@ export class ProviderProxyReferenceError extends Error {
 }
 
 export class FileConfigStore implements ConfigStore {
+  private readonly listeners = new Set<() => void>();
   private readonly configPath: string;
   private readonly secretsPath: string;
 
@@ -149,6 +150,11 @@ export class FileConfigStore implements ConfigStore {
       const secrets = await this.readSecrets();
       return this.toState(stored, secrets);
     });
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
   }
 
   imageGenerationLegacySettingsAdapter(): ImageGenerationLegacySettingsAdapter {
@@ -304,6 +310,9 @@ export class FileConfigStore implements ConfigStore {
       // 先写入密钥可保证失败安全：只有私密文件完成持久替换后，配置提交才能引用新密钥。
       await this.writeSecrets(secrets);
       await writeJsonFile(this.configPath, stored);
+      for (const listener of this.listeners) {
+        try { listener(); } catch { /* Observers cannot fail an already committed configuration. */ }
+      }
       return this.toState(stored, secrets);
     });
   }

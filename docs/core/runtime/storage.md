@@ -113,6 +113,14 @@ Input 中未提供 key 表示不覆盖；不能把 UI 空输入误解释为删�
 3. 更新轻量线程摘要。生命周期边界同时推进检查点；其他记录按默认 1 秒窗口合并检查点。
 4. Commit 后发布整批事件。批次失败不发布其中任何事件，也不提交半批记录。
 
+`commitContextCompaction` 在同一线程写入队列内验证捕获的活跃前缀指纹、检查点身份、
+历史改写序号、取消和合并后预算，再写 `thread.context_compacted`。
+覆盖范围随事件持久化，投影保留期间追加的完整后缀。候选过期返回未提交结果，
+不使共享 event writer 进入故障状态；其模型 usage 独立记账。
+
+`thread.context_usage_calibrated` 随事件立即落盘，但沿用 telemetry 的延迟检查点策略，
+不因每次模型 usage 校准而额外强制重写线程检查点；事件尾部可以恢复该基线。
+
 检查点使用 `snapshot_format = 2`：
 
 - `threads.snapshot_json` 只保存线程头部和消息/回合数量，不再包含完整历史。

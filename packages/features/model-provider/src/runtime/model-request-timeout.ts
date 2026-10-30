@@ -1,4 +1,4 @@
-const DEFAULT_TOTAL_TIMEOUT_MS = 15 * 60 * 1000;
+import { MODEL_REQUEST_TOTAL_TIMEOUT_MS } from '@setsuna-desktop/contracts';
 
 export type ModelRequestTimeoutOptions = Readonly<{
   totalTimeoutMs?: number;
@@ -11,7 +11,7 @@ export async function* streamWithModelTimeout<T>(
 ): AsyncGenerator<T> {
   const controller = new AbortController();
   const signal = parentSignal ? AbortSignal.any([parentSignal, controller.signal]) : controller.signal;
-  const totalTimeoutMs = positiveTimeout(options.totalTimeoutMs, DEFAULT_TOTAL_TIMEOUT_MS);
+  const totalTimeoutMs = positiveTimeout(options.totalTimeoutMs, MODEL_REQUEST_TOTAL_TIMEOUT_MS);
   const deadline = Date.now() + totalTimeoutMs;
   const iterator = createStream(signal)[Symbol.asyncIterator]();
   try {
@@ -38,7 +38,7 @@ export async function runWithModelTimeout<T>(
 ): Promise<T> {
   const controller = new AbortController();
   const signal = parentSignal ? AbortSignal.any([parentSignal, controller.signal]) : controller.signal;
-  const timeoutMs = positiveTimeout(options.totalTimeoutMs, DEFAULT_TOTAL_TIMEOUT_MS);
+  const timeoutMs = positiveTimeout(options.totalTimeoutMs, MODEL_REQUEST_TOTAL_TIMEOUT_MS);
   try {
     return await waitForPromise(operation(signal), signal, controller, timeoutMs, 'Model request timed out.');
   } finally {

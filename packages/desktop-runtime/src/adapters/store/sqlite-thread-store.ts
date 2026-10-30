@@ -23,7 +23,11 @@ import type {
   ThreadStoreCreateInput,
   ThreadStorePatch,
   ThreadStoreQuery,
+  ContextWindowSnapshot,
+  PendingContextCompactionEvent,
+  ContextCompactionCommitOptions,
 } from '../../ports/thread-store.js';
+import { contextWindowMatches } from '../../utils/context-window-snapshot.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { readLegacyJsonThreads } from './legacy-json-thread-reader.js';
 import {
@@ -469,6 +473,19 @@ export class SqliteThreadStore implements ThreadStore {
       safeThreadId,
       () => this.appendEventsUnlocked(safeThreadId, eventsWithoutSeq),
     );
+  }
+
+  async commitContextCompaction(threadId: string, expected: ContextWindowSnapshot, event: PendingContextCompactionEvent, options?: ContextCompactionCommitOptions): Promise<StoredThreadEvent | null> {
+    const id = assertSafeRuntimeId(threadId, 'Thread id');
+    if (event.threadId !== id) throw new Error('Runtime event thread id does not match its storage thread.');
+    await this.ensureReady();
+    return this.enqueueThreadWrite(id, async () => {
+      const current = this.threadCache.get(id) ?? this.loadThread(id);
+      if (options?.signal?.aborted || !current || (expected.mutationSeq !== undefined && expected.mutationSeq !== (current.contextBudgetInvalidatedAtSeq ?? 0))
+        || !contextWindowMatches(current.messages, expected) || options?.acceptsWindow?.(current.messages) === false) return null;
+      // No await between validation and the transaction's projection read. All mutations share this queue.
+      return this.appendEventUnlocked(id, { ...event, payload: { ...event.payload, sourceMessageIds: expected.messageIds } });
+    });
   }
 
   async listEvents(threadId: string, sinceSeq = 0, filter?: ThreadEventFilter): Promise<StoredThreadEvent[]> {

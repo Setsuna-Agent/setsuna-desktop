@@ -2,7 +2,7 @@ import { isRuntimeInputMessageAttachment, type RuntimeMessage } from '@setsuna-d
 
 /** Route capabilities from task input, never from reports encoded as user-role context. */
 export function currentTurnSkillActivationText(messages: RuntimeMessage[], turnId: string): string {
-  const requests = messages.filter(isSkillActivationInput);
+  const requests = messages.filter(isTaskInput);
   const currentInputs = requests.filter((message) => message.turnId === turnId);
   // Only legacy inputs lack a turn ID. A different turn's request must not activate this turn's plugins.
   const legacyInput = currentInputs.length ? undefined : [...requests].reverse().find((message) => !message.turnId);
@@ -15,7 +15,7 @@ export function currentTurnSkillActivationText(messages: RuntimeMessage[], turnI
   ]).map((value) => value.trim()).filter(Boolean).join('\n');
 }
 
-function isSkillActivationInput(message: RuntimeMessage): boolean {
+export function isTaskInput(message: RuntimeMessage): boolean {
   return message.role === 'user'
     && message.visibility !== 'model'
     && !message.contextCompaction && !message.goalMode && !message.reviewMode && !message.planMode

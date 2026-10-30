@@ -31,7 +31,7 @@ import type {
   RuntimeToolResultRef,
 } from './provider.js';
 import { reviewMarkdownLinksByLabelStart } from './review/markdown-link-scanner.js';
-import type { RuntimeContextCompactionNotice, RuntimeThreadContextCompactionState } from './thread-context.js';
+import type { RuntimeContextCompactionNotice, RuntimeThreadContextCompactionState, RuntimeContextUsageBaseline } from './thread-context.js';
 import type { RuntimeUsage } from './usage.js';
 import type { ThreadFileChangeState } from './workspace.js';
 import type { RuntimeFileChangeGroups } from './workspace/file-change-group-types.js';
@@ -680,6 +680,7 @@ export type RuntimeThread = RuntimeThreadSummary & {
   /** Display-only complete operation sets for turns in a paged snapshot; no undo bodies. */
   fileChangeGroups?: RuntimeFileChangeGroups;
   contextCompaction?: RuntimeThreadContextCompactionState;
+  contextUsageBaseline?: RuntimeContextUsageBaseline;
   /** Budgets sampled before this history mutation no longer describe the current context. */
   contextBudgetInvalidatedAtSeq?: number;
   mailboxDeliveries?: RuntimeMailboxDeliveryRecord[];

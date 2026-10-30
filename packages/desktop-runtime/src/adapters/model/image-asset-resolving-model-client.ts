@@ -51,7 +51,8 @@ export class ImageAssetResolvingModelClient implements ModelClient {
           resolvedRequest = await this.resolveRequest(preparedRequest);
           continue;
         }
-        if (emitted || !hasModelVisibleImages(resolvedRequest.messages) || !isRejectedImageInputError(error)) throw error;
+        if (emitted || request.usageContext?.source === 'compaction'
+          || !hasModelVisibleImages(resolvedRequest.messages) || !isRejectedImageInputError(error)) throw error;
         // Main-turn requests carry a step snapshot. Emit a deterministic disclosure instead of
         // relying on the fallback model to remember to mention the rejected visual inspection.
         if (request.stepSnapshot) yield { type: 'text_delta' as const, text: IMAGE_INPUT_FALLBACK_NOTICE };
@@ -63,7 +64,7 @@ export class ImageAssetResolvingModelClient implements ModelClient {
 
   async compactConversation(request: ModelCompactionRequest) {
     if (!this.inner.compactConversation) {
-      throw new Error('Remote context compaction is not supported by the configured model client.');
+      return { kind: 'unsupported' as const };
     }
     const preparedRequest = prepareRequestAfterImageFallback(request);
     let resolvedRequest = await this.resolveRequest(preparedRequest);
@@ -75,8 +76,8 @@ export class ImageAssetResolvingModelClient implements ModelClient {
           resolvedRequest = await this.resolveRequest(preparedRequest);
           continue;
         }
-        if (!hasModelVisibleImages(resolvedRequest.messages) || !isRejectedImageInputError(error)) throw error;
-        return this.inner.compactConversation(withoutModelVisibleImages(resolvedRequest));
+        // A checkpoint replaces history. Never make it authoritative after silently removing evidence.
+        throw error;
       }
     }
   }

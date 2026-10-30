@@ -33,8 +33,11 @@ export class UsageTrackingModelClient implements ModelClient {
         let usage: RuntimeUsage | undefined;
         let result: RuntimeUsageResult = 'error';
         try {
-          const response = await inner.compactConversation!(providerRequest);
-          usage = response.usage;
+          const response = await inner.compactConversation!({
+            ...providerRequest,
+            onUsage: (observed) => { usage = observed; request.onUsage?.(observed); },
+          });
+          usage = response.usage ?? usage;
           result = 'success';
           return response;
         } catch (error) {

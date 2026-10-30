@@ -170,6 +170,14 @@ Goal 的附件、Skill、thinking 等放在 Feature-owned `Goal.execution`，后
 - Native provider replacement items 放在受校验 metadata 中。
 - Compaction lifecycle 和 notice 通过事件投影。
 
+新 `thread.context_compacted` 事件的 `sourceMessageIds` 指定捕获的活跃历史覆盖范围。
+投影只替换该范围，完整保留生成期间追加的后缀；旧事件缺少该字段时沿用整窗口替换语义。
+存储层先校验源历史指纹、检查点身份和改写序号，拒绝过期候选后不写入该事件。
+
+`thread.context_usage_calibrated` 保存匹配模型/连接与历史前缀的 input usage 校准基线，
+用于跨 turn 和重启后的窗口估算；它不增加聊天活动项或 SWE 通知。压缩替换窗口时清除旧基线。
+基线中的哈希和 ID 是恢复投影数据，不能代替计费账本，也不保存凭据或请求正文。
+
 Reducer 不能删除用户历史来模拟压缩。
 
 ## Delete、truncate 与 regenerate

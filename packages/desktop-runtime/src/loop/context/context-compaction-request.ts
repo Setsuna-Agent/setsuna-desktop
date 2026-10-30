@@ -19,6 +19,7 @@ export type ContextCompactionRequestBudget = {
   modelOutputLimit: number;
   summaryTokenLimit: number;
   inputTokenLimit: number;
+  supportsImages: boolean;
 };
 
 /** Resolve the actual summarizer once, including room for a handoff between batches. */
@@ -45,7 +46,7 @@ export function contextCompactionRequestBudget(input: {
   // Leave at least a quarter of the window for generation when the model allows it.
   const outputReserve = Math.min(modelOutputLimit, Math.max(summaryTokenLimit, Math.floor(contextWindow / 4)));
   return {
-    contextWindow, modelOutputLimit, summaryTokenLimit,
+    contextWindow, modelOutputLimit, summaryTokenLimit, supportsImages: model?.supportsImages === true,
     inputTokenLimit: contextWindow - outputReserve - COMPACTION_SUMMARY_CONTEXT_OVERHEAD_TOKENS,
     modelRequest: {
       ...selected,

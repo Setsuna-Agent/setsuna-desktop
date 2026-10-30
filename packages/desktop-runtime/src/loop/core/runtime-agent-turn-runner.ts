@@ -1,4 +1,4 @@
-import { ContextTokenCalibration } from '../context/context-token-calibration.js';
+import { ContextTokenCalibration, contextModelIdentity } from '../context/context-token-calibration.js';
 import {
   normalizeRuntimeSkillReferences,
   type RuntimeEnvironment,
@@ -101,6 +101,7 @@ export class RuntimeAgentTurnRunner {
   }: RuntimeTurnExecutionInput): Promise<void> {
     const createdAt = this.options.clock.now().toISOString();
     let activeAssistantMessageId: string | null = null;
+    let settleCompactionUsage: (() => Promise<void>) | undefined;
     const publishUserMessage = options.publishUserMessage !== false;
     // Direct ordinary resumes keep delegated provenance; explicit review/goal modes keep their own policy.
     const taskKind = (options.taskKind === undefined || options.taskKind === 'regular')
@@ -274,7 +275,7 @@ export class RuntimeAgentTurnRunner {
       let stopHookActive = false;
       const publishedModelHistoryWarnings = new Set<string>();
       const loadedToolNames = new Set<string>();
-      const contextTokenCalibration = new ContextTokenCalibration();
+      const contextTokenCalibration = new ContextTokenCalibration(thread.contextUsageBaseline);
 
       // 一个 turn 可能包含多段 assistant：工具调用会结束当前段，把 tool 消息补回上下文后再问模型。
       while (true) {
@@ -305,6 +306,7 @@ export class RuntimeAgentTurnRunner {
           toolAccess: taskKind === 'review' ? 'read-only' : 'all',
         });
         cleanupEnvironment = stepContext.toolContext.environment;
+        settleCompactionUsage = stepContext.settleCompactionUsage ?? settleCompactionUsage;
         conversationMessages = stepContext.conversationMessages;
         responseLanguage = stepContext.responseLanguage;
         runtimeConfig = stepContext.runtimeConfig;
@@ -344,7 +346,13 @@ export class RuntimeAgentTurnRunner {
           toolCalls,
         } = sampled;
         usage = addRuntimeUsage(usage, sampled.usage);
-        contextTokenCalibration.record(stepContext.modelRequest, stepContext.messages, stepContext.tools, sampled.usage);
+        contextTokenCalibration.record(contextModelIdentity(stepContext.modelRequest, stepContext.runtimeConfig),
+          stepContext.messages, stepContext.tools, sampled.usage, stepContext.tokenCalibrationMessages ?? stepContext.conversationMessages);
+        const baseline = contextTokenCalibration.snapshot();
+        if (baseline && sampled.usage?.inputTokens) await this.options.appendEvent(threadId, {
+          id: this.options.ids.id('event'), threadId, turnId, type: 'thread.context_usage_calibrated',
+          createdAt: this.options.clock.now().toISOString(), payload: { baseline },
+        });
         let roundText = sampled.text;
 
         if (toolCalls.length) {
@@ -459,6 +467,10 @@ export class RuntimeAgentTurnRunner {
           },
         });
         activeAssistantMessageId = null;
+        stepContext.precomputeCompaction?.([...conversationMessages, {
+          ...assistantMessage, content: roundText, phase: 'final_answer', status: 'complete',
+          memoryCitation: roundMemoryCitation,
+        }]);
         break;
       }
     } catch (error) {
@@ -546,6 +558,8 @@ export class RuntimeAgentTurnRunner {
         } finally {
           // 轮次级审批只在当前轮次活动期间有效。
           this.options.toolExecutor.cleanupTurn(turnId);
+          // The final answer is already published. Goal settlement must not miss late compaction usage.
+          await settleCompactionUsage?.();
         }
       }
     }

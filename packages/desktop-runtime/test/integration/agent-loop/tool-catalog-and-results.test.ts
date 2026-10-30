@@ -243,7 +243,10 @@ describe('agent loop tool catalog and stored results', () => {
       expect(requests[0].messages.find(message => message.id === originals[0].id)?.content).toContain('[Stored tool observation]');
       expect(requests[1].messages.find(message => message.id === originals[0].id)).toMatchObject(originals[0]);
     } else {
-      expect(compactionRequests.some(request => request.messages.some(message => message.content.includes('[Stored tool observation]')))).toBe(true);
+      expect(compactionRequests.some(request => request.messages.some(message => message.content.includes('[Stored tool observation]')))).toBe(false);
+      const source = compactionRequests.map(request => request.messages[1]!.content
+        .split('<untrusted_older_history>\n')[1]!.split('\n</untrusted_older_history>')[0]).join('');
+      expect(source).toContain(originals[0]!.content);
       const compactions = (await threadStore.listEvents(thread.id)).filter(event => event.type === 'thread.context_compacted');
       expect(compactions.length).toBeGreaterThan(0);
       for (const event of compactions) {
@@ -265,14 +268,15 @@ describe('agent loop tool catalog and stored results', () => {
     threadStore.getSamplingState = async () => { throw new Error('Sampling snapshot unavailable'); };
     const originals = Array.from({ length: 12 }, (_, index) => `Current evidence ${index}: `.padEnd(32_000, 'x'));
     let step = 0;
-    let sawProjectedCompaction = false;
+    const summarySources: string[] = [];
     const loop = new AgentLoop({ ids, threadStore, clock: systemClock, eventBus: new InMemoryEventBus(),
       configStore: new ContextWindowConfigStore(32_000), toolResultStore: new FileToolResultStore(dataDir),
       toolHost: { listTools: async () => [{ name: 'read_file', description: 'Read evidence', inputSchema: { type: 'object' } }],
         runTool: async (_name, args) => ({ content: originals[(args as { index: number }).index] }) },
       modelClient: { async *stream(request): AsyncGenerator<ModelStreamEvent> {
         if (request.messages.some(message => message.id === 'context_compaction_system')) {
-          sawProjectedCompaction ||= request.messages.some(message => message.content.includes('[Stored tool observation]'));
+          expect(request.messages.some(message => message.content.includes('[Stored tool observation]'))).toBe(false);
+          summarySources.push(request.messages[1]!.content.split('<untrusted_older_history>\n')[1]!.split('\n</untrusted_older_history>')[0]!);
           yield { type: 'text_delta', text: JSON.stringify({ summary: 'Inspected the requested evidence.', decisions: [], open_items: [] }) };
           yield { type: 'done', finishReason: 'stop' };
         } else if (++step === 1) {
@@ -291,7 +295,7 @@ describe('agent loop tool catalog and stored results', () => {
     } finally {
       await loop.shutdown();
     }
-    expect(sawProjectedCompaction).toBe(true);
+    expect(summarySources.join('')).toContain(originals[0]!);
     const compactions = (await threadStore.listEvents(thread.id)).filter(event => event.type === 'thread.context_compacted');
     expect(compactions.length).toBeGreaterThan(0);
     const saved = await threadStore.getThread(thread.id);

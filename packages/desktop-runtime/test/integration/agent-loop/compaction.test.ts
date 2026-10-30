@@ -217,7 +217,8 @@ describe('agent loop context compaction', () => {
         }),
       }));
       const compactedSummary = compacted.messages.find((message) => message.contextCompaction);
-      expect(compacted.messages.some((message) => message.id === 'msg_0' && message.visibility === 'transcript')).toBe(true);
+      expect(compacted.messages.find((message) => message.id === 'msg_0')?.visibility).not.toBe('transcript');
+      expect(compacted.messages.find((message) => message.id === 'msg_1')?.visibility).toBe('transcript');
       expect(compactedSummary?.contextCompaction?.triggerScopes).toEqual(['manual']);
       expect(compactedSummary?.turnId).toBe(compactedEvent?.turnId);
       expect(compactedSummary?.content).toContain('模型整理后的上下文摘要');
@@ -301,7 +302,7 @@ describe('agent loop context compaction', () => {
     const compacted = await loop.compactThreadContext(thread.id);
     const summary = compacted.messages.find((message) => message.contextCompaction);
 
-    expect(summary?.contextCompaction?.compactedMessageCount).toBe(3);
+    expect(summary?.contextCompaction?.compactedMessageCount).toBe(2);
     expect(compacted.messages.find((message) => message.id === 'assistant_first')?.visibility).toBe('transcript');
     expect(compacted.messages.find((message) => message.id === 'tool_first')?.visibility).toBe('transcript');
     expect(compacted.messages.find((message) => message.id === 'assistant_second')?.visibility).not.toBe('transcript');
@@ -458,13 +459,11 @@ describe('agent loop context compaction', () => {
       const compactedEvent = events.find((event) => event.type === 'thread.context_compacted' && event.turnId);
       const mainRequest = modelClient.requests.find((request) => request.stepSnapshot);
   
-      expect(modelClient.requests.map((request) => ({
-        model: request.model,
-        toolChoice: request.toolChoice,
-      }))).toEqual([
-        { model: 'local-runtime-smoke', toolChoice: 'none' },
-        { model: 'local-runtime-smoke', toolChoice: undefined },
-      ]);
+      const summaryRequests = modelClient.requests.filter((request) => request.toolChoice === 'none');
+      expect(summaryRequests.length).toBeGreaterThan(0);
+      expect(summaryRequests.every((request) => request.model === 'local-runtime-smoke')).toBe(true);
+      expect(modelClient.requests.filter((request) => request.stepSnapshot)).toEqual([mainRequest]);
+      expect(modelClient.requests.at(-1)).toBe(mainRequest);
       expect(events.some((event) => event.type === 'thread.context_compacting' && event.turnId)).toBe(true);
       expect(compactedEvent?.turnId).toBeTruthy();
       const savedCompactionSummary = saved?.messages.find((message) => message.contextCompaction);

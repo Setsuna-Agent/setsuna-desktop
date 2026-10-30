@@ -180,13 +180,13 @@ AgentLoop facade
 1. 写 `turn.started` 和用户消息事件。
 2. 每个 sampling step 解析一次 `RuntimeEnvironment`。
 3. 读取最新 config、memory、Skill、MCP、工具面和 project instructions。
-4. 必要时执行 context compaction。
+4. 在采样边界校验并安装可复用的后台压缩候选；必要时执行前台压缩，启用后台模式时在软阈值预计算稳定窗口。
 5. 规范化模型历史和 provider replay metadata。
 6. 流式发布 assistant item、text/reasoning delta 和 tool call preview。
 7. 路由工具，执行审批、权限检查、预览和结果落盘。
 8. 若模型继续请求工具则重复 sampling。
 9. 累计 usage、完成消息、标题、review 与显式 memory。
-10. 写 `turn.completed`；被动 memory 抽取进入可取消后台队列。
+10. 写 `turn.completed`；被动 memory 抽取进入可取消后台队列，启用后台压缩时也可预计算完成后的稳定窗口。
 
 Notifications Feature 通过 EventBus 的全局实时订阅观察已持久化的完成事件，异步读取
 该轮最终回答并请求系统通知。Main 在发送前判断窗口焦点，仅在应用处于后台时展示
@@ -236,7 +236,7 @@ BrowserToolHost（通用 ToolHost adapter）
 
 1. Main 先停止 Updater 定时检查与 WebDAV 调度等新的外围工作。
 2. Runtime server 停止接收新请求并关闭 SSE。
-3. 终止 app-server command/fs manager，`AgentLoop.shutdown()` 取消并排空 turn 与后台 memory。
+3. 终止 app-server command/fs manager，`AgentLoop.shutdown()` 取消并排空 turn、后台 memory 和压缩生成，之后刷入事件。
 4. 等待已进入的 HTTP handler 完成，dispose Runtime Feature composition（其中 MCP scope 关闭连接），再关闭后台 shell 和 thread store。
 5. Main dispose Feature composition；scope 先拒绝新 IPC，排空已进入的操作，再关闭 Browser server、Network Proxy 的 browser/fetch/relay、Terminal PTY 和 Updater 传输并撤销 handler。
 6. 关闭 native bridge。

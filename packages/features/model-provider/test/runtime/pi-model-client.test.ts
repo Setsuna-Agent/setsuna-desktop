@@ -347,7 +347,11 @@ describe('Pi model client protocol integration', () => {
     'user-agent': 'custom/{{appVersion}}',
     'x-opencode-session': 'custom-{{sessionId}}',
   }])('applies configured or default identity to native compaction: %j', async (requestHeaders) => {
-    const capture = captureFetch(JSON.stringify({ output: [{ type: 'compaction', encrypted_content: 'opaque' }] }));
+    const compaction = { type: 'compaction', encrypted_content: 'opaque' };
+    const capture = captureFetch([
+      { type: 'response.output_item.done', item: compaction, output_index: 0 },
+      { type: 'response.completed', response: { id: 'compact-1', status: 'completed', output: [compaction], usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 } } },
+    ].map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));
     const client = new PiModelClient(host({
       ...providerFixture('openai-responses'),
       catalogProviderId: 'opencode-go',
@@ -358,7 +362,8 @@ describe('Pi model client protocol integration', () => {
     const result = await client.compactConversation(requestFixture({ sessionId: 'compacting-thread' }));
 
     expect(result.kind).toBe('native');
-    expect(capture.url()).toBe('https://opencode.ai/zen/go/v1/responses/compact');
+    expect(capture.url()).toBe('https://opencode.ai/zen/go/v1/responses');
+    expect(capture.body().input.at(-1)).toEqual({ type: 'compaction_trigger' });
     expect(capture.headers().get('user-agent')).toBe(requestHeaders ? 'custom/1.2.3' : 'setsuna-desktop/1.2.3');
     expect(capture.headers().get('x-opencode-session')).toBe(requestHeaders ? 'custom-compacting-thread' : 'compacting-thread');
     expect(capture.headers().get('authorization')).toBe('Bearer secret');

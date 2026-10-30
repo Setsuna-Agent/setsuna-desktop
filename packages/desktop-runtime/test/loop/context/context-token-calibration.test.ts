@@ -24,6 +24,9 @@ describe('context token calibration', () => {
     const compacted = [{ ...messages[0]!, contextCompaction: { compactedMessageCount: 10 } as RuntimeMessage['contextCompaction'] }];
     expect(calibration.adjustment(model, compacted)).toBe(0);
     calibration.record(model, messages, [], undefined);
-    expect(calibration.adjustment(model, messages)).toBe(0);
+    expect(calibration.adjustment(model, messages)).toBe(400);
+    const restored = new ContextTokenCalibration(calibration.snapshot());
+    expect(restored.adjustment(model, [...messages, { ...messages[0]!, id: 'new', content: 'new result' }])).toBe(400);
+    expect(restored.adjustment(model, [{ ...messages[0]!, content: 'edited prefix' }, ...messages.slice(1)])).toBe(0);
   });
 });

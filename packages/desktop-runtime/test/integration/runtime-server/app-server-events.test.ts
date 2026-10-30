@@ -225,6 +225,13 @@ describe('runtime server AppServer events and shell turns', () => {
         thread.id,
         (item) => !item.activeTurnId && item.messages.some((message) => message.role === 'assistant' && message.status === 'complete'),
       );
+      // User input remains verbatim. Add an earlier completed response so there is useful
+      // history to summarize while the latest exchange is retained.
+      await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
+        method: 'POST', body: JSON.stringify({ input: 'Record the next step before compacting.' }),
+      });
+      await harness.waitForThread(thread.id, (item) => !item.activeTurnId
+        && item.messages.filter((message) => message.role === 'assistant' && message.status === 'complete').length >= 2);
   
       await expect(harness.appServerRpc('thread/compact/start', { threadId: thread.id })).resolves.toEqual({});
   
