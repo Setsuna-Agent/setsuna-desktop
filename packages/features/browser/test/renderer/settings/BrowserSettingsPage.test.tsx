@@ -4,6 +4,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
+import { SettingsPageNavigationProvider } from '@setsuna-desktop/renderer-ui';
 import type { BrowserDesktopBridge } from '../../../src/contracts/bridge.js';
 import type { BrowserExtension } from '../../../src/contracts/extensions.js';
 import { DEFAULT_BROWSER_PREFERENCES, type BrowserPreferences } from '../../../src/contracts/settings.js';
@@ -30,11 +31,19 @@ function openSettings(overrides: Partial<BrowserDesktopBridge> = {}) {
     onExtensionsChanged: () => () => undefined,
     ...overrides,
   } as unknown as BrowserDesktopBridge;
-  render(<StrictMode><BrowserSettingsNavigationProvider value={{ openPage, openSettings: vi.fn() }}>
-    <BrowserSettingsPage bridge={bridge} ui={settingsTestUi as SettingsViewUi} translate={(key) => translateBrowserMessage('en-US', key)} />
-  </BrowserSettingsNavigationProvider></StrictMode>);
+  function Harness() {
+    const [path, navigate] = useState<readonly string[]>([]);
+    return <BrowserSettingsNavigationProvider value={{ openPage, openSettings: vi.fn() }}>
+      <SettingsPageNavigationProvider value={{ path, navigate }}>
+        <BrowserSettingsPage bridge={bridge} ui={settingsTestUi as SettingsViewUi} translate={translate} />
+      </SettingsPageNavigationProvider>
+    </BrowserSettingsNavigationProvider>;
+  }
+  render(<StrictMode><Harness /></StrictMode>);
   return { bridge, openPage };
 }
+
+const translate = (key: Parameters<typeof translateBrowserMessage>[1]) => translateBrowserMessage('en-US', key);
 
 function ExtensionSettingsShortcut() {
   const navigation = useBrowserSettingsNavigation();
@@ -94,17 +103,20 @@ it('opens the requested extension subpage, toggles without uninstalling and retu
   const openSettings = vi.fn();
   function Harness() {
     const [opened, setOpened] = useState(false);
+    const [path, navigate] = useState<readonly string[]>([]);
     return <BrowserSettingsNavigationProvider value={{
-      openSettings: (section) => { openSettings(section); setOpened(true); }, openPage: vi.fn(),
+      openSettings: (section, nextPath = []) => { openSettings(section, nextPath); navigate(nextPath); setOpened(true); }, openPage: vi.fn(),
     }}>
       <ExtensionSettingsShortcut />
-      {opened ? <BrowserSettingsPage bridge={bridge} ui={settingsTestUi as SettingsViewUi} translate={(key) => translateBrowserMessage('en-US', key)} /> : null}
+      <SettingsPageNavigationProvider value={{ path, navigate }}>
+        {opened ? <BrowserSettingsPage bridge={bridge} ui={settingsTestUi as SettingsViewUi} translate={translate} /> : null}
+      </SettingsPageNavigationProvider>
     </BrowserSettingsNavigationProvider>;
   }
   render(<StrictMode><Harness /></StrictMode>);
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Open extension settings' }));
-  expect(openSettings).toHaveBeenCalledExactlyOnceWith('browser');
+  expect(openSettings).toHaveBeenCalledExactlyOnceWith('browser', ['extensions']);
   await user.click(await screen.findByRole('button', { name: 'Pin to toolbar' }));
   await user.click(screen.getByRole('switch', { name: `Disable extension ${extension.name}` }));
   expect(setExtensionEnabled).toHaveBeenLastCalledWith(extension.id, false);

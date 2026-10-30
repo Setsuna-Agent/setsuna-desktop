@@ -37,7 +37,8 @@ type ChatRouteAdapterProps = Omit<
   | 'onSelectedCapabilitiesPluginIdChange'
   | 'selectedCapabilitiesPluginId'
   | 'setActiveView'
-  | 'settingsInitialSection'
+  | 'settingsLocation'
+  | 'onSettingsNavigate'
 > & { starterPresentation?: ChatStarterPresentation; turnNavigationRequest?: ChatTurnNavigationRequest };
 
 export function ChatRouteAdapter({

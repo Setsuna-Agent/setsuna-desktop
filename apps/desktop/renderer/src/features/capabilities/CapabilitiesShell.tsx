@@ -7,14 +7,14 @@ import {
   type CapabilitiesCreateMenuProps,
   type CapabilitiesPageNavigation,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { ChevronRight, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { startTransition, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   RendererOwnedKeyedSlot,
   useRendererOwnedKeyedEntries,
 } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { AppRouteTopbarPortal } from '../../shared/ui/AppRouteTopbarPortal.js';
+import { AppRouteBreadcrumb } from '../../shared/ui/AppRouteBreadcrumb.js';
 import { settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
 import { Button } from '../../shared/ui/primitives.js';
 import { CapabilitiesSidebar } from './CapabilitiesSidebar.js';
@@ -72,16 +72,10 @@ export function CapabilitiesShell({
     currentLabel,
     parentLabel,
     onBack,
-  }: CapabilitiesBreadcrumbProps) => {
-    const breadcrumb = (
-      <nav className="desktop-capabilities-breadcrumb" aria-label={`${parentLabel} / ${currentLabel}`}>
-        <UiButton variant="ghost" type="button" onClick={onBack}>{parentLabel}</UiButton>
-        <ChevronRight aria-hidden="true" />
-        <span title={currentLabel}>{currentLabel}</span>
-      </nav>
-    );
-    return <AppRouteTopbarPortal>{breadcrumb}</AppRouteTopbarPortal>;
-  }, []);
+  }: CapabilitiesBreadcrumbProps) => (
+    <AppRouteBreadcrumb currentLabel={currentLabel} onBack={onBack}
+      parents={[{ label: parentLabel, onClick: onBack }]} />
+  ), []);
   const renderCreateMenu = useCallback((props: CapabilitiesCreateMenuProps) => (
     <CapabilitiesCreateMenu {...props} />
   ), []);

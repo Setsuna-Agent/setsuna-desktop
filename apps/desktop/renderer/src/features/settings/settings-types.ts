@@ -12,6 +12,12 @@ export type CoreSettingsSectionId =
 
 export type SettingsSectionId = CoreSettingsSectionId | (string & {});
 
+export type SettingsPageLocation = Readonly<{
+  sectionId: SettingsSectionId;
+  /** Feature-owned page identities; an empty path opens the section overview. */
+  path: readonly string[];
+}>;
+
 export type RuntimePreferenceInput = Pick<
   RuntimeConfigInput,
   | 'globalPrompt'

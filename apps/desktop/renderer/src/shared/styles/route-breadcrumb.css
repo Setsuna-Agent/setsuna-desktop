@@ -1,0 +1,62 @@
+.app-route-breadcrumb {
+  --app-route-breadcrumb-control-size: 26px;
+
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.app-route-breadcrumb > .sd-button {
+  flex: 0 0 auto;
+  height: var(--app-route-breadcrumb-control-size);
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.app-route-breadcrumb > .sd-icon-button {
+  width: var(--app-route-breadcrumb-control-size);
+  padding: 0;
+}
+
+.app-route-breadcrumb > .sd-button:hover {
+  color: var(--app-text);
+  border-color: var(--desktop-agent-panel-border);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.app-route-breadcrumb > .sd-button:focus-visible {
+  outline: 0;
+  border-radius: var(--app-radius-xs);
+  box-shadow: var(--app-focus-ring);
+}
+
+.app-route-breadcrumb > svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.8;
+}
+
+.app-route-breadcrumb > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-route-breadcrumb > [aria-current='page'] {
+  color: var(--app-text);
+}

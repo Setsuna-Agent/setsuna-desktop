@@ -94,7 +94,7 @@ describe('BrowserPanel interactions', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Extensions', exact: true }));
     await user.click(screen.getByRole('button', { name: 'Manage extensions' }));
-    expect(openSettings).toHaveBeenCalledExactlyOnceWith('browser');
+    expect(openSettings).toHaveBeenCalledExactlyOnceWith('browser', ['extensions']);
     expect(screen.queryByRole('dialog', { name: 'Extensions' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Extensions', exact: true }));
     await user.click(screen.getByRole('button', { name: 'Chrome Web Store' }));

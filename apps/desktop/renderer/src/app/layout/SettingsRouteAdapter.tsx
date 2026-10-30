@@ -6,22 +6,23 @@ const SettingsPage = lazy(() => import('../../features/settings/SettingsRoute.js
 
 type SettingsRouteAdapterProps = Pick<
   AppRouteContentProps,
-  'runtime' | 'settingsInitialSection'
+  'runtime' | 'settingsLocation' | 'onSettingsNavigate'
 >;
 
 export function SettingsRouteAdapter({
   runtime,
-  settingsInitialSection,
+  settingsLocation,
+  onSettingsNavigate,
 }: SettingsRouteAdapterProps) {
   const { t } = useI18n();
 
   return (
     <Suspense fallback={<RouteLoadingState label={t('common.loading')} />}>
       <SettingsPage
-        key={settingsInitialSection ?? 'general'}
         archivedThreads={runtime.archivedThreads}
         config={runtime.config}
-        initialSection={settingsInitialSection ?? undefined}
+        location={settingsLocation}
+        onNavigate={onSettingsNavigate}
         onSaveRuntimePreferences={runtime.saveRuntimePreferences}
         onDeleteAllArchivedThreads={runtime.permanentlyDeleteArchivedThreads}
         onDeleteArchivedThread={runtime.permanentlyDeleteThread}

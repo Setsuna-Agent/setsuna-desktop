@@ -1,30 +1,26 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
+import { useSettingsPageNavigation } from '@setsuna-desktop/renderer-ui';
 import { BROWSER_PERMISSIONS, type BrowserPreferences, type BrowserSearchEngine, type BrowserPermissionPolicy } from '../../contracts/settings.js';
 import type { BrowserDesktopBridge } from '../../contracts/bridge.js';
 import type { BrowserTranslate } from '../messages.js';
 import { BrowserFeatureIcon } from '../BrowserFeatureIcon.js';
 import { BrowserFavoritesIcon, BrowserHistoryIcon } from '../records/recordIcons.js';
 import { BrowserClearDataDialog } from './BrowserClearDataDialog.js';
-import { BrowserSettingsDetail, type BrowserSettingsDetailKind } from './BrowserSettingsDetail.js';
+import { BrowserSettingsDetail, isBrowserSettingsDetailKind, type BrowserSettingsDetailKind } from './BrowserSettingsDetail.js';
 import { useBrowserSettingsNavigation } from './context.js';
 import { useBrowserPreferences } from './useBrowserPreferences.js';
 import './settings.css';
 import './settings-pages.css';
 
-type Manager = BrowserSettingsDetailKind | 'clear';
 type ToggleSetting = { [K in keyof BrowserPreferences]: BrowserPreferences[K] extends boolean ? K : never }[keyof BrowserPreferences];
 
 export function BrowserSettingsPage({ bridge, children, translate: t, ui }: { bridge: BrowserDesktopBridge | null; children?: ReactNode; translate: BrowserTranslate; ui: SettingsViewUi }) {
   const { preferences, ready, busy, error, run, update } = useBrowserPreferences(bridge);
   const navigation = useBrowserSettingsNavigation();
-  const [manager, setManager] = useState<Manager | null>(null);
-  const extensionsRequested = navigation?.extensionsRequested;
-  const consumeExtensionsRequest = navigation?.consumeExtensionsRequest;
-  useEffect(() => {
-    // The host selects the browser section; its nested management route stays Feature-owned.
-    if (extensionsRequested) { setManager('extensions'); consumeExtensionsRequest?.(); }
-  }, [extensionsRequested, consumeExtensionsRequest]);
+  const pageNavigation = useSettingsPageNavigation();
+  const manager = pageNavigation.path[0];
+  const [clearDataOpen, setClearDataOpen] = useState(false);
   const [home, setHome] = useState('');
   useEffect(() => { setHome(preferences.homeUrl); }, [preferences.homeUrl]);
   // Commit on blur/Enter rather than per keystroke: main rejects partial URLs, so typing would surface errors.
@@ -34,12 +30,12 @@ export function BrowserSettingsPage({ bridge, children, translate: t, ui }: { br
   };
   if (!bridge?.getBrowserPreferences) return <ui.EmptyState title={t('feature.browser.settings.unavailable')} />;
   if (!ready) return <ui.EmptyState title={t(error ? 'feature.browser.settings.failed' : 'feature.browser.settings.loading')} />;
-  if (manager && manager !== 'clear') return <BrowserSettingsDetail kind={manager} bridge={bridge} translate={t} ui={ui} onBack={() => setManager(null)} />;
+  if (isBrowserSettingsDetailKind(manager)) return <BrowserSettingsDetail kind={manager} bridge={bridge} translate={t} ui={ui} onBack={() => pageNavigation.navigate([])} />;
   const toggle = (key: ToggleSetting) => <ui.Toggle key={key} label={t(`feature.browser.settings.${key}`)} description={null} checked={preferences[key]} disabled={busy} onChange={(value) => void update({ [key]: value })} />;
-  const manage = (label: Parameters<BrowserTranslate>[0], target: Manager) => <ui.NavigationRow
+  const manage = (label: Parameters<BrowserTranslate>[0], target: BrowserSettingsDetailKind) => <ui.NavigationRow
     icon={target === 'bookmarks' ? <BrowserFavoritesIcon aria-hidden="true" size={18} /> : target === 'history' ? <BrowserHistoryIcon aria-hidden="true" size={18} /> : undefined}
-    label={t(label)} onClick={() => setManager(target)} />;
-  const dialogProps = { bridge, translate: t, ui, onClose: () => setManager(null) };
+    label={t(label)} onClick={() => pageNavigation.navigate([target])} />;
+  const dialogProps = { bridge, translate: t, ui, onClose: () => setClearDataOpen(false) };
   return <ui.PageLayout title={t('feature.browser.settings.title')}>
     <ui.Section className="browser-settings" featureId="browser">
     <ui.Group>
@@ -75,7 +71,7 @@ export function BrowserSettingsPage({ bridge, children, translate: t, ui }: { br
     <ui.Group title={t('feature.browser.settings.privacy')}>
       {toggle('rememberHistory')}
       {manage('feature.browser.settings.history', 'history')}{manage('feature.browser.settings.bookmarks', 'bookmarks')}
-      <ui.Row label={t('feature.browser.settings.clearData')}><ui.Button onClick={() => setManager('clear')}>{t('feature.browser.settings.clearData')}</ui.Button></ui.Row>
+      <ui.Row label={t('feature.browser.settings.clearData')}><ui.Button onClick={() => setClearDataOpen(true)}>{t('feature.browser.settings.clearData')}</ui.Button></ui.Row>
     </ui.Group>
     <ui.Group title={t('feature.browser.settings.passwordGroup')}>
       {toggle('savePasswords')}{toggle('autofillPasswords')}{manage('feature.browser.settings.passwords', 'passwords')}
@@ -92,7 +88,7 @@ export function BrowserSettingsPage({ bridge, children, translate: t, ui }: { br
     </ui.Group>
     <ui.Group title={t('feature.browser.extension.label')}>{manage('feature.browser.extension.label', 'extensions')}</ui.Group>
     {error ? <ui.Toast tone="error" message={t('feature.browser.settings.failed')} /> : null}
-    {manager === 'clear' ? <BrowserClearDataDialog {...dialogProps} /> : null}
+    {clearDataOpen ? <BrowserClearDataDialog {...dialogProps} /> : null}
     </ui.Section>
   </ui.PageLayout>;
 }
