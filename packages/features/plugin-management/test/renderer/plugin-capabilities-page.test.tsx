@@ -10,6 +10,31 @@ import { PluginCapabilitiesPage } from '../../src/renderer/PluginCapabilitiesPag
 
 afterEach(cleanup);
 
+it('opens the built-in plugin builder from the create action without installing a marketplace plugin', async () => {
+  const snapshot: PluginManagementSnapshot = { catalogRevision: 'local', extensions: [], plugins: [], marketplace: [], marketplaceErrors: [] };
+  const hooks = { hooks: [] };
+  const service = {
+    getSnapshot: () => snapshot, getHookSnapshot: () => hooks, subscribe: () => () => undefined,
+    refresh: vi.fn(async () => snapshot), refreshHooks: vi.fn(async () => hooks),
+    refreshInstalled: vi.fn(async () => ({ plugins: [] })), installMarketplace: vi.fn(),
+  };
+  const capabilities: CapabilitiesPageNavigation = {
+    activeItemId: null, catalogNavigation: null, catalogNavigationInPage: false, workspacePath: null,
+    openChat: vi.fn(), openPluginChat: vi.fn(), renderBreadcrumb: () => null, setActiveItemId: vi.fn(),
+    renderCreateMenu: ({ items }) => <>{items.map((item) => <Button key={item.id} onClick={item.onSelect}>{item.title}</Button>)}</>,
+  };
+  await act(async () => {
+    render(<PluginCapabilitiesPage sectionId="plugins" service={service as unknown as PluginManagementRendererService}
+      capabilities={capabilities} capabilitiesRefresh={{ refresh: vi.fn() } as unknown as CapabilitiesRefreshCoordinator}
+      openExternal={async () => true} translate={(key) => key}
+      ui={{ Button, IconButton, PluginIcon: () => null, Toast: () => null } as unknown as SettingsViewUi} />);
+  });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'feature.pluginManagement.createChat' })); });
+  expect(service.refreshInstalled).toHaveBeenCalledOnce();
+  expect(service.installMarketplace).not.toHaveBeenCalled();
+  expect(capabilities.openPluginChat).toHaveBeenCalledWith('plugin-builder');
+});
+
 it('distinguishes a failed catalog load, an empty catalog and an empty search, and recovers on refresh', async () => {
   let snapshot: PluginManagementSnapshot = { catalogRevision: 'local', extensions: [], plugins: [], marketplace: [], marketplaceErrors: [] };
   const hooks = { hooks: [] };

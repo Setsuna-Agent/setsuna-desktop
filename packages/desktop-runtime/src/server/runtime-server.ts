@@ -52,7 +52,6 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   let featureComposition: RuntimeFeatureComposition | null = null;
   try {
     await runtime.mcpStore.migrateLegacySecrets();
-    await runtime.installDefaultPlugins();
     await runtime.threadStore.recover();
     const recoveredThreads = await runtime.threadStore.listThreads({ includeArchived: true, includeSide: true, includeFeatures: true });
     const imageCandidates = new Set(await runtime.generatedImageStore.listAssetIds());
@@ -181,11 +180,14 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     }
   });
 
+  // Built-in authoring content is peripheral. Plugin/Skill reads share this preparation on demand.
+  void runtime.installDefaultPlugins().catch(() => undefined);
   return {
     listen: (port) => new Promise((resolve) => server.listen(port, '127.0.0.1', resolve)),
     close: () => {
       if (closingPromise) return closingPromise;
       shuttingDown = true;
+      const builtinsStopped = runtime.stopBuiltinPlugins();
       stopObservingActivity();
       closingPromise = (async () => {
         // 先停止接收请求，再关闭长连接流，让服务器回调能在后台轮次逐步结束时完成。
@@ -202,6 +204,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
           await inFlightRequests.waitForIdle();
           if (!drained) throw new Error('Runtime tasks did not drain before shutdown timeout.');
         } finally {
+          await builtinsStopped;
           try {
             await featureComposition?.dispose();
           } finally {

@@ -1,11 +1,13 @@
 ---
 name: create-plugin-in-chat
-description: "通过对话创建或更新 Setsuna 插件，包括详情页配置表单、API Key 配置、侧栏应用、Skill、MCP、Hook 和可执行工具。生成完整 manifest 和文件快照并调用 configure_plugin。"
+description: "通过对话创建或更新 Setsuna 侧栏应用，包括网页入口、React 应用、表格、表单和图表。生成完整应用 Bundle 并调用 configure_plugin。"
 ---
 
-# 对话创建插件
+# 对话创建应用
 
-本 Skill 随默认安装的「应用构建器」插件提供。侧栏「+」或能力页“用对话创建插件”会选中该插件；快捷选项会在无项目新对话中填好需求，等用户发送后再执行。根据用户描述生成完整 Plugin Bundle，并通过 `configure_plugin` 直接安装；不要让用户准备解压目录，也不要写 runtime 私有目录。创建侧栏应用无需先选择项目。
+本 Skill 属于「应用构建器」，负责创建或更新侧栏应用。侧栏「+」会选中该构建器；快捷选项在无项目新对话中填好需求，等用户发送后再执行。创建侧栏应用无需先选择项目。修改已有应用时保留插件 ID、页面 ID 和已保存数据。
+
+独立 Skill、MCP、Hook、工具和对话卡片使用「插件构建器」。这里仅在应用需求确实需要时添加对应后端能力；应用仍使用 Plugin Bundle 作为安装格式。
 
 ## 界面设计资源
 
@@ -19,18 +21,6 @@ description: "通过对话创建或更新 Setsuna 插件，包括详情页配置
 - 维护 HTML document 时将基础 CSS 内容写入应用的 `ui/app.css`，追加应用样式，通过它自己的 `resources` / `document.cssResourceId` 交付。包内文件仍通过资源 ID 交付；浏览器可以加载远程 `<link>`、`@import` 和 CDN。
 - 规范约束颜色、字号、间距、对齐和交互状态，不要求统一业务布局。不要把规范文字、示例区块、无关字段或装饰性数据写进用户界面。
 
-## 选择能力形式
-
-- 只需要模型遵循说明或工作流时，使用 `skills/<name>/SKILL.md` 并在 manifest 的 `skills` 中声明目录。
-- 需要连接外部服务时，使用 manifest 的 `mcpServers`；不得写入 API key、固定密钥、认证 header 或带凭据 URL。
-- 需要在 Agent 生命周期前后运行本地命令时，使用 `hooks`，脚本路径通过 `{{pluginRoot}}` 引用。
-- 需要注册动态工具、订阅生命周期事件、保存状态或结构化询问用户时，使用 `extension`。
-- 需要插件配置字段时，使用 `extension.rendererUi` 的 `renderer.capabilities.plugin.details` 和宿主 `tree`，表单直接显示在该插件详情页；不声明 `navigation`，不为几个配置项另建侧栏应用。API Key 使用 `field.secret: true`。先用 `read_plugin_resource({pluginId:'app-builder',resourceId:'plugin-settings-guide'})` 读取[完整配置表单示例](references/plugin-settings.md)。
-- 需要侧栏入口或独立功能页时，在 `extension.rendererUi` 使用 Renderer UI v2。打开已有网站使用 `webpage: { url: "https://…" }`，原生浏览器直接加载；简单表单/状态使用宿主渲染的 `tree`；新建本地应用默认使用独立 React/Vite 项目的 `reactApp`；已有 HTML/CSS/JS `document` 保持兼容，更新时按用户需求决定是否迁移。
-- 需要在工具执行后把结果显示成自由交互卡片时，在 `extension.uiCards` 声明卡片名称、对应工具和静态沙箱预览，并让该工具返回 `plugin.ui-card@1`；卡片与持久侧栏页面可以由同一个 Plugin 同时提供。
-- `tools` 只是展示元数据，不会注册可执行工具；动态工具必须由 extension 的 `api.registerTool` 注册。
-- `resources` 声明 Agent 可读资源以及沙箱页面引用的 HTML/CSS/JS 文件。
-
 ## Bundle 规则
 
 调用 `configure_plugin` 时提交一份完整快照：
@@ -40,79 +30,18 @@ description: "通过对话创建或更新 Setsuna 插件，包括详情页配置
 - 应用优先在当前工作区（无项目时使用当前临时工作区）写入和编辑文件，再提交 `{ "path": "ui/app.html", "sourcePath": "ui/app.html" }`。`path` 是包内目标路径，`sourcePath` 相对当前工作区，也可使用已批准可读范围内的绝对路径。宿主直接读取原始文件，不需要读回整份源码再复制到调用中。
 - 每项必须且只能提供 `sourcePath` 或 `content`。小片段可用 `content`，它是普通 JSON 字符串；不要额外做 XML/HTML 实体转义或 Base64 编码，保留源码中的 `&amp;`、标签、引号和换行。若收到 `$text`、非字符串 content 或文件数组结构错误，改用 `sourcePath` 重试，不要反复生成 JSON/XML 中间文件、猜端口或寻找 token。
 - 最多提交 64 个文本文件、合计 512 KiB。图片等二进制资源不能通过本工具创建。
-- Skill 目录必须包含完整 `SKILL.md`，不能保留 TODO、占位符或省略内容。
-- Hook 命令应引用 Bundle 内脚本，同时按需要提供 `commandWindows`。
 - extension 入口必须是 Bundle 内的 `.mjs`，使用 `apiVersion: 1`、`runtime: node-worker`，并只声明实际使用的 `tools`、`events`、`state`、`ui`、`network` 能力。
-- `rendererUi`、`uiCards` 和 `plugin.ui-card` 必须声明 `ui`；`uiCards` 只能放在 `manifest.extension.uiCards`，每个 `toolName` 必须引用顶层工具。预览使用无副作用的静态示例 HTML/JS 和有界数据，不执行工具，也不替代真实工具结果。使用 runtime 状态绑定还需 `state`。不要进入宿主 DOM；本地页面默认使用 React 项目，已有网站优先使用直接网页模式。
+- `rendererUi` 必须声明 `ui`，状态绑定还需 `state`；不要进入宿主 DOM。
 - 不要声明 `image-generation` 或 `vision-recognition`；它们是随应用 marketplace Bundle 专用的私有 host bridge，本地或对话创建的插件不能安装。
 - 使用 `network` 时必须在 `extension.network.allowedOrigins` 声明无路径、无凭据的精确 HTTP(S) origin，并在 handler 的第二个参数上调用 `context.network.request(...)`，以复用应用代理、取消、超时和响应大小限制。`response.body` 永远是字符串；读取字段前必须先用 `await response.json()` 或 `JSON.parse(response.body)`，并先检查 `response.ok`/`response.status`。绝不能使用不存在的 `api.network`。
 - React 项目支持自己的 package.json 和 registry packages，获批安装/更新时由宿主安装并构建，详见 React 项目指南；不运行安装脚本，不提交 node_modules。HTML document 与后端 worker 仍使用自包含源码。
 - 调用前先核对 manifest 的 `extension.entry`、每个 `resources[].path`、每个 Skill 的 `SKILL.md` 以及 `{{pluginRoot}}` 引用都存在于同一次 `files` 完整快照中。不要用残缺快照逐个试探校验错误。
 
-最小动态工具入口：
+## 应用处理函数
 
-```js
-export default function activate(api) {
-  api.registerTool({
-    name: 'example',
-    description: '明确说明模型应在什么情况下调用此工具。',
-    inputSchema: {
-      type: 'object',
-      properties: { value: { type: 'string' } },
-      required: ['value'],
-      additionalProperties: false,
-    },
-    async execute(input) {
-      return { content: String(input.value) };
-    },
-  });
-}
-```
+`activate(api)` 只提供 `registerTool`、`on` 和 `onUiAction`。页面操作使用 `api.onUiAction(id, async (input, context) => ...)`；React/document 参数在 `input.payload`，宿主表单字段在 `input.values`。运行时能力在 `context`，不存在 `api.network`、`api.state` 或 `api.ui`。
 
-## Extension API 契约
-
-生成 extension 时严格区分“注册 API”和“执行上下文”。`activate(api)` 的 `api` **只提供**：
-
-- `api.registerTool(definition)`：注册动态工具。
-- `api.on(eventName, handler)`：注册 `session.start`、`prompt.before`、`tool.before`、`tool.after`、`compact.before`、`turn.settled` 事件；不存在 `api.onEvent`。
-- `api.onUiAction(actionId, handler)`：注册 Renderer UI action。
-
-网络、状态、交互 UI 和取消信号只存在于 handler 的第二个参数 `context` 上；不要使用 `api.network`、`api.state` 或 `api.ui`：
-
-```js
-api.registerTool({
-  name: 'get_weather',
-  description: '当用户询问某地实时天气时调用，并返回天气卡片。',
-  inputSchema: {
-    type: 'object',
-    properties: { city: { type: 'string' } },
-    required: ['city'],
-    additionalProperties: false,
-  },
-  async execute(input, context) {
-    const response = await context.network.request({
-      url: `https://api.example.com/weather?city=${encodeURIComponent(input.city)}`,
-      method: 'GET',
-      headers: { accept: 'application/json' },
-    });
-    if (!response.ok) throw new Error(`Weather API failed: HTTP ${response.status}`);
-    const weather = await response.json();
-    if (!weather || typeof weather !== 'object') throw new Error('Weather API returned invalid JSON.');
-    return { content: `${input.city}：${weather.temperature}°C` };
-  },
-});
-```
-
-Handler 能力如下：
-
-- Tool：`async execute(input, context)`；按 capability 提供 `context.network`、`context.state`、`context.ui`，并始终提供 `context.signal`。
-- Event：`api.on(name, async (payload, context) => ...)`；事件输入是第一个参数，不要假设工具 input 形状。
-- UI Action：`api.onUiAction(id, async (input, context) => ...)`；表单在 `input.values`，沙箱页面参数在 `input.payload`。这里不提供交互式 `context.ui`。
-- 密钥：handler 用 `await context.secrets.get(name)` 读取本插件详情页声明的密钥，返回字符串或 `null`。宿主负责加密保存表单提交，`input.values` 不含密钥；不把密钥写入 state、源码、工具参数或输出，也不要求用户在聊天里提供真实密钥。
-- 状态方法：`context.state.get(key, scope?)`、`set(key, value, scope?)`、`delete(key, scope?)`。Tool/Event 默认 `thread`；UI Action 默认使用 contribution 的 `data.scope`。需要跨入口共享侧栏数据时显式使用与 manifest 一致的 `global`/`project`/`thread`。
-- 网络响应：`{ ok, status, statusText, headers, body, text(), json() }`。`body` 是 UTF-8 字符串，不是对象；不要写 `response.body.current`。
-
-只声明实际存在并经过功能验证的事件。非核心的自动同步不要为了“看起来完整”而加入；错误事件名或未经验证的 payload 假设会降低一次生成成功率。
+状态方法为 `context.state.get(key, scope?)`、`set(key, value, scope?)` 和 `delete(key, scope?)`。UI action 默认使用 contribution 的 `data.scope`，tool/event 默认 `thread`；跨入口共享数据时沿用声明的 `global`/`project`/`thread`。API Key 使用插件详情表单的 `field.secret: true`，不设 `defaultValue`，通过 `context.secrets.get(name)` 读取，不写入普通 state 或表单 values。
 
 ## Renderer UI
 
@@ -322,98 +251,17 @@ await window.setsunaUI.invoke('weather.refresh', { city: '杭州' });
 
 图表应用可在 `document` 声明 `"libraries": ["echarts"]`，由宿主在页面脚本之前提供离线 `window.echarts`。无需复制 ECharts 源码或运行包管理器；需要其他浏览器库时可以加载远程资源。采用 `ui-patterns` 中的主题图表模板，随容器 resize、随主题更新，卸载时取消订阅并 dispose，按真实数据修改字段、维度和单位。
 
-### 对话交互卡片
-
-先在 manifest 中声明卡片目录信息和一份无副作用的静态示例；插件详情页会把它列在“界面”并在同一安全沙箱中提供预览。真实运行时源码仍由工具结果返回，不要把联网或宿主操作放进 `preview`：
-
-```json
-{
-  "tools": [
-    { "name": "get_weather", "description": "查询用户指定地点的实时天气并返回天气卡片。" }
-  ],
-  "extension": {
-    "apiVersion": 1,
-    "runtime": "node-worker",
-    "entry": "extension/entry.mjs",
-    "capabilities": ["tools", "ui", "network"],
-    "uiCards": [
-      {
-        "id": "weather.current",
-        "label": "实时天气卡片",
-        "description": "在对话中展示当前天气和短期预报。",
-        "toolName": "get_weather",
-        "preview": {
-          "html": "<main id=\"weather\"></main>",
-          "css": "html,body{margin:0;background:transparent}.card{padding:16px;border:1px solid var(--setsuna-color-border);border-radius:10px;color:var(--setsuna-color-text);background:var(--setsuna-color-surface);font:14px/1.5 var(--setsuna-font-family)}.temp{font-size:28px;font-weight:600}",
-          "js": "window.setsunaUI.ready.then(({data})=>{document.querySelector('#weather').innerHTML=`<section class=\"card\"><div>${data.city} · ${data.condition}</div><div class=\"temp\">${data.temperature}°C</div></section>`})",
-          "data": { "city": "杭州", "condition": "晴", "temperature": 28 }
-        }
-      }
-    ]
-  }
-}
-```
-
-工具返回卡片时，把正常文本摘要放在 `content`，把卡片放在 `data`。不要填写 `pluginId`，宿主会用真实工具来源盖章：
-
-```js
-return {
-  content: '杭州今天晴，28°C。',
-  data: {
-    resultKind: 'plugin.ui-card',
-    resultMajor: 1,
-    payload: {
-      id: 'weather.hangzhou.today',
-      title: '杭州天气',
-      html: '<main id="weather"></main>',
-      css: '#weather { padding: 20px; border-radius: 18px; }',
-      js: 'window.setsunaUI.ready.then(({data}) => { document.querySelector("#weather").textContent = `${data.temperature}°C`; });',
-      data: { temperature: 28, condition: '晴' },
-      permissions: { network: true, hostActions: [] }
-    }
-  }
-};
-```
-
-卡片 JavaScript 也只能在沙箱内操作自己的 DOM，并从 `window.setsunaUI.ready` 读取这次工具结果。卡片会锚定在该工具调用的持久化时间线位置；模型在调用工具前输出的介绍和拿到结果后的后续回答会自然形成 `文字 → 卡片 → 文字`，不要在 Markdown 中伪造占位标签。v1 卡片不允许 host action；需要刷新、配置或长期状态时同时提供上面的独立页面。天气类插件应把“当用户询问某地当前天气时调用”写进工具 description，由工具在 worker 中通过 allowlist 网络查询，再把结果数据和卡片一起返回；卡片也可以遵循 CORS 直接联网。
-
-对“汇总对话中的发布产物”这类需求，使用 `events` 订阅 `tool.after` 或 `turn.settled`，从事件 payload 中提取明确的产物字段，再将去重后的有界摘要写入 `global` 或 `project` 状态；不要保存整段对话或未经约束的工具结果。
-
 ## 执行流程
 
 1. 判断用户要新建还是更新，并从描述中推断插件 ID、名称和所需能力。
 2. 只追问无法安全推断的核心行为、外部服务入口或跨平台要求；需求足够明确时直接创建。
 3. 生成完整 manifest，在当前工作区准备全部文本文件，优先使用 `sourcePath` 提交；不要要求用户准备本地目录，也不要调用 `install_plugin_bundle`。
-4. 调用 `configure_plugin`。审批前简短说明将安装的 Skill、MCP、Hook、资源和 extension，以及是否包含可执行代码。
+4. 调用 `configure_plugin`。审批前简短说明将安装的应用页面、资源和后端处理函数。
 5. 如果工具返回预检错误，一次性修正错误中列出的全部字段和文件，再提交新的完整快照。不得以“让我补全”“稍后继续”等未来时表述结束 turn。
 6. `Installed and enabled: true` 只代表清单、语法、React 类型检查/构建和 worker 激活通过。只要插件包含 extension 工具或 UI Action，紧接着调用 `verify_plugin`，用代表性、默认只读的输入覆盖每个用户可见执行路径；声明了 `uiCards` 的工具会被自动要求返回合法 `plugin.ui-card`。
 7. UI Action 检查应提供其 `contributionId`，React/document 使用与真实页面一致的 `payload`，`values` 留空。保存检查用 `expectStateValues` 核对实际提交的关键值；`expectStatePaths` 只证明字段存在，空数组通过不证明新增成功。验证不能插入测试记录或清空用户数据，使用用户要求的真实写入、明确实现的 dry-run 或读取后原样保存已有数据；外部写操作使用 dry-run，没有安全方式时取得用户明确授权。
 8. `verify_plugin` 的 `checksPassed:true` 仅证明列出的宿主处理函数或接口检查通过。`ui-action` 直接调用 worker，不执行页面 JavaScript，不点击按钮，也不检查弹窗；`pageInteractionsVerified:false` 表示页面交互未验证。报告实际检查范围，不能据此声称按钮、弹窗或整个应用已验证可用。如果检查失败，修复完整快照、重新调用 `configure_plugin` 并再次验证。页面行为只有在另有真实交互证据时才能报告已验证，不为补证据擅自使用用户未授权的浏览器或 computer-use。
 9. 更新受管插件时仍提交完整快照。若同名插件来自内置市场或其他目录，工具会拒绝覆盖；必须明确告知用户“已有同名插件，安装失败，请换个名字重新安装”。新应用同步更换 `pluginId` 和 `manifest.id`；只修改 `manifest.name` 会再次冲突。不要改写已有插件来源或用原 ID 反复重试。
-
-天气插件同时有对话卡片和侧栏刷新时，安装后至少执行这两个真实路径：
-
-```json
-{
-  "pluginId": "hangzhou-weather",
-  "checks": [
-    {
-      "kind": "tool",
-      "name": "get_weather",
-      "input": { "city": "杭州" },
-      "expectUiCard": true
-    },
-    {
-      "kind": "ui-action",
-      "name": "weather.refresh",
-      "contributionId": "weather.page",
-      "values": {},
-      "payload": { "city": "杭州" },
-      "expectStatePaths": ["summary.label"]
-    }
-  ]
-}
-```
 
 ## 安全边界
 

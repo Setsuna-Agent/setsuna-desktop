@@ -2,7 +2,7 @@ import { parseRuntimeApiRequest, runtimeText, type RuntimeToolDefinition } from 
 import type { RuntimeApi } from '../../ports/runtime-api.js';
 import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import type { ToolExecutionContext, ToolHost } from '../../ports/tool-host.js';
-import { appBuilderToolOwner, requireAppBuilderTool } from './app-builder-tool-owner.js';
+import { builderToolOwner, requireBuilderTool } from './builder-tool-owner.js';
 
 const TOOL_NAME = 'read_runtime_api';
 
@@ -11,7 +11,7 @@ export class RuntimeApiToolHost implements ToolHost {
   constructor(private readonly api: RuntimeApi, private readonly plugins: Pick<PluginBundleStore, 'listPlugins'>) {}
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    if (!await appBuilderToolOwner(this.plugins, TOOL_NAME, context)) return [];
+    if (!await builderToolOwner(this.plugins, TOOL_NAME, context)) return [];
     const text = runtimeText(context.interfaceLanguage);
     return [{
       name: TOOL_NAME,
@@ -33,13 +33,13 @@ export class RuntimeApiToolHost implements ToolHost {
 
   async toolRuntimeProfile(name: string, context: ToolExecutionContext) {
     if (name !== TOOL_NAME) return null;
-    const plugin = await appBuilderToolOwner(this.plugins, name, context);
+    const plugin = await builderToolOwner(this.plugins, name, context);
     return plugin ? { plugin, supportsParallel: true } : null;
   }
 
   async runTool(name: string, input: unknown, context: ToolExecutionContext) {
     if (name !== TOOL_NAME) throw new Error(`Unknown tool: ${name}`);
-    await requireAppBuilderTool(this.plugins, name, context);
+    await requireBuilderTool(this.plugins, name, context);
     const request = parseRuntimeApiRequest(input);
     if (request.method !== 'GET') throw new Error('read_runtime_api only accepts GET requests.');
     assertAgentRuntimeReadPath(request.path);

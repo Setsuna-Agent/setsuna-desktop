@@ -1,8 +1,44 @@
 import type { RuntimeConfigState, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
+import type { SkillPromptContextSnapshot } from '@setsuna-desktop/feature-skills/contracts';
 import { describe, expect, it } from 'vitest';
 import { RuntimePromptContextAssembler } from '../../../src/loop/context/runtime-prompt-context-assembler.js';
 
 describe('RuntimePromptContextAssembler', () => {
+  it('cancels prompt preparation while shared skill initialization remains pending', async () => {
+    let finishSkills!: (snapshot: SkillPromptContextSnapshot) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const skills = new Promise<SkillPromptContextSnapshot>((resolve) => { finishSkills = resolve; });
+    let skillReads = 0;
+    const assembler = new RuntimePromptContextAssembler({
+      memoryControl: () => ({ contextMessages: async () => [] }),
+      skillRegistry: { resolvePromptContext: () => { skillReads += 1; markStarted(); return skills; } },
+    });
+    const controller = new AbortController();
+    const input: Parameters<typeof assembler.build>[0] = {
+      config: null, hookContextMessages: [], skillIds: ['plugin-builder.create-plugin-in-chat'],
+      thread: { id: 'thread_1' } as RuntimeThread,
+      toolContext: {
+        environment: { id: 'workspace', cwd: '/workspace', workspaceRoot: '/workspace', workspaceRoots: ['/workspace'] },
+        threadId: 'thread_1', turnId: 'turn_1', permissionProfile: 'workspace-write',
+        sandboxWorkspaceWrite: {}, signal: controller.signal,
+      },
+      toolRouter: null, tools: [],
+    };
+    const waiting = assembler.build(input);
+    const rejected = expect(waiting).rejects.toMatchObject({ name: 'AbortError' });
+    await started;
+    controller.abort();
+    await rejected;
+
+    finishSkills({ availableSkills: [], selectedInjections: [] });
+    await expect(assembler.build({
+      ...input, toolContext: { ...input.toolContext, signal: new AbortController().signal },
+    })).resolves.toMatchObject({ selectedSkills: [] });
+    await expect(assembler.build(input)).rejects.toMatchObject({ name: 'AbortError' });
+    expect(skillReads).toBe(2);
+  });
+
   it.each(['explicit', 'default'])('prioritizes %s skills over automatic activations when the full-content budget is exhausted', async (selection) => {
     let instructionEnvironment: unknown;
     const assembler = new RuntimePromptContextAssembler({

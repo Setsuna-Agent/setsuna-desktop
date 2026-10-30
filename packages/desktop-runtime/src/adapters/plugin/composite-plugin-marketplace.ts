@@ -8,7 +8,7 @@ export class CompositePluginMarketplace implements PluginMarketplace {
 
   async listPlugins(options?: PluginMarketplaceListOptions) {
     const catalogs = await Promise.allSettled([
-      this.bundled.listPlugins(),
+      this.bundled.listPlugins(options),
       this.repository.listPlugins({
         ...options,
         waitForInitialization: options?.waitForInitialization ?? Boolean(options?.refreshRepositories),
@@ -26,12 +26,12 @@ export class CompositePluginMarketplace implements PluginMarketplace {
     return this.source(pluginId).readItemContent(pluginId, kind, itemId);
   }
 
-  installPlugin(pluginId: string) {
-    return this.source(pluginId).installPlugin(pluginId);
+  installPlugin(pluginId: string, options?: { signal?: AbortSignal }) {
+    return this.source(pluginId).installPlugin(pluginId, options);
   }
 
-  updatePlugin(pluginId: string) {
-    return this.source(pluginId).updatePlugin(pluginId);
+  updatePlugin(pluginId: string, options?: { signal?: AbortSignal }) {
+    return this.source(pluginId).updatePlugin(pluginId, options);
   }
 
   private source(pluginId: string): PluginMarketplace {

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "id": "plugin-builder",
+  "name": "插件构建器",
+  "icon": "plugin-builder",
+  "version": "1.0.0",
+  "description": "通过对话创建或更新 Skill、MCP、Hook、可执行工具、对话卡片和插件配置。",
+  "publisher": "Setsuna",
+  "tags": ["插件", "创作"],
+  "featured": false,
+  "skills": ["skills/create-plugin-in-chat"],
+  "resources": [
+    { "id": "plugin-settings-guide", "label": "插件配置与密钥字段", "path": "skills/create-plugin-in-chat/references/plugin-settings.md" },
+    { "id": "conversation-cards-guide", "label": "对话交互卡片", "path": "skills/create-plugin-in-chat/references/conversation-cards.md" }
+  ],
+  "tools": [
+    { "name": "read_runtime_api", "description": "读取集成所需的 Setsuna 后端接口与数据。" },
+    { "name": "configure_plugin", "description": "提交完整插件包，创建或更新插件能力。" },
+    { "name": "verify_plugin", "description": "验证已安装插件的工具、配置操作和后端接口。" }
+  ]
+}

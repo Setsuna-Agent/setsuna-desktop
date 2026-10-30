@@ -21,7 +21,7 @@ import {
 } from '../../ports/tool-host.js';
 import { normalizePluginId } from '../plugin/file-plugin-bundle-model.js';
 import { isDeepStrictEqual } from 'node:util';
-import { appBuilderToolOwner, requireAppBuilderTool } from './app-builder-tool-owner.js';
+import { builderToolOwner, requireBuilderTool } from './builder-tool-owner.js';
 
 export const VERIFY_PLUGIN_TOOL = 'verify_plugin';
 const MAX_VERIFICATION_CHECKS = 512;
@@ -125,7 +125,7 @@ export class PluginVerificationToolHost implements ToolHost {
   ) {}
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    return await appBuilderToolOwner(this.plugins, VERIFY_PLUGIN_TOOL, context)
+    return await builderToolOwner(this.plugins, VERIFY_PLUGIN_TOOL, context)
       ? [verifyPluginDefinition(context.interfaceLanguage)] : [];
   }
 
@@ -140,7 +140,7 @@ export class PluginVerificationToolHost implements ToolHost {
 
   async toolRuntimeProfile(name: string, context: ToolExecutionContext) {
     if (name !== VERIFY_PLUGIN_TOOL) return null;
-    const plugin = await appBuilderToolOwner(this.plugins, name, context);
+    const plugin = await builderToolOwner(this.plugins, name, context);
     if (!plugin) return null;
     return {
       plugin,
@@ -182,7 +182,7 @@ export class PluginVerificationToolHost implements ToolHost {
     context: ToolExecutionContext,
   ): Promise<ToolExecutionResult> {
     if (name !== VERIFY_PLUGIN_TOOL) throw new Error(`Unknown Plugin verification tool: ${name}`);
-    await requireAppBuilderTool(this.plugins, name, context);
+    await requireBuilderTool(this.plugins, name, context);
     const normalized = normalizeVerificationInput(input);
     const plugin = await this.installedPlugin(normalized.pluginId);
     assertCompleteVerificationCoverage(plugin, normalized.checks);

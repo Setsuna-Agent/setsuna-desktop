@@ -1,11 +1,13 @@
 ---
-name: "Create Plugin in Chat"
-description: "Create or update Setsuna plugins from chat, including Plugin details configuration forms, API key settings, sidebar apps, Skills, MCP servers, Hooks, and executable tools. Generate a complete manifest and file snapshot, then call configure_plugin."
+name: create-plugin-in-chat
+description: "Create or update Setsuna sidebar apps from chat, including website entries, React apps, tables, forms, and charts. Generate a complete app bundle and call configure_plugin."
 ---
 
-# Create Plugin in Chat
+# Create apps in chat
 
-This Skill ships with the default-installed App Builder plugin. The sidebar “+” and the capability page's “Create plugin in chat” action select that plugin. Shortcuts prefill a new projectless chat; wait for the user to send before acting. Generate a complete Plugin Bundle from the request and install it with `configure_plugin`. Do not ask for an unpacked directory or write to private runtime directories. Creating a sidebar app does not require a project.
+This Skill belongs to App Builder and creates or updates sidebar apps. The sidebar “+” starts a projectless chat with this builder; shortcuts prefill a draft and wait for the user to send it. Creating a sidebar app does not require a project. Preserve an existing app's plugin ID, page ID, and stored data when updating.
+
+Use Plugin Builder for standalone Skills, MCP servers, Hooks, tools, or conversation cards. Add backend capabilities here only when the requested app needs them. Apps still use Plugin Bundles as their installation format.
 
 ## UI design resources
 
@@ -19,18 +21,6 @@ Read these resources only when creating or changing a local React or HTML/CSS/JS
 - For HTML documents, write base CSS into the app's `ui/app.css`, append app styles, and deliver local files through resource IDs. Browser pages may also load remote stylesheets, `@import`, and CDN resources.
 - The guidelines govern color, typography, spacing, alignment, and interaction states without forcing one business layout. Do not put the guidelines, sample sections, unrelated fields, or decorative data into the user's UI.
 
-## Choose the capability
-
-- For model instructions or workflows, use `skills/<name>/SKILL.md` and declare the directory in manifest `skills`.
-- For external services, use `mcpServers`; never embed API keys, fixed secrets, authentication headers, or credential-bearing URLs.
-- For local commands around the Agent lifecycle, use `hooks` and reference bundled scripts through `{{pluginRoot}}`.
-- For dynamic tools, lifecycle events, state, or structured user questions, use `extension`.
-- For plugin settings, use a host `tree` in `extension.rendererUi` at `renderer.capabilities.plugin.details`. The form appears in the owning Plugin details; omit `navigation` and do not create a sidebar app for configuration fields. API keys use `field.secret: true`. Read the [complete form example](references/plugin-settings.en-US.md) through `read_plugin_resource({pluginId:'app-builder',resourceId:'plugin-settings-guide'})` first.
-- For sidebar entries or standalone pages, use Renderer UI v2 in `extension.rendererUi`. Use `webpage: { url: "https://…" }` to load an existing website directly in the native browser, host-rendered `tree` for simple forms and status, or an independent React/Vite `reactApp` project for new local apps. Existing HTML/CSS/JS `document` pages remain compatible; migrate only when appropriate for the requested update.
-- For interactive cards after a tool runs, declare the card name, tool, and static sandbox preview in `extension.uiCards`, then return `plugin.ui-card@1` from the tool. One Plugin can provide both cards and persistent sidebar pages.
-- `tools` is display metadata and does not register executable tools; use `api.registerTool` in the extension.
-- `resources` declares Agent-readable resources and the HTML/CSS/JS files referenced by sandboxed pages.
-
 ## Bundle rules
 
 Submit a complete snapshot to `configure_plugin`:
@@ -40,79 +30,18 @@ Submit a complete snapshot to `configure_plugin`:
 - For apps, prefer writing and editing files in the current workspace (the current temporary workspace when no project is selected), then submit `{ "path": "ui/app.html", "sourcePath": "ui/app.html" }`. `path` is the bundle destination; `sourcePath` is workspace-relative or an absolute path within approved readable roots. The host reads the original file directly; do not read back and copy all source into the call.
 - Each item must provide exactly one of `sourcePath` or `content`. Small snippets may use `content` as an ordinary JSON string. Do not add XML/HTML entity escaping or Base64 encoding; preserve source entities such as `&amp;`, tags, quotes, and newlines. For `$text`, non-string content, or malformed file arrays, retry with `sourcePath` instead of repeatedly generating JSON/XML payload files, guessing ports, or searching for tokens.
 - The limit is 64 text files and 512 KiB in total. This tool cannot create binary assets such as images.
-- Every Skill directory must contain a complete `SKILL.md`, without TODOs, placeholders, or omitted content.
-- Hook commands should reference bundled scripts; provide `commandWindows` when needed.
 - The extension entry must be a bundled `.mjs`, using `apiVersion: 1`, `runtime: node-worker`, and only the capabilities actually used: `tools`, `events`, `state`, `ui`, `network`.
-- `rendererUi`, `uiCards`, and `plugin.ui-card` require `ui`. Put cards at `manifest.extension.uiCards` with each toolName matching a top-level tool. Previews use static, side-effect-free example source and bounded data; they do not execute tools or replace real tool results. Runtime state bindings also require `state`. Local pages default to React projects; existing websites should use direct webpage mode. Keep host DOM access isolated.
+- `rendererUi` requires `ui`; state bindings also require `state`. Keep host DOM access isolated.
 - Do not declare `image-generation` or `vision-recognition`; these private host bridges are reserved for the bundled marketplace and cannot be installed in local or chat-created plugins.
 - `network` requires exact HTTP(S) origins without paths or credentials in `extension.network.allowedOrigins`. Call `context.network.request(...)` on the handler's second argument to use app proxying, cancellation, timeouts, and response-size limits. `response.body` is always a string: check `response.ok`/`response.status`, then use `await response.json()` or `JSON.parse(response.body)` before accessing fields. There is no `api.network`.
 - React projects support their own package.json and registry packages. The host installs and builds during approved install/update, without running lifecycle scripts. Do not submit node_modules. HTML documents and backend workers remain self-contained.
 - Before calling, verify `extension.entry`, all `resources[].path` values, every Skill's `SKILL.md`, and every `{{pluginRoot}}` reference exist in this same complete `files` snapshot. Do not probe validation one error at a time with incomplete snapshots.
 
-Minimal dynamic tool entry:
+## App handlers
 
-```js
-export default function activate(api) {
-  api.registerTool({
-    name: 'example',
-    description: 'Explain exactly when the model should call this tool.',
-    inputSchema: {
-      type: 'object',
-      properties: { value: { type: 'string' } },
-      required: ['value'],
-      additionalProperties: false,
-    },
-    async execute(input) {
-      return { content: String(input.value) };
-    },
-  });
-}
-```
+`activate(api)` exposes only `registerTool`, `on`, and `onUiAction`. Page actions use `api.onUiAction(id, async (input, context) => ...)`; React/document data arrives in `input.payload`, and host form fields in `input.values`. Runtime capabilities are on `context`, never `api.network`, `api.state`, or `api.ui`.
 
-## Extension API contract
-
-Distinguish registration APIs from execution context. `activate(api)` provides **only**:
-
-- `api.registerTool(definition)` to register tools.
-- `api.on(eventName, handler)` for `session.start`, `prompt.before`, `tool.before`, `tool.after`, `compact.before`, and `turn.settled`. There is no `api.onEvent`.
-- `api.onUiAction(actionId, handler)` to register Renderer UI actions.
-
-Network, state, interactive UI, and cancellation are on the handler's second argument, `context`. Do not use `api.network`, `api.state`, or `api.ui`:
-
-```js
-api.registerTool({
-  name: 'get_weather',
-  description: 'Call when the user asks for current weather at a location and return a weather card.',
-  inputSchema: {
-    type: 'object',
-    properties: { city: { type: 'string' } },
-    required: ['city'],
-    additionalProperties: false,
-  },
-  async execute(input, context) {
-    const response = await context.network.request({
-      url: `https://api.example.com/weather?city=${encodeURIComponent(input.city)}`,
-      method: 'GET',
-      headers: { accept: 'application/json' },
-    });
-    if (!response.ok) throw new Error(`Weather API failed: HTTP ${response.status}`);
-    const weather = await response.json();
-    if (!weather || typeof weather !== 'object') throw new Error('Weather API returned invalid JSON.');
-    return { content: `${input.city}：${weather.temperature}°C` };
-  },
-});
-```
-
-Handler capabilities:
-
-- Tool: `async execute(input, context)`; declared capabilities provide `context.network`, `context.state`, and `context.ui`, and `context.signal` is always available.
-- Event: `api.on(name, async (payload, context) => ...)`; the first argument is event data, not necessarily tool input.
-- UI Action: `api.onUiAction(id, async (input, context) => ...)`; form values are in `input.values`, page arguments in `input.payload`. Interactive `context.ui` is unavailable here.
-- Secrets: handlers use `await context.secrets.get(name)` to read their plugin's declared details credential as a string or `null`. The host encrypts form edits; `input.values` excludes secrets. Never put keys in state, source files, tool arguments or outputs, or ask users to provide real keys in chat.
-- State: `context.state.get(key, scope?)`, `set(key, value, scope?)`, `delete(key, scope?)`. Tool/Event default to `thread`; UI Action uses the contribution's `data.scope`. Explicitly use the matching `global`/`project`/`thread` scope when sharing sidebar state across entry points.
-- Network response: `{ ok, status, statusText, headers, body, text(), json() }`. `body` is UTF-8 text, not an object; do not use `response.body.current`.
-
-Declare only supported events with verified behavior. Do not add nonessential automatic synchronization just for completeness; incorrect events and unverified payload assumptions reduce reliability.
+State methods are `context.state.get(key, scope?)`, `set(key, value, scope?)`, and `delete(key, scope?)`. UI actions default to the contribution data scope; tool/event handlers default to `thread`. Use the declared `global`/`project`/`thread` scope consistently. API keys use `field.secret: true` in a Plugin details form, without `defaultValue`; read them through `context.secrets.get(name)`, never normal state or form values.
 
 ## Renderer UI
 
@@ -322,98 +251,17 @@ The host provides compatible `window.alert`, `window.confirm` and `window.prompt
 
 Declare `"libraries": ["echarts"]` in `document` for host-bundled offline `window.echarts`. Generate chart options and interaction code without copying ECharts or running a package manager. Other browser libraries can load as remote resources. Use the themed chart template with container resize, theme updates, unsubscribe/dispose on unload, and actual data fields and units.
 
-### Conversation cards
-
-Declare card metadata and a side-effect-free static example in the manifest. Plugin details list it under “Interface” and preview it in the same sandbox. Actual runtime source still comes from the tool result; do not put network or host operations in `preview`:
-
-```json
-{
-  "tools": [
-    { "name": "get_weather", "description": "Look up current weather at the requested location and return a weather card." }
-  ],
-  "extension": {
-    "apiVersion": 1,
-    "runtime": "node-worker",
-    "entry": "extension/entry.mjs",
-    "capabilities": ["tools", "ui", "network"],
-    "uiCards": [
-      {
-        "id": "weather.current",
-        "label": "Current Weather Card",
-        "description": "Show current weather and a short forecast in the conversation.",
-        "toolName": "get_weather",
-        "preview": {
-          "html": "<main id=\"weather\"></main>",
-          "css": "html,body{margin:0;background:transparent}.card{padding:16px;border:1px solid var(--setsuna-color-border);border-radius:10px;color:var(--setsuna-color-text);background:var(--setsuna-color-surface);font:14px/1.5 var(--setsuna-font-family)}.temp{font-size:28px;font-weight:600}",
-          "js": "window.setsunaUI.ready.then(({data})=>{document.querySelector('#weather').innerHTML=`<section class=\"card\"><div>${data.city} · ${data.condition}</div><div class=\"temp\">${data.temperature}°C</div></section>`})",
-          "data": { "city": "Hangzhou", "condition": "Sunny", "temperature": 28 }
-        }
-      }
-    ]
-  }
-}
-```
-
-When returning a card, put the normal text summary in `content` and the card in `data`. Do not supply `pluginId`; the host stamps the actual tool origin:
-
-```js
-return {
-  content: 'Sunny in Hangzhou today, 28°C.',
-  data: {
-    resultKind: 'plugin.ui-card',
-    resultMajor: 1,
-    payload: {
-      id: 'weather.hangzhou.today',
-      title: 'Hangzhou Weather',
-      html: '<main id="weather"></main>',
-      css: '#weather { padding: 20px; border-radius: 18px; }',
-      js: 'window.setsunaUI.ready.then(({data}) => { document.querySelector("#weather").textContent = `${data.temperature}°C`; });',
-      data: { temperature: 28, condition: 'Sunny' },
-      permissions: { network: true, hostActions: [] }
-    }
-  }
-};
-```
-
-Card JavaScript can modify only its own sandbox DOM and read this tool result through `window.setsunaUI.ready`. The card is anchored at the tool call's persisted timeline position, naturally producing text → card → text around the tool call. Do not fake placeholders in Markdown. v1 cards cannot invoke host actions; provide a standalone page for refresh, configuration, or persistent state. A weather tool should say when to call it in its description, fetch data through allowlisted worker networking, and return both results and the card. Cards may also access the network subject to normal browser CORS.
-
-For collecting release artifacts from conversation, subscribe to `tool.after` or `turn.settled` via `events`, extract explicit artifact fields, deduplicate, and save a bounded summary in `global` or `project` state. Do not store entire conversations or unbounded tool results.
-
 ## Workflow
 
 1. Determine whether this is creation or update; infer the plugin ID, name, and capabilities from the request.
 2. Ask only for core behavior, external service details, or platform requirements that cannot safely be inferred. Create directly when requirements are clear.
 3. Generate the complete manifest and prepare all text files in the current workspace, preferring `sourcePath` for submission. Do not ask the user to prepare a local directory or call `install_plugin_bundle`.
-4. Call `configure_plugin`. Before approval, briefly describe the Skills, MCP servers, Hooks, resources, and extension to install, including whether it contains executable code.
+4. Call `configure_plugin`. Before approval, briefly describe the app, resources, and backend handlers to install.
 5. If preflight fails, fix every listed field and file and submit a new complete snapshot. Do not end the turn with promises to finish later.
 6. `Installed and enabled: true` confirms only manifest, syntax, React type checking/building and worker activation. For extensions with tools or UI actions, immediately call `verify_plugin` using representative, read-only inputs covering every user-facing execution path. Tools declaring `uiCards` are required to return a valid `plugin.ui-card`.
 7. For UI actions, provide `contributionId`. React/document checks must use the actual page's `payload` with empty `values`. Save checks must assert submitted values with `expectStateValues`; `expectStatePaths` proves only existence, and an empty array passing does not prove adding works. Never insert test records or clear user data. Use a user-requested real write, an implemented dry-run, or read existing data and save it unchanged. External writes must use dry-run; obtain explicit user authorization when no safe method exists.
 8. `verify_plugin` returning `checksPassed:true` proves only the listed host-handler or API checks. A `ui-action` check calls the worker directly without executing page JavaScript, clicking buttons or testing dialogs; `pageInteractionsVerified:false` means page interactions remain unverified. Report the actual scope, without claiming that buttons, dialogs or the entire app were verified. On failure, repair the complete snapshot, call `configure_plugin` again and recheck. Claim page behavior was verified only with separate interaction evidence; do not use a browser or computer-use without the user's authorization just to obtain it.
 9. Updates also require complete snapshots. If the same plugin ID belongs to the built-in marketplace or another directory, explicitly tell the user that installation failed because a same-name plugin already exists and to choose a different name before reinstalling. A new app must change both `pluginId` and `manifest.id`; changing only `manifest.name` will fail again. Do not alter the existing plugin's source or retry its ID unchanged.
-
-If a weather plugin provides both a conversation card and sidebar refresh, verify both real paths after installation:
-
-```json
-{
-  "pluginId": "hangzhou-weather",
-  "checks": [
-    {
-      "kind": "tool",
-      "name": "get_weather",
-      "input": { "city": "Hangzhou" },
-      "expectUiCard": true
-    },
-    {
-      "kind": "ui-action",
-      "name": "weather.refresh",
-      "contributionId": "weather.page",
-      "values": {},
-      "payload": { "city": "Hangzhou" },
-      "expectStatePaths": ["summary.label"]
-    }
-  ]
-}
-```
 
 ## Safety boundaries
 

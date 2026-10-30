@@ -10,7 +10,7 @@ import { createPluginRuntime } from '../adapters/plugin/support/file-plugin-bund
 
 describe('chat-authored Plugin details credentials', () => {
   it.each(['plugin-settings.md', 'plugin-settings.en-US.md'])('installs the %s example, saves privately, and uses the key from its worker after an update', async (guide) => {
-    const markdown = await readFile(path.resolve('plugins/app-builder/skills/create-plugin-in-chat/references', guide), 'utf8');
+    const markdown = await readFile(path.resolve('plugins/plugin-builder/skills/create-plugin-in-chat/references', guide), 'utf8');
     const example = markdown.match(/```json\n([\s\S]*?)\n```/u)?.[1];
     if (!example) throw new Error('Configuration example missing');
     const snapshot = normalizeConfigurePluginInput(JSON.parse(example));

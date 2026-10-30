@@ -17,7 +17,7 @@
 
 `display-in-chat` 的组件签名来自 renderer 实际注册的 OpenUI library；升级依赖或调整组件范围后运行 `pnpm generate:openui-catalog`。示例和签名生成到两种语言的 Skill 正文中，Agent 可通过现有 `read_skill` 分块加载，不需要扩大工作区外的文件读取权限。普通回合只注入 Skill 目录元信息。
 
-应用与插件创建 Skill 由默认安装的 `app-builder` 插件提供，源码位于 `plugins/app-builder/skills/create-plugin-in-chat/`，安装后 ID 为 `app-builder.create-plugin-in-chat`。
+应用创建与插件创建由两个内置构建器分别提供：`app-builder` 负责侧栏应用，`plugin-builder` 负责 Skill、MCP、Hook、工具与插件配置。两者随应用提供，无需用户安装，源码分别位于 `plugins/{app-builder,plugin-builder}/skills/create-plugin-in-chat/`。应用 Skill 保留 `app-builder.create-plugin-in-chat` 这一既有 ID，以保留用户的编辑和启用设置；插件 Skill 使用独立的 `plugin-builder.create-plugin-in-chat`。
 
 ## 内置内容的语言
 

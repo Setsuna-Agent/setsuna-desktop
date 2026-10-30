@@ -35,6 +35,8 @@ export type ToolExecutionContext = {
   /** Per-turn roots available to host file-reading tools but never delegated to a shell sandbox. */
   directToolReadableRoots?: string[];
   features?: Record<string, boolean>;
+  /** Explicit plugin selection affects shared-tool attribution, never availability or permissions. */
+  selectedPluginIds?: readonly string[];
   sandbox?: ToolSandboxAttempt;
   signal?: AbortSignal;
   onToolOutputDelta?(delta: ToolOutputDelta): void;

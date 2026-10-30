@@ -24,7 +24,7 @@ import {
 } from './configure-plugin-tool.js';
 import { pluginRequiresFunctionalVerification } from './plugin-verification-tool-host.js';
 import { objectInput, requiredStringArg } from './tool-input.js';
-import { appBuilderToolOwner, requireAppBuilderTool } from './app-builder-tool-owner.js';
+import { builderToolOwner, requireBuilderTool } from './builder-tool-owner.js';
 import { resolveConfigurePluginSources } from './configure-plugin-sources.js';
 
 const INSTALL_PLUGIN_TOOL = 'install_plugin_bundle';
@@ -104,14 +104,14 @@ export class PluginBundleToolHost implements ToolHost {
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     if (context.features?.plugins === false) return [];
-    const builder = await appBuilderToolOwner(this.plugins, CONFIGURE_PLUGIN_TOOL, context);
+    const builder = await builderToolOwner(this.plugins, CONFIGURE_PLUGIN_TOOL, context);
     return [...resourceToolDefinitions(context.interfaceLanguage), ...managementToolDefinitions(context.interfaceLanguage)]
       .filter((tool) => tool.name !== CONFIGURE_PLUGIN_TOOL || builder);
   }
 
   async toolRuntimeProfile(name: string, context: ToolExecutionContext) {
     if (name !== CONFIGURE_PLUGIN_TOOL) return null;
-    const plugin = await appBuilderToolOwner(this.plugins, name, context);
+    const plugin = await builderToolOwner(this.plugins, name, context);
     return plugin ? { plugin } : null;
   }
 
@@ -122,11 +122,9 @@ export class PluginBundleToolHost implements ToolHost {
     return [
       text('When the user asks to create, update, or save a Setsuna Plugin from chat, use configure_plugin instead of writing runtime directories or asking for an extracted bundle.', "用户通过对话要求创建、更新或保存 Setsuna 插件时，使用 configure_plugin，不要直接写入运行时目录或要求用户提供解压后的插件包。"),
       text('configure_plugin accepts one complete Bundle v2 snapshot: manifest plus every UTF-8 text file. Omitted files are removed on update.', "configure_plugin 接收完整的 Bundle v2 快照：清单及全部 UTF-8 文本文件。更新时，省略的文件会被删除。"),
-      text('For plugin settings, use renderer.capabilities.plugin.details with a host tree instead of creating a sidebar app. API key fields declare secret:true and no defaultValue; the host securely saves edits before onUiAction and excludes secrets from input.values. Read configured keys with context.secrets.get(name). Read app-builder resource plugin-settings-guide for a complete example.', '插件配置表单使用 renderer.capabilities.plugin.details 和宿主 tree，不要擅自创建侧栏应用。API Key 字段声明 secret:true，不设 defaultValue；宿主在 onUiAction 前安全保存修改，input.values 不含密钥。通过 context.secrets.get(name) 读取已配置密钥。完整示例见 app-builder 的 plugin-settings-guide 资源。'),
+      text('For plugin settings, use renderer.capabilities.plugin.details with a host tree instead of creating a sidebar app. API key fields declare secret:true and no defaultValue; the host securely saves edits before onUiAction and excludes secrets from input.values. Read configured keys with context.secrets.get(name).', '插件配置表单使用 renderer.capabilities.plugin.details 和宿主 tree，不要擅自创建侧栏应用。API Key 字段声明 secret:true，不设 defaultValue；宿主在 onUiAction 前安全保存修改，input.values 不含密钥。通过 context.secrets.get(name) 读取已配置密钥。'),
       text('If installation fails because another plugin already uses the ID, clearly tell the user that a same-name conflict prevented installation and ask them to choose a different name for reinstalling. A new app needs a new pluginId and manifest.id as well; changing only the display name will fail again. Do not overwrite the existing plugin or retry the unchanged ID.', '安装因已有同名插件/ID 冲突而失败时，明确告知用户安装失败，并提示换个名字重新安装；新应用也必须更换 pluginId 和 manifest.id，只改显示名称会再次失败。不要覆盖已有插件或使用原 ID 反复重试。'),
-      text('For a sidebar entry that opens an existing website, use renderer.plugin.page with webpage:{url:"https://..."}, ui capability and a minimal extension entry. The native browser loads the URL directly, so iframe embedding checks, UI design resources and HTML/CSS/JS page files are unnecessary. For new local apps, use reactApp with an independent project, multi-file TSX, routes and package.json; @setsuna/app supplies default components, styles and existing data/action/runtime hooks.', '侧栏入口打开已有网站时，使用 renderer.plugin.page 和 webpage:{url:"https://..."}，声明 ui 能力并提供最小 extension 入口。原生浏览器直接加载该 URL，无需检查 iframe 嵌入许可、读取界面设计资源或生成 HTML/CSS/JS 页面文件；新建本地应用使用 reactApp 独立项目、多文件 TSX、路由和 package.json，@setsuna/app 提供默认组件、样式及现有数据/action/runtime hooks。'),
       text('For React and HTML/CSS/JS apps, write and edit files in the current workspace, then submit files as {path,sourcePath}; the host reads their exact contents. Inline content is for small snippets and uses ordinary JSON strings, with no extra XML/HTML or Base64 encoding. On malformed file parameters, retry with sourcePath instead of generating escaped payloads or probing runtime ports/tokens.', 'React 和 HTML/CSS/JS 应用先在当前工作区写入和编辑文件，再以 {path,sourcePath} 提交，宿主原样读取。小片段可内联 content，使用普通 JSON 字符串，不额外做 XML/HTML 或 Base64 编码。文件参数结构错误时改用 sourcePath 重试，不要反复生成转义载荷或探测 runtime 端口/token。'),
-      text('React apps share the host public UI through @setsuna/app: SelectField uses value/onValueChange and option children; Checkbox uses native onChange with label/children; Markdown renders sanitized content. Buttons, dialogs, menus, tooltips, tabs and other shared controls are available there. Read react-app-guide for their exact props; do not fall back to native selects/checkboxes or copy host UI implementations.', 'React 应用通过 @setsuna/app 复用宿主公共 UI：SelectField 使用 value/onValueChange 和 option children，Checkbox 使用原生 onChange 与 label/children，Markdown 渲染过滤后的内容；按钮、弹窗、菜单、Tooltip、Tabs 等公共组件也从同一入口导入。先读 react-app-guide 确认参数，不退回原生下拉/复选框，也不复制宿主 UI 实现。'),
       text('Skill directories need SKILL.md; Hooks should reference bundled scripts with {{pluginRoot}}; executable extensions use a node-worker entry and declare tools/events/ui/state/network capabilities.', "Skill 目录需要 SKILL.md；Hook 应通过 {{pluginRoot}} 引用包内脚本；可执行扩展使用 node-worker 入口，并声明 tools/events/ui/state/network 能力。"),
       text('The activation api exposes only registerTool, on, and onUiAction. Runtime capabilities are on the second handler argument: async execute(input, context), api.on(event, (payload, context) => ...), or api.onUiAction(id, (input, context) => ...). Never use api.network, api.state, api.ui, or api.onEvent.', "激活 api 仅提供 registerTool、on 和 onUiAction。运行时能力在处理函数的第二个参数中：async execute(input, context)、api.on(event, (payload, context) => ...) 或 api.onUiAction(id, (input, context) => ...)。不得使用 api.network、api.state、api.ui 或 api.onEvent。"),
       text('Renderer UI action approval is optional. Omit it for saves, app state updates and refreshes; handlers can persist through context.state without per-save confirmation. Declare approval only for interactions needing extra confirmation, and do not duplicate a page dialog. Remove an old save action\'s approval when updating it to save directly.', 'Renderer UI action 的 approval 可选。保存、应用数据更新和刷新应省略，handler 直接通过 context.state 持久化，无需逐次确认。仅对需要二次确认的交互声明 approval，不要重复页面已有弹窗。修改旧应用以直接保存时，移除保存 action 原有的 approval。'),
@@ -180,7 +178,7 @@ export class PluginBundleToolHost implements ToolHost {
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
     const args = objectInput(input);
     if (name === CONFIGURE_PLUGIN_TOOL) {
-      await requireAppBuilderTool(this.plugins, name, context);
+      await requireBuilderTool(this.plugins, name, context);
       const state = await this.configurePluginState(input, context);
       const integrityToken = configurePluginIntegrityToken(state.input, state.action);
       if (context.expectedPreviewIntegrityToken && context.expectedPreviewIntegrityToken !== integrityToken) {

@@ -40,6 +40,7 @@ import { runtimePluginSelectionContext } from './runtime-plugin-selection-contex
 import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { runtimeThreadReferenceContext } from './runtime-thread-reference-context.js';
+import { abortable, throwIfAborted } from '../core/runtime-turn-errors.js';
 
 const DEFAULT_SKILL_PROMPT_MAX_BYTES = 48 * 1024;
 const DEFAULT_TOOL_EXTERNAL_CONTEXT_MAX_BYTES = 64 * 1024;
@@ -96,15 +97,16 @@ export class RuntimePromptContextAssembler {
     const permissionToolNames = catalogTools ?? tools;
     const pluginContext = await runtimePluginSelectionContext(skillActivationText,
       config?.features?.plugins === false ? undefined : this.options.pluginStore, language, catalogTools ?? tools);
+    throwIfAborted(toolContext.signal);
     const [skillContext, memoryMessages, projectInstructions, projectWorkflow, toolPrompt, toolExternalContext, threadReferences] = await Promise.all([
-      this.skillContext(
+      abortable(this.skillContext(
         [...new Set([...skillIds, ...pluginContext.skillIds])],
         config,
         language,
         { text: skillActivationText, defaultSkillIds: thread.defaultSkillIds },
         skillCatalogContextWindowTokens,
         tools.some((tool) => tool.name === 'read_skill'),
-      ),
+      ), toolContext.signal),
       this.options.memoryControl().contextMessages(thread.projectId),
       this.options.projectInstructions?.load({
         environment,

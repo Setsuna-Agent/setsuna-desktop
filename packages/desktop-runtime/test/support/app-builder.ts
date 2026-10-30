@@ -7,3 +7,7 @@ export function installedAppBuilder(): RuntimePluginSummary {
     skills: [], mcpServers: [], hooks: [], hookCount: 0, resources: [],
   };
 }
+
+export function installedPluginBuilder(): RuntimePluginSummary {
+  return { ...installedAppBuilder(), id: 'plugin-builder', name: '插件构建器', icon: 'plugin-builder' };
+}

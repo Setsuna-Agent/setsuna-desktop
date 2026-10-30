@@ -1,4 +1,4 @@
 interface:
-  display_name: "对话创建插件"
-  short_description: "通过对话创建或更新包含技能、工具与自动化的 Setsuna 插件"
-  default_prompt: "Use $create-plugin-in-chat to create or update the Setsuna plugin or app I describe, placing plugin configuration fields in its details page."
+  display_name: "对话创建应用"
+  short_description: "通过对话创建或更新 Setsuna 侧栏应用"
+  default_prompt: "Use $create-plugin-in-chat to create or update the Setsuna sidebar app I describe, preserving existing app identity and data."

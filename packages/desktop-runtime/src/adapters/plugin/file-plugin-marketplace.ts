@@ -12,7 +12,7 @@ import {
 import { readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { PluginBundleInspection, PluginBundleStore } from '../../ports/plugin-bundle-store.js';
-import type { PluginMarketplace } from '../../ports/plugin-marketplace.js';
+import type { PluginMarketplace, PluginMarketplaceListOptions } from '../../ports/plugin-marketplace.js';
 
 type MarketplaceBundleStore = Pick<
   PluginBundleStore,
@@ -31,8 +31,8 @@ export class FilePluginMarketplace implements PluginMarketplace {
     private readonly bundles: MarketplaceBundleStore,
   ) {}
 
-  async listPlugins(): Promise<RuntimePluginMarketplaceList> {
-    const { catalog, installedPlugins } = await this.readCatalogState();
+  async listPlugins(options?: PluginMarketplaceListOptions): Promise<RuntimePluginMarketplaceList> {
+    const { catalog, installedPlugins } = await this.readCatalogState(options?.signal);
     const errors = [...catalog.errors];
     const plugins = catalog.plugins
       .sort(compareMarketplacePlugins)
@@ -100,9 +100,9 @@ export class FilePluginMarketplace implements PluginMarketplace {
     return this.bundles.readBundleItemContent({ path: plugin.sourcePath }, kind, itemId);
   }
 
-  async installPlugin(pluginId: string): Promise<RuntimePluginInstallResult> {
+  async installPlugin(pluginId: string, options: { signal?: AbortSignal } = {}): Promise<RuntimePluginInstallResult> {
     const id = pluginId.trim().toLowerCase();
-    const { catalog, installedPlugins } = await this.readCatalogState();
+    const { catalog, installedPlugins } = await this.readCatalogState(options.signal);
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
     const installed = installedPlugins.find((item) => item.id === id);
@@ -112,13 +112,13 @@ export class FilePluginMarketplace implements PluginMarketplace {
     // readCatalog 已把来源限制在应用内置目录；用户点击安装就是对这份随包插件的授权。
     return this.bundles.installPlugin(
       { path: plugin.sourcePath },
-      { installationSource: 'marketplace', trustHooks: true, trustExtension: true },
+      { installationSource: 'marketplace', trustHooks: true, trustExtension: true, signal: options.signal },
     );
   }
 
-  async updatePlugin(pluginId: string): Promise<RuntimePluginInstallResult> {
+  async updatePlugin(pluginId: string, options: { signal?: AbortSignal } = {}): Promise<RuntimePluginInstallResult> {
     const id = pluginId.trim().toLowerCase();
-    const { catalog, installedPlugins } = await this.readCatalogState();
+    const { catalog, installedPlugins } = await this.readCatalogState(options.signal);
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
     const installed = installedPlugins.find((item) => item.id === id);
@@ -135,24 +135,29 @@ export class FilePluginMarketplace implements PluginMarketplace {
         installationSource: 'marketplace',
         trustHooks: true,
         trustExtension: true,
+        signal: options.signal,
       },
     );
   }
 
-  private async readCatalogState(): Promise<{
+  private async readCatalogState(signal?: AbortSignal): Promise<{
     catalog: { plugins: PluginBundleInspection[]; errors: string[] };
     installedPlugins: Awaited<ReturnType<MarketplaceBundleStore['listPlugins']>>['plugins'];
   }> {
-    const catalog = await this.readCatalog();
+    signal?.throwIfAborted();
+    const catalog = await this.readCatalog(signal);
+    signal?.throwIfAborted();
     // Legacy records predate installationSource. Reclaim the exact controlled
     // catalog source across application locations, while preserving local
     // bundles that merely reuse an id.
     await this.bundles.migrateLegacyMarketplaceInstallations(catalog.plugins);
+    signal?.throwIfAborted();
     const { plugins: installedPlugins } = await this.bundles.listPlugins();
+    signal?.throwIfAborted();
     return { catalog, installedPlugins };
   }
 
-  private async readCatalog(): Promise<{ plugins: PluginBundleInspection[]; errors: string[] }> {
+  private async readCatalog(signal?: AbortSignal): Promise<{ plugins: PluginBundleInspection[]; errors: string[] }> {
     const root = await realpath(this.catalogRoot).catch(() => null);
     if (!root) return { plugins: [], errors: [] };
     const entries = await readdir(root, { withFileTypes: true });
@@ -160,6 +165,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
     const errors: string[] = [];
     const seenIds = new Set<string>();
     for (const entry of entries) {
+      signal?.throwIfAborted();
       if (!entry.isDirectory() || entry.isSymbolicLink() || entry.name.startsWith('.')) continue;
       try {
         const plugin = await this.bundles.inspectPlugin({ path: path.join(root, entry.name) });

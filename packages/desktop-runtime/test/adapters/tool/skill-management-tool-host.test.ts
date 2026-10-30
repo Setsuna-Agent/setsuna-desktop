@@ -1,11 +1,33 @@
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-registry.js';
 import { SkillManagementToolHost } from '../../../src/adapters/tool/skill-management-tool-host.js';
 
 describe('skill management tool host', () => {
+  it('cancels read_skill while initialization is pending and permits a later read', async () => {
+    const { host, registry } = await createSkillHostFixture();
+    const skill = await registry.getSkill('builtin-guide');
+    let finishRead!: (value: typeof skill) => void;
+    const pendingRead = new Promise<typeof skill>((resolve) => { finishRead = resolve; });
+    const read = vi.spyOn(registry, 'getSkill').mockReturnValue(pendingRead);
+    const controller = new AbortController();
+    const input = { skill_id: 'builtin-guide', content_version: skill!.contentVersion };
+    try {
+      const waiting = host.runTool('read_skill', input, { threadId: 'cancelled', signal: controller.signal });
+      const rejected = expect(waiting).rejects.toMatchObject({ name: 'AbortError' });
+      controller.abort();
+      await rejected;
+      finishRead(skill);
+      await expect(host.runTool('read_skill', input, { threadId: 'other' }))
+        .resolves.toMatchObject({ data: { complete: true } });
+    } finally {
+      finishRead(skill);
+      read.mockRestore();
+    }
+  });
+
   it('reads complete instructions only for enabled Skills without approval', async () => {
     const { host, registry } = await createSkillHostFixture();
     const builtin = await registry.getSkill('builtin-guide');
