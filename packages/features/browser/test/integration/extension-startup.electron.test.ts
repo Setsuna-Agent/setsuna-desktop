@@ -9,6 +9,9 @@ import { build } from 'esbuild';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const supported = ['darwin', 'win32'].includes(process.platform);
+// Cold Electron setup and multiple workers need a longer total deadline than
+// the 10-second worker timeout. Core readiness is checked with loading gated.
+const fixtureTimeoutMs = 30_000;
 
 describe.skipIf(!supported)('extension restoration keeps the browser provider usable', () => {
   let directory: string;
@@ -33,13 +36,13 @@ describe.skipIf(!supported)('extension restoration keeps the browser provider us
     ['pages', 'starts healthy MV2 pages while another page is stalled'],
   ])('%s: %s', async (phase) => {
     const { stdout, stderr } = await promisify(execFile)(createRequire(import.meta.url)('electron'), [entry, directory, phase],
-      { env, timeout: 8000, maxBuffer: 1024 * 1024 }).catch(error => {
-      throw new Error(`Extension startup phase: ${phase}\n${error.message}\n${error.stdout}`);
+      { env, timeout: fixtureTimeoutMs, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024 }).catch(error => {
+      throw new Error(`Extension startup phase: ${phase}\n${error.message}\n${error.stdout}\n${error.stderr}`);
     });
     expect(stdout).toContain(`EXTENSION_STARTUP_${phase.toUpperCase()}_OK`);
     expect(stdout).toContain('BROWSER_READY_WITH_RESTORE_PENDING_MS');
     console.info(`${phase}: ${stdout.split('\n').find(line => line.startsWith('BROWSER_READY_WITH_RESTORE_PENDING_MS'))}`);
     expect(stderr).not.toContain('MaxListenersExceededWarning');
     expect(stderr).not.toContain('Timed out starting extension worker');
-  }, 10_000);
+  }, fixtureTimeoutMs + 5000);
 });
