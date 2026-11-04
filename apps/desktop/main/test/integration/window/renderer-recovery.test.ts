@@ -8,7 +8,7 @@ import { build } from 'esbuild';
 import { describe, expect, it } from 'vitest';
 
 describe.skipIf(!['darwin', 'win32'].includes(process.platform))('native renderer recovery', () => {
-  it.each(['image-policy-only', 'recovery-only', 'readiness-only'])('validates %s rendering and normal fixture exit', async (scenario) => {
+  it.each(['load-and-close', 'recovery'])('validates %s rendering and normal fixture exit', async (scenario) => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-renderer-recovery-'));
     try {
       const entry = path.join(root, 'main.cjs');

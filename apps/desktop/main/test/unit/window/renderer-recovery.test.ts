@@ -128,8 +128,17 @@ describe('desktop renderer recovery', () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(fixture.load).not.toHaveBeenCalled();
     if (condition !== 'close') fixture.close();
-    expect(fixture.native.webContents.listenerCount('render-process-gone')).toBe(0);
+    expect(fixture.contents.listenerCount('render-process-gone')).toBe(0);
     expect(fixture.native.listenerCount('focus')).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cleans up without reading BrowserWindow native getters after closed', () => {
+    const fixture = createFixture();
+    fixture.crash();
+    expect(() => fixture.close()).not.toThrow();
+    expect(() => fixture.native.webContents).toThrow('native wrapper is destroyed');
+    expect(fixture.contents.listenerCount('render-process-gone')).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -157,23 +166,28 @@ function createFixture(initiallyVisible = true) {
   let destroyed = false;
   let contentsDestroyed = false;
   let allowed = true;
+  const contents = Object.assign(new EventEmitter(), { id: 7, isDestroyed: () => contentsDestroyed, isCrashed: () => false });
   const native = Object.assign(new EventEmitter(), {
-    webContents: Object.assign(new EventEmitter(), { id: 7, isDestroyed: () => contentsDestroyed, isCrashed: () => false }),
+    webContents: contents,
     isDestroyed: () => destroyed,
     isVisible: () => visible,
     isFocused: () => false,
     isMinimized: () => minimized,
     show: vi.fn(), focus: vi.fn(),
   });
+  Object.defineProperty(native, 'webContents', { get: () => {
+    if (destroyed) throw new Error('BrowserWindow native wrapper is destroyed.');
+    return contents;
+  } });
   const load = vi.fn(async (): Promise<void> => undefined);
   registerDesktopRendererRecovery(native as unknown as BrowserWindow, { load, canRecover: () => allowed });
   return {
-    native, load,
+    native, contents, load,
     setVisible: (value: boolean) => { visible = value; native.emit(value ? 'show' : 'hide'); },
     setMinimized: (value: boolean) => { minimized = value; },
     setAllowed: (value: boolean) => { allowed = value; },
     setContentsDestroyed: (value: boolean) => { contentsDestroyed = value; },
-    crash: (reason = 'crashed') => native.webContents.emit('render-process-gone', {}, { reason, exitCode: 1 }),
+    crash: (reason = 'crashed') => contents.emit('render-process-gone', {}, { reason, exitCode: 1 }),
     close: () => { destroyed = true; native.emit('closed'); },
   };
 }

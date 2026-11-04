@@ -11,6 +11,8 @@ type RecoveryOptions = {
 
 /** Recover a lost desktop renderer, never a merely slow or background-throttled page. */
 export function registerDesktopRendererRecovery(window: BrowserWindow, options: RecoveryOptions): void {
+  // BrowserWindow's native webContents getter is unavailable during closed cleanup.
+  const contents = window.webContents;
   let disposed = false;
   let pending = false;
   let loading = false;
@@ -20,7 +22,7 @@ export function registerDesktopRendererRecovery(window: BrowserWindow, options: 
   let presented = window.isVisible() || window.isFocused();
   let retry: ReturnType<typeof setTimeout> | undefined;
   let stable: ReturnType<typeof setTimeout> | undefined;
-  const available = () => !disposed && !window.isDestroyed() && !window.webContents.isDestroyed() && options.canRecover();
+  const available = () => !disposed && !window.isDestroyed() && !contents.isDestroyed() && options.canRecover();
   const schedule = () => {
     if (!pending || loading || retry || !available() || !presented || window.isMinimized()) return;
     if (attempts >= MAX_RECOVERY_ATTEMPTS) return;
@@ -38,11 +40,11 @@ export function registerDesktopRendererRecovery(window: BrowserWindow, options: 
         stable = setTimeout(() => { attempts = 0; }, STABLE_UPTIME_MS);
       }).catch((error: unknown) => {
         pending = true;
-        console.error('[desktop-renderer] recovery load failed', { senderId: window.webContents.id, attempt: attempts }, error);
+        console.error('[desktop-renderer] recovery load failed', { senderId: contents.id, attempt: attempts }, error);
       }).finally(() => {
         loading = false;
         if (pending && attempts >= MAX_RECOVERY_ATTEMPTS) {
-          console.error('[desktop-renderer] automatic recovery limit reached', { senderId: window.webContents.id });
+          console.error('[desktop-renderer] automatic recovery limit reached', { senderId: contents.id });
         }
         schedule();
       });
@@ -52,22 +54,22 @@ export function registerDesktopRendererRecovery(window: BrowserWindow, options: 
     clearTimeout(stable);
     stable = undefined;
     console.error('[desktop-renderer] render process gone', {
-      senderId: window.webContents.id, reason: details.reason, exitCode: details.exitCode,
+      senderId: contents.id, reason: details.reason, exitCode: details.exitCode,
     });
     if (details.reason === 'clean-exit' || !available()) return;
     pending = true;
     if (attempts >= MAX_RECOVERY_ATTEMPTS) {
-      console.error('[desktop-renderer] automatic recovery limit reached', { senderId: window.webContents.id });
+      console.error('[desktop-renderer] automatic recovery limit reached', { senderId: contents.id });
     }
     // Hidden windows stay idle until shown; recovery never steals focus or restarts runtime.
     schedule();
   };
   const unresponsive = () => {
-    console.warn('[desktop-renderer] window unresponsive', { senderId: window.webContents.id });
+    console.warn('[desktop-renderer] window unresponsive', { senderId: contents.id });
   };
   const shown = () => { presented = true; schedule(); };
   const hidden = () => { presented = false; clearTimeout(retry); retry = undefined; };
-  window.webContents.on('render-process-gone', gone);
+  contents.on('render-process-gone', gone);
   window.on('unresponsive', unresponsive);
   window.on('show', shown);
   window.on('restore', shown);
@@ -75,7 +77,7 @@ export function registerDesktopRendererRecovery(window: BrowserWindow, options: 
   window.on('hide', hidden);
   // Resources may have loaded before slow service preparation finished. Catch a
   // process lost in that gap without adding work to the startup readiness path.
-  if (window.webContents.isCrashed()) {
+  if (contents.isCrashed()) {
     pending = true;
     schedule();
   }
@@ -83,7 +85,7 @@ export function registerDesktopRendererRecovery(window: BrowserWindow, options: 
     disposed = true;
     clearTimeout(retry);
     clearTimeout(stable);
-    window.webContents.removeListener('render-process-gone', gone);
+    contents.removeListener('render-process-gone', gone);
     window.removeListener('unresponsive', unresponsive);
     window.removeListener('show', shown);
     window.removeListener('restore', shown);
