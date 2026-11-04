@@ -15,15 +15,18 @@ export function registerDesktopRendererRecovery(window: BrowserWindow, options: 
   let pending = false;
   let loading = false;
   let attempts = 0;
+  // Native show/hide expresses presentation; macOS isVisible() also depends on
+  // occlusion and must not veto recovery after an explicit show/restore/focus.
+  let presented = window.isVisible() || window.isFocused();
   let retry: ReturnType<typeof setTimeout> | undefined;
   let stable: ReturnType<typeof setTimeout> | undefined;
   const available = () => !disposed && !window.isDestroyed() && !window.webContents.isDestroyed() && options.canRecover();
   const schedule = () => {
-    if (!pending || loading || retry || !available() || !window.isVisible() || window.isMinimized()) return;
+    if (!pending || loading || retry || !available() || !presented || window.isMinimized()) return;
     if (attempts >= MAX_RECOVERY_ATTEMPTS) return;
     retry = setTimeout(() => {
       retry = undefined;
-      if (!pending || !available() || !window.isVisible() || window.isMinimized()) return;
+      if (!pending || !available() || !presented || window.isMinimized()) return;
       pending = false;
       loading = true;
       attempts += 1;
@@ -62,11 +65,14 @@ export function registerDesktopRendererRecovery(window: BrowserWindow, options: 
   const unresponsive = () => {
     console.warn('[desktop-renderer] window unresponsive', { senderId: window.webContents.id });
   };
+  const shown = () => { presented = true; schedule(); };
+  const hidden = () => { presented = false; clearTimeout(retry); retry = undefined; };
   window.webContents.on('render-process-gone', gone);
   window.on('unresponsive', unresponsive);
-  window.on('show', schedule);
-  window.on('restore', schedule);
-  window.on('focus', schedule);
+  window.on('show', shown);
+  window.on('restore', shown);
+  window.on('focus', shown);
+  window.on('hide', hidden);
   // Resources may have loaded before slow service preparation finished. Catch a
   // process lost in that gap without adding work to the startup readiness path.
   if (window.webContents.isCrashed()) {
@@ -79,8 +85,9 @@ export function registerDesktopRendererRecovery(window: BrowserWindow, options: 
     clearTimeout(stable);
     window.webContents.removeListener('render-process-gone', gone);
     window.removeListener('unresponsive', unresponsive);
-    window.removeListener('show', schedule);
-    window.removeListener('restore', schedule);
-    window.removeListener('focus', schedule);
+    window.removeListener('show', shown);
+    window.removeListener('restore', shown);
+    window.removeListener('focus', shown);
+    window.removeListener('hide', hidden);
   });
 }

@@ -45,6 +45,18 @@ describe('desktop renderer recovery', () => {
     fixture.close();
   });
 
+  it('recovers after native show even when macOS occlusion reports isVisible false', async () => {
+    const fixture = createFixture(false);
+    fixture.native.isVisible = () => false;
+    fixture.crash();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(fixture.load).not.toHaveBeenCalled();
+    fixture.setVisible(true);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fixture.load).toHaveBeenCalledOnce();
+    fixture.close();
+  });
+
   it('does not reload healthy, merely unresponsive, or normally exiting documents', async () => {
     const fixture = createFixture();
     fixture.native.emit('show');
@@ -139,8 +151,8 @@ describe('desktop renderer recovery', () => {
   });
 });
 
-function createFixture() {
-  let visible = true;
+function createFixture(initiallyVisible = true) {
+  let visible = initiallyVisible;
   let minimized = false;
   let destroyed = false;
   let contentsDestroyed = false;
@@ -149,6 +161,7 @@ function createFixture() {
     webContents: Object.assign(new EventEmitter(), { id: 7, isDestroyed: () => contentsDestroyed, isCrashed: () => false }),
     isDestroyed: () => destroyed,
     isVisible: () => visible,
+    isFocused: () => false,
     isMinimized: () => minimized,
     show: vi.fn(), focus: vi.fn(),
   });
@@ -156,7 +169,7 @@ function createFixture() {
   registerDesktopRendererRecovery(native as unknown as BrowserWindow, { load, canRecover: () => allowed });
   return {
     native, load,
-    setVisible: (value: boolean) => { visible = value; },
+    setVisible: (value: boolean) => { visible = value; native.emit(value ? 'show' : 'hide'); },
     setMinimized: (value: boolean) => { minimized = value; },
     setAllowed: (value: boolean) => { allowed = value; },
     setContentsDestroyed: (value: boolean) => { contentsDestroyed = value; },

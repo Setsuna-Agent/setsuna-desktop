@@ -82,6 +82,8 @@ function windowFixture(id: number) {
   const native = Object.assign(new EventEmitter(), {
     webContents: Object.assign(new EventEmitter(), { id, isDestroyed: () => destroyed, isCrashed: () => false, send: vi.fn(), session: { webRequest: { onBeforeRequest: vi.fn() } } }),
     isDestroyed: () => destroyed,
+    isVisible: () => false,
+    isFocused: () => false,
     getBounds: () => ({ x: 20, y: 30, width: 1000, height: 700 }),
     loadFile: vi.fn(async () => undefined),
     show: vi.fn(),
