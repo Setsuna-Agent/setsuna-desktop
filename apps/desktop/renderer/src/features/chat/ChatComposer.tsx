@@ -42,7 +42,7 @@ import { ChatComposerOverlays } from './composer/ChatComposerOverlays.js';
 import { ChatSendQueue } from './composer/ChatSendQueue.js';
 import type { SlashCommandMenuItem } from './composer/ChatSlashCommandMenu.js';
 import { parseMentionCommand, parseSkillCommand, parseSlashCommand } from './composer/chatCommandUtils.js';
-import { createComposerDraftSyncPlan } from './composer/chatComposerDraftSync.js';
+import { createComposerDraftSyncPlan, sameComposerDraftReferences } from './composer/chatComposerDraftSync.js';
 import type { ChatComposerSendOptions } from './composer/chatComposerSendOptions.js';
 import { startChatComposerCapabilitySelection, type ChatComposerCapabilitySelection } from './composer/chatComposerCapabilitySelection.js';
 import { parsePluginMentions, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
@@ -272,7 +272,6 @@ export function ChatComposer({
     const slots = createReferenceDraftSlots(
       input.input, plugins, skills, input.skillReferences,
     );
-    // Taking a draft replaces reference identity even when its text is unchanged.
     const editor = senderRef.current;
     editor?.clear();
     if (input.input) editor?.insert(slots, 'end', undefined, true);
@@ -524,6 +523,16 @@ export function ChatComposer({
     const editor = senderRef.current;
     if (!editor) return;
     const currentEditorValue = editor.getValue();
+    const editorReferences = {
+      skillReferences: createSelectedSkillReferences(currentEditorValue.slotConfig, { trim: false }),
+      workspaceReferences: createWorkspaceDraftReferences(currentEditorValue.slotConfig),
+    };
+    // Uncontrolled callers keep editor-owned references; retained sessions supply
+    // authoritative metadata even if an earlier editor initiated the replacement.
+    const externalReferences = {
+      skillReferences: draftSkillReferences === EMPTY_SKILL_REFERENCES ? editorReferences.skillReferences : draftSkillReferences,
+      workspaceReferences: draftWorkspaceReferences === EMPTY_WORKSPACE_REFERENCES ? editorReferences.workspaceReferences : draftWorkspaceReferences,
+    };
     const previousExternalDraft = previousExternalDraftRef.current;
     previousExternalDraftRef.current = draft;
     const syncPlan = createComposerDraftSyncPlan(
@@ -531,6 +540,7 @@ export function ChatComposer({
       previousExternalDraft,
       lastEditorDraftRef.current,
       currentEditorValue.value,
+      !sameComposerDraftReferences(externalReferences, editorReferences),
     );
     if (syncPlan.type === 'none') return;
     if (syncPlan.type === 'adopt') {
@@ -541,9 +551,9 @@ export function ChatComposer({
     if (syncPlan.type === 'replace') editor.clear();
     if (syncPlan.value) {
       const offset = syncPlan.type === 'append' ? currentEditorValue.value.length : 0;
-      const references = draftSkillReferences.filter((reference) => reference.start >= offset)
+      const references = externalReferences.skillReferences.filter((reference) => reference.start >= offset)
         .map((reference) => ({ ...reference, start: reference.start - offset, end: reference.end - offset }));
-      const workspaceReferences = draftWorkspaceReferences.filter((reference) => reference.start >= offset)
+      const workspaceReferences = externalReferences.workspaceReferences.filter((reference) => reference.start >= offset)
         .map((reference) => ({ ...reference, start: reference.start - offset, end: reference.end - offset }));
       // 先聚焦到末尾，确保外部文件引用插入到当前草稿。
       editor.focus({ cursor: 'end', preventScroll: true });
@@ -636,7 +646,7 @@ export function ChatComposer({
   };
 
   const submitDraft = async (value?: string) => {
-    if (attachmentsBusy || submitting) return;
+    if (attachmentsBusy || submitting || queuedTurnEdit.retrieving) return;
     // Send buttons hand focus back before locking the editor, never after an async response.
     senderRef.current?.focus({ preventScroll: true });
     if (modeController.reviewModeEnabled) {
@@ -819,7 +829,7 @@ export function ChatComposer({
               attachmentOnlyReady,
               attachmentsBusy,
               queueReady: activeQueueReady,
-              submitting,
+              submitting: submitting || queuedTurnEdit.retrieving,
               onCancelActiveTurn,
               onSubmit: () => void submitDraft(draft),
             }}

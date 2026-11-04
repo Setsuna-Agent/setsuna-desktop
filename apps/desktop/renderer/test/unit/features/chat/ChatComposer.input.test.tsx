@@ -481,23 +481,50 @@ it.each(['message', 'goal'] as const)('keeps a late taken %s in its originating 
   expect((send.mock.calls[1] as unknown as [string, { goalMode?: boolean }])[1].goalMode).toBeUndefined();
 });
 
-it.each(['', ' extra'])('replaces old Skill references when the taken plain draft shares its text prefix %j', async (suffix) => {
+it.each(['', ' extra'])('replaces old Skill references in a remounted editor when a taken draft shares its prefix %j', async (suffix) => {
   const skill: RuntimeSkillSummary = { id: 'build', name: 'Build', kind: 'builtin', enabled: true };
   const queued: RuntimeQueuedTurnInput = { id: 'queued-plain', input: `Build run tests${suffix}`, createdAt: '' };
+  let resolveRetrieve!: (input: RuntimeQueuedTurnInput) => void;
+  const pending = new Promise<RuntimeQueuedTurnInput>((resolve) => { resolveRetrieve = resolve; });
   const actions: ChatQueuedTurnActions = {
     deleteQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(),
-    retrieveQueuedTurnInput: vi.fn(async () => queued),
+    retrieveQueuedTurnInput: vi.fn(() => pending),
   };
   const send = vi.fn(async () => false);
-  render(<SessionHarness target="thread:A" client={{} as DesktopRuntimeClient} send={send} skills={[skill]}
+  const client = {} as DesktopRuntimeClient;
+  const view = render(<SessionHarness target="thread:A" client={client} send={send} skills={[skill]}
     queuedTurnInputs={[queued]} queuedTurnActions={actions} />);
   const input = screen.getByRole('textbox');
   paste(input, '$Build');
   fireEvent.mouseDown(await screen.findByRole('option', { name: /Build/ }));
   paste(input, 'run tests');
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '编辑' })); });
-  await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
+  fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+  view.rerender(<SessionHarness target="thread:B" client={client} send={send} skills={[skill]} />);
+  view.rerender(<SessionHarness target="thread:A" client={client} send={send} skills={[skill]} />);
+  await act(async () => { resolveRetrieve(queued); });
+  await act(async () => { fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' }); });
   expect(send).toHaveBeenCalledExactlyOnceWith(queued.input, expect.objectContaining({ skillIds: [] }));
+});
+
+it('waits for queue retrieval before sending through the active-turn footer or keyboard', async () => {
+  const queued: RuntimeQueuedTurnInput = { id: 'queued-1', input: 'Retrieved draft', createdAt: '' };
+  let resolveRetrieve!: (input: RuntimeQueuedTurnInput) => void;
+  const pending = new Promise<RuntimeQueuedTurnInput>((resolve) => { resolveRetrieve = resolve; });
+  const actions: ChatQueuedTurnActions = {
+    deleteQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(),
+    retrieveQueuedTurnInput: vi.fn(() => pending),
+  };
+  const send = vi.fn(async () => true);
+  render(<Harness activeTurnId="active-turn" send={send} queuedTurnInputs={[queued]} queuedTurnActions={actions} />);
+  const input = screen.getByRole('textbox');
+  paste(input, 'Existing draft');
+  fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+  fireEvent.click(screen.getByRole('button', { name: '加入发送队列' }));
+  fireEvent.keyDown(input, { key: 'Enter' });
+  expect(send).not.toHaveBeenCalled();
+  await act(async () => { resolveRetrieve(queued); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '加入发送队列' })); });
+  expect(send).toHaveBeenCalledExactlyOnceWith(queued.input, expect.any(Object));
 });
 
 it.each(['', 'Restored draft'])('keeps project default skills out of the composer draft %j', async (initialDraft) => {
@@ -527,9 +554,10 @@ function SessionHarness({ target, client, send, skills, windowKey, queuedTurnInp
     queuedTurnInputs={queuedTurnInputs} queuedTurnActions={queuedTurnActions} />;
 }
 
-function Harness({ preferenceKey, project, newThread = false, initialDraft = '', client = {} as DesktopRuntimeClient, messages = [], skills = [], plugins = [], tabs = [], threadId = 'thread-1', send = async () => false, session, queuedTurnInputs = [], queuedTurnActions }: {
+function Harness({ preferenceKey, project, newThread = false, initialDraft = '', activeTurnId = null, client = {} as DesktopRuntimeClient, messages = [], skills = [], plugins = [], tabs = [], threadId = 'thread-1', send = async () => false, session, queuedTurnInputs = [], queuedTurnActions }: {
   preferenceKey?: string; project?: WorkspaceProject; newThread?: boolean;
   initialDraft?: string;
+  activeTurnId?: string | null;
   client?: DesktopRuntimeClient;
   messages?: RuntimeMessage[];
   skills?: RuntimeSkillSummary[];
@@ -547,7 +575,7 @@ function Harness({ preferenceKey, project, newThread = false, initialDraft = '',
     draftSkillReferences={session?.draftSkillReferences}
     draftSendIntent={session?.draftSendIntent}
     draftWorkspaceReferences={session?.draftWorkspaceReferences}
-    activeTurnId={null} client={client} config={null} canClearContext={false}
+    activeTurnId={activeTurnId} client={client} config={null} canClearContext={false}
     contextUsage={{ compactedMessageCount: 0, percent: 0, totalTokens: 256_000, triggerScopes: [], usedTokens: 0, visiblePercent: 0 }}
     preferenceKey={preferenceKey} activeProject={project} currentThread={newThread ? null : { id: threadId, messages, queuedTurnInputs } as unknown as RuntimeThread}
     draft={session?.draft ?? draft} skills={skills} plugins={plugins} onDraftChange={session?.setDraft ?? setDraft} onSend={send}
