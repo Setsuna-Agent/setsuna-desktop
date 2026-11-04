@@ -1,10 +1,12 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { loadDesktopRenderer } from '../../src/window/renderer-loading.js';
+import { registerRendererImagePolicy } from '../../src/window/renderer-image-policy.js';
+import { registerDesktopRendererRecovery } from '../../src/window/renderer-recovery.js';
 
 app.setPath('userData', path.join(process.argv[2]!, 'profile'));
 app.disableHardwareAcceleration();
@@ -21,7 +23,7 @@ app.once('quit', (_event, code) => {
 void app.whenReady().then(async () => {
   const root = process.argv[2]!;
   const scenario = process.argv[3]!;
-  assert.ok(['baseline', 'loaded-baseline', 'manual-loss', 'recovery'].includes(scenario));
+  assert.ok(['baseline', 'loaded-baseline', 'manual-loss', 'recovery', 'image-policy-only', 'recovery-only', 'readiness-only'].includes(scenario));
   await mkdir(path.join(root, 'dist/renderer'), { recursive: true });
   const entry = path.join(root, 'dist/renderer/index.html');
   await writeFile(entry, '<!doctype html><title>Recovery fixture</title><body>Ready</body>');
@@ -37,10 +39,16 @@ void app.whenReady().then(async () => {
   window.webContents.on('did-finish-load', () => { loaded += 1; });
   mark('loading initial document');
   const managed = scenario === 'recovery' || scenario === 'loaded-baseline';
+  if (scenario === 'image-policy-only') registerRendererImagePolicy(window, path.dirname(entry));
+  if (scenario === 'readiness-only') {
+    ipcMain.handle('desktop:when-ready', async () => undefined);
+    window.once('closed', () => ipcMain.removeHandler('desktop:when-ready'));
+  }
   if (managed) await loadDesktopRenderer(window, { appRoot: root, prepare: async () => { prepared += 1; } });
   else await window.loadFile(entry);
+  if (scenario === 'recovery-only') registerDesktopRendererRecovery(window, { load: () => window.loadFile(entry), canRecover: () => true });
   assert.equal(loaded, 1);
-  if (scenario === 'baseline' || scenario === 'loaded-baseline') {
+  if (scenario !== 'manual-loss' && scenario !== 'recovery') {
     window.show();
     await delay(1_200);
   } else {
