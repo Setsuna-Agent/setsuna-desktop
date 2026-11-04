@@ -87,7 +87,6 @@ function emptyState(): DesktopNetworkProxyState {
       scopes: {
         browser: { mode: 'inherit' },
         runtime: { mode: 'inherit' },
-        sync: { mode: 'inherit' },
         terminal: { mode: 'inherit' },
         updater: { mode: 'inherit' },
       },

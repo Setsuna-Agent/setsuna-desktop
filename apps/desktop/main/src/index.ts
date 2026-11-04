@@ -4,7 +4,6 @@ import type {
   RuntimeRequestInput,
 } from '@setsuna-desktop/contracts';
 import { NETWORK_PROXY_IPC_CHANNELS } from '@setsuna-desktop/feature-network-proxy/contracts';
-import { WEB_DAV_SYNC_IPC_CHANNELS, type DesktopWebDavSyncState } from '@setsuna-desktop/feature-webdav-sync/contracts';
 import type { MainFeatureComposition } from '@setsuna-desktop/feature-core/main';
 import {
   app,
@@ -62,13 +61,6 @@ import {
   type ActivatedBuiltinMainFeatures,
 } from './composition/builtin-main-features.js';
 import {
-  desktopWebDavSyncStorageHost,
-  finalizeCommittedWebDavRestore,
-  recoverInterruptedWebDavRestore,
-  rollbackCommittedWebDavRestore,
-  type DesktopWebDavSyncLifecycle,
-} from './composition/webdav-sync-storage-host.js';
-import {
   createWindowsSandboxMainHost,
   prepareDesktopWindowsSandbox,
 } from './composition/windows-sandbox-feature-host.js';
@@ -125,7 +117,6 @@ let mainFeatureComposition: MainFeatureComposition | null = null;
 let desktopUpdaterLifecycle: ActivatedBuiltinMainFeatures['updater'] | null = null;
 let networkProxyMainService: ActivatedBuiltinMainFeatures['networkProxy'] | null = null;
 let windowsSandboxMainService: ActivatedBuiltinMainFeatures['windowsSandbox'] | null = null;
-let webDavSyncLifecycle: DesktopWebDavSyncLifecycle | null = null;
 let interfaceLanguage: RuntimeInterfaceLanguage = 'zh-CN';
 let isAppQuitting = false;
 let desktopServicesShutdownPromise: Promise<void> | null = null;
@@ -203,10 +194,6 @@ async function createWindow(): Promise<void> {
   }
 
   const dataLayout = desktopDataLayout(app.getPath('userData'));
-  const webDavRestoreRecovery = await recoverInterruptedWebDavRestore(
-    dataLayout.root,
-    desktopWebDavSyncStorageHost,
-  );
   const windowStateFilePath = dataLayout.windowStatePath;
   const windowState = loadDesktopWindowState(windowStateFilePath, desktopDisplayWorkAreas(), {
     defaultHeight: mainWindowDefaultHeight,
@@ -374,32 +361,6 @@ async function createWindow(): Promise<void> {
           init?: RequestInit,
         ) => requireNetworkProxyMainService().fetch('updater', input, init),
       }),
-      webDavSyncHost: Object.freeze({
-        appVersion: app.getVersion(),
-        configPath: dataLayout.webDavSyncConfigPath,
-        credentialVault,
-        dataRoot: dataLayout.root,
-        publishState: (state: DesktopWebDavSyncState) => desktopWindows.publish(WEB_DAV_SYNC_IPC_CHANNELS.stateChange, state),
-        requestRelaunch: requestDesktopRelaunch,
-        runtime: Object.freeze({
-          prepare: () => requireRuntimeHost().prepareWebDavSync(),
-          release: () => requireRuntimeHost().releaseWebDavSyncPreparation(),
-          stop: () => requireRuntimeHost().stop(),
-          start: () => requireRuntimeHost().start(),
-          exportPortableFeatureSettings: () => requireRuntimeHost().exportPortableFeatureSettings(),
-          exportFeatureCredentialBackups: () => requireRuntimeHost().exportFeatureCredentialBackups(),
-          stagePortableFeatureSettingsRestore: (
-            input: Parameters<RuntimeHost['stagePortableFeatureSettingsRestore']>[0],
-          ) => (
-            requireRuntimeHost().stagePortableFeatureSettingsRestore(input)
-          ),
-        }),
-        storage: desktopWebDavSyncStorageHost,
-        fetch: (
-          input: Parameters<typeof globalThis.fetch>[0],
-          init?: RequestInit,
-        ) => requireNetworkProxyMainService().fetch('sync', input, init),
-      }),
       windowsSandboxHost: createWindowsSandboxMainHost({
         executablePath: windowsSandbox.executablePath,
         isRendererSender: (senderId) => Boolean(desktopWindows.get(senderId)),
@@ -425,8 +386,6 @@ async function createWindow(): Promise<void> {
   }
   const currentMainFeatureComposition = activatedMainFeatures.composition;
   mainFeatureComposition = currentMainFeatureComposition;
-  const currentWebDavSyncLifecycle = activatedMainFeatures.webDavSync;
-  webDavSyncLifecycle = currentWebDavSyncLifecycle;
   const currentDesktopUpdaterLifecycle = activatedMainFeatures.updater;
   desktopUpdaterLifecycle = currentDesktopUpdaterLifecycle;
 
@@ -450,24 +409,7 @@ async function createWindow(): Promise<void> {
     devServerUrl: process.env.SETSUNA_DESKTOP_DEV_SERVER_URL,
     prepare: async () => {
       try {
-        try {
-          await currentRuntimeHost.start();
-        } catch (error) {
-          if (webDavRestoreRecovery !== 'awaiting-validation') throw error;
-          console.error('[webdav-sync] restored data failed Runtime startup; rolling back', error);
-          await currentRuntimeHost.stop().catch(() => undefined);
-          await rollbackCommittedWebDavRestore(
-            dataLayout.root,
-            desktopWebDavSyncStorageHost,
-          );
-          await currentRuntimeHost.start();
-        }
-        if (webDavRestoreRecovery === 'awaiting-validation') {
-          await finalizeCommittedWebDavRestore(
-            dataLayout.root,
-            desktopWebDavSyncStorageHost,
-          );
-        }
+        await currentRuntimeHost.start();
       } catch (error) {
         await currentMainFeatureComposition.dispose().catch(() => undefined);
         if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
@@ -479,7 +421,6 @@ async function createWindow(): Promise<void> {
       }
       registerRuntimeIpc(currentRuntimeHost, deleteThread);
       if (startupClosedBeforeHandoff) return;
-      await currentWebDavSyncLifecycle.start();
       await currentDesktopUpdaterLifecycle.initialize();
       registerDesktopIpc({
         interfaceLanguage: () => interfaceLanguage,
@@ -701,10 +642,8 @@ function shutdownDesktopServices(
   const currentDesktopUpdaterLifecycle = desktopUpdaterLifecycle;
   const currentNetworkProxyMainService = networkProxyMainService;
   const currentWindowsSandboxMainService = windowsSandboxMainService;
-  const currentWebDavSyncLifecycle = webDavSyncLifecycle;
 
   currentDesktopUpdaterLifecycle?.stop();
-  currentWebDavSyncLifecycle?.close();
 
   desktopServicesShutdownPromise = (async () => {
     let runtimeStopError: unknown;
@@ -735,7 +674,6 @@ function shutdownDesktopServices(
     if (desktopUpdaterLifecycle === currentDesktopUpdaterLifecycle) desktopUpdaterLifecycle = null;
     if (networkProxyMainService === currentNetworkProxyMainService) networkProxyMainService = null;
     if (windowsSandboxMainService === currentWindowsSandboxMainService) windowsSandboxMainService = null;
-    if (webDavSyncLifecycle === currentWebDavSyncLifecycle) webDavSyncLifecycle = null;
     if (runtimeStopError && options.requireRuntimeExit) throw runtimeStopError;
   })();
   return desktopServicesShutdownPromise;

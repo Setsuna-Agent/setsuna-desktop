@@ -3,7 +3,6 @@ export const DESKTOP_NETWORK_PROXY_SCOPES = [
   'terminal',
   'updater',
   'runtime',
-  'sync',
 ] as const;
 
 export type DesktopNetworkProxyScope = typeof DESKTOP_NETWORK_PROXY_SCOPES[number];
@@ -81,7 +80,6 @@ export function defaultDesktopNetworkProxyRouting(): DesktopNetworkProxyRoutingS
       terminal: { mode: 'inherit' },
       updater: { mode: 'inherit' },
       runtime: { mode: 'inherit' },
-      sync: { mode: 'inherit' },
     },
   };
 }

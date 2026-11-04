@@ -412,7 +412,7 @@ type RendererLayoutPreferencesV1 = Readonly<{
 - 未安装 entry 的 preference 可以保留，以便重新启用后恢复；它不会让 entry 变成可执行代码。
 - `chain` 默认不可配置，除非 owner 以后单独证明用户选择不会破坏数据语义。
 - V1 是设备本地偏好，由 Renderer-owned、带 codec/migration 的 preference store 统一读写；不再新增散落的 `localStorage` key。
-- 是否随 WebDAV 同步是后续产品决策。若要同步，只切换 store adapter 并增加显式 migration，不能同时维护 browser storage 和 runtime settings 两份真源。
+- 是否跨设备同步是后续产品决策。若要同步，只切换 store adapter 并增加显式 migration，不能同时维护 browser storage 和 runtime settings 两份真源。
 - preference 更新使用 Runtime transaction；新 snapshot 校验失败时保留旧 snapshot 与旧 UI。
 
 ## 错误、fallback 与恢复
@@ -521,7 +521,7 @@ tree UI action 只能引用 manifest 中声明的 action ID，由 host 携带当
 
 - 受信 client bundle 的构建与加载协议。
 - 跨 Desktop 版本的 Slot API negotiation。
-- layout preference 是否跨设备/WebDAV 同步。
+- layout preference 是否跨设备同步。
 - Plugin 提供完整主题或全局 CSS。
 - 将 iframe 升级为独立 renderer process/WebContents 的更强 CPU/崩溃隔离形态。
 - 开发态保留 React state 的细粒度 HMR。

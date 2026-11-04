@@ -59,7 +59,7 @@ Memory 是独立 renderer Feature，但不单独占用设置导航。它在 setu
 
 Updater 也是独立 renderer Feature。它通过 Settings extension Slot 填充宿主保留的“关于”分区，并由 `UpdaterRendererStateService` 单点订阅 preload 状态；设置页和 App controller 不传递 updater 专用 props。顶栏铃铛由 Feature 自己注册到 `renderer.shell.topbar.action`，状态、动作、文案和样式均由 `packages/features/updater/src/renderer` 持有。
 
-WebDAV Sync 也是独立 renderer Feature，并通过 `registerSettingsPage(context.ui, ...)` 形成完整“同步”页面。它用 `navigationGroupId` 声明归入宿主“数据管理”分组；没有已知宿主归属的 contribution 才进入独立“功能”分组。连接、自动备份、数据类别、当前快照、还原检查、文案和 scoped CSS 都位于 `packages/features/webdav-sync/src/renderer`；宿主设置页只消费 Slot descriptor，不读取 WebDAV 状态，也不持有 bridge 方法。
+完整设置页 contribution 可用 `navigationGroupId` 声明宿主导航分组；没有已知宿主归属的 contribution 才进入独立“功能”分组。宿主设置页只消费 Slot descriptor，业务状态和 bridge 调用由对应 Feature 持有。
 
 Network Proxy 同样通过 Settings page Slot 提供完整“代理服务器”页面，状态订阅、编辑动作、文案与 scoped CSS 位于 `packages/features/network-proxy/src/renderer`。Model Provider Feature 通过宿主 capability 读取代理服务器公开投影；宿主设置页不直接调用代理 bridge，也不拥有代理 section。preload 子桥类型由 Feature contract 贡献，renderer 不接触端口、凭据或本地文件。
 
@@ -255,7 +255,6 @@ Settings：
 
 - `apps/desktop/renderer/test/unit/features/settings/SettingsPage.test.ts`
 - `packages/features/model-provider/test/renderer/`
-- `packages/features/webdav-sync/test/renderer/`
 - `packages/features/network-proxy/test/renderer/`
 - `packages/features/workspace-dependencies/test/renderer/`
 - `packages/features/usage/test/renderer/`

@@ -22,7 +22,6 @@ const scopeRows: Array<{ scope: DesktopNetworkProxyScope; labelKey: ScopeLabelKe
   { scope: 'terminal', labelKey: 'feature.networkProxy.settings.scope.terminal', detailKey: 'feature.networkProxy.settings.scope.terminalDetail' },
   { scope: 'updater', labelKey: 'feature.networkProxy.settings.scope.updater', detailKey: 'feature.networkProxy.settings.scope.updaterDetail' },
   { scope: 'runtime', labelKey: 'feature.networkProxy.settings.scope.runtime', detailKey: 'feature.networkProxy.settings.scope.runtimeDetail' },
-  { scope: 'sync', labelKey: 'feature.networkProxy.settings.scope.sync', detailKey: 'feature.networkProxy.settings.scope.syncDetail' },
 ];
 
 type ScopeLabelKey = `feature.networkProxy.settings.scope.${DesktopNetworkProxyScope}`;

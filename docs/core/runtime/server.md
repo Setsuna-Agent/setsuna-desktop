@@ -129,13 +129,6 @@ Route 应：
 
 “active task registry 已空”不等于所有写入已经落盘；shutdown 还要等待 `InFlightRequestTracker` idle。
 
-WebDAV 使用同一套准入边界，但不会把 Feature schema 复制到 Electron main：
-
-- `POST /internal/webdav-sync/prepare` 关闭 turn 和普通 REST mutation admission，并 flush thread store。
-- gate 持有期间，main 可读取 Runtime catalog 导出的 portable settings 与显式 opt-in credentials。
-- `POST /internal/webdav-sync/feature-settings/restore-stage` 只在 gate 持有期间接受恢复 payload；settings registry 校验已注册 owner、sync policy、credential opt-in 和 schema version，在 data root 的 `.webdav-sync-work` 内生成可原子提交的本地 envelope/secret revision，不修改活动 settings store。
-- main 随后停止 Runtime，再把 Runtime 返回的精确目标纳入恢复 journal。启动前恢复只校验受限路径语法，不能依赖尚未启动的 Feature catalog。
-
 ## Thread SSE
 
 `sse.ts`：

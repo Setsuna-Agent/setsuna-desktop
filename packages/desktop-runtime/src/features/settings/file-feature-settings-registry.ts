@@ -2,12 +2,9 @@ import type { FeatureId } from '@setsuna-desktop/feature-core/definition';
 import type {
   ErasedFeatureSettingsBundle,
   ErasedFeatureSettingsDocumentDefinition,
-  FeatureCredentialBackup,
   FeatureSecretMetadata,
   FeatureSettingsDiagnosis,
   FeatureSettingsDocumentDefinition,
-  PortableFeatureSettingsDocument,
-  PortableFeatureSettingsRestoreTarget,
   RuntimeFeatureSettingsDocumentHandle,
   RuntimeFeatureSettingsRegistry,
 } from '@setsuna-desktop/feature-core/settings';
@@ -30,11 +27,6 @@ import {
   type FeatureSecretNamespace,
   type VersionedSecretPort,
 } from './versioned-file-secret-store.js';
-import {
-  migratePortableDocument,
-  preparePortableSettingsRestore,
-  webDavRestoreStagingDataDir,
-} from './portable-feature-settings-restore.js';
 
 type StoredFeatureSettingsDocument = {
   featureId: string;
@@ -204,199 +196,6 @@ export class FileFeatureSettingsRegistry implements RuntimeFeatureSettingsRegist
     });
     this.publish(definition, result.data, result.revision);
     return { revision: result.revision };
-  }
-
-  async exportPortableDocuments(): Promise<readonly PortableFeatureSettingsDocument[]> {
-    const portable: PortableFeatureSettingsDocument[] = [];
-    for (const definition of this.definitions.values()) {
-      if (definition.syncPolicy !== 'portable') continue;
-      try {
-        const result = await this.readStored(definition);
-        portable.push(Object.freeze({
-          featureId: definition.featureId,
-          documentId: definition.documentId,
-          schemaVersion: definition.currentVersion,
-          data: structuredClone(result.value),
-        }));
-      } catch {
-        // Invalid documents remain local and diagnosable, but never enter a new backup.
-      }
-    }
-    return Object.freeze(portable);
-  }
-
-  async exportCredentialBackups(): Promise<readonly FeatureCredentialBackup[]> {
-    const credentials: FeatureCredentialBackup[] = [];
-    for (const definition of this.definitions.values()) {
-      if (!definition.credentialBackupSecretNames.length) continue;
-      const current = await withFileStateUpdate(
-        this.documentPath(definition),
-        () => this.readLocked(definition),
-      );
-      for (const secretName of definition.credentialBackupSecretNames) {
-        const value = current.secretValues[secretName];
-        if (!value) continue;
-        credentials.push(Object.freeze({
-          featureId: definition.featureId,
-          documentId: definition.documentId,
-          secretName,
-          value,
-        }));
-      }
-    }
-    return Object.freeze(credentials);
-  }
-
-  async importPortableDocuments(
-    documents: readonly PortableFeatureSettingsDocument[],
-  ): Promise<readonly Readonly<{
-    featureId: FeatureId;
-    documentId: string;
-    revision: number;
-  }>[]> {
-    const seen = new Set<string>();
-    const results: Array<Readonly<{
-      featureId: FeatureId;
-      documentId: string;
-      revision: number;
-    }>> = [];
-
-    for (const document of documents) {
-      const definition = this.registeredDefinition(document.featureId, document.documentId);
-      const key = documentKey(document.featureId, document.documentId);
-      if (seen.has(key)) throw new Error(`Portable Feature settings document is duplicated: ${key}`);
-      seen.add(key);
-      if (definition.syncPolicy !== 'portable') {
-        throw new Error(`Feature settings document is not portable: ${key}`);
-      }
-      const data = migratePortableDocument(definition, document);
-      const filePath = this.documentPath(definition);
-      const result = await withFileStateUpdate(filePath, async () => {
-        const metadata = await bestEffortEnvelopeMetadata(filePath, definition);
-        const revision = Math.max(1, (metadata?.revision ?? 0) + 1);
-        await writeJsonFile(filePath, {
-          featureId: definition.featureId,
-          documentId: definition.documentId,
-          schemaVersion: definition.currentVersion,
-          revision,
-          ...(metadata?.secretRevision ? { secretRevision: metadata.secretRevision } : {}),
-          data,
-        } satisfies StoredFeatureSettingsDocument);
-        return { revision };
-      });
-      this.publish(definition, data, result.revision);
-      results.push(Object.freeze({
-        featureId: definition.featureId,
-        documentId: definition.documentId,
-        revision: result.revision,
-      }));
-    }
-
-    return Object.freeze(results);
-  }
-
-  /**
-   * Validates the complete restore payload against the live Feature catalog and
-   * writes ready-to-commit envelopes into the isolated WebDAV work directory.
-   * The active settings store is never modified by this preparation step.
-   */
-  async stagePortableDocumentsRestore(input: Readonly<{
-    documents: readonly PortableFeatureSettingsDocument[];
-    credentials: readonly FeatureCredentialBackup[];
-    stagingRoot: string;
-  }>): Promise<readonly PortableFeatureSettingsRestoreTarget[]> {
-    const prepared = preparePortableSettingsRestore({
-      documents: input.documents,
-      credentials: input.credentials,
-      resolveDefinition: (featureId, documentId) => this.registeredDefinition(featureId, documentId),
-    });
-    const stagingDataDir = webDavRestoreStagingDataDir(this.dataDir, input.stagingRoot);
-    const stagingSecrets = new VersionedFileSecretStore(stagingDataDir);
-    const targets: PortableFeatureSettingsRestoreTarget[] = [];
-
-    for (const item of prepared) {
-      const hasCredentials = Object.keys(item.credentials).length > 0;
-      const current = await this.readRestoreBase(item.definition, hasCredentials);
-      const data = item.portableData === undefined
-        ? current.data
-        : item.portableData.value;
-      let secretRevision = current.secretRevision;
-
-      if (hasCredentials) {
-        const secretValues = Object.freeze({
-          ...current.secretValues,
-          ...item.credentials,
-        });
-        secretRevision = await stagingSecrets.stage(this.namespace(item.definition), secretValues);
-        await stagingSecrets.finalize(this.namespace(item.definition), secretRevision);
-      }
-
-      await writeJsonFile(
-        path.join(
-          stagingDataDir,
-          'features',
-          item.definition.featureId,
-          'settings',
-          `${item.definition.documentId}.json`,
-        ),
-        {
-          featureId: item.definition.featureId,
-          documentId: item.definition.documentId,
-          schemaVersion: item.definition.currentVersion,
-          revision: Math.max(1, current.revision + 1),
-          ...(secretRevision ? { secretRevision } : {}),
-          data,
-        } satisfies StoredFeatureSettingsDocument,
-        { mode: 0o600 },
-      );
-      targets.push(Object.freeze({
-        featureId: item.definition.featureId,
-        documentId: item.definition.documentId,
-        includesSecrets: hasCredentials,
-      }));
-    }
-
-    return Object.freeze(targets);
-  }
-
-  private async readRestoreBase(
-    definition: ErasedFeatureSettingsDocumentDefinition,
-    includeSecretValues: boolean,
-  ): Promise<Readonly<{
-    data: unknown;
-    revision: number;
-    secretRevision?: string;
-    secretValues: Readonly<Record<string, string>>;
-  }>> {
-    const filePath = this.documentPath(definition);
-    const metadata = await bestEffortEnvelopeMetadata(filePath, definition);
-    let data = definition.schema.parse(definition.defaults());
-    try {
-      const serialized = await readFile(filePath, 'utf8');
-      try {
-        const envelope = parseEnvelope(JSON.parse(serialized) as unknown, definition);
-        data = migratePortableDocument(definition, {
-          featureId: definition.featureId,
-          documentId: definition.documentId,
-          schemaVersion: envelope.schemaVersion,
-          data: envelope.data,
-        });
-      } catch {
-        // A damaged local payload falls back to defaults, matching recovery
-        // reset semantics. Valid revision and secret metadata remain intact.
-      }
-    } catch (error) {
-      if (!(isNodeError(error) && error.code === 'ENOENT')) throw error;
-    }
-    const secretValues = includeSecretValues && metadata?.secretRevision
-      ? await this.secrets.read(this.namespace(definition), metadata.secretRevision)
-      : Object.freeze({});
-    return Object.freeze({
-      data,
-      revision: metadata?.revision ?? 0,
-      ...(metadata?.secretRevision ? { secretRevision: metadata.secretRevision } : {}),
-      secretValues,
-    });
   }
 
   private registeredDefinition(
@@ -825,28 +624,5 @@ async function bestEffortRevision(filePath: string): Promise<number> {
       : 0;
   } catch {
     return 0;
-  }
-}
-
-async function bestEffortEnvelopeMetadata(
-  filePath: string,
-  definition: ErasedFeatureSettingsDocumentDefinition,
-): Promise<{ revision: number; secretRevision?: string } | null> {
-  try {
-    const value = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const record = value as Record<string, unknown>;
-    if (
-      record.featureId !== definition.featureId
-      || record.documentId !== definition.documentId
-      || !Number.isSafeInteger(record.revision)
-      || (record.revision as number) < 1
-    ) return null;
-    return {
-      revision: record.revision as number,
-      ...(typeof record.secretRevision === 'string' ? { secretRevision: record.secretRevision } : {}),
-    };
-  } catch {
-    return null;
   }
 }

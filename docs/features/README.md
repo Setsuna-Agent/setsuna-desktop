@@ -53,7 +53,6 @@ packages/features/<feature>/
 | `updater` | `updater` | — | R | B | R | 更新检查、下载源、校验、安装与 UI 状态 |
 | `usage` | `usage` | O | — | — | O | Usage 持久化、聚合、线程实时补齐与统计 UI |
 | `vision-recognition` | `vision-recognition` | O | — | — | O | 视觉模型选择、附件识别、测试与 Plugin 详情贡献 |
-| `webdav-sync` | `webdav-sync` | — | R | B | O | 加密备份、不可变快照、还原事务与设置 UI |
 | `windows-sandbox` | `windows-sandbox` | R | R | B | R | Windows sidecar、隔离执行、受控出口与管理 UI |
 | `workspace-apps` | `workspace-apps` | — | R | B | R | IDE/系统应用发现、结构化打开和 launcher |
 | `workspace-dependencies` | `workspace-dependencies` | O | — | — | O | 托管 Node/Python/uv、包源、诊断与修复 |
@@ -84,7 +83,7 @@ Inventory 的事实来源不是这张表，而是四个 composition root 和各 
 - [Pull Request 工作台](pull-requests.md)
 - [自动化](automation.md)
 - [系统通知](notifications.md)
-- [Review、Terminal、Network、Updater、WebDAV、Sandbox 与 Workspace Apps](desktop-workbench.md)
+- [Review、Terminal、Network、Updater、Sandbox 与 Workspace Apps](desktop-workbench.md)
 - [Desktop 宿主](../desktop/README.md)
 
 Feature 拥有原生业务闭环，Electron main 只提供窗口、credential vault、runtime request、平台路径等宿主 Capability，并控制全局启动/关闭顺序。
@@ -104,7 +103,7 @@ Feature 拥有原生业务闭环，Electron main 只提供窗口、credential va
 | Preload | `apps/desktop/preload/src/composition/builtin-preload-features.ts` | 校验 bridge 白名单和 key 冲突，组合最终 `DesktopPreloadBridge` |
 | Renderer | `apps/desktop/renderer/src/composition/renderer-feature-composition.ts` | 注入 typed transport/event feed/host UI bridge，生成 service 与只读 view catalog |
 
-一个 Feature 可在不同进程拥有不同 criticality。例如 WebDAV 的 main 数据恢复边界是 required，而 renderer 设置视图是 optional；renderer 失败不应破坏 main 的恢复事务。
+一个 Feature 可在不同进程拥有不同 criticality。例如 Runtime Activity 在 runtime/renderer 是 required，而 main 是 optional；各进程的失败边界应按自身职责声明。
 
 ## 常见数据与调用模式
 

@@ -40,6 +40,31 @@ afterEach(async () => {
 });
 
 describe('desktop data root coordinator', () => {
+  it('preserves retired sync configuration, restore metadata and credentials during migration', async () => {
+    const fixture = await createMigrationFixture();
+    const legacyFiles = {
+      'webdav-sync.json': '{"enabled":true,"credentialKey":"webdav.legacy"}',
+      '.webdav-sync-restore.json': '{"phase":"awaiting-validation"}',
+      'secure-credentials.json': '{"webdav.legacy":"encrypted-secret"}',
+    };
+    for (const [relativePath, content] of Object.entries(legacyFiles)) {
+      await writeFixture(fixture.sourceRoot, relativePath, content);
+    }
+    await writeFixture(fixture.sourceRoot, '.webdav-sync-work/backup.bin', 'legacy-staging');
+    const coordinator = migratingCoordinator(fixture, vi.fn());
+
+    await expect(coordinator.runMigration()).resolves.toEqual({ ok: true });
+
+    for (const [relativePath, content] of Object.entries(legacyFiles)) {
+      await expect(readFile(path.join(fixture.sourceRoot, relativePath), 'utf8')).resolves.toBe(content);
+      await expect(readFile(path.join(fixture.targetRoot, relativePath), 'utf8')).resolves.toBe(content);
+    }
+    await expect(readFile(path.join(fixture.sourceRoot, '.webdav-sync-work/backup.bin'), 'utf8'))
+      .resolves.toBe('legacy-staging');
+    await expect(lstat(path.join(fixture.targetRoot, '.webdav-sync-work')))
+      .rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('copies, validates and commits a target before switching the bootstrap pointer', async () => {
     const fixture = await createMigrationFixture();
     await writeFixture(fixture.sourceRoot, 'runtime/config.json', JSON.stringify({

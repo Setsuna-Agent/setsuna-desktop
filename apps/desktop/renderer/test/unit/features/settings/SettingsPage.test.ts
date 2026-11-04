@@ -3,8 +3,6 @@ import { networkProxyFeature } from '@setsuna-desktop/feature-network-proxy/cont
 import { networkProxyRendererFeature } from '@setsuna-desktop/feature-network-proxy/renderer';
 import { modelProviderFeature } from '@setsuna-desktop/feature-model-provider/contracts';
 import { modelProviderRendererFeature } from '@setsuna-desktop/feature-model-provider/renderer';
-import { webDavSyncFeature } from '@setsuna-desktop/feature-webdav-sync/contracts';
-import { webDavSyncRendererFeature } from '@setsuna-desktop/feature-webdav-sync/renderer';
 import type {
   SettingsPageEntryDescriptor,
   SettingsPageMetadata,
@@ -19,30 +17,9 @@ import { hostMessages } from '../../../../src/shared/i18n/messages.js';
 const messageCatalog = composeRendererMessages(hostMessages, [
   { module: modelProviderRendererFeature },
   { module: networkProxyRendererFeature },
-  { module: webDavSyncRendererFeature },
 ]);
 
 describe('SettingsSidebar', () => {
-  it('places built-in Feature settings in their declared host group', () => {
-    const html = renderSettingsSidebar({
-      activeSection: 'webdav-sync',
-      pages: [...basePages, page({
-        descriptionKey: 'feature.webdavSync.settings.description',
-        icon: () => createElement('svg', { 'data-settings-icon': 'webdav-sync' }),
-        location: 'settings',
-        navigationGroupId: 'data-management',
-        order: 100,
-        sectionId: 'webdav-sync',
-        titleKey: 'feature.webdavSync.settings.title',
-      }, webDavSyncFeature.id)],
-      onSelectSection: vi.fn(),
-    });
-
-    expect(html.match(/role="group"/g)).toHaveLength(3);
-    expect(html).not.toContain('>功能<');
-    expect(html).toContain('同步');
-  });
-
   it('places network settings in the workspace group after model settings', () => {
     const html = renderSettingsSidebar({
       activeSection: 'network-proxy',

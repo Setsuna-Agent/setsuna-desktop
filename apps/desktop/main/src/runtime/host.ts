@@ -15,11 +15,6 @@ import {
 import type { WebContents } from 'electron';
 import { installLocalPlugin } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { KERNEL_FEATURE_OPERATION_ERRORS } from '@setsuna-desktop/feature-core/operation';
-import type {
-  FeatureCredentialBackup,
-  PortableFeatureSettingsDocument,
-  PortableFeatureSettingsRestoreTarget,
-} from '@setsuna-desktop/feature-core/settings';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { RuntimeEventBatcher } from './runtime-event-batcher.js';
@@ -168,52 +163,6 @@ export class RuntimeHost {
       path: '/v1/data-migration/prepare',
       method: 'DELETE',
     });
-  }
-
-  /** Main-only quiescence gate used to take a consistent encrypted sync snapshot. */
-  prepareWebDavSync(): Promise<RuntimeDataMigrationReadiness> {
-    const requestPath = '/internal/webdav-sync/prepare';
-    return this.sendRequest({ path: requestPath, method: 'POST' }, requestPath);
-  }
-
-  async releaseWebDavSyncPreparation(): Promise<void> {
-    const requestPath = '/internal/webdav-sync/prepare';
-    await this.sendRequest({ path: requestPath, method: 'DELETE' }, requestPath);
-  }
-
-  /** Reads schema-validated portable Feature documents while the WebDAV gate is held. */
-  async exportPortableFeatureSettings(): Promise<readonly PortableFeatureSettingsDocument[]> {
-    const requestPath = '/internal/webdav-sync/feature-settings';
-    const response = await this.sendRequest<Readonly<{
-      documents: readonly PortableFeatureSettingsDocument[];
-    }>>({ path: requestPath, method: 'GET' }, requestPath);
-    return response.documents;
-  }
-
-  /** Exports only Feature secrets explicitly opted into encrypted credential backup. */
-  async exportFeatureCredentialBackups(): Promise<readonly FeatureCredentialBackup[]> {
-    const requestPath = '/internal/webdav-sync/feature-credentials';
-    const response = await this.sendRequest<Readonly<{
-      credentials: readonly FeatureCredentialBackup[];
-    }>>({ path: requestPath, method: 'GET' }, requestPath);
-    return response.credentials;
-  }
-
-  /** Lets the live Runtime validate and stage Feature-owned settings before it is stopped. */
-  async stagePortableFeatureSettingsRestore(input: Readonly<{
-    documents: readonly PortableFeatureSettingsDocument[];
-    credentials: readonly FeatureCredentialBackup[];
-    stagingRoot: string;
-  }>): Promise<readonly PortableFeatureSettingsRestoreTarget[]> {
-    const requestPath = '/internal/webdav-sync/feature-settings/restore-stage';
-    const response = await this.sendRequest<Readonly<{
-      targets: readonly PortableFeatureSettingsRestoreTarget[];
-    }>>({
-      path: requestPath,
-      method: 'POST',
-      body: input,
-    }, requestPath);
-    return response.targets;
   }
 
   /** Registers a renderer-selected local file without copying its bytes into runtime storage. */

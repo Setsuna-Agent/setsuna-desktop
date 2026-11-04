@@ -78,7 +78,6 @@ importers:
       '@setsuna-desktop/feature-updater': workspace:*
       '@setsuna-desktop/feature-usage': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
-      '@setsuna-desktop/feature-webdav-sync': workspace:*
       '@setsuna-desktop/feature-windows-sandbox': workspace:*
       '@setsuna-desktop/feature-workspace-apps': workspace:*
       '@setsuna-desktop/feature-workspace-dependencies': workspace:*
@@ -179,7 +178,6 @@ importers:
       '@setsuna-desktop/feature-updater': link:packages/features/updater
       '@setsuna-desktop/feature-usage': link:packages/features/usage
       '@setsuna-desktop/feature-vision-recognition': link:packages/features/vision-recognition
-      '@setsuna-desktop/feature-webdav-sync': link:packages/features/webdav-sync
       '@setsuna-desktop/feature-windows-sandbox': link:packages/features/windows-sandbox
       '@setsuna-desktop/feature-workspace-apps': link:packages/features/workspace-apps
       '@setsuna-desktop/feature-workspace-dependencies': link:packages/features/workspace-dependencies
@@ -769,32 +767,6 @@ importers:
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
-
-  packages/features/webdav-sync:
-    specifiers:
-      '@setsuna-desktop/contracts': workspace:*
-      '@setsuna-desktop/feature-core': workspace:*
-      '@setsuna-desktop/feature-image-generation': workspace:*
-      '@setsuna-desktop/feature-memory': workspace:*
-      '@setsuna-desktop/feature-vision-recognition': workspace:*
-      '@setsuna-desktop/renderer-contracts': workspace:*
-      '@setsuna-desktop/renderer-ui': workspace:*
-      electron: '>=30'
-      lucide-react: ^0.468.0
-      react: ^18.3.1
-      react-dom: ^18.3.1
-    dependencies:
-      '@setsuna-desktop/contracts': link:../../contracts
-      '@setsuna-desktop/feature-core': link:../../feature-core
-      '@setsuna-desktop/feature-image-generation': link:../image-generation
-      '@setsuna-desktop/feature-memory': link:../memory
-      '@setsuna-desktop/feature-vision-recognition': link:../vision-recognition
-      '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
-      '@setsuna-desktop/renderer-ui': link:../../renderer-ui
-      electron: 43.8.3
-      lucide-react: 0.468.0_react@18.3.1
-      react: 18.3.1
-      react-dom: 18.3.1_react@18.3.1
 
   packages/features/windows-sandbox:
     specifiers:

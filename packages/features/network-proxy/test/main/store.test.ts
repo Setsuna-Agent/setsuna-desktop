@@ -67,10 +67,39 @@ describe('DesktopNetworkProxyStore', () => {
           terminal: { mode: 'inherit' },
           updater: { mode: 'direct' },
           runtime: { mode: 'inherit' },
-          sync: { mode: 'inherit' },
         },
       },
     });
+  });
+
+  it('ignores retired sync routes without invalidating active routes or retaining stale references', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-retired-scope-'));
+    const configPath = path.join(root, 'network-proxies.json');
+    await writeFile(configPath, JSON.stringify({
+      version: 1,
+      servers: [],
+      routing: {
+        global: { mode: 'direct' },
+        scopes: {
+          browser: { mode: 'system' },
+          terminal: { mode: 'inherit' },
+          updater: { mode: 'direct' },
+          runtime: { mode: 'inherit' },
+          sync: { mode: 'proxy', proxyServerId: 'proxy-retired-server' },
+        },
+      },
+    }), 'utf8');
+    const store = createNetworkProxyStore(configPath, new MemoryCredentialVault());
+    const state = await store.getState();
+    expect(state.routing.scopes).toEqual({
+      browser: { mode: 'system' },
+      terminal: { mode: 'inherit' },
+      updater: { mode: 'direct' },
+      runtime: { mode: 'inherit' },
+    });
+    await store.setRouting({ global: { mode: 'system' } });
+    const persisted = JSON.parse(await readFile(configPath, 'utf8'));
+    expect(persisted.routing.scopes).not.toHaveProperty('sync');
   });
 
   it('uses Chromium fetch for system routes and an explicit dispatcher for direct routes', async () => {
@@ -122,7 +151,7 @@ describe('DesktopNetworkProxyStore', () => {
 
     try {
       const body = Buffer.from('hello');
-      await proxyFetch.fetch('sync', 'https://dav.example.com/file', {
+      await proxyFetch.fetch('runtime', 'https://api.example.com/file', {
         method: 'PUT',
         headers: {
           'Content-Length': String(body.byteLength),

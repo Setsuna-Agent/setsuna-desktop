@@ -11,6 +11,7 @@ const MANAGED_JSON_PATHS = new Set([
   'network-proxies.json',
   'secure-credentials.json',
   'update-download-sources.json',
+  // Recognize retained legacy sync files without loading or executing their state.
   'webdav-sync.json',
   '.webdav-sync-restore.json',
   'window-preferences.json',

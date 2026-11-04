@@ -48,7 +48,7 @@ Renderer 的 `services/runtime-client/client.ts` 必须完整实现它。纵向 
 - Runtime bridge。
 - Data-root。
 - Desktop/system。
-- Feature-owned bridge（Browser、Computer Use、Review、Terminal、Network Proxy、Plugin Management、Updater、WebDAV、Windows Sandbox、Workspace Apps）通过对应 Feature contracts 与 host bridge 显式组合。
+- Feature-owned bridge（Browser、Computer Use、Review、Terminal、Network Proxy、Plugin Management、Updater、Windows Sandbox、Workspace Apps）通过对应 Feature contracts 与 host bridge 显式组合。
 - Window controls。
 
 Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复用同一 DTO。

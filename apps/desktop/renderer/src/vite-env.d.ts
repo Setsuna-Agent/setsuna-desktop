@@ -12,7 +12,6 @@ import type { PluginManagementPreloadBridgeContribution } from '@setsuna-desktop
 import type { ReviewPreloadBridgeContribution } from '@setsuna-desktop/feature-review/contracts';
 import type { TerminalPreloadBridgeContribution } from '@setsuna-desktop/feature-terminal/contracts';
 import type { UpdaterPreloadBridgeContribution } from '@setsuna-desktop/feature-updater/contracts';
-import type { WebDavSyncPreloadBridgeContribution } from '@setsuna-desktop/feature-webdav-sync/contracts';
 import type { WorkspaceAppsPreloadBridgeContribution } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import type { WindowsSandboxPreloadBridgeContribution } from '@setsuna-desktop/feature-windows-sandbox/contracts';
 
@@ -28,7 +27,6 @@ declare global {
       & ReviewPreloadBridgeContribution
       & TerminalPreloadBridgeContribution
       & UpdaterPreloadBridgeContribution
-      & WebDavSyncPreloadBridgeContribution
       & WindowsSandboxPreloadBridgeContribution
       & WorkspaceAppsPreloadBridgeContribution;
   }

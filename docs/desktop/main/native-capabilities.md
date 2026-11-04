@@ -123,7 +123,7 @@ Plugin Management 是 Plugin catalog 和管理事务的纵向 Feature。runtime 
 - `packages/features/network-proxy/src/{contracts,main,preload,renderer}/`
 - `apps/desktop/{main,preload,renderer}/src/composition/`
 
-Network Proxy 是纵向 Feature：配置 store、凭据引用、受保护 loopback relay、浏览器 session 路由、Node fetch dispatcher、IPC/preload bridge、renderer 状态服务和完整设置页都由同一包拥有。宿主只注入配置路径、credential vault、原子 JSON writer、系统代理 fetch、主窗口和 runtime 删除入口；Updater、WebDAV 与 Terminal 只依赖 activation 后暴露的窄 `NetworkProxyMainService`。
+Network Proxy 是纵向 Feature：配置 store、凭据引用、受保护 loopback relay、浏览器 session 路由、Node fetch dispatcher、IPC/preload bridge、renderer 状态服务和完整设置页都由同一包拥有。宿主只注入配置路径、credential vault、原子 JSON writer、系统代理 fetch、主窗口和 runtime 删除入口；Updater 与 Terminal 只依赖 activation 后暴露的窄 `NetworkProxyMainService`。
 
 删除代理必须经 runtime 配置 route，先校验模型 provider 引用，再由 native bridge 回调 Feature 完成真实删除。普通配置不保存密码，browser/runtime 看到的也只是 Feature 管理的 loopback relay；代理初始化失败时保持 fail-closed，但设置页仍可用于修复配置。
 

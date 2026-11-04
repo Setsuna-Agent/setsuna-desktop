@@ -32,7 +32,8 @@ describe('scheduled conversations through the runtime API', () => {
     try { await harness?.close(); } finally { vi.useRealTimers(); }
   });
 
-  it.each(['/v1/data-migration/prepare', '/internal/webdav-sync/prepare'])('preserves overdue one-shot tasks while %s holds the snapshot boundary', async (preparePath) => {
+  it('preserves overdue one-shot tasks while data migration holds the write boundary', async () => {
+    const preparePath = '/v1/data-migration/prepare';
     await harness.configureSmokeProviderContextWindow(32_000);
     const { threadId } = await harness.runtimeFetch('/v1/features/automation/conversations', { method: 'POST' });
     const task = await harness.runtimeFetch('/v1/features/automation/tasks', {

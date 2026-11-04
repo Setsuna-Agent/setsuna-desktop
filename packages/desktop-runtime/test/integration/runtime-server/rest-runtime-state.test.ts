@@ -111,39 +111,32 @@ describe('runtime server REST runtime state', () => {
     expect((await stat(path.join(projectPath, 'test'))).isDirectory()).toBe(true);
   });
 
-  it('freezes every REST mutation while a WebDAV snapshot is being staged', async () => {
+  it.each([
+    ['POST', '/internal/webdav-sync/prepare'],
+    ['DELETE', '/internal/webdav-sync/prepare'],
+    ['GET', '/internal/webdav-sync/feature-settings'],
+    ['GET', '/internal/webdav-sync/feature-credentials'],
+    ['POST', '/internal/webdav-sync/feature-settings/restore-stage'],
+  ])('does not expose removed WebDAV endpoint %s %s', async (method, requestPath) => {
+    const response = await fetch(`${harness.baseUrl}${requestPath}`, {
+      method,
+      headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/json' },
+      ...(method === 'POST' ? { body: '{}' } : {}),
+    });
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: 'Not found' });
+    await expect(harness.runtimeFetch('/v1/projects', {
+      method: 'POST', body: JSON.stringify({ name: 'Still accepting requests' }),
+    })).resolves.toMatchObject({ name: 'Still accepting requests' });
+  });
+
+  it('freezes REST mutations during data migration and resumes them after cancellation', async () => {
     const project = await harness.runtimeFetch('/v1/projects', {
       method: 'POST',
-      body: JSON.stringify({ name: 'Before snapshot' }),
+      body: JSON.stringify({ name: 'Before migration' }),
     });
-    const stagingRoot = path.join(
-      harness.runtimeDataDir,
-      '.webdav-sync-work',
-      'restore-fixture',
-      'restored-data',
-    );
-    const stageBeforePreparation = await fetch(
-      `${harness.baseUrl}/internal/webdav-sync/feature-settings/restore-stage`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${harness.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ documents: [], credentials: [], stagingRoot }),
-      },
-    );
-    expect(stageBeforePreparation.status).toBe(409);
-    await expect(stageBeforePreparation.json()).resolves.toMatchObject({
-      code: 'webdav_sync_not_preparing',
-    });
-    const readiness = await waitForWebDavPreparation(harness);
-
+    const readiness = await waitForDataMigrationPreparation(harness);
     expect(readiness).toEqual({ ready: true, registeredTasks: 0, pendingMutations: 0 });
-    await expect(harness.runtimeFetch('/internal/webdav-sync/feature-settings/restore-stage', {
-      method: 'POST',
-      body: JSON.stringify({ documents: [], credentials: [], stagingRoot }),
-    })).resolves.toEqual({ targets: [] });
     const blocked = await fetch(`${harness.baseUrl}/v1/projects/${encodeURIComponent(project.id)}`, {
       method: 'PATCH',
       headers: {
@@ -155,12 +148,12 @@ describe('runtime server REST runtime state', () => {
     expect(blocked.status).toBe(409);
     await expect(blocked.json()).resolves.toMatchObject({ code: 'data_migration_preparing' });
 
-    await harness.runtimeFetch('/internal/webdav-sync/prepare', { method: 'DELETE' });
+    await harness.runtimeFetch('/v1/data-migration/prepare', { method: 'DELETE' });
     const updated = await harness.runtimeFetch(
       `/v1/projects/${encodeURIComponent(project.id)}`,
-      { method: 'PATCH', body: JSON.stringify({ name: 'After snapshot' }) },
+      { method: 'PATCH', body: JSON.stringify({ name: 'After migration' }) },
     );
-    expect(updated).toMatchObject({ id: project.id, name: 'After snapshot' });
+    expect(updated).toMatchObject({ id: project.id, name: 'After migration' });
   });
 
   it('exposes local project status and revision-protected text-file APIs', async () => {
@@ -628,15 +621,15 @@ function configuredProvider(id: string, modelId: string) {
   };
 }
 
-async function waitForWebDavPreparation(
+async function waitForDataMigrationPreparation(
   harness: RuntimeServerTestHarness,
 ): Promise<RuntimeDataMigrationReadiness> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const readiness = await harness.runtimeFetch('/internal/webdav-sync/prepare', {
+    const readiness = await harness.runtimeFetch('/v1/data-migration/prepare', {
       method: 'POST',
     }) as RuntimeDataMigrationReadiness;
     if (readiness.ready) return readiness;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error('Runtime did not become ready for a WebDAV snapshot.');
+  throw new Error('Runtime did not become ready for data migration.');
 }

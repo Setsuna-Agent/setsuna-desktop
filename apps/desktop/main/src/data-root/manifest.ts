@@ -201,6 +201,7 @@ export function migrationCategory(relativePath: string): DesktopDataMigrationCat
   if (
     normalized === 'network-proxies.json'
     || normalized === 'secure-credentials.json'
+    // Retired sync settings remain user-owned data during data-root migration.
     || normalized === 'webdav-sync.json'
     || normalized === 'window-preferences.json'
   ) {
@@ -347,6 +348,7 @@ function shouldSkip(relativePath: string, name: string, directory: boolean): boo
   if (relativePath === DATA_ROOT_MARKER_FILE_NAME) return true;
   if (!relativePath.includes(path.sep) && TRANSIENT_ROOT_FILE_NAMES.has(name)) return true;
   const normalized = relativePath.replaceAll(path.sep, '/').toLowerCase();
+  // Legacy sync staging stays in the old root; never revive or relocate its transaction.
   if (directory && normalized === '.webdav-sync-work') return true;
   // Phase 2 used a private Git repository before switching to snapshot baselines.
   // The current runtime never reads this history, so carrying it forward only
