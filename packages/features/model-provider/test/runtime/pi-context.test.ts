@@ -4,6 +4,8 @@ import type {
   RuntimeMessage,
 } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
+import { convertResponsesMessages } from '@earendil-works/pi-ai/api/openai-responses-shared';
+import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript';
 import { describe, expect, it } from 'vitest';
 import type { ModelProviderRuntimeConfig } from '../../src/contracts/index.js';
 import {
@@ -27,6 +29,75 @@ describe('Pi model context', () => {
       { toolCallId: 'failed', isError: true, content: [{ type: 'text', text: 'Hunk order is reversed.' }] },
       { toolCallId: 'success', isError: false },
     ]);
+  });
+
+  it.each([
+    { schemaVersion: 2, model: 'gpt-test' },
+    { schemaVersion: 3, model: 'gpt-test' },
+    { schemaVersion: 3, model: 'gpt-other' },
+  ] as const)('serializes one real result per call for v$schemaVersion replay on $model', ({ schemaVersion, model }) => {
+    const provider = providerFixture('provider-a', 'openai-responses');
+    const source = createPiReplayContext(provider, 'gpt-test');
+    const calls = [
+      { id: 'call-shell', name: 'run_shell_command', arguments: '{"command":"inspect"}' },
+      { id: 'call-file', name: 'read_file', arguments: '{"path":"missing.txt"}' },
+    ];
+    const assistant = bindV3Fingerprint(messageFixture({
+      id: 'parallel-calls', role: 'assistant', content: '', toolCalls: calls,
+      providerMetadata: schemaVersion === 3 ? {
+        schemaVersion,
+        source: replaySource(source),
+        assistantReplay: { blocks: calls.map((call) => ({
+          type: 'tool_call', id: call.id, itemId: `fc_${call.id}`, name: call.name,
+          arguments: JSON.parse(call.arguments),
+        })) },
+      } : {
+        schemaVersion,
+        source: replaySource(source),
+        openAiResponses: { items: calls.map((call) => ({
+          type: 'function_call', id: `fc_${call.id}`, call_id: call.id,
+          name: call.name, arguments: call.arguments,
+        })) },
+      },
+    }));
+    const request = requestFixture([
+      messageFixture({ id: 'user', role: 'user', content: 'Inspect the workspace.' }),
+      assistant,
+      messageFixture({
+        id: 'file-result', role: 'tool', toolCallId: 'call-file', toolName: 'read_file',
+        status: 'error', content: 'File does not exist.',
+      }),
+      messageFixture({
+        id: 'shell-result', role: 'tool', toolCallId: 'call-shell', toolName: 'run_shell_command',
+        content: 'Exit Code: 0\nStdout:\n工具输出\nNo result provided is literal file content.',
+      }),
+      messageFixture({ id: 'next-call', role: 'assistant', content: '', toolCalls: [
+        { id: 'call-next', name: 'read_file', arguments: '{"path":"found.txt"}' },
+      ] }),
+      messageFixture({
+        id: 'next-result', role: 'tool', toolCallId: 'call-next', toolName: 'read_file',
+        content: 'Actual file contents.',
+      }),
+    ]);
+    const original = structuredClone(request);
+    const context = toPiContext(request, createPiReplayContext(provider, model));
+    const input = convertResponsesMessages(
+      createPiModel(provider, model), normalizeContext(context), new Set(['openai']),
+    );
+    const results = input.filter((item) => item.type === 'function_call_output');
+
+    expect(results).toEqual(request.messages.filter((message) => message.role === 'tool').map((message) => ({
+      type: 'function_call_output', call_id: message.toolCallId, output: message.content,
+    })));
+    expect(input.filter((item) => item.type === 'function_call').map((item) => item.call_id))
+      .toEqual(['call-shell', 'call-file', 'call-next']);
+    if (model === 'gpt-test') {
+      expect(input.filter((item) => item.type === 'function_call').slice(0, 2).map((item) => item.id))
+        .toEqual(['fc_call-shell', 'fc_call-file']);
+    }
+    expect(context.messages.filter((message) => message.role === 'toolResult').map((message) => message.isError))
+      .toEqual([true, false, false]);
+    expect(request).toEqual(original);
   });
 
   it('preserves privileged instruction order in the provider system prompt', () => {

@@ -58,6 +58,8 @@ AgentLoop / Review / Vision / Thread title / Memory
 
 直接调用 provider/API stream 前，统一通过 Pi `normalizeContext()` 把系统提示词和工具声明转换为 transcript system message；不把 Pi transcript 类型扩散到共享 contracts 或持久存储。
 
+Responses 原生回放在 Pi context 内使用 `call_id|item_id` 配对工具调用与结果，两侧必须使用同一个完整 ID，避免 SDK 误补缺失结果并覆盖真实输出；持久化的工具调用 ID 仍保留 `call_id`，`item_id` 只由回放 metadata 持有。v2/v3 回放与语义回退共用此转换，普通采样和原生压缩保持一致。
+
 Setsuna provider ID 是配置和 metadata 身份。预置配置的 Pi model 保留 `deepseek`、`openrouter`、`openai`、`anthropic` 等真实 provider identity 和模型 compat；自定义配置使用 canonical `openai`/`anthropic` fallback。
 
 Pi 目录升级不改写已保存连接的协议和地址。若厂商已切换协议（例如 Kimi Code），旧连接仍使用原协议的通用 adapter；OpenCode Go 的历史 `/zen/go` 地址继续识别为该厂商，保留会话请求头。Pi 报告工具参数 JSON 无效时终止该次采样，不把其空对象占位值作为有效工具调用执行或保存到回放 metadata。

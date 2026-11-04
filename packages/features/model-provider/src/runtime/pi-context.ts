@@ -183,6 +183,7 @@ export function toPiContext(
   replayContext: PiReplayContext,
 ): Context {
   const messages: Message[] = [];
+  const replayToolCallIds = new Map<string, string>();
 
   for (const message of request.messages) {
     if (message.visibility === 'transcript') continue;
@@ -199,11 +200,16 @@ export function toPiContext(
     }
     if (message.role === 'assistant') {
       const assistant = toPiAssistantMessage(message, replayContext);
+      // Pi pairs results before splitting Responses call_id/item_id. Both sides
+      // must use its composite ID or Pi appends a synthetic "No result provided".
+      for (const block of assistant.content) {
+        if (block.type === 'toolCall') replayToolCallIds.set(block.id.split('|')[0]!, block.id);
+      }
       if (assistant.content.length) messages.push(assistant);
       continue;
     }
     if (message.role !== 'tool' || !message.toolCallId) continue;
-    messages.push(toPiToolResult(message));
+    messages.push(toPiToolResult(message, replayToolCallIds.get(message.toolCallId) ?? message.toolCallId));
   }
 
   const systemPrompt = request.messages
@@ -246,10 +252,10 @@ function toPiUserMessage(message: RuntimeMessage): UserMessage | null {
   };
 }
 
-function toPiToolResult(message: RuntimeMessage): ToolResultMessage {
+function toPiToolResult(message: RuntimeMessage, toolCallId: string): ToolResultMessage {
   return {
     role: 'toolResult',
-    toolCallId: message.toolCallId!,
+    toolCallId,
     toolName: message.toolName || 'tool',
     content: [
       ...(message.content ? [{ type: 'text' as const, text: message.content }] : []),
