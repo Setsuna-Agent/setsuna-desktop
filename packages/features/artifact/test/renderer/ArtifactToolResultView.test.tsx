@@ -86,7 +86,7 @@ it('ignores repeated double-clicks while opening and reports native open failure
 it('reports unavailable native opening on double-click', async () => {
   const user = userEvent.setup();
   render(<ArtifactToolResultView host={{ startFileDrag: null, createWorkspaceFilePreview: null, openWorkspaceFile: null }}
-    payload={artifact} threadId="thread" translate={(key) => key} />);
+    payload={artifact} threadId="thread" translate={(key, values) => String(values?.error ?? key)} />);
   await user.dblClick(screen.getByText(artifact.name));
   expect((await screen.findByRole('alert')).textContent).toContain('feature.artifact.localUnsupported');
 });
