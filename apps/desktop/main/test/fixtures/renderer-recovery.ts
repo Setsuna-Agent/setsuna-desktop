@@ -9,9 +9,15 @@ import { loadDesktopRenderer } from '../../src/window/renderer-loading.js';
 app.setPath('userData', path.join(process.argv[2]!, 'profile'));
 app.disableHardwareAcceleration();
 app.dock?.hide();
+// Keep a single explicit shutdown path, rather than racing the default last-window quit.
+app.on('window-all-closed', () => undefined);
 let phase = 'waiting for app readiness';
 const mark = (value: string) => { phase = value; console.log(`RENDERER_RECOVERY_PHASE ${value}`); };
 const watchdog = setTimeout(() => { console.error(`Renderer recovery fixture stalled: ${phase}`); app.exit(1); }, 15_000);
+app.once('quit', (_event, code) => {
+  clearTimeout(watchdog);
+  console.log('RENDERER_RECOVERY_QUIT', code);
+});
 
 void app.whenReady().then(async () => {
   mark('creating window');
@@ -66,8 +72,8 @@ void app.whenReady().then(async () => {
   // Release the deliberately crashed final document before native fixture teardown.
   mark('restoring document for fixture cleanup');
   await window.loadFile(path.join(root, 'dist/renderer/index.html'));
-  window.destroy();
-  clearTimeout(watchdog);
   console.log('RENDERER_RECOVERY_OK');
+  mark('exiting fixture');
+  // Exit owns window destruction; do not start default last-window quit first.
   app.exit(0);
 }).catch((error: unknown) => { console.error(error); app.exit(1); });
