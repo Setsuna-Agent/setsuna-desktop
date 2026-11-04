@@ -9,16 +9,26 @@ import { loadDesktopRenderer } from '../../src/window/renderer-loading.js';
 app.setPath('userData', path.join(process.argv[2]!, 'profile'));
 app.disableHardwareAcceleration();
 app.dock?.hide();
+let phase = 'waiting for app readiness';
+const mark = (value: string) => { phase = value; console.log(`RENDERER_RECOVERY_PHASE ${value}`); };
+const watchdog = setTimeout(() => { console.error(`Renderer recovery fixture stalled: ${phase}`); app.exit(1); }, 15_000);
 
 void app.whenReady().then(async () => {
+  mark('creating window');
   const root = process.argv[2]!;
   await mkdir(path.join(root, 'dist/renderer'), { recursive: true });
   await writeFile(path.join(root, 'dist/renderer/index.html'), '<!doctype html><title>Recovery fixture</title><body>Ready</body>');
   const window = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+  const state = () => ({ visible: window.isVisible(), minimized: window.isMinimized(), focused: window.isFocused() });
+  for (const event of ['show', 'hide', 'focus', 'restore'] as const) {
+    window.on(event, () => console.log('RENDERER_RECOVERY_WINDOW', event, state()));
+  }
   let prepared = 0;
   let loaded = 0;
   window.webContents.on('did-finish-load', () => { loaded += 1; });
+  mark('loading initial document');
   await loadDesktopRenderer(window, { appRoot: root, prepare: async () => { prepared += 1; } });
+  mark('crashing hidden renderer');
   assert.equal(loaded, 1);
   // A hidden renderer can die without destroying its BrowserWindow/WebContents.
   const gone = once(window.webContents, 'render-process-gone');
@@ -29,17 +39,22 @@ void app.whenReady().then(async () => {
   await delay(1_200);
   assert.equal(loaded, 1);
   const restored = once(window.webContents, 'did-finish-load');
+  mark('revealing crashed renderer');
   window.show();
+  setTimeout(() => console.log('RENDERER_RECOVERY_WINDOW after-show', state()), 1_100);
   await restored;
+  mark('checking restored document');
   assert.equal(await window.webContents.executeJavaScript('document.title'), 'Recovery fixture');
   assert.equal(prepared, 1);
   assert.equal(loaded, 2);
+  mark('crashing foreground renderer');
   const nextGone = once(window.webContents, 'render-process-gone');
   const nextRestored = once(window.webContents, 'did-finish-load');
   window.webContents.forcefullyCrashRenderer();
   await nextGone;
   await nextRestored;
   assert.equal(loaded, 3);
+  mark('checking crash loop limit');
   const finalGone = once(window.webContents, 'render-process-gone');
   window.webContents.forcefullyCrashRenderer();
   await finalGone;
@@ -48,6 +63,7 @@ void app.whenReady().then(async () => {
   assert.equal(loaded, 3);
   assert.equal(prepared, 1);
   window.destroy();
+  clearTimeout(watchdog);
   console.log('RENDERER_RECOVERY_OK');
   app.exit(0);
 }).catch((error: unknown) => { console.error(error); app.exit(1); });
