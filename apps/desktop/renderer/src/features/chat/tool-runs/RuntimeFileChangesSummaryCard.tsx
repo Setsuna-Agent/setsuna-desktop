@@ -1,12 +1,12 @@
 import type { ThreadFileChangesResult, WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
-import { Button, useConfirm } from '@setsuna-desktop/renderer-ui';
+import { Button, CollapsibleContent, useConfirm } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, FileDiff, Redo2, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
 import { useChatThreadId } from '../conversation/ChatThreadProvider.js';
 import { useThreadFileChanges } from '../hooks/ThreadFileChangesProvider.js';
-import type { RuntimeFileChangeSummary } from './runtimeFileChanges.js';
+import type { RuntimeFileChange, RuntimeFileChangeSummary } from './runtimeFileChanges.js';
 import {
   completedFileOperationActionLabel,
   normalizeFileOperationAction,
@@ -52,11 +52,9 @@ export function FileChangesSummaryCard({
   const filePathKey = useMemo(() => filePaths.join('\0'), [filePaths]);
   const [showAllFiles, setShowAllFiles] = useState(false);
   const canApply = Boolean(available && onApplyChanges && filePaths.length);
-  const hasMoreFiles = fileCount > fileChangePreviewLimit;
-  const visibleFiles = showAllFiles || !hasMoreFiles
-    ? summary.files
-    : summary.files.slice(0, fileChangePreviewLimit);
-  const hiddenFileCount = Math.max(0, fileCount - fileChangePreviewLimit);
+  const previewFiles = summary.files.slice(0, fileChangePreviewLimit);
+  const overflowFiles = summary.files.slice(fileChangePreviewLimit);
+  const hasMoreFiles = overflowFiles.length > 0;
 
   useEffect(() => {
     setShowAllFiles(false);
@@ -140,24 +138,15 @@ export function FileChangesSummaryCard({
         ) : null}
       </div>
       <div className="chat-file-changes__list">
-        {visibleFiles.map((file) => (
-          <div className="chat-file-changes__item" key={file.path}>
-            <Button variant="ghost"
-              className="chat-file-changes__row"
-              type="button"
-              disabled={!onOpenReview}
-              title={file.path}
-              onClick={() => onOpenReview?.(file.path)}
-            >
-              <FileChangePath path={file.path} />
-              <ChangeCounts
-                additions={file.additions}
-                deletions={file.deletions}
-                showZero
-              />
-            </Button>
-          </div>
+        {previewFiles.map((file) => (
+          <FileChangeItem file={file} key={file.path} onOpenReview={onOpenReview} />
         ))}
+        {/* 前几行常驻，其余行随“显示更多”展开收起。 */}
+        <CollapsibleContent open={showAllFiles}>
+          {overflowFiles.map((file) => (
+            <FileChangeItem file={file} key={file.path} onOpenReview={onOpenReview} />
+          ))}
+        </CollapsibleContent>
         {hasMoreFiles ? (
           <Button variant="ghost"
             className="chat-file-changes__more"
@@ -168,7 +157,7 @@ export function FileChangesSummaryCard({
             <span>
               {showAllFiles
                 ? t('toolRun.changes.collapse')
-                : t('toolRun.changes.showMore', { count: hiddenFileCount })}
+                : t('toolRun.changes.showMore', { count: overflowFiles.length })}
             </span>
             <ChevronDown
               className="chat-file-changes__more-chevron"
@@ -178,6 +167,30 @@ export function FileChangesSummaryCard({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function FileChangeItem({ file, onOpenReview }: {
+  file: RuntimeFileChange;
+  onOpenReview?: DesktopReviewOpenHandler;
+}) {
+  return (
+    <div className="chat-file-changes__item">
+      <Button variant="ghost"
+        className="chat-file-changes__row"
+        type="button"
+        disabled={!onOpenReview}
+        title={file.path}
+        onClick={() => onOpenReview?.(file.path)}
+      >
+        <FileChangePath path={file.path} />
+        <ChangeCounts
+          additions={file.additions}
+          deletions={file.deletions}
+          showZero
+        />
+      </Button>
+    </div>
   );
 }
 

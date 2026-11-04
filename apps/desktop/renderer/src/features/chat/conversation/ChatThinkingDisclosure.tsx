@@ -16,10 +16,11 @@ export const ChatThinkingDisclosure = memo(function ChatThinkingDisclosure({
   scrollStateKey: string;
 }) {
   const { t } = useI18n();
-  const [expanded, setExpanded] = useState(false);
+  // 首次展开才挂载正文，之后保持挂载，收起时才有内容可供 details-content 高度动画过渡。
+  const [contentMounted, setContentMounted] = useState(false);
   const label = t(active ? 'chat.thinking.active' : 'chat.thinking.completed');
   const handleToggle = (event: SyntheticEvent<HTMLDetailsElement>) => {
-    setExpanded(event.currentTarget.open);
+    if (event.currentTarget.open) setContentMounted(true);
   };
 
   return (
@@ -37,7 +38,7 @@ export const ChatThinkingDisclosure = memo(function ChatThinkingDisclosure({
         </span>
         <ChevronDown aria-hidden="true" className="chat-thinking-disclosure__chevron" size={12} />
       </summary>
-      {expanded ? (
+      {contentMounted ? (
         <ThinkingContent active={active} content={content} label={label} scrollStateKey={scrollStateKey} />
       ) : null}
     </details>

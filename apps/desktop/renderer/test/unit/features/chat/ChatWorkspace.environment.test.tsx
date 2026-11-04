@@ -75,8 +75,8 @@ function Harness({ client, project, runAction }: {
           onDeleteMessages={noop} onEditUserMessage={noop} onAccessModeChange={noop}
           onCancelActiveTurn={noop} onClearContext={noop} onCompactContext={noop}
           onSelectModel={noop} onSetMultiAgentEnabled={noop} onStartThreadReview={vi.fn()} onSearchProjectEntries={vi.fn()}
-          queuedTurnActions={{ deleteQueuedTurnInput: vi.fn(), releaseQueuedTurnInputEdit: vi.fn(), retrieveQueuedTurnInput: vi.fn(),
-            reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(), updateQueuedTurnInput: vi.fn() }} />
+          queuedTurnActions={{ deleteQueuedTurnInput: vi.fn(), retrieveQueuedTurnInput: vi.fn(),
+            reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn() }} />
       </TerminalActionsHostProvider>
     </RendererPluginTestHost>
   </ToastProvider></I18nProvider>;

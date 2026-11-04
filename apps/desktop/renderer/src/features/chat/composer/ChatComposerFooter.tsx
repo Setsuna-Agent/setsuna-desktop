@@ -6,10 +6,8 @@ import type {
 } from '@setsuna-desktop/contracts';
 
 import {
-  ArrowUp,
   LoaderCircle,
   Plus,
-  Square,
   X,
 } from 'lucide-react';
 import type {
@@ -22,18 +20,13 @@ import { AppTooltip } from '../../../shared/ui/primitives.js';
 import { formatTokenCount, type ChatContextTokenUsage } from '../conversation/chatContextUsage.js';
 import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
+import { ChatSubmitIcon } from './editor/ChatSubmitIcon.js';
 import type { ChatThinkingControl } from './chatThinkingMenu.js';
 
 type ChatComposerFooterCommandControl = {
   active: boolean;
   disabled: boolean;
   onOpen: () => void;
-};
-
-type ChatComposerFooterEditingControl = {
-  active: boolean;
-  disabled: boolean;
-  onCancel: () => void;
 };
 
 type ChatComposerFooterModeBadges = {
@@ -59,7 +52,6 @@ export function ChatComposerFooter({
   config,
   contextCompacting,
   contextUsage,
-  editingControl,
   hasActiveTurn,
   modeBadges,
   model,
@@ -76,7 +68,6 @@ export function ChatComposerFooter({
   config: RuntimeConfigState | null;
   contextCompacting: boolean;
   contextUsage: ChatContextTokenUsage;
-  editingControl: ChatComposerFooterEditingControl;
   hasActiveTurn: boolean;
   modeBadges: ChatComposerFooterModeBadges;
   model: ProviderModelConfig | null;
@@ -111,13 +102,6 @@ export function ChatComposerFooter({
           permissionProfile={config?.permissionProfile ?? 'workspace-write'}
           onChange={onAccessModeChange}
         />
-        {editingControl.active ? (
-          <ChatModeBadge
-            disabled={editingControl.disabled}
-            label={t('chat.queue.editing')}
-            onClose={editingControl.onCancel}
-          />
-        ) : null}
         {modeBadges.collaborationEnabled ? (
           <ChatModeBadge
             label={t('chat.composer.badge.collaboration')}
@@ -208,9 +192,11 @@ function ChatComposerPrimaryAction({
   senderActions: ReactNode;
 }) {
   const { t } = useI18n();
+  const stopping = hasActiveTurn && !primaryAction.queueReady;
+  let button = senderActions;
 
   if (primaryAction.queueReady) {
-    return (
+    button = (
       <UiButton variant="primary"
         className="chat-prompt__submit"
         type="button"
@@ -219,28 +205,22 @@ function ChatComposerPrimaryAction({
         disabled={primaryAction.attachmentsBusy || primaryAction.submitting}
         onClick={primaryAction.onSubmit}
       >
-        <ArrowUp size={16} />
+        <ChatSubmitIcon stop={false} />
       </UiButton>
     );
-  }
-
-  if (hasActiveTurn) {
-    return (
-      <ShortcutTooltip commandId="chat.cancelTurn" label={t('chat.composer.stop')}>
-        <UiButton variant="primary"
-          className="chat-prompt__submit"
-          type="button"
-          aria-label={t('chat.composer.stop')}
-          onClick={primaryAction.onCancelActiveTurn}
-        >
-          <Square size={13} fill="currentColor" />
-        </UiButton>
-      </ShortcutTooltip>
+  } else if (stopping) {
+    button = (
+      <UiButton variant="primary"
+        className="chat-prompt__submit"
+        type="button"
+        aria-label={t('chat.composer.stop')}
+        onClick={primaryAction.onCancelActiveTurn}
+      >
+        <ChatSubmitIcon stop />
+      </UiButton>
     );
-  }
-
-  if (primaryAction.attachmentOnlyReady) {
-    return (
+  } else if (primaryAction.attachmentOnlyReady) {
+    button = (
       <UiButton variant="primary"
         className="chat-prompt__submit"
         type="button"
@@ -248,12 +228,18 @@ function ChatComposerPrimaryAction({
         disabled={primaryAction.attachmentsBusy || primaryAction.submitting}
         onClick={primaryAction.onSubmit}
       >
-        <ArrowUp size={16} />
+        <ChatSubmitIcon stop={false} />
       </UiButton>
     );
   }
 
-  return senderActions;
+  // 各状态的按钮都放在同一个 Tooltip 包裹位置，React 会复用同一个按钮节点，
+  // 发送 / 停止图标切换才有过渡；只有停止态展示快捷键提示。
+  return (
+    <ShortcutTooltip commandId="chat.cancelTurn" disabled={!stopping} label={t('chat.composer.stop')}>
+      {button}
+    </ShortcutTooltip>
+  );
 }
 
 function ChatModeBadge({

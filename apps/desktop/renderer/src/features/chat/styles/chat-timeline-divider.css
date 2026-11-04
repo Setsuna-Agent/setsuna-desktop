@@ -8,6 +8,7 @@
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 18px;
+  user-select: none;
 }
 
 .chat-timeline-divider__line {

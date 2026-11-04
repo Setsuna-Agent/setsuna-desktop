@@ -447,8 +447,9 @@ export function ChatTranscript({
           onScrollToBottom={scrollToBottom}
         />
       ) : null}
-      {showScrollBottom && !showEmptyStarter ? (
-        <div className="chat-scroll-bottom-anchor">
+      {/* 锚点常驻，用 hidden 切换显隐，让 CSS 在出现和隐藏时都能过渡。 */}
+      {!showEmptyStarter ? (
+        <div className="chat-scroll-bottom-anchor" hidden={!showScrollBottom}>
           <Button variant="ghost" className="chat-scroll-bottom" type="button" aria-label={t('chat.scrollBottom')} onClick={() => scrollToBottom()}>
             <ArrowDown size={16} />
           </Button>

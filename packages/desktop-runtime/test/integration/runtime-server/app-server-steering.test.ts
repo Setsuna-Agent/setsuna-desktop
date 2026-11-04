@@ -484,69 +484,39 @@ describe('runtime server AppServer steering and dynamic tools', () => {
         expect(reordered.queuedTurnInputs.map((item: { id: string }) => item.id))
           .toEqual([second.queuedInputId, first.queuedInputId]);
 
-        const firstEditSession = await harness.runtimeFetch(
+        const retrieved = await harness.runtimeFetch(
           `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(first.queuedInputId)}/retrieve`,
           { method: 'POST' },
         );
-        expect(firstEditSession).toMatchObject({
-          editToken: expect.any(String),
-          input: {
-            id: first.queuedInputId,
-            input: 'Original queued guidance.',
-          },
+        expect(retrieved).toMatchObject({ id: first.queuedInputId, input: 'Original queued guidance.' });
+        const replacement = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs`, {
+          method: 'POST',
+          body: JSON.stringify({ clientId: 'rest-edited-send-now', input: 'Edited queued guidance.' }),
         });
-        await expect(harness.runtimeFetch(
-          `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(first.queuedInputId)}/release`,
-          {
-            method: 'POST',
-            body: JSON.stringify({ editToken: firstEditSession.editToken }),
-          },
-        )).resolves.toMatchObject({
-          released: true,
-          resumed: {
-            disposition: 'queued',
-            queuedInputId: second.queuedInputId,
-          },
-        });
-        const editSession = await harness.runtimeFetch(
-          `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(first.queuedInputId)}/retrieve`,
-          { method: 'POST' },
-        );
-        await expect(harness.runtimeFetch(
-          `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(first.queuedInputId)}`,
-          {
-            method: 'PATCH',
-            body: JSON.stringify({
-              editToken: editSession.editToken,
-              input: 'Edited queued guidance.',
-            }),
-          },
-        )).resolves.toMatchObject({
-          disposition: 'queued',
-          queuedInputId: first.queuedInputId,
-          turnId: null,
-        });
+        const afterRetrieve = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
+        expect(afterRetrieve.queuedTurnInputs.map((item: { id: string }) => item.id))
+          .toEqual([second.queuedInputId, replacement.queuedInputId]);
         await expect(harness.runtimeFetch(
           `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(second.queuedInputId)}`,
           { method: 'DELETE' },
         )).resolves.toEqual({ deleted: true });
         const pending = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
         expect(pending.queuedTurnInputs).toMatchObject([
-          { id: first.queuedInputId, input: 'Edited queued guidance.' },
+          { id: replacement.queuedInputId, input: 'Edited queued guidance.' },
         ]);
 
         await expect(harness.runtimeFetch(
-          `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(first.queuedInputId)}/send-now`,
+          `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(replacement.queuedInputId)}/send-now`,
           { method: 'POST' },
         )).resolves.toMatchObject({
           disposition: 'steered',
-          queuedInputId: first.queuedInputId,
+          queuedInputId: replacement.queuedInputId,
           turnId: started.turnId,
         });
         const sent = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
         expect(sent.queuedTurnInputs).toEqual([]);
         expect(sent.messages.find((message: { clientId?: string }) =>
-          message.clientId === 'rest-queued-send-now'
+          message.clientId === 'rest-edited-send-now'
         )).toMatchObject({
           content: 'Edited queued guidance.',
           role: 'user',

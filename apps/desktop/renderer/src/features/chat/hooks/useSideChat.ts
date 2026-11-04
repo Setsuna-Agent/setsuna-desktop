@@ -61,6 +61,7 @@ export function useSideChat({
     attachmentStore,
     draft,
     draftSkillReferences,
+    draftSendIntent,
     draftWorkspaceReferences,
     reset: resetComposer,
     setDraft,
@@ -297,6 +298,7 @@ export function useSideChat({
     setDraft,
     startReview,
     draftSkillReferences,
+    draftSendIntent,
     draftWorkspaceReferences,
   }), [
     actions,
@@ -310,6 +312,7 @@ export function useSideChat({
     draft,
     effectiveActiveTurnId,
     draftSkillReferences,
+    draftSendIntent,
     draftWorkspaceReferences,
     setDraft,
     startReview,

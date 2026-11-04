@@ -71,7 +71,7 @@ import { useChatComposerModeController } from './composer/useChatComposerModeCon
 import { useQueuedTurnComposerEdit } from './composer/useQueuedTurnComposerEdit.js';
 import type { ChatContextTokenUsage } from './conversation/chatContextUsage.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
-import type { SetChatComposerDraft } from './hooks/useChatComposerSession.js';
+import type { ChatComposerSendIntent, SetChatComposerDraft } from './hooks/useChatComposerSession.js';
 import {
   type ChatModelSelectionHandler,
 } from './chatModelSelection.js';
@@ -121,6 +121,7 @@ export function ChatComposer({
   contextUsage,
   currentThread,
   draft,
+  draftSendIntent,
   draftSkillReferences = EMPTY_SKILL_REFERENCES,
   draftWorkspaceReferences = EMPTY_WORKSPACE_REFERENCES,
   attachmentStore,
@@ -162,6 +163,7 @@ export function ChatComposer({
   contextUsage: ChatContextTokenUsage;
   currentThread: RuntimeThread | null;
   draft: string;
+  draftSendIntent?: ChatComposerSendIntent;
   draftSkillReferences?: RuntimeSkillReference[];
   draftWorkspaceReferences?: WorkspaceDraftReference[];
   attachmentStore?: ChatAttachmentStore;
@@ -232,12 +234,16 @@ export function ChatComposer({
     () => composerActiveTurn(currentThread, activeTurnId),
     [activeTurnId, currentThread?.turns],
   );
+  const setDraftSendIntent = useCallback((sendIntent: ChatComposerSendIntent) => {
+    onDraftChange((current) => current, undefined, undefined, { sendIntent });
+  }, [onDraftChange]);
   const modeController = useChatComposerModeController({
     currentThreadId: currentThread?.id,
     preferenceKey,
     defaultThinking,
     model: selectedThreadModel.model,
     provider: selectedThreadModel.provider,
+    sendIntentControl: draftSendIntent === undefined ? undefined : { value: draftSendIntent, onChange: setDraftSendIntent },
   });
   const {
     addExistingImage,
@@ -245,7 +251,6 @@ export function ChatComposer({
     atLimit: attachmentLimitReached,
     beginSend: beginAttachmentSend,
     busy: attachmentsBusy,
-    clear: clearAttachments,
     items: attachmentItems,
     remove: removeAttachment,
     replaceWithExisting: replaceAttachmentsWithExisting,
@@ -262,37 +267,31 @@ export function ChatComposer({
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
   const multiAgentEnabled = !sideConversation
     && (config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true);
-  const composerHasProtectedState = Boolean(
-    draft
-    || attachmentItems.length
-    || selectedSkills.length
-    || modeController.hasProtectedModeState,
-  );
-  const resetQueuedTurnComposer = useCallback(() => {
-    clearAttachments();
-    setSelectedSkills([]);
-    onDraftChange('', [], [], { source: 'draft' });
-    lastEditorDraftRef.current = '';
-    senderRef.current?.clear?.();
-  }, [clearAttachments, onDraftChange]);
   const replaceQueuedTurnComposer = useCallback((input: RuntimeQueuedTurnInput) => {
     replaceAttachmentsWithExisting(input.attachments ?? []);
-    setSelectedSkills([]);
-    onDraftChange(input.input, [], [], { source: 'queued-edit' });
+    const slots = createReferenceDraftSlots(
+      input.input, plugins, skills, input.skillReferences,
+    );
+    // Taking a draft replaces reference identity even when its text is unchanged.
+    const editor = senderRef.current;
+    editor?.clear();
+    if (input.input) editor?.insert(slots, 'end', undefined, true);
+    setSelectedSkills(filterSelectedSkillsBySlots(skills, slots));
+    onDraftChange(input.input, input.skillReferences ?? [], []);
+    if (input.kind === 'goal') modeController.enableGoalMode();
+    else modeController.resetAfterSend();
     senderRef.current?.focus?.({ cursor: 'end', preventScroll: true });
   }, [
+    modeController.enableGoalMode,
+    modeController.resetAfterSend,
     onDraftChange,
+    plugins,
     replaceAttachmentsWithExisting,
+    skills,
   ]);
   const queuedTurnEdit = useQueuedTurnComposerEdit({
     actions: queuedTurnActions,
-    attachmentsBusy,
-    composerHasProtectedState,
-    queuedTurnInputs,
     replaceComposer: replaceQueuedTurnComposer,
-    resetComposer: resetQueuedTurnComposer,
-    sendableAttachments,
-    setSubmitting,
     submitting,
   });
   const attachmentPickerDisabled = attachmentLimitReached
@@ -320,7 +319,7 @@ export function ChatComposer({
   });
   const navigateHistory = useChatComposerHistory({
     currentThread, draft, getEditor: getComposerEditor, plugins, skills,
-    disabled: submitting || queuedTurnEdit.editing || queuedTurnEdit.retrieving || modeController.reviewModeEnabled,
+    disabled: submitting || queuedTurnEdit.retrieving || modeController.reviewModeEnabled,
     onRestore: (slots) => setSelectedSkills(filterSelectedSkillsBySlots(skills, slots)),
   });
   const commandController = useChatCommandController({
@@ -329,7 +328,7 @@ export function ChatComposer({
     plugins,
     getInputElement: getComposerInputElement,
     onSearchProjectEntries,
-    slashMenuBlocked: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
+    slashMenuBlocked: queuedTurnEdit.retrieving,
     t,
   });
   const slashEntries = useMemo(() => commandController.skillCommand ? createChatSkillCommandItems({
@@ -640,10 +639,6 @@ export function ChatComposer({
     if (attachmentsBusy || submitting) return;
     // Send buttons hand focus back before locking the editor, never after an async response.
     senderRef.current?.focus({ preventScroll: true });
-    if (queuedTurnEdit.editing) {
-      await queuedTurnEdit.submit(value ?? draft);
-      return;
-    }
     if (modeController.reviewModeEnabled) {
       const instructions = (value ?? draft).trim();
       if (!instructions) return;
@@ -664,10 +659,10 @@ export function ChatComposer({
           modeController.enableReviewMode();
         }
       }
+      if (sent) modeController.resetAfterSend();
       if (!mountedRef.current) return;
       setSubmitting(false);
       if (!sent) return;
-      modeController.resetAfterSend();
       senderRef.current?.clear?.();
       return;
     }
@@ -685,11 +680,11 @@ export function ChatComposer({
     setSubmitting(true);
     const sent = await onSend(value, sendOptions).catch(() => false);
     settleAttachmentSend(submittedAttachments, sent);
+    if (sent) modeController.resetAfterSend();
     if (!mountedRef.current) return;
     setSubmitting(false);
     if (!sent) return;
     setSelectedSkills([]);
-    modeController.resetAfterSend();
     senderRef.current?.clear?.();
   };
 
@@ -763,10 +758,9 @@ export function ChatComposer({
         ) : null}
         <ChatSendQueue
           key={currentThread?.id ?? "new-thread"}
-          disabled={submitting || queuedTurnEdit.editing}
-          editDisabled={queuedTurnEdit.editDisabled}
+          disabled={submitting || queuedTurnEdit.retrieving}
           hasActiveTurn={Boolean(activeTurnId)}
-          items={queuedTurnEdit.visibleQueuedTurnInputs}
+          items={queuedTurnInputs}
           onDelete={deleteQueuedTurnInput}
           onEdit={queuedTurnEdit.edit}
           onReorder={queuedTurnActions.reorderQueuedTurnInputs}
@@ -802,17 +796,12 @@ export function ChatComposer({
           <ChatComposerFooter
             commandControl={{
               active: commandController.forcedSlashMenuOpen,
-              disabled: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
+              disabled: queuedTurnEdit.retrieving,
               onOpen: openSlashMenu,
             }}
             config={config}
             contextCompacting={contextCompacting}
             contextUsage={contextUsage}
-            editingControl={{
-              active: queuedTurnEdit.editing,
-              disabled: submitting,
-              onCancel: () => void queuedTurnEdit.cancel(),
-            }}
             hasActiveTurn={Boolean(activeTurnId)}
             modeBadges={{
               collaborationEnabled: multiAgentEnabled,
@@ -837,7 +826,7 @@ export function ChatComposer({
             senderActions={actions}
             thinkingControl={{
               config: modeController.thinkingConfig,
-              disabled: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
+              disabled: queuedTurnEdit.retrieving,
               effort: modeController.thinkingEffort,
               enabled: modeController.thinkingEnabled,
               onEffortChange: modeController.setThinkingEffort,

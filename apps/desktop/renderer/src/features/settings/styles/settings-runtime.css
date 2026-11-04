@@ -37,7 +37,6 @@
   padding: 13px 14px;
   cursor: pointer;
   list-style: none;
-  user-select: none;
   transition: background 160ms ease;
 }
 

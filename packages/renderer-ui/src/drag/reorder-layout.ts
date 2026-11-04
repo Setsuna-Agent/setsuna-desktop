@@ -54,6 +54,34 @@ export function useReorderLayout(root: RefObject<HTMLElement | null>, orderKey: 
   }, [root]);
 }
 
+const ENTER_FADE: KeyframeAnimationOptions = { duration: 160, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' };
+
+/**
+ * Insert/remove motion for lists that are also drag-reorderable: survivors glide to their new
+ * slot with the shared spring and inserted rows fade in. Positions are re-recorded whenever
+ * `layoutKey` changes (reorder commits, paging), but motion only plays when `changeKey` changed
+ * as well, so a committed drop or a "show more" batch never replays from stale positions.
+ */
+export function useListChangeLayout(
+  root: RefObject<HTMLElement | null>,
+  { layoutKey, changeKey, enabled = true }: { layoutKey: string; changeKey: string; enabled?: boolean },
+) {
+  const reduce = useReducedMotion() ?? false;
+  const previous = useRef<{ changeKey: string; positions: Map<HTMLElement, Position> } | null>(null);
+  useLayoutEffect(() => {
+    const next = positions(root.current);
+    const last = previous.current;
+    previous.current = { changeKey, positions: next };
+    if (!last || !enabled || reduce || last.changeKey === changeKey) return;
+    animatePositions(last.positions, next, false);
+    // WAAPI leaves no inline opacity behind, so drag/dim styles keep working afterwards;
+    // DOMs without WAAPI (test environments) simply skip the fade.
+    for (const element of next.keys()) {
+      if (!last.positions.has(element)) element.animate?.([{ opacity: 0 }, { opacity: 1 }], ENTER_FADE);
+    }
+  }, [root, layoutKey, changeKey, enabled, reduce]);
+}
+
 /** Cross-slot placeholders are inserted imperatively; animate their neighbours with the same spring. */
 export function animateReorderLayout(root: HTMLElement, change: () => void) {
   const before = positions(root);

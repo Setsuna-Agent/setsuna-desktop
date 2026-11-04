@@ -1,5 +1,5 @@
 import type { WorkspaceDraftReference } from '../../features/chat/session/chatDraftReferences.js';
-import type { SetChatComposerDraft } from '../../features/chat/hooks/useChatComposerSession.js';
+import type { ChatComposerSendIntent, SetChatComposerDraft } from '../../features/chat/hooks/useChatComposerSession.js';
 import type {
   MessagePatch,
   WorkspaceFileChangeAction,
@@ -56,6 +56,7 @@ export type ChatConversationSurfaceModel = Readonly<{
   currentThread: RuntimeThread | null;
   draft: string;
   draftSkillReferences?: RuntimeSkillReference[];
+  draftSendIntent?: ChatComposerSendIntent;
   draftWorkspaceReferences?: WorkspaceDraftReference[];
   focusComposerRequest: number;
   findInChatRequest?: number;
@@ -139,6 +140,7 @@ export function ChatConversationSurface({
         currentThread={model.currentThread}
         draft={model.draft}
         draftSkillReferences={model.draftSkillReferences}
+        draftSendIntent={model.draftSendIntent}
         draftWorkspaceReferences={model.draftWorkspaceReferences}
         focusComposerOnReveal
         focusComposerRequest={model.focusComposerRequest}

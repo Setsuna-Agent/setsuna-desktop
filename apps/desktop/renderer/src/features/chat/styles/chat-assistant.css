@@ -199,7 +199,9 @@
 }
 
 .chat-thinking-disclosure__summary {
-  display: inline-grid;
+  /* 用块级 grid + fit-content，与工具行一致；行内 grid 在 details 中会落进匿名行盒，
+     底部多出字体下沉留白，使思考行与下一项的间距大于其他行。 */
+  display: grid;
   grid-template-columns: minmax(0, auto) 12px;
   align-items: center;
   justify-content: start;
@@ -396,8 +398,9 @@
 
 .chat-work-history__body {
   --chat-work-history-item-gap: 8px;
-  /* 标题分隔线与第一项内容之间的距离。 */
-  --chat-work-history-lead-gap: 7px;
+  /* 标题分隔线与第一项内容之间的距离。各行文字上下约有 5px 自带留白，分隔线没有，
+     所以首项多留这一段，分隔线到首行文字的视觉距离才与相邻两行之间一致。 */
+  --chat-work-history-lead-gap: calc(var(--chat-work-history-item-gap) + 5px);
 
   display: grid;
   gap: var(--chat-work-history-item-gap);
@@ -464,6 +467,8 @@
   color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
   font-size: 13px;
   line-height: 20px;
+  /* 与工具记录行一致，属于状态行；也避免双击插件名时选中前面的状态文字。 */
+  user-select: none;
 }
 
 .chat-plugin-uses__status {
@@ -489,6 +494,12 @@ button.chat-plugin-use {
   background: transparent;
   cursor: pointer;
   text-align: left;
+}
+
+/* 插件名按文字链接呈现：压住 ghost 按钮 hover 的底色和正文色，只保留下划线反馈。 */
+button.chat-plugin-use:is(:hover, :active):not(:disabled) {
+  color: var(--app-primary);
+  background: transparent;
 }
 
 button.chat-plugin-use:hover .chat-plugin-use__name {

@@ -12,7 +12,6 @@ import { BrowserTabMentionsProvider } from '../../../../src/features/chat/mentio
 import { CHAT_COMPOSER_CLIPBOARD_TYPE } from '../../../../src/features/chat/composer/chatComposerClipboard.js';
 import { MAX_INLINE_PASTE_CHARACTERS } from '../../../../src/features/chat/composer/useChatComposerClipboard.js';
 import { RendererPluginTestHost } from '../../support/RendererPluginTestHost.js';
-import { readSessionRecord } from '../../../../src/shared/preferences/sessionStorage.js';
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 
@@ -416,46 +415,89 @@ it('restores selected Skills by ID and exact range after navigation, and removes
   expect(screen.getByRole('textbox').textContent).toBe('');
 });
 
-it.each([false, true])('excludes a borrowed queue edit from restart recovery and resumes saving after cancellation (attachment only: %s)', async (attachmentOnly) => {
+it.each([false, true])('takes a queued input into an ordinary draft, overwrites existing text and leaves other queue actions available (attachment only: %s)', async (attachmentOnly) => {
   const target = 'thread:thread-1';
   const windowKey = 'primary:0';
   const queued: RuntimeQueuedTurnInput = {
     id: 'queued-1', input: attachmentOnly ? '' : 'Queued task', createdAt: '',
     attachments: [{ id: 'original', assetId: 'original', source: 'runtime', name: 'original.txt', type: 'text/plain', size: 4 }],
   };
-  const editSession = { threadId: 'thread-1', input: queued, editToken: 'edit-token' };
+  const next: RuntimeQueuedTurnInput = { id: 'queued-2', input: 'Other pending input', createdAt: '' };
   const actions: ChatQueuedTurnActions = {
-    deleteQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(),
-    retrieveQueuedTurnInput: vi.fn(async () => editSession),
-    releaseQueuedTurnInputEdit: vi.fn(async () => true),
-    updateQueuedTurnInput: vi.fn(async () => 'retained-after-error' as const),
+    deleteQueuedTurnInput: vi.fn(async () => true), reorderQueuedTurnInputs: vi.fn(async () => true),
+    sendQueuedTurnInputNow: vi.fn(async () => true), retrieveQueuedTurnInput: vi.fn(async () => queued),
   };
   const send = vi.fn(async () => true);
   const client = { uploadAttachment: vi.fn(), linkAttachment: vi.fn(), deleteAttachment: vi.fn(async () => ({ deleted: true })) } as unknown as DesktopRuntimeClient;
-  const view = render(<SessionHarness target={target} windowKey={windowKey} client={client} send={send}
-    queuedTurnInputs={[queued]} queuedTurnActions={actions} />);
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '编辑' })); });
-  const cancel = screen.getByRole('button', { name: /关闭.*正在编辑队列消息/ });
+  render(<SessionHarness target={target} windowKey={windowKey} client={client} send={send}
+    queuedTurnInputs={[queued, next]} queuedTurnActions={actions} />);
+  paste(screen.getByRole('textbox'), 'Replace this existing draft');
+  await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: '编辑' })[0]); });
+  expect(actions.retrieveQueuedTurnInput).toHaveBeenCalledExactlyOnceWith(queued.id);
   const input = screen.getByRole('textbox');
+  expect(input.textContent).toBe(queued.input);
   paste(input, ' edited');
-  await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
-  expect(actions.updateQueuedTurnInput).toHaveBeenCalledExactlyOnceWith(editSession, `${queued.input} edited`.trim(), queued.attachments);
-  expect(send).not.toHaveBeenCalled();
-  // Flushing while the edit is live catches reloads/crashes that never run React cleanup.
-  act(() => window.dispatchEvent(new Event('beforeunload')));
-  expect(readSessionRecord(windowKey, 'draft', target)).toBeNull();
-  const restarted = renderHook(() => useChatComposerSession(target, client, windowKey));
-  expect(restarted.result.current.draft).toBe('');
-  expect(restarted.result.current.attachmentStore.getSnapshot().items).toEqual([]);
-  restarted.unmount();
+  await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: '立即发送' })[1]); });
+  await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: '删除' })[1]); });
+  expect(actions.sendQueuedTurnInputNow).toHaveBeenCalledExactlyOnceWith(next.id);
+  expect(actions.deleteQueuedTurnInput).toHaveBeenCalledExactlyOnceWith(next.id);
 
-  await act(async () => { fireEvent.click(cancel); });
-  expect(actions.releaseQueuedTurnInputEdit).toHaveBeenCalledExactlyOnceWith(editSession);
-  expect(input.textContent).toBe('');
-  paste(input, 'Ordinary draft');
-  view.unmount();
-  const ordinary = renderHook(() => useChatComposerSession(target, client, windowKey));
-  expect(ordinary.result.current.draft).toBe('Ordinary draft');
+  act(() => window.dispatchEvent(new Event('beforeunload')));
+  const restored = renderHook(() => useChatComposerSession(target, client, windowKey));
+  expect(restored.result.current.draft.trim()).toBe(`${queued.input} edited`.trim());
+  restored.unmount();
+  await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
+  expect(send).toHaveBeenCalledExactlyOnceWith(expect.any(String), expect.objectContaining({ attachments: queued.attachments }));
+  expect((send.mock.calls[0] as unknown as [string])[0].trim()).toBe(`${queued.input} edited`.trim());
+});
+
+it.each(['message', 'goal'] as const)('keeps a late taken %s in its originating draft with its send intent', async (kind) => {
+  const queued: RuntimeQueuedTurnInput = { id: 'queued-1', kind, input: 'Taken from A', createdAt: '' };
+  let resolveRetrieve!: (input: RuntimeQueuedTurnInput) => void;
+  const pending = new Promise<RuntimeQueuedTurnInput>((resolve) => { resolveRetrieve = resolve; });
+  const actions: ChatQueuedTurnActions = {
+    deleteQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(),
+    retrieveQueuedTurnInput: vi.fn(() => pending),
+  };
+  const client = {} as DesktopRuntimeClient;
+  const send = vi.fn(async () => true);
+  const view = render(<SessionHarness target="thread:A" client={client} send={send}
+    queuedTurnInputs={[queued]} queuedTurnActions={actions} />);
+  fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+  view.rerender(<SessionHarness target="thread:B" client={client} send={send} />);
+  paste(screen.getByRole('textbox'), 'Keep B draft');
+  await act(async () => { resolveRetrieve(queued); });
+  expect(screen.getByRole('textbox').textContent).toBe('Keep B draft');
+  view.rerender(<SessionHarness target="thread:A" client={client} send={send} />);
+  expect(screen.getByRole('textbox').textContent).toBe('Taken from A');
+  await act(async () => { fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' }); });
+  expect(send).toHaveBeenCalledWith(queued.input, expect.any(Object));
+  expect((send.mock.calls[0] as unknown as [string, { goalMode?: boolean }])[1].goalMode)
+    .toBe(kind === 'goal' ? true : undefined);
+  view.rerender(<SessionHarness target="thread:B" client={client} send={send} />);
+  view.rerender(<SessionHarness target="thread:A" client={client} send={send} />);
+  paste(screen.getByRole('textbox'), 'Ordinary follow-up');
+  await act(async () => { fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' }); });
+  expect((send.mock.calls[1] as unknown as [string, { goalMode?: boolean }])[1].goalMode).toBeUndefined();
+});
+
+it.each(['', ' extra'])('replaces old Skill references when the taken plain draft shares its text prefix %j', async (suffix) => {
+  const skill: RuntimeSkillSummary = { id: 'build', name: 'Build', kind: 'builtin', enabled: true };
+  const queued: RuntimeQueuedTurnInput = { id: 'queued-plain', input: `Build run tests${suffix}`, createdAt: '' };
+  const actions: ChatQueuedTurnActions = {
+    deleteQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(),
+    retrieveQueuedTurnInput: vi.fn(async () => queued),
+  };
+  const send = vi.fn(async () => false);
+  render(<SessionHarness target="thread:A" client={{} as DesktopRuntimeClient} send={send} skills={[skill]}
+    queuedTurnInputs={[queued]} queuedTurnActions={actions} />);
+  const input = screen.getByRole('textbox');
+  paste(input, '$Build');
+  fireEvent.mouseDown(await screen.findByRole('option', { name: /Build/ }));
+  paste(input, 'run tests');
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '编辑' })); });
+  await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
+  expect(send).toHaveBeenCalledExactlyOnceWith(queued.input, expect.objectContaining({ skillIds: [] }));
 });
 
 it.each(['', 'Restored draft'])('keeps project default skills out of the composer draft %j', async (initialDraft) => {
@@ -503,12 +545,13 @@ function Harness({ preferenceKey, project, newThread = false, initialDraft = '',
   return <RendererPluginTestHost><BrowserTabMentionsProvider value={tabs}><ChatComposer
     key={session?.composerKey} attachmentStore={session?.attachmentStore}
     draftSkillReferences={session?.draftSkillReferences}
+    draftSendIntent={session?.draftSendIntent}
     draftWorkspaceReferences={session?.draftWorkspaceReferences}
     activeTurnId={null} client={client} config={null} canClearContext={false}
     contextUsage={{ compactedMessageCount: 0, percent: 0, totalTokens: 256_000, triggerScopes: [], usedTokens: 0, visiblePercent: 0 }}
     preferenceKey={preferenceKey} activeProject={project} currentThread={newThread ? null : { id: threadId, messages, queuedTurnInputs } as unknown as RuntimeThread}
     draft={session?.draft ?? draft} skills={skills} plugins={plugins} onDraftChange={session?.setDraft ?? setDraft} onSend={send}
-    queuedTurnActions={queuedTurnActions ?? { deleteQueuedTurnInput: vi.fn(), releaseQueuedTurnInputEdit: vi.fn(), retrieveQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(), updateQueuedTurnInput: vi.fn() }}
+    queuedTurnActions={queuedTurnActions ?? { deleteQueuedTurnInput: vi.fn(), retrieveQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn() }}
     onAccessModeChange={vi.fn()} onCancelActiveTurn={vi.fn()} onClearContext={vi.fn()} onCompactContext={vi.fn()}
     onSelectModel={vi.fn()} onSetMultiAgentEnabled={vi.fn()} onStartThreadReview={vi.fn()} onSearchProjectEntries={vi.fn()}
   /></BrowserTabMentionsProvider></RendererPluginTestHost>;

@@ -17,18 +17,15 @@ import type {
   DeleteQueuedTurnInputResponse,
   MessageDeleteInput,
   MessagePatch,
-  QueuedTurnInputEditRelease,
-  QueuedTurnInputEditReleaseResponse,
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
-  QueuedTurnInputEditSession,
-  QueuedTurnInputPatch,
   ReorderQueuedTurnInputsInput,
   ReorderQueuedTurnInputsResponse,
   QueuedTurnInputResponse,
   QueueTurnInput,
   RegenerateMessageInput,
   RuntimeThread,
+  RuntimeQueuedTurnInput,
   SendTurnInput,
   SendTurnResponse,
   StartTurnResponse,
@@ -109,9 +106,7 @@ export type DesktopRuntimeClient = {
   steerTurn(threadId: string, turnId: string, input: SteerTurnInput): Promise<SendTurnResponse>;
   queueTurnInput(threadId: string, input: QueueTurnInput): Promise<QueuedTurnInputResponse>;
   reorderQueuedTurnInputs(threadId: string, input: ReorderQueuedTurnInputsInput): Promise<ReorderQueuedTurnInputsResponse>;
-  retrieveQueuedTurnInput(threadId: string, inputId: string): Promise<QueuedTurnInputEditSession>;
-  releaseQueuedTurnInputEdit(threadId: string, inputId: string, input: QueuedTurnInputEditRelease): Promise<QueuedTurnInputEditReleaseResponse>;
-  updateQueuedTurnInput(threadId: string, inputId: string, patch: QueuedTurnInputPatch): Promise<QueuedTurnInputResponse>;
+  retrieveQueuedTurnInput(threadId: string, inputId: string): Promise<RuntimeQueuedTurnInput>;
   deleteQueuedTurnInput(threadId: string, inputId: string): Promise<DeleteQueuedTurnInputResponse>;
   sendQueuedTurnInputNow(threadId: string, inputId: string): Promise<QueuedTurnInputResponse>;
   updateMessage(threadId: string, messageId: string, patch: MessagePatch): Promise<RuntimeThread>;

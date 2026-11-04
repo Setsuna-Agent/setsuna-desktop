@@ -5,9 +5,11 @@ import { createChatAttachmentStore, type ChatAttachmentClient, type ChatAttachme
 import { chatComposerTargetIdentity, chatComposerNewThreadTarget, type ChatComposerTargetIdentity } from '../session/chatComposerIdentity.js';
 import { readChatDraft } from '../session/chatDraftRecovery.js';
 import type { WorkspaceDraftReference } from '../session/chatDraftReferences.js';
+import type { ChatComposerSendIntent } from '../composer/chatComposerModeState.js';
 import { useSessionWriter } from '../../../shared/preferences/sessionStorage.js';
 
 export { chatComposerTargetIdentity, chatComposerNewThreadTarget, type ChatComposerTargetIdentity } from '../session/chatComposerIdentity.js';
+export type { ChatComposerSendIntent } from '../composer/chatComposerModeState.js';
 
 export type ChatComposerSessionState = {
   draft: string;
@@ -17,13 +19,11 @@ export type ChatComposerSessionState = {
   targetIdentity: ChatComposerTargetIdentity;
 };
 
-type ComposerDraftSource = 'draft' | 'queued-edit';
-
 export type SetChatComposerDraft = (
   value: SetStateAction<string>,
   skillReferences?: RuntimeSkillReference[],
   workspaceReferences?: WorkspaceDraftReference[],
-  options?: { source?: ComposerDraftSource },
+  options?: { sendIntent?: ChatComposerSendIntent },
 ) => void;
 
 export type ChatComposerSessionClaim = {
@@ -60,7 +60,7 @@ export function transitionChatComposerSession(
 
 type RetainedComposerSession = ChatComposerSessionState & {
   attachments: ChatAttachmentStore;
-  draftSource: ComposerDraftSource;
+  sendIntent: ChatComposerSendIntent;
 };
 type ComposerSessions = {
   windowKey: string | null;
@@ -80,7 +80,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
   const writer = useSessionWriter(windowKey, 'draft');
   const restoreSession = (identity: ChatComposerTargetIdentity, sessionId: number): RetainedComposerSession => ({
     ...readChatDraft(windowKey, identity), sessionId, targetIdentity: identity,
-    draftSource: 'draft', attachments: createChatAttachmentStore(client, t),
+    attachments: createChatAttachmentStore(client, t), sendIntent: 'message',
   });
   const [storedSessions, setStoredSessions] = useState<ComposerSessions>(() => ({
     windowKey,
@@ -103,7 +103,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     );
     const next = {
       ...transition.state,
-      draftSource: transition.claimed ? current.draftSource : saved.draftSource,
+      sendIntent: transition.claimed ? current.sendIntent : saved.sendIntent,
       attachments: transition.claimed ? current.attachments : saved?.attachments ?? createChatAttachmentStore(client, t),
     };
     const entries = new Map(sessions.entries);
@@ -124,13 +124,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     if (previous.windowKey !== windowKey) return;
     for (const [identity, entry] of sessions.entries) {
       const old = previous.entries.get(identity);
-      // Queue edits are borrowed copies backed by runtime events. Never restore
-      // one as a normal draft without its edit token, including after a crash.
-      if (entry.draftSource === 'queued-edit') {
-        if (old?.draftSource !== 'queued-edit') writer.write(identity, null);
-        continue;
-      }
-      if (old?.draftSource === entry.draftSource && old?.draft === entry.draft
+      if (old?.draft === entry.draft
         && old?.skillReferences === entry.skillReferences && old?.workspaceReferences === entry.workspaceReferences) continue;
       writer.write(identity, entry.draft ? { draft: entry.draft, skillReferences: entry.skillReferences, workspaceReferences: entry.workspaceReferences } : null);
     }
@@ -162,13 +156,12 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
       const entry = [...current.entries.values()].find((item) => item.sessionId === sessionId);
       if (!entry) return current;
       const nextDraft = typeof value === 'function' ? value(entry.draft) : value;
-      // Ordinary typing inherits the edit's source until its owner explicitly finishes.
-      const draftSource = options?.source ?? entry.draftSource;
-      if (typeof value === 'function' && nextDraft === entry.draft && draftSource === entry.draftSource) return current;
+      const sendIntent = options?.sendIntent ?? entry.sendIntent;
+      if (typeof value === 'function' && nextDraft === entry.draft && sendIntent === entry.sendIntent) return current;
       // Plain-text appends retain existing offsets; replacements must supply their own references.
       const nextReferences = skillReferences ?? (nextDraft.startsWith(entry.draft) ? entry.skillReferences : []);
       const nextWorkspaceReferences = workspaceReferences ?? (nextDraft.startsWith(entry.draft) ? entry.workspaceReferences : []);
-      if (draftSource === entry.draftSource && nextDraft === entry.draft && nextReferences.length === entry.skillReferences.length
+      if (sendIntent === entry.sendIntent && nextDraft === entry.draft && nextReferences.length === entry.skillReferences.length
         && nextReferences.every((reference, index) => {
           const previous = entry.skillReferences[index];
           return reference.skillId === previous.skillId && reference.start === previous.start && reference.end === previous.end;
@@ -178,7 +171,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
           return reference.start === previous.start && reference.end === previous.end && reference.entry === previous.entry;
         })) return current;
       const entries = new Map(current.entries);
-      entries.set(entry.targetIdentity, { ...entry, draft: nextDraft, draftSource, skillReferences: nextReferences, workspaceReferences: nextWorkspaceReferences });
+      entries.set(entry.targetIdentity, { ...entry, draft: nextDraft, sendIntent, skillReferences: nextReferences, workspaceReferences: nextWorkspaceReferences });
       return { ...current, entries };
     });
   }, [sessionId]);
@@ -188,7 +181,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     const identity = targetIdentityRef.current;
     const next: RetainedComposerSession = {
       draft: '', skillReferences: [], workspaceReferences: [], sessionId: nextSessionIdRef.current++, targetIdentity: identity,
-      draftSource: 'draft',
+      sendIntent: 'message',
       attachments: createChatAttachmentStore(servicesRef.current.client, servicesRef.current.t),
     };
     setStoredSessions((current) => ({
@@ -211,7 +204,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     claimRef.current = null;
     const next: RetainedComposerSession = {
       draft, skillReferences: [], workspaceReferences: [], sessionId, targetIdentity: identity,
-      draftSource: 'draft',
+      sendIntent: 'message',
       attachments: createChatAttachmentStore(servicesRef.current.client, servicesRef.current.t),
     };
     // Prefills get a local identity so neither visible nor hidden unsent input is replaced.
@@ -239,7 +232,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
       const entries = new Map(current.entries);
       entries.set(identity, {
         ...entry, draft: '', skillReferences: [], workspaceReferences: [], sessionId: nextSessionIdRef.current++,
-        draftSource: 'draft',
+        sendIntent: 'message',
         attachments: createChatAttachmentStore(servicesRef.current.client, servicesRef.current.t),
       });
       return { ...current, entries };
@@ -252,6 +245,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     claimForThread,
     composerKey: `chat-composer-session:${sessionId}`,
     draft: session.draft,
+    draftSendIntent: session.sendIntent,
     draftSkillReferences: session.skillReferences,
     draftWorkspaceReferences: session.workspaceReferences,
     discardThread,

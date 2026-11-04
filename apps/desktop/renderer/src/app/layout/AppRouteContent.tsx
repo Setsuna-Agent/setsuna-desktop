@@ -14,7 +14,7 @@ import type {
 } from 'react';
 import type { ChatAttachmentStore } from '../../features/chat/composer/chatAttachmentStore.js';
 import type { ChatTurnActions } from '../../features/chat/hooks/useChatTurnActions.js';
-import type { SetChatComposerDraft } from '../../features/chat/hooks/useChatComposerSession.js';
+import type { ChatComposerSendIntent, SetChatComposerDraft } from '../../features/chat/hooks/useChatComposerSession.js';
 import type { SettingsPageLocation } from '../../features/settings/settings-types.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
@@ -43,6 +43,7 @@ export type AppRouteContentProps = Readonly<{
   conversationOverviewVisibility: ConversationOverviewVisibility;
   draft: string;
   draftSkillReferences?: RuntimeSkillReference[];
+  draftSendIntent?: ChatComposerSendIntent;
   draftWorkspaceReferences?: WorkspaceDraftReference[];
   focusComposerRequest: number;
   findInChatRequest?: number;

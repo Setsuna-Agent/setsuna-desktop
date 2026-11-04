@@ -5,20 +5,11 @@ import { ChatSendQueue } from '../../../../../src/features/chat/composer/ChatSen
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 
 describe('ChatSendQueue', () => {
-  it('blocks edit without disabling send-now when the composer already has content', () => {
-    const html = renderQueue([
-      queuedInput({ id: 'queued_1', input: 'Keep current draft safe' }),
-    ], true);
-
-    expect(html).toContain('aria-label="请先发送或清空当前输入内容，再编辑队列消息"');
-    expect(html).toContain('aria-label="立即发送"');
-  });
-
   it('keeps Goal send-now disabled until the active turn finishes', () => {
     const html = renderQueue([
       queuedInput({ id: 'queued_message', input: 'Message', kind: 'message' }),
       queuedInput({ id: 'queued_goal', input: 'Goal', kind: 'goal' }),
-    ], false, true);
+    ], true);
 
     expect(html).toContain('data-queue-kind="message"');
     expect(html).toContain('data-queue-kind="goal"');
@@ -29,13 +20,11 @@ describe('ChatSendQueue', () => {
 
 function renderQueue(
   items: RuntimeQueuedTurnInput[],
-  editDisabled = false,
   hasActiveTurn = false,
 ): string {
   return renderToStaticMarkup(
     <I18nProvider initialLocale="zh-CN">
       <ChatSendQueue
-        editDisabled={editDisabled}
         hasActiveTurn={hasActiveTurn}
         items={items}
         onDelete={vi.fn(async () => true)}

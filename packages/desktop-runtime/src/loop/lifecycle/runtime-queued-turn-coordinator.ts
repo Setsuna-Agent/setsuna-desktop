@@ -1,9 +1,5 @@
 import type {
   QueueTurnInput,
-  QueuedTurnInputEditRelease,
-  QueuedTurnInputEditReleaseResponse,
-  QueuedTurnInputEditSession,
-  QueuedTurnInputPatch,
   QueuedTurnInputResponse,
   RuntimeMessage,
   RuntimeQueuedTurnInput,
@@ -27,11 +23,6 @@ import { runtimeTaskSupportsSteering, type RuntimeTurnTaskRegistry } from './tur
 type QueuedTurnRun = {
   done: Promise<void>;
   turnId: string;
-};
-
-type QueuedTurnEditClaim = {
-  editToken: string;
-  inputId: string;
 };
 
 type RuntimeQueuedTurnCoordinatorOptions = {
@@ -77,13 +68,11 @@ const MAX_QUEUED_INPUTS_PER_THREAD = 20;
 /**
  * 管理跨轮次的用户发送队列。
  *
- * 每个线程的写操作在这里串行化，避免自动续发、取回更新、立即发送和删除同时命中
- * 同一队列项。队列本体通过 RuntimeEvent 持久化；内存状态只负责调度互斥、编辑占用、
- * 最新轮次代次和失败暂停。
+ * 每个线程的写操作在这里串行化，避免自动续发、取回、立即发送和删除同时命中
+ * 同一队列项。队列本体通过 RuntimeEvent 持久化；内存状态只负责调度互斥、最新轮次代次和失败暂停。
  */
 export class RuntimeQueuedTurnCoordinator {
   private readonly dispatchingInputIds = new Set<string>();
-  private readonly editingClaimsByThread = new Map<string, QueuedTurnEditClaim>();
   private readonly latestObservedRuns = new Map<string, Promise<unknown>>();
   private readonly observedRuns = new WeakSet<Promise<unknown>>();
   private readonly operationTails = new Map<string, Promise<void>>();
@@ -94,7 +83,6 @@ export class RuntimeQueuedTurnCoordinator {
 
   shutdown(): void {
     this.stopped = true;
-    this.editingClaimsByThread.clear();
     this.latestObservedRuns.clear();
     this.pausedThreads.clear();
   }
@@ -174,9 +162,6 @@ export class RuntimeQueuedTurnCoordinator {
   reorder(threadId: string, inputIds: string[]): Promise<boolean> {
     return this.runExclusive(threadId, async () => {
       this.assertRunning();
-      if (this.editingClaimsByThread.has(threadId)) {
-        throw new Error('Cannot reorder queued inputs while an input is being edited.');
-      }
       const thread = await this.requireThread(threadId);
       const queued = thread.queuedTurnInputs ?? [];
       const requestedIds = new Set(inputIds);
@@ -214,146 +199,30 @@ export class RuntimeQueuedTurnCoordinator {
         createdAt: this.options.clock.now().toISOString(),
         payload: { inputId: queuedInput.id },
       });
-      if (this.editingClaimsByThread.get(threadId)?.inputId === inputId) {
-        this.editingClaimsByThread.delete(threadId);
-        await this.resumeAfterEditingClaimReleased(threadId);
-      }
       return true;
     });
   }
 
-  /**
-   * 原子取回一个待发送项用于编辑。
-   *
-   * 取回期间队列项仍保留在事件投影中，只暂停自动调度；因此响应丢失、页面切换或
-   * 应用退出都不会让消息消失。再次取回同一线程的其他项等价于放弃前一次编辑。
-   */
-  retrieveForEditing(threadId: string, inputId: string): Promise<QueuedTurnInputEditSession> {
+  /** Taking an item removes it atomically; the composer owns an ordinary draft afterwards. */
+  retrieve(threadId: string, inputId: string): Promise<RuntimeQueuedTurnInput> {
     return this.runExclusive(threadId, async () => {
       this.assertRunning();
       const queuedInput = await this.requireQueuedInput(threadId, inputId);
       this.assertNotDispatching(queuedInput.id);
-      const editToken = this.options.ids.id('queued_edit');
-      this.editingClaimsByThread.set(threadId, {
-        editToken,
-        inputId: queuedInput.id,
-      });
-      return {
-        editToken,
-        input: cloneQueuedInput(queuedInput),
-      };
-    });
-  }
-
-  /**
-   * 释放取回编辑并恢复队列调度。令牌不匹配时保持当前编辑不变，避免旧页面的迟到
-   * cleanup 解锁后来开始的新编辑会话。
-   */
-  releaseEditing(
-    threadId: string,
-    inputId: string,
-    input: QueuedTurnInputEditRelease,
-  ): Promise<QueuedTurnInputEditReleaseResponse> {
-    return this.runExclusive(threadId, async () => {
-      this.assertRunning();
-      if (!this.matchesEditingClaim(threadId, inputId, input.editToken)) {
-        return { released: false, resumed: null };
-      }
-
-      this.editingClaimsByThread.delete(threadId);
-      return {
-        released: true,
-        resumed: await this.resumeAfterEditingClaimReleased(threadId),
-      };
-    });
-  }
-
-  /**
-   * 提交取回后的文本并恢复调度。更新事件和后续启动都处于同一线程串行区间内，
-   * 即使客户端收不到响应，原队列项也只会保持更新后状态或已经开始发送。
-   */
-  updateAfterEditing(
-    threadId: string,
-    inputId: string,
-    patch: QueuedTurnInputPatch,
-  ): Promise<QueuedTurnInputResponse> {
-    return this.runExclusive(threadId, async () => {
-      this.assertRunning();
-      const queuedInput = await this.requireQueuedInput(threadId, inputId);
-      if (!this.matchesEditingClaim(threadId, queuedInput.id, patch.editToken)) {
-        throw new Error(`Queued input is not being edited: ${inputId}`);
-      }
-      this.assertNotDispatching(queuedInput.id);
-      const text = patch.input.trim();
-      const kind = normalizeRuntimeQueuedTurnInputKind(queuedInput.kind);
-      let attachments = queuedInput.attachments?.map((attachment) => ({ ...attachment })) ?? [];
-      let modelSelection = queuedInput.modelSelection
-        ? { ...queuedInput.modelSelection }
-        : undefined;
-      if (patch.attachments !== undefined) {
-        attachments = this.options.normalizeAttachments(patch.attachments)
-          .filter(isRuntimeInputMessageAttachment);
-        const nextTurnModel = await this.options.inputGuard.resolveNextTurnModel(
-          await this.requireThread(threadId),
-          modelSelection,
-        );
-        await this.options.inputGuard.assertAttachmentsSupported(
-          attachments,
-          nextTurnModel?.model,
-        );
-        modelSelection = nextTurnModel ? modelReference(nextTurnModel.binding) : undefined;
-      }
-      assertQueuedInputContent(kind, text, attachments);
-      if (kind === 'goal') {
-        const thread = await this.requireThread(threadId);
-        assertNoOtherQueuedGoal(thread.queuedTurnInputs ?? [], queuedInput.id);
-        await this.options.validateGoalInput(threadId, text);
-      }
-      if (patch.attachments !== undefined) {
-        attachments = (await this.options.claimAttachments(threadId, attachments))
-          .filter(isRuntimeInputMessageAttachment);
-      }
-      const skillReferences = text === queuedInput.input
-        ? cloneRuntimeSkillReferences(queuedInput.skillReferences)
-        : undefined;
-      const updatedAt = this.options.clock.now().toISOString();
       await this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
         threadId,
-        type: 'turn.input_updated',
-        createdAt: updatedAt,
-        payload: {
-          input: {
-            ...cloneQueuedInput(queuedInput),
-            input: text,
-            attachments,
-            modelSelection,
-            skillReferences,
-            updatedAt,
-          },
-        },
+        type: 'turn.input_deleted',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { inputId: queuedInput.id },
       });
-
-      this.editingClaimsByThread.delete(threadId);
-      // 编辑完成属于显式用户恢复动作，与重新入队和立即发送保持一致。
-      this.pausedThreads.delete(threadId);
-      const updatedThread = await this.requireThread(threadId);
-      const next = updatedThread.queuedTurnInputs?.find(
-        (item) => !this.dispatchingInputIds.has(item.id),
-      );
-      if (!next) return queuedResponse(queuedInput.id);
-      const response = await this.dispatchInputIfIdle(threadId, next);
-      // 编辑不会改变原有 FIFO 位置；若更早的项先启动，当前编辑项仍应报告 queued。
-      return next.id === queuedInput.id ? response : queuedResponse(queuedInput.id);
+      return queuedInput;
     });
   }
 
   sendNow(threadId: string, inputId: string): Promise<QueuedTurnInputResponse> {
     return this.runExclusive(threadId, async () => {
       this.assertRunning();
-      if (this.editingClaimsByThread.has(threadId)) {
-        throw new Error('A queued input is currently being edited.');
-      }
       const queuedInput = await this.requireQueuedInput(threadId, inputId);
       this.assertNotDispatching(queuedInput.id);
 
@@ -424,7 +293,7 @@ export class RuntimeQueuedTurnCoordinator {
           }
           return;
         }
-        if (this.isDispatchPaused(threadId)) return;
+        if (this.pausedThreads.has(threadId)) return;
         const thread = await this.requireThread(threadId);
         if (!this.isLatestObservedRun(threadId, settledRun)) return;
         const next = thread.queuedTurnInputs?.find((input) => !this.dispatchingInputIds.has(input.id));
@@ -441,7 +310,7 @@ export class RuntimeQueuedTurnCoordinator {
     threadId: string,
     input: RuntimeQueuedTurnInput,
   ): Promise<QueuedTurnInputResponse> {
-    if (this.isDispatchPaused(threadId)) {
+    if (this.pausedThreads.has(threadId)) {
       return queuedResponse(input.id);
     }
     if (this.options.turnTasks.activeForThread(threadId)) {
@@ -492,20 +361,6 @@ export class RuntimeQueuedTurnCoordinator {
     return cloneQueuedInput(queuedInput);
   }
 
-  /**
-   * 所有解除编辑占用的路径都从这里恢复队首，避免 delete/release 的行为逐渐分叉。
-   */
-  private async resumeAfterEditingClaimReleased(
-    threadId: string,
-  ): Promise<QueuedTurnInputResponse | null> {
-    if (this.pausedThreads.has(threadId)) return null;
-    const thread = await this.requireThread(threadId);
-    const next = thread.queuedTurnInputs?.find(
-      (item) => !this.dispatchingInputIds.has(item.id),
-    );
-    return next ? this.dispatchInputIfIdle(threadId, next) : null;
-  }
-
   private assertNotDispatching(inputId: string): void {
     if (this.dispatchingInputIds.has(inputId)) {
       throw new Error('Queued input is already being sent.');
@@ -514,19 +369,6 @@ export class RuntimeQueuedTurnCoordinator {
 
   private assertRunning(): void {
     if (this.stopped) throw new Error('Desktop runtime is shutting down.');
-  }
-
-  private isDispatchPaused(threadId: string): boolean {
-    return this.pausedThreads.has(threadId) || this.editingClaimsByThread.has(threadId);
-  }
-
-  private matchesEditingClaim(threadId: string, inputId: string, editToken: string): boolean {
-    const claim = this.editingClaimsByThread.get(threadId);
-    return Boolean(
-      editToken
-      && claim?.inputId === inputId
-      && claim.editToken === editToken,
-    );
   }
 
   private isLatestObservedRun(threadId: string, run: Promise<unknown>): boolean {

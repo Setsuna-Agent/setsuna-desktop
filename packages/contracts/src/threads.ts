@@ -770,30 +770,6 @@ export type QueueTurnInput = Omit<SteerTurnInput, 'expectedTurnId'> & {
   modelSelection?: RuntimeConfiguredModelReference;
 };
 
-/**
- * 取回编辑使用独立会话令牌，确保旧页面的迟到 release 不会解锁后来重新开始的编辑。
- */
-export type QueuedTurnInputEditSession = {
-  editToken: string;
-  input: RuntimeQueuedTurnInput;
-};
-
-export type QueuedTurnInputEditRelease = {
-  editToken: string;
-};
-
-export type QueuedTurnInputEditReleaseResponse = {
-  released: boolean;
-  resumed: QueuedTurnInputResponse | null;
-};
-
-export type QueuedTurnInputPatch = {
-  editToken: string;
-  input: string;
-  /** undefined 表示保留原附件，空数组表示移除全部附件。 */
-  attachments?: RuntimeInputMessageAttachment[];
-};
-
 export type QueuedTurnInputDisposition = 'queued' | 'started' | 'steered';
 
 export type QueuedTurnInputResponse = {

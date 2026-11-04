@@ -17,12 +17,12 @@
 - 普通消息的“立即发送”仍共享当前 `turnId`，并在下一个安全模型检查点被消费。
 - 普通、Goal 作为显式队列类型持久化，不能在排队过程中丢失执行语义。
 - renderer、REST 和 runtime 共享同一套 contract 与事件投影，不维护平行状态。
-- 并发的自动调度、排序、取回更新、立即发送和删除必须保证不丢、不重；默认 FIFO，显式排序后按新顺序发送。
+- 并发的自动调度、排序、取回、立即发送和删除必须保证不丢、不重；默认 FIFO，显式排序后按新顺序发送。
 
 非目标：
 
 - 不在当前正在流式输出的模型请求中直接插入 token。
-- 取回编辑支持文本和附件；队列项原有 Skill 与 thinking 配置保持不变。
+- 取回编辑覆盖当前输入的文本、附件和 Skill 引用；再次发送使用提交时的模型与 thinking 配置。
 - 队列不替代 active turn 内部的 mailbox 和 steer 检查点队列。
 
 ## 数据模型与事件
@@ -32,16 +32,17 @@
 - 稳定 `id` 和可选 `clientId`。
 - `kind: 'message' | 'goal'`；旧版本遗留项缺失或为已移除的 `plan` 时按 `message` 读取。
 - 文本、输入附件、Skill 和 thinking 配置。
-- `createdAt` 与可选 `updatedAt`。
+- `createdAt` 与兼容历史更新事件的可选 `updatedAt`。
 
 队列通过 append-only 事件持久化：
 
 ```text
 turn.input_queued
-turn.input_updated
 turn.inputs_reordered
 turn.input_deleted
 ```
+
+历史 `turn.input_updated` 继续解码和投影，当前编辑流程不再产生该事件。
 
 队列项开始发送时不额外写“dequeued”事件。普通项的初始用户消息通过 `message.created.queuedInputId` 原子消费；Goal 项在同一个 `appendEvents` 批次中写入带 `queuedInputId` 的 Core `message.created` 和 `goal.state-replaced@1` Feature envelope。前者原子消费队列并建立可见用户消息，后者建立 Goal 私有状态，因此不会双写旧事件或留下部分语义。
 
@@ -76,17 +77,6 @@ type QueueTurnInput = Omit<SteerTurnInput, 'expectedTurnId'> & {
   kind?: 'message' | 'goal';
 };
 
-type QueuedTurnInputPatch = {
-  editToken: string;
-  input: string;
-  attachments?: RuntimeInputMessageAttachment[];
-};
-
-type QueuedTurnInputEditSession = {
-  editToken: string;
-  input: RuntimeQueuedTurnInput;
-};
-
 type QueuedTurnInputResponse = {
   accepted: true;
   disposition: 'queued' | 'started' | 'steered';
@@ -101,8 +91,6 @@ HTTP 入口：
 POST   /v1/threads/:threadId/queued-turn-inputs
 POST   /v1/threads/:threadId/queued-turn-inputs/reorder
 POST   /v1/threads/:threadId/queued-turn-inputs/:inputId/retrieve
-POST   /v1/threads/:threadId/queued-turn-inputs/:inputId/release
-PATCH  /v1/threads/:threadId/queued-turn-inputs/:inputId
 DELETE /v1/threads/:threadId/queued-turn-inputs/:inputId
 POST   /v1/threads/:threadId/queued-turn-inputs/:inputId/send-now
 ```
@@ -136,7 +124,7 @@ POST /v1/threads/:threadId/turns/:turnId/steer
 
 - active turn 存在时，普通 start 请求转为入队。
 - 线程因取消或错误留下待发送项时，新的普通 start 也先入队并恢复旧队首。
-- 输入一旦写入 `turn.input_queued` 就返回可表示 `queued` 的成功响应；即使编辑占用暂时阻止调度，也不能返回会诱导客户端重试的失败。
+- 输入一旦写入 `turn.input_queued` 就返回可表示 `queued` 的成功响应，不能因为尚未调度就返回会诱导客户端重试的失败。
 - 只有显式 send-now 或 steer API 才能插入当前 turn。
 
 这保证 renderer 与 SSE 短暂不同步时不会意外恢复旧的“立即引导”行为。
@@ -145,7 +133,7 @@ POST /v1/threads/:threadId/turns/:turnId/steer
 
 队列协调器观察所有可能占用线程的任务。只有该 turn 存在 `turn.completed` 且不存在任何 `turn.cancelled` / `runtime.error` 时，才调度下一个队首；取消或错误优先于迟到写入的 completed。每个线程还记录最新观察到的 run，旧 run 的迟到结算不能重新暂停或续发已经恢复的新 run。
 
-`turn.cancelled` 或 `runtime.error` 会暂停自动调度并保留队列；之后用户点击“立即发送”、提交新输入或完成一次取回编辑，才恢复队列。
+`turn.cancelled` 或 `runtime.error` 会暂停自动调度并保留队列；之后用户点击“立即发送”、提交新输入，才恢复队列。
 
 用户队列优先于目标自动续轮。`RuntimeGoalCoordinator` 在创建 goal continuation 前检查队列，避免目标轮次长期抢占用户输入。
 
@@ -156,7 +144,7 @@ POST /v1/threads/:threadId/turns/:turnId/steer
 
 ### 排序
 
-reorder 接收 `ReorderQueuedTurnInputsInput.inputIds`，必须恰好包含当前队列的所有 ID，且不能重复。校验与落盘和自动调度共用线程串行锁；拖动过程中发生入队、删除或发送时，旧请求会被整体拒绝，不会丢项或恢复已发送的内容。编辑占用和调度中的项也不允许排序。
+reorder 接收 `ReorderQueuedTurnInputsInput.inputIds`，必须恰好包含当前队列的所有 ID，且不能重复。校验与落盘和自动调度共用线程串行锁；拖动过程中发生入队、删除或发送时，旧请求会被整体拒绝，不会丢项或恢复已发送的内容。调度中的项不允许排序。
 
 `turn.inputs_reordered` 只保存新顺序，投影器保留每项的文本、附件、模型、Skill 与 thinking 设置。重复提交同一顺序不写新事件。排序不主动发送，也不会解除取消或失败后的暂停；下一次正常调度按新队首执行。
 
@@ -178,20 +166,13 @@ Goal 不能被改写为当前 turn 的 steer；active turn 存在时 UI 禁用�
 
 ### 取回编辑
 
-retrieve 在线程串行区间内创建带随机令牌的编辑会话，但不会删除持久化队列数据；自动调度在编辑期间暂停。renderer 把返回的文本和附件放入主输入框并临时隐藏该行。用户再次提交时，PATCH 必须携带同一令牌，原子写入完整的 `turn.input_updated`、释放编辑会话，并按当时的 active/idle 状态继续排队或启动。
+retrieve 在线程串行区间内读取并校验队列项，写入 `turn.input_deleted` 后直接返回 `RuntimeQueuedTurnInput`。调度和取回竞争时，只能由一个入口消费该项；已发送或删除的项会拒绝取回。
 
-release 也必须携带同一令牌。旧页面或旧请求的迟到 release 无法释放后来重新创建的编辑会话。renderer 在以下路径主动 release：
+renderer 收到返回值后，用文本、附件和 Skill 引用覆盖发起操作的输入框，Goal 类型恢复 Goal 模式。返回内容成为普通草稿，沿用既有草稿保存和发送失败恢复；没有编辑会话、令牌、release、PATCH 或专属提交路径。短暂的取回请求结束后，队列中的其他项继续按既定顺序调度，删除、立即发送和排序也不受该草稿影响。
 
-- 用户点击输入框 footer 中的紧凑“正在编辑队列消息”关闭按钮。
-- 组件卸载或切换线程。
-- retrieve 返回时 identity guard 已判定请求过期。
-- PATCH 失败；若 release 同样失败则保留编辑 UI 供重试。
+再次发送时通过普通发送入口创建新消息。若仍有 active turn 或队列项，则生成新 ID 并入队尾，不回写旧位置；模型和 thinking 设置使用本次提交时的选择。其他仍在排队的项继续保留它们各自的执行快照。取回本身不会解除取消或失败后的自动调度暂停。
 
-只有 composer 没有草稿、附件、已选 Skill 或 Goal/Review 临时模式时才允许开始编辑；思考开关与强度是持久化的模型偏好，取回编辑不会覆盖它们，也不因此禁用编辑。取回请求期间 composer 暂时禁用，避免用户刚输入的内容被迟到响应覆盖。因此无需牺牲现有 composer 状态。retrieve 响应丢失、页面切换、组件卸载或应用退出时，原队列项仍可从事件投影恢复，不存在“持久化消息已删除、草稿只存在内存”的窗口。
-
-编辑副本及其修改只属于当前 edit token，不进入普通草稿持久化。刷新或异常退出后恢复原队列项，不生成可再次普通发送的副本；文本为空、仅包含附件的取回编辑遵循相同规则。
-
-删除当前正在编辑的项也属于释放编辑占用；删除事件落盘后必须复用 release 的恢复入口，在非暂停且线程空闲时继续调度剩余队首。
+迟到响应仍交给原 composer session 的草稿回调，切换对话后也不会丢掉已经取出的消息，或覆盖新对话的输入。
 
 ## Renderer 交互
 
@@ -202,8 +183,8 @@ composer 上方渲染 `ChatSendQueue`：
 - 队列 ID 或顺序变化、切换线程、开始编辑时取消未完成的拖动；落下后通过排序 API 写入，显示顺序以 SSE 事件为准。
 - 每项展示文本和附件名；普通、Goal 分别使用消息和目标图标。消息真正进入 transcript 后仍保留 `inputKind`，Goal 用户消息继续显示目标语义图标。
 - 普通项的“立即发送”调用 send-now API；Goal 在 active turn 期间等待自动调度。
-- “编辑”调用 retrieve 后把文本与附件放入主输入框并隐藏原行；可删除或补充附件，再通过 PATCH 原子更新原队列项。
-- composer 已有内容时只禁用“编辑”，不会影响立即发送和删除；编辑期间通过 footer 小标签显式取消。
+- “编辑”调用 retrieve 取走队列项，把文本、附件和 Skill 引用放入输入框；修改后通过普通入口发送为新消息。
+- composer 已有内容时允许“编辑”直接覆盖；取回后不保留编辑标签，也不锁定其他队列操作。
 - “删除”只移除尚未发送的项。
 - 队列为空时组件返回 `null`，不占用输入框上方空间。
 
@@ -235,14 +216,12 @@ active turn 期间：
 - 超过 20 项：runtime 拒绝继续入队。
 - 队列项已发送或不存在：取回编辑不会覆盖主输入框，send-now 返回 not found；重复删除返回 `deleted: false`。
 - 项正在调度：取回、删除和重复 send-now 返回明确错误。
-- 编辑期间当前 turn 结束：原队列项保持持久化和暂停，直到用户提交或显式取消。
-- 另一窗口删除正在编辑的项：清除编辑占用并尝试恢复剩余队首。
-- 旧编辑会话迟到释放：令牌不匹配，不影响当前编辑会话。
+- 修改取回内容期间当前 turn 结束：其余队列项照常自动发送，取回内容仍保留在输入草稿中。
+- 切换对话后取回响应迟到：内容仍交给发起操作的草稿，不覆盖新对话输入。
 - review active：普通补充支持 steer，且保持审查只读权限；compact 或 user-shell active 不能 steer，但可以排队，正常完成后自动发送。
 - 取消或错误：队列保留且不自动发送。
 - runtime 重启：队列从事件投影恢复；不会在没有新用户动作时擅自恢复失败前的自动发送。
 - 普通 start 与 active turn 竞态：服务端转为排队。
-- 编辑占用下的普通 start：返回 `queued` 成功且只持久化一次，不恢复草稿诱导重复提交。
 
 ## 验证覆盖
 
@@ -251,17 +230,16 @@ runtime 与 contract 测试覆盖：
 - 事件投影的入队、更新、删除和 `message.created` 原子消费。
 - 多项按 FIFO 自动创建独立 turn。
 - send-now 复用同 turn steer。
-- 取回期间保持持久化和暂停；显式 release 恢复调度，旧令牌不能释放新会话。
-- 更新后发送新文本和附件，删除项不进入 transcript。
+- 原子取回只消费一次，其他消息照常调度；再次提交生成新 ID 并进入队尾。
+- 取回保留附件和 Skill 引用，重新提交可替换附件；删除项不进入 transcript。
 - 错误后暂停；新输入恢复时旧项优先。
 - cancelled 后迟到的 completed 不会续发；旧 run 的迟到结算不会污染新 run。
 - active 期间误发普通 start 也会排队。
 - Goal 类型持久化、专用调度和原子消费。
 - Goal 入队前校验、当前 Goal 的显式替换，以及附件与执行选项续轮复用。
-- 删除当前编辑项后恢复剩余队首；编辑占用下 start 返回 queued 成功且不重复。
-- REST 的创建、retrieve、release、更新、删除和 send-now 路由；AppServer busy start 返回显式 queued 结果而不伪造 turn ID。
+- REST 的创建、retrieve、删除和 send-now 路由；AppServer busy start 返回显式 queued 结果而不伪造 turn ID。
 
-renderer 测试覆盖队列顺序、空态、附件摘要和操作入口。原有 steer transcript、工具顺序、final drain 与 guidance timeline 测试继续覆盖立即发送路径。
+renderer 测试验证覆盖已有输入、普通草稿恢复、取回后继续操作其他队列项，以及切换对话后迟到响应的归属。原有 steer transcript、工具顺序、final drain 与 guidance timeline 测试继续覆盖立即发送路径。
 
 ## 相关文件
 
