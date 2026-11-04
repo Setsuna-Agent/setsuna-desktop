@@ -50,6 +50,47 @@ it('keeps browser previews for PDF and does not reveal an artifact in an unrelat
   expect(onShowInFiles).not.toHaveBeenCalled();
 });
 
+it('opens the artifact with the system default app only on double-click', async () => {
+  const user = userEvent.setup();
+  const host = { startFileDrag: null, createWorkspaceFilePreview: vi.fn(), openWorkspaceFile: vi.fn().mockResolvedValue({ ok: true }) };
+  render(<ArtifactToolResultView host={host} payload={artifact} threadId="thread" translate={(key) => key} />);
+  const name = screen.getByText(artifact.name);
+  await user.click(name);
+  expect(host.openWorkspaceFile).not.toHaveBeenCalled();
+  await user.dblClick(name);
+  await waitFor(() => expect(host.openWorkspaceFile).toHaveBeenCalledExactlyOnceWith('/repo', 'docs/report.md'));
+  expect(host.createWorkspaceFilePreview).not.toHaveBeenCalled();
+});
+
+it('does not open the default app when the open-mode button is double-clicked', async () => {
+  const user = userEvent.setup();
+  const host = { startFileDrag: null, createWorkspaceFilePreview: null, openWorkspaceFile: vi.fn() };
+  render(<ArtifactToolResultView host={host} payload={artifact} threadId="thread" translate={(key) => key} />);
+  await user.dblClick(screen.getByRole('button', { name: 'feature.artifact.openMode' }));
+  expect(host.openWorkspaceFile).not.toHaveBeenCalled();
+});
+
+it('ignores repeated double-clicks while opening and reports native open failures', async () => {
+  const user = userEvent.setup();
+  let finishOpen!: (result: { ok: false; error: string }) => void;
+  const openWorkspaceFile = vi.fn(() => new Promise<{ ok: false; error: string }>((resolve) => { finishOpen = resolve; }));
+  render(<ArtifactToolResultView host={{ startFileDrag: null, createWorkspaceFilePreview: null, openWorkspaceFile }}
+    payload={artifact} threadId="thread" translate={(key, values) => String(values?.error ?? key)} />);
+  await user.dblClick(screen.getByText(artifact.name));
+  await user.dblClick(screen.getByText(artifact.name));
+  expect(openWorkspaceFile).toHaveBeenCalledExactlyOnceWith('/repo', 'docs/report.md');
+  finishOpen({ ok: false, error: 'File no longer exists.' });
+  expect((await screen.findByRole('alert')).textContent).toContain('File no longer exists.');
+});
+
+it('reports unavailable native opening on double-click', async () => {
+  const user = userEvent.setup();
+  render(<ArtifactToolResultView host={{ startFileDrag: null, createWorkspaceFilePreview: null, openWorkspaceFile: null }}
+    payload={artifact} threadId="thread" translate={(key) => key} />);
+  await user.dblClick(screen.getByText(artifact.name));
+  expect((await screen.findByRole('alert')).textContent).toContain('feature.artifact.localUnsupported');
+});
+
 it('exports the artifact file through the native bridge and reports a missing file', async () => {
   const host = {
     createWorkspaceFilePreview: null, openWorkspaceFile: null,
