@@ -20,9 +20,10 @@ void app.whenReady().then(async () => {
   await writeFile(path.join(root, 'dist/renderer/index.html'), '<!doctype html><title>Recovery fixture</title><body>Ready</body>');
   const window = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
   const state = () => ({ visible: window.isVisible(), minimized: window.isMinimized(), focused: window.isFocused() });
-  for (const event of ['show', 'hide', 'focus', 'restore'] as const) {
-    window.on(event, () => console.log('RENDERER_RECOVERY_WINDOW', event, state()));
-  }
+  window.on('show', () => console.log('RENDERER_RECOVERY_WINDOW show', state()));
+  window.on('hide', () => console.log('RENDERER_RECOVERY_WINDOW hide', state()));
+  window.on('focus', () => console.log('RENDERER_RECOVERY_WINDOW focus', state()));
+  window.on('restore', () => console.log('RENDERER_RECOVERY_WINDOW restore', state()));
   let prepared = 0;
   let loaded = 0;
   window.webContents.on('did-finish-load', () => { loaded += 1; });
