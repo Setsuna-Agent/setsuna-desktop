@@ -101,11 +101,22 @@ it('guards a configured custom root before its writable probe or profile selecti
 
 it('fails closed when legacy metadata cannot be inspected', async () => {
   const fixture = await createFixture();
-  vi.mocked(lstatSync).mockImplementationOnce(() => { throw Object.assign(new Error('access denied'), { code: 'EACCES' }); });
-
-  expect(resolveDesktopDataRootBootMode(fixture)).toMatchObject({
-    mode: 'recovery', reason: 'configured_root_invalid', error: expect.stringContaining('cannot be inspected safely'),
+  const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+  const journalPath = path.join(fixture.defaultRoot, '.webdav-sync-restore.json');
+  vi.mocked(lstatSync).mockImplementation((...args) => {
+    if (args[0] === journalPath) {
+      throw Object.assign(new Error('access denied'), { code: 'EACCES' });
+    }
+    return actualFs.lstatSync(...args);
   });
+
+  try {
+    expect(resolveDesktopDataRootBootMode(fixture)).toMatchObject({
+      mode: 'recovery', reason: 'configured_root_invalid', error: expect.stringContaining('cannot be inspected safely'),
+    });
+  } finally {
+    vi.mocked(lstatSync).mockImplementation(actualFs.lstatSync);
+  }
 });
 
 it.each(['source', 'target'] as const)('does not begin pending migration with a legacy restore in its %s root', async (location) => {
