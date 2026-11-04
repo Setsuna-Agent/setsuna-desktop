@@ -24,7 +24,7 @@
 3. 与 splash 加载并行补齐桌面进程 PATH，完成后解析随包发布的 ripgrep。
 4. 启动原生凭据 bridge，并激活 Main Feature composition；Browser server、Terminal/Updater IPC 等由各自 Feature scope 管理。
 5. 创建 `RuntimeHost`，并行启动 runtime 与加载 Vite dev server 或 `dist/renderer/index.html`。
-6. Runtime 数据恢复完成后，启动 WebDAV 调度、初始化 updater 持久下载源并注册其余宿主 IPC。
+6. 初始化 updater 持久下载源并注册其余宿主 IPC。
 7. `desktop.whenReady()` 在以上服务准备完成后放行 renderer 的偏好设置、Feature 和工作台初始化；JS、CSS 等资源已可提前加载。维护模式复用同一入口，无需启动 runtime。
 8. renderer 首帧完成后揭示主界面并启动 updater。
 
@@ -234,7 +234,7 @@ BrowserToolHost（通用 ToolHost adapter）
 
 正常关闭按依赖逆序进行：
 
-1. Main 先停止 Updater 定时检查与 WebDAV 调度等新的外围工作。
+1. Main 先停止 Updater 定时检查等新的外围工作。
 2. Runtime server 停止接收新请求并关闭 SSE。
 3. 终止 app-server command/fs manager，`AgentLoop.shutdown()` 取消并排空 turn、后台 memory 和压缩生成，之后刷入事件。
 4. 等待已进入的 HTTP handler 完成，dispose Runtime Feature composition（其中 MCP scope 关闭连接），再关闭后台 shell 和 thread store。

@@ -63,6 +63,8 @@ import type {
   RetainedDataRootBackup,
 } from './model.js';
 import { relocateDataRootContents } from './relocate.js';
+import { legacyRestoreStartupError } from './legacy-restore-guard.js';
+import { hasExpectedDataRootMarker, isPlainDataRootDirectory } from './recovery-root-validation.js';
 import {
   deleteRetainedDataRootBackup,
   dismissRetainedDataRootBackups,
@@ -393,14 +395,12 @@ export class DesktopDataRootCoordinator {
       return failure('invalid_mode', 'Storage recovery is not active.');
     }
     const root = this.bootMode.pointer.dataRoot;
+    const restoreError = root ? legacyRestoreStartupError(root) : undefined;
+    if (restoreError) return failure('configured_root_invalid', restoreError, root);
     const stats = await lstat(root).catch(() => null);
     const marker = root ? readDataRootMarkerSync(root) : undefined;
     const isDefaultRoot = samePath(root, this.bootMode.defaultRoot);
-    if (
-      !stats?.isDirectory()
-      || stats.isSymbolicLink()
-      || (!isDefaultRoot && marker?.rootId !== this.bootMode.pointer.rootId)
-    ) {
+    if (!isPlainDataRootDirectory(stats) || !hasExpectedDataRootMarker(isDefaultRoot, marker?.rootId, this.bootMode.pointer.rootId)) {
       return failure('configured_root_unavailable', 'The configured data location is still unavailable.', root);
     }
     const writeError = probeDataRootWritableSync(root);
@@ -424,13 +424,15 @@ export class DesktopDataRootCoordinator {
     }
     const pointer = this.bootMode.pointer;
     const previousRoot = pointer.previousDataRoot || this.bootMode.defaultRoot;
+    const restoreError = legacyRestoreStartupError(previousRoot);
+    if (restoreError) return failure('configured_root_invalid', restoreError, previousRoot);
     const stats = await lstat(previousRoot).catch(() => null);
-    if (!stats?.isDirectory() || stats.isSymbolicLink()) {
+    if (!isPlainDataRootDirectory(stats)) {
       return failure('previous_root_unavailable', 'The previous data location is unavailable.', previousRoot);
     }
     const previousIsDefault = samePath(previousRoot, this.bootMode.defaultRoot);
     const marker = previousIsDefault ? undefined : readDataRootMarkerSync(previousRoot);
-    if (!previousIsDefault && marker?.rootId !== pointer.previousRootId) {
+    if (!hasExpectedDataRootMarker(previousIsDefault, marker?.rootId, pointer.previousRootId)) {
       return failure('previous_root_invalid', 'The previous data location has an invalid ownership marker.', previousRoot);
     }
     const writeError = probeDataRootWritableSync(previousRoot);

@@ -18,7 +18,6 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 | `plugins` | 用户选择本地 Bundle 目录并安装 | `packages/features/plugin-management/src/{preload,main}/` |
 | `desktopReview` | review state、stage、unstage、discard | `packages/features/review/src/{preload,main}/` |
 | `terminal` | session open/write/read/resize/restart/close、事件 | `packages/features/terminal/src/{preload,main}/` |
-| `webdavSync` | 连接、备份、还原、取消与状态事件 | `packages/features/webdav-sync/src/{preload,main}/` |
 | `workspaceApps` | 应用列表与打开 workspace/file | `packages/features/workspace-apps/src/{preload,main}/` |
 | `updater` | 状态、检查、下载源、安装包打开与状态事件 | `packages/features/updater/src/{preload,main}/` |
 | `windowsSandbox` | 状态检测与安装、修复、卸载 | `packages/features/windows-sandbox/src/{preload,main}/` |

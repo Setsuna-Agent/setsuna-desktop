@@ -138,7 +138,7 @@ Input 中未提供 key 表示不覆盖；不能把 UI 空输入误解释为删�
 回合结算、取消和 Goal 核算按事件类型/turn 查询持久记录，不再解压无关的流式归档。
 
 v5 移除事件 ID ledger 上重复的 seq 唯一索引；事件 ID 仍由 ledger 主键保证唯一，
-seq 由事件表主键保证唯一。大事件可以混合 TEXT 与 gzip BLOB，WebDAV 恢复会保留编码并重映射项目引用。
+seq 由事件表主键保证唯一。大事件可以混合 TEXT 与 gzip BLOB。
 
 ### Recovery
 
@@ -169,7 +169,6 @@ Legacy import 测试使用冻结的历史 JSON/JSONL fixture，避免由当前�
 
 - 本地文件只保存原路径引用和 metadata，不复制源文件；只有无本地路径的图片保存受管字节。
 - 本地引用解析为精确文件的 direct-tool-only readable root，不进入 shell sandbox plan，也不新增写权限；已有 workspace/writable-root 权限仍适用。删除引用或 thread 不会删除用户的原文件。
-- WebDAV 可移植快照会剔除设备本地文件引用，但保留受管图片记录，避免恢复时把旧绝对路径绑定到另一台设备的文件。
 - 受管图片验证名称、MIME 以及 PNG/JPEG/GIF/WebP 的真实文件签名；本地链接不设大小上限，无路径图片的单次托管请求保留独立的内存安全边界。
 - 临时 asset 在 turn/thread 认领后转为持久化归属。
 - Recovery 清理无主或不完整 staging。

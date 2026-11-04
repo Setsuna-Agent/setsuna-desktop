@@ -16,6 +16,13 @@ describe('data root volume detection', () => {
     expect(isPathOnNetworkMount('/Users/user/Setsuna Data', mounts)).toBe(false);
   });
 
+  it('still recognizes WebDAV network filesystems after retiring sync', () => {
+    const mounts = parseDarwinMounts('https://storage.example/dav on /Volumes/Remote (webdav, nodev, nosuid)');
+
+    expect(isPathOnNetworkMount('/Volumes/Remote/Setsuna Data', mounts)).toBe(true);
+    expect(isPathOnNetworkMount('/Volumes/RemoteLocal/Setsuna Data', mounts)).toBe(false);
+  });
+
   it('uses the longest mount when a local volume is nested under a network share', () => {
     const mounts = parseDarwinMounts([
       'server:/team on /Volumes/Team (nfs, nodev, nosuid)',

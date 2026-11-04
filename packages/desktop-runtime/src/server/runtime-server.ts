@@ -111,7 +111,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
         return;
       }
 
-      if (await maintenanceGate.handle(request, response, url)) return;
+      if (maintenanceGate.handle(request, response, url)) return;
       maintenanceGate.assertAcceptingRequests();
 
       if (request.method === 'GET' && url.pathname === '/v1/swe/app-server/events') {

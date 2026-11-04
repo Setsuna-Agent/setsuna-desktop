@@ -44,7 +44,6 @@
       "@setsuna-desktop/feature-usage/*": ["packages/features/usage/src/*"],
       "@setsuna-desktop/feature-updater/*": ["packages/features/updater/src/*"],
       "@setsuna-desktop/feature-vision-recognition/*": ["packages/features/vision-recognition/src/*"],
-      "@setsuna-desktop/feature-webdav-sync/*": ["packages/features/webdav-sync/src/*"],
       "@setsuna-desktop/feature-windows-sandbox/*": ["packages/features/windows-sandbox/src/*"],
       "@setsuna-desktop/feature-workspace-apps/*": ["packages/features/workspace-apps/src/*"],
       "@setsuna-desktop/feature-workspace-dependencies/*": ["packages/features/workspace-dependencies/src/*"]
@@ -88,7 +87,6 @@
     { "path": "./packages/features/usage/tsconfig.build.json" },
     { "path": "./packages/features/updater/tsconfig.build.json" },
     { "path": "./packages/features/vision-recognition/tsconfig.build.json" },
-    { "path": "./packages/features/webdav-sync/tsconfig.build.json" },
     { "path": "./packages/features/windows-sandbox/tsconfig.build.json" },
     { "path": "./packages/features/workspace-apps/tsconfig.build.json" },
     { "path": "./packages/features/workspace-dependencies/tsconfig.build.json" },

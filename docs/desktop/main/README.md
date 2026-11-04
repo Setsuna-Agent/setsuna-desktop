@@ -20,7 +20,6 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 | `packages/features/review/src/main` | Git review 状态、watcher、IPC 与 stage/unstage/discard | [本机能力](native-capabilities.md) |
 | `packages/features/workspace-apps/src/main` | 外部应用检测、平台启动参数与 IPC | [本机能力](native-capabilities.md) |
 | `packages/features/updater/src/main` | release metadata、下载源、checksum、安装包与 IPC | [本机能力](native-capabilities.md) |
-| `packages/features/webdav-sync/src/main` | 加密 WebDAV 备份、还原事务、调度与 IPC | [WebDAV 设计](../../designs/current/webdav-backup-and-restore.md) |
 | `packages/features/windows-sandbox/src/main` | sidecar、信任快照、受限出口与 IPC | [Windows 原生沙箱](../../designs/current/windows-native-sandbox.md) |
 | `src/workspace/` | 宿主文件打开、生成图片动作 | [本机能力](native-capabilities.md) |
 | `src/i18n/` | main 原生菜单与提示文案 | [本机能力](native-capabilities.md) |
@@ -57,10 +56,9 @@ Windows 开发窗口在显示前通过 `setAppDetails` 配置开发 AppUserModel
 
 1. Desktop 环境与 bundled ripgrep。
 2. Credential vault 与 `DesktopNativeBridgeServer` 容器。
-3. Main Feature composition；Network Proxy Feature 启动代理服务与浏览器路由，Browser Feature 启动 controller 和独立 control server，Terminal、Updater、WebDAV 等 Feature 注册服务与 IPC。
+3. Main Feature composition；Network Proxy Feature 启动代理服务与浏览器路由，Browser Feature 启动 controller 和独立 control server，Terminal、Updater 等 Feature 注册服务与 IPC。
 4. 启动 native bridge，再创建 `RuntimeHost`，注入 Browser Feature 与 native bridge 的地址/token；runtime 启动与 renderer 资源加载并行。
-5. Runtime 成功打开数据后确认待验证的 WebDAV 还原，并启动自动备份调度。
-6. 初始化 Updater 的持久下载源和其余宿主 IPC，再通过 `desktop.whenReady()` 放行 renderer 业务初始化；renderer 首帧后才启动自动检查。
+5. 初始化 Updater 的持久下载源和其余宿主 IPC，再通过 `desktop.whenReady()` 放行 renderer 业务初始化；renderer 首帧后才启动自动检查。
 
 Runtime 依赖 Browser Feature/native bridge 的地址和 token，因此相应 provider 必须先激活；关闭时先停止 runtime consumer，再 dispose Main Feature composition。
 
@@ -122,6 +120,5 @@ Windows 用户可选择关闭窗口时直接退出或隐藏到系统托盘。托
 - `packages/features/workspace-apps/test/{main,renderer}/`
 - `packages/features/terminal/test/integration/main/`
 - `packages/features/updater/test/{main,renderer}/`
-- `packages/features/webdav-sync/test/main/`
 
 修改 `index.ts` 组装顺序时，除定向测试外至少运行 `pnpm typecheck`，因为跨模块 constructor 和 bridge contract 很容易在这里暴露漂移。

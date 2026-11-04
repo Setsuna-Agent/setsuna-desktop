@@ -1,6 +1,6 @@
 # Desktop 工作台与原生 Features
 
-本页覆盖 Review、Terminal、Network Proxy、Updater、WebDAV Sync、Windows Sandbox 和 Workspace Apps。它们都需要 Electron/OS 能力，因此业务实现位于 Feature main/preload/renderer；宿主 `apps/desktop` 只负责全局窗口、数据根、runtime 子进程和组合时点。
+本页覆盖 Review、Terminal、Network Proxy、Updater、Windows Sandbox 和 Workspace Apps。它们都需要 Electron/OS 能力，因此业务实现位于 Feature main/preload/renderer；宿主 `apps/desktop` 只负责全局窗口、数据根、runtime 子进程和组合时点。
 
 Browser 因为还包含 guest/CDP/Agent tool 链路，有单独的[详细文档](browser.md)。
 
@@ -104,12 +104,12 @@ Network Proxy 拥有代理配置、credential reference、受保护 loopback rel
 
 - 普通配置文件不保存密码，只保存 credential reference；明文凭据留在 Main 的 credential vault。
 - Browser/runtime 看到的是 Feature 管理的 loopback relay，不直接获得上游代理凭据。
-- Provider、Updater、WebDAV、Terminal 和 Windows Sandbox 只依赖激活后暴露的窄 routing/service Capability。
+- Provider、Updater、Terminal 和 Windows Sandbox 只依赖激活后暴露的窄 routing/service Capability。
 - 删除 proxy server 前，runtime config route 必须校验 Model Provider 引用；Main 再完成真实删除。
 - 初始化或 credential 读取失败时保持 fail-closed，同时保留设置页用于修复。
 - Renderer service 订阅 state change，并防止迟到 `getState` 覆盖 mutation 结果。
 
-代理协议、TLS、认证或路由规则变更会扩散到 main service、native bridge、provider fetch、terminal environment、updater/webdav 和 sandbox egress，必须按 [变更扩散图](../architecture/change-map.md) 检查。
+代理协议、TLS、认证或路由规则变更会扩散到 main service、native bridge、provider fetch、terminal environment、updater 和 sandbox egress，必须按 [变更扩散图](../architecture/change-map.md) 检查。
 
 ## Updater
 
@@ -144,30 +144,6 @@ macOS 优先下载同架构 ZIP，要求 `SHA256SUMS` 中存在其校验值；�
 应用必须先通过 DMG 安装到可写位置，并使用同一 Developer ID 签名。未签名旧版本或尚未包含原生更新逻辑的版本
 需要手动安装一次新版 DMG，此后才可使用原生自动更新。发布仍以 GitHub Release API 和 `SHA256SUMS` 为元数据，
 不使用 electron-builder 的 `latest-mac.yml`。
-
-## WebDAV Sync
-
-源码：`packages/features/webdav-sync/`
-
-WebDAV Sync 拥有连接配置、credential、恢复密钥、端到端加密、不可变 snapshot、自动备份、手动还原、恢复 journal 和 renderer 设置。Main entry 是 required，因为它参与启动前的还原恢复；renderer entry 是 optional，设置 UI 失败不能破坏已存在的数据恢复边界。
-
-主要桥操作：
-
-- 读取状态和本地类别摘要。
-- 配置、测试连接、更新偏好、断开。
-- 立即备份、列出 snapshots。
-- 生成 restore plan、确认还原、取消当前操作。
-- 显示 recovery key 或重置本地配置。
-
-关键规则：
-
-- 备份使用数据白名单，不上传 cache、运行锁、临时文件和平台凭据密文。
-- 远端 snapshot 不可变；manifest/内容完整性和加密认证必须先验证。
-- Restore 先生成损失清单和计划，再 staging/commit；进程中断由 journal 在下一次启动恢复或回滚。
-- API key 的换机恢复依赖用户 recovery key，不能假设系统 credential vault 可跨机器解密。
-- Main 宿主必须在 runtime 启动前处理 interrupted restore；运行中还原需要排空并关闭 runtime。
-
-完整协议见 [WebDAV 自动备份与手动还原](../designs/current/webdav-backup-and-restore.md)。
 
 ## Windows Sandbox
 

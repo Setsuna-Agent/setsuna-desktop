@@ -108,7 +108,6 @@
     "@setsuna-desktop/feature-updater": "workspace:*",
     "@setsuna-desktop/feature-usage": "workspace:*",
     "@setsuna-desktop/feature-vision-recognition": "workspace:*",
-    "@setsuna-desktop/feature-webdav-sync": "workspace:*",
     "@setsuna-desktop/feature-windows-sandbox": "workspace:*",
     "@setsuna-desktop/feature-workspace-apps": "workspace:*",
     "@setsuna-desktop/feature-workspace-dependencies": "workspace:*",

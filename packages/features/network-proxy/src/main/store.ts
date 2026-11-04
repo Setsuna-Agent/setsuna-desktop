@@ -388,7 +388,6 @@ function routingReferences(routing: DesktopNetworkProxyRoutingState, proxyServer
     terminal: '终端',
     updater: '应用更新',
     runtime: 'Runtime 服务',
-    sync: 'WebDAV 同步',
   };
   for (const scope of DESKTOP_NETWORK_PROXY_SCOPES) {
     const route = routing.scopes[scope];

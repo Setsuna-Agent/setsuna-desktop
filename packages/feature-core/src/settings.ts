@@ -113,15 +113,7 @@ export interface RuntimeFeatureSettingsRegistry {
     expectedDiagnosisId: string;
     confirmed: true;
   }>): Promise<{ revision: number }>;
-  exportPortableDocuments(): Promise<readonly PortableFeatureSettingsDocument[]>;
-  exportCredentialBackups(): Promise<readonly FeatureCredentialBackup[]>;
-  importPortableDocuments(
-    documents: readonly PortableFeatureSettingsDocument[],
-  ): Promise<readonly Readonly<{
-    featureId: FeatureId;
-    documentId: string;
-    revision: number;
-  }>[]>;
+
 }
 
 export type FeatureSettingsDiagnosis = Readonly<{
@@ -135,31 +127,6 @@ export type FeatureSettingsDiagnosis = Readonly<{
     | 'secret-reference-unavailable';
   diagnosisId: string;
   safeDetails?: Readonly<Record<string, string | number | boolean>>;
-}>;
-
-export type PortableFeatureSettingsDocument = Readonly<{
-  featureId: FeatureId;
-  documentId: string;
-  schemaVersion: number;
-  data: unknown;
-}>;
-
-/** Plaintext values cross only the authenticated runtime-to-main backup boundary. */
-export type FeatureCredentialBackup = Readonly<{
-  featureId: FeatureId;
-  documentId: string;
-  secretName: string;
-  value: string;
-}>;
-
-/**
- * A restore transaction always replaces the settings envelope. Secret storage
- * is replaced only when the backup supplied credentials for this document.
- */
-export type PortableFeatureSettingsRestoreTarget = Readonly<{
-  featureId: FeatureId;
-  documentId: string;
-  includesSecrets: boolean;
 }>;
 
 export class FeatureSettingsRevisionConflictError extends Error {

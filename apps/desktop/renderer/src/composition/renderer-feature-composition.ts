@@ -87,10 +87,6 @@ import {
   updaterRendererHostCapability,
 } from '@setsuna-desktop/feature-updater/renderer';
 import { visionRecognitionRendererFeature } from '@setsuna-desktop/feature-vision-recognition/renderer';
-import {
-  webDavSyncRendererFeature,
-  webDavSyncRendererHostCapability,
-} from '@setsuna-desktop/feature-webdav-sync/renderer';
 import { workspaceDependenciesRendererFeature } from '@setsuna-desktop/feature-workspace-dependencies/renderer';
 import { workspaceAppsRendererFeature } from '@setsuna-desktop/feature-workspace-apps/renderer';
 import { appReadySlot } from '@setsuna-desktop/renderer-contracts/shell';
@@ -149,7 +145,6 @@ const rendererFeatures = defineRendererFeatureHost({
     threadTitleGenerationRendererFeature,
     usageRendererFeature,
     visionRecognitionRendererFeature,
-    webDavSyncRendererFeature,
     workspaceDependenciesRendererFeature,
   ],
 });
@@ -284,10 +279,6 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         }),
       ),
       provideHostCapability(usageRendererHostCapability, usageRendererHost),
-      provideHostCapability(
-        webDavSyncRendererHostCapability,
-        Object.freeze({ bridge: window.setsunaDesktop?.webdavSync ?? null }),
-      ),
       provideHostCapability(
         windowsSandboxRendererHostCapability,
         Object.freeze({

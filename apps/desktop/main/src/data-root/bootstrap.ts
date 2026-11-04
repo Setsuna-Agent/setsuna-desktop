@@ -25,6 +25,7 @@ import type {
   PendingDataMigration,
 } from './model.js';
 import { removeFileDurably, writeJsonAtomically } from './atomic-json.js';
+import { legacyRestoreStartupError } from './legacy-restore-guard.js';
 
 export function resolveDesktopDataRootBootMode(input: {
   appDataRoot: string;
@@ -52,6 +53,25 @@ export function resolveDesktopDataRootBootMode(input: {
       error: `Pending data migration metadata is invalid: ${bootstrap.pendingMigrationPath}`,
       bootstrapIssue: 'pending_migration',
     };
+  }
+
+  // Check before any root writability probe, legacy import or profile selection.
+  // Pending migration can touch both roots, so neither may contain an old restore.
+  const configuredPointer = validPointer(pointer) ? normalizePointer(pointer) : defaultPointer(defaultRoot);
+  const rootsToInspect = validPendingMigration(pending)
+    ? [pending.sourceRoot, pending.targetRoot, configuredPointer.dataRoot]
+    : [configuredPointer.dataRoot];
+  for (const root of new Set(rootsToInspect.map((candidate) => path.resolve(candidate)))) {
+    const restoreError = legacyRestoreStartupError(root);
+    if (restoreError) {
+      return {
+        mode: 'recovery',
+        defaultRoot,
+        pointer: { ...configuredPointer, dataRoot: root },
+        reason: 'configured_root_invalid',
+        error: restoreError,
+      };
+    }
   }
 
   if (validPendingMigration(pending)) {
