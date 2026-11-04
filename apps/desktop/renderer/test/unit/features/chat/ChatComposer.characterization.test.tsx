@@ -183,7 +183,6 @@ describe('ChatComposer view state characterization', () => {
       enableGoalMode: vi.fn(),
       enableReviewMode: vi.fn(),
       goalModeEnabled: false,
-      hasProtectedModeState: false,
       modelOpenSignal: 0,
       openModelPicker: vi.fn(),
       resetAfterSend: vi.fn(),
@@ -200,13 +199,8 @@ describe('ChatComposer view state characterization', () => {
       thinkingEnabled: false,
     };
     composerHarness.queuedEdit = {
-      cancel: vi.fn(),
       edit: vi.fn(),
-      editDisabled: false,
-      editing: false,
       retrieving: false,
-      submit: vi.fn(),
-      visibleQueuedTurnInputs: [],
     };
   });
 
@@ -282,11 +276,9 @@ describe('ChatComposer view state characterization', () => {
 function renderComposer(overrides: Partial<Parameters<typeof ChatComposer>[0]> = {}): string {
   const queuedTurnActions = {
     deleteQueuedTurnInput: vi.fn(async () => true),
-    releaseQueuedTurnInputEdit: vi.fn(async () => true),
     retrieveQueuedTurnInput: vi.fn(async () => null),
     reorderQueuedTurnInputs: vi.fn(async () => true),
     sendQueuedTurnInputNow: vi.fn(async () => true),
-    updateQueuedTurnInput: vi.fn(async () => 'updated' as const),
   };
 
   return renderToStaticMarkup(composerElement(overrides, queuedTurnActions));
@@ -296,11 +288,9 @@ function composerElement(
   overrides: Partial<Parameters<typeof ChatComposer>[0]> = {},
   queuedTurnActions = {
     deleteQueuedTurnInput: vi.fn(async () => true),
-    releaseQueuedTurnInputEdit: vi.fn(async () => true),
     retrieveQueuedTurnInput: vi.fn(async () => null),
     reorderQueuedTurnInputs: vi.fn(async () => true),
     sendQueuedTurnInputNow: vi.fn(async () => true),
-    updateQueuedTurnInput: vi.fn(async () => 'updated' as const),
   },
 ) {
   return (

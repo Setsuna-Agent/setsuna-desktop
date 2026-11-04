@@ -42,7 +42,7 @@ import { ChatComposerOverlays } from './composer/ChatComposerOverlays.js';
 import { ChatSendQueue } from './composer/ChatSendQueue.js';
 import type { SlashCommandMenuItem } from './composer/ChatSlashCommandMenu.js';
 import { parseMentionCommand, parseSkillCommand, parseSlashCommand } from './composer/chatCommandUtils.js';
-import { createComposerDraftSyncPlan } from './composer/chatComposerDraftSync.js';
+import { createComposerDraftSyncPlan, sameComposerDraftReferences } from './composer/chatComposerDraftSync.js';
 import type { ChatComposerSendOptions } from './composer/chatComposerSendOptions.js';
 import { startChatComposerCapabilitySelection, type ChatComposerCapabilitySelection } from './composer/chatComposerCapabilitySelection.js';
 import { parsePluginMentions, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
@@ -71,7 +71,7 @@ import { useChatComposerModeController } from './composer/useChatComposerModeCon
 import { useQueuedTurnComposerEdit } from './composer/useQueuedTurnComposerEdit.js';
 import type { ChatContextTokenUsage } from './conversation/chatContextUsage.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
-import type { SetChatComposerDraft } from './hooks/useChatComposerSession.js';
+import type { ChatComposerSendIntent, SetChatComposerDraft } from './hooks/useChatComposerSession.js';
 import {
   type ChatModelSelectionHandler,
 } from './chatModelSelection.js';
@@ -121,6 +121,8 @@ export function ChatComposer({
   contextUsage,
   currentThread,
   draft,
+  draftSendIntent,
+  retrievingQueuedInput,
   draftSkillReferences = EMPTY_SKILL_REFERENCES,
   draftWorkspaceReferences = EMPTY_WORKSPACE_REFERENCES,
   attachmentStore,
@@ -162,6 +164,8 @@ export function ChatComposer({
   contextUsage: ChatContextTokenUsage;
   currentThread: RuntimeThread | null;
   draft: string;
+  draftSendIntent?: ChatComposerSendIntent;
+  retrievingQueuedInput?: boolean;
   draftSkillReferences?: RuntimeSkillReference[];
   draftWorkspaceReferences?: WorkspaceDraftReference[];
   attachmentStore?: ChatAttachmentStore;
@@ -202,7 +206,6 @@ export function ChatComposer({
   const [selectedSkills, setSelectedSkills] = useState(() => filterSelectedSkillsBySlots(skills, initialSlotConfigRef.current!));
   const selectedPluginIds = useMemo(() => [...new Set(parsePluginMentions(draft).map((mention) => mention.pluginId))], [draft]);
   const [localSubmitting, setSubmitting] = useState(false);
-  const submitting = localSubmitting || submissionPending;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const senderRef = useRef<ComponentRef<typeof ChatPromptInput>>(null);
   const lastEditorDraftRef = useRef(draft);
@@ -232,12 +235,19 @@ export function ChatComposer({
     () => composerActiveTurn(currentThread, activeTurnId),
     [activeTurnId, currentThread?.turns],
   );
+  const setDraftSendIntent = useCallback((sendIntent: ChatComposerSendIntent) => {
+    onDraftChange((current) => current, undefined, undefined, { sendIntent });
+  }, [onDraftChange]);
+  const setRetrievingQueuedInput = useCallback((retrievingQueuedInput: boolean) => {
+    onDraftChange((current) => current, undefined, undefined, { retrievingQueuedInput });
+  }, [onDraftChange]);
   const modeController = useChatComposerModeController({
     currentThreadId: currentThread?.id,
     preferenceKey,
     defaultThinking,
     model: selectedThreadModel.model,
     provider: selectedThreadModel.provider,
+    sendIntentControl: draftSendIntent === undefined ? undefined : { value: draftSendIntent, onChange: setDraftSendIntent },
   });
   const {
     addExistingImage,
@@ -245,7 +255,6 @@ export function ChatComposer({
     atLimit: attachmentLimitReached,
     beginSend: beginAttachmentSend,
     busy: attachmentsBusy,
-    clear: clearAttachments,
     items: attachmentItems,
     remove: removeAttachment,
     replaceWithExisting: replaceAttachmentsWithExisting,
@@ -253,6 +262,7 @@ export function ChatComposer({
     sending: attachmentsSending,
     settleSend: settleAttachmentSend,
   } = useChatAttachments({ client, store: attachmentStore });
+  const submitting = localSubmitting || submissionPending || attachmentsSending;
   const attachmentOnlyAllowed = !modeController.goalModeEnabled && !modeController.reviewModeEnabled;
   const attachmentOnlyReady = attachmentOnlyAllowed && sendableAttachments.length > 0 && !draft.trim();
   const activeQueueReady = Boolean(
@@ -262,37 +272,31 @@ export function ChatComposer({
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
   const multiAgentEnabled = !sideConversation
     && (config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true);
-  const composerHasProtectedState = Boolean(
-    draft
-    || attachmentItems.length
-    || selectedSkills.length
-    || modeController.hasProtectedModeState,
-  );
-  const resetQueuedTurnComposer = useCallback(() => {
-    clearAttachments();
-    setSelectedSkills([]);
-    onDraftChange('', [], [], { source: 'draft' });
-    lastEditorDraftRef.current = '';
-    senderRef.current?.clear?.();
-  }, [clearAttachments, onDraftChange]);
   const replaceQueuedTurnComposer = useCallback((input: RuntimeQueuedTurnInput) => {
     replaceAttachmentsWithExisting(input.attachments ?? []);
-    setSelectedSkills([]);
-    onDraftChange(input.input, [], [], { source: 'queued-edit' });
+    const slots = createReferenceDraftSlots(
+      input.input, plugins, skills, input.skillReferences,
+    );
+    const editor = senderRef.current;
+    editor?.clear();
+    if (input.input) editor?.insert(slots, 'end', undefined, true);
+    setSelectedSkills(filterSelectedSkillsBySlots(skills, slots));
+    onDraftChange(input.input, input.skillReferences ?? [], []);
+    if (input.kind === 'goal') modeController.enableGoalMode();
+    else modeController.resetAfterSend();
     senderRef.current?.focus?.({ cursor: 'end', preventScroll: true });
   }, [
+    modeController.enableGoalMode,
+    modeController.resetAfterSend,
     onDraftChange,
+    plugins,
     replaceAttachmentsWithExisting,
+    skills,
   ]);
   const queuedTurnEdit = useQueuedTurnComposerEdit({
     actions: queuedTurnActions,
-    attachmentsBusy,
-    composerHasProtectedState,
-    queuedTurnInputs,
     replaceComposer: replaceQueuedTurnComposer,
-    resetComposer: resetQueuedTurnComposer,
-    sendableAttachments,
-    setSubmitting,
+    retrievingControl: retrievingQueuedInput === undefined ? undefined : { value: retrievingQueuedInput, onChange: setRetrievingQueuedInput },
     submitting,
   });
   const attachmentPickerDisabled = attachmentLimitReached
@@ -320,7 +324,7 @@ export function ChatComposer({
   });
   const navigateHistory = useChatComposerHistory({
     currentThread, draft, getEditor: getComposerEditor, plugins, skills,
-    disabled: submitting || queuedTurnEdit.editing || queuedTurnEdit.retrieving || modeController.reviewModeEnabled,
+    disabled: submitting || queuedTurnEdit.retrieving || modeController.reviewModeEnabled,
     onRestore: (slots) => setSelectedSkills(filterSelectedSkillsBySlots(skills, slots)),
   });
   const commandController = useChatCommandController({
@@ -329,7 +333,7 @@ export function ChatComposer({
     plugins,
     getInputElement: getComposerInputElement,
     onSearchProjectEntries,
-    slashMenuBlocked: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
+    slashMenuBlocked: queuedTurnEdit.retrieving,
     t,
   });
   const slashEntries = useMemo(() => commandController.skillCommand ? createChatSkillCommandItems({
@@ -525,6 +529,16 @@ export function ChatComposer({
     const editor = senderRef.current;
     if (!editor) return;
     const currentEditorValue = editor.getValue();
+    const editorReferences = {
+      skillReferences: createSelectedSkillReferences(currentEditorValue.slotConfig, { trim: false }),
+      workspaceReferences: createWorkspaceDraftReferences(currentEditorValue.slotConfig),
+    };
+    // Uncontrolled callers keep editor-owned references; retained sessions supply
+    // authoritative metadata even if an earlier editor initiated the replacement.
+    const externalReferences = {
+      skillReferences: draftSkillReferences === EMPTY_SKILL_REFERENCES ? editorReferences.skillReferences : draftSkillReferences,
+      workspaceReferences: draftWorkspaceReferences === EMPTY_WORKSPACE_REFERENCES ? editorReferences.workspaceReferences : draftWorkspaceReferences,
+    };
     const previousExternalDraft = previousExternalDraftRef.current;
     previousExternalDraftRef.current = draft;
     const syncPlan = createComposerDraftSyncPlan(
@@ -532,6 +546,7 @@ export function ChatComposer({
       previousExternalDraft,
       lastEditorDraftRef.current,
       currentEditorValue.value,
+      !sameComposerDraftReferences(externalReferences, editorReferences),
     );
     if (syncPlan.type === 'none') return;
     if (syncPlan.type === 'adopt') {
@@ -542,9 +557,9 @@ export function ChatComposer({
     if (syncPlan.type === 'replace') editor.clear();
     if (syncPlan.value) {
       const offset = syncPlan.type === 'append' ? currentEditorValue.value.length : 0;
-      const references = draftSkillReferences.filter((reference) => reference.start >= offset)
+      const references = externalReferences.skillReferences.filter((reference) => reference.start >= offset)
         .map((reference) => ({ ...reference, start: reference.start - offset, end: reference.end - offset }));
-      const workspaceReferences = draftWorkspaceReferences.filter((reference) => reference.start >= offset)
+      const workspaceReferences = externalReferences.workspaceReferences.filter((reference) => reference.start >= offset)
         .map((reference) => ({ ...reference, start: reference.start - offset, end: reference.end - offset }));
       // 先聚焦到末尾，确保外部文件引用插入到当前草稿。
       editor.focus({ cursor: 'end', preventScroll: true });
@@ -637,13 +652,9 @@ export function ChatComposer({
   };
 
   const submitDraft = async (value?: string) => {
-    if (attachmentsBusy || submitting) return;
+    if (attachmentsBusy || submitting || queuedTurnEdit.retrieving) return;
     // Send buttons hand focus back before locking the editor, never after an async response.
     senderRef.current?.focus({ preventScroll: true });
-    if (queuedTurnEdit.editing) {
-      await queuedTurnEdit.submit(value ?? draft);
-      return;
-    }
     if (modeController.reviewModeEnabled) {
       const instructions = (value ?? draft).trim();
       if (!instructions) return;
@@ -664,10 +675,10 @@ export function ChatComposer({
           modeController.enableReviewMode();
         }
       }
+      if (sent) modeController.resetAfterSend();
       if (!mountedRef.current) return;
       setSubmitting(false);
       if (!sent) return;
-      modeController.resetAfterSend();
       senderRef.current?.clear?.();
       return;
     }
@@ -685,11 +696,11 @@ export function ChatComposer({
     setSubmitting(true);
     const sent = await onSend(value, sendOptions).catch(() => false);
     settleAttachmentSend(submittedAttachments, sent);
+    if (sent) modeController.resetAfterSend();
     if (!mountedRef.current) return;
     setSubmitting(false);
     if (!sent) return;
     setSelectedSkills([]);
-    modeController.resetAfterSend();
     senderRef.current?.clear?.();
   };
 
@@ -763,10 +774,9 @@ export function ChatComposer({
         ) : null}
         <ChatSendQueue
           key={currentThread?.id ?? "new-thread"}
-          disabled={submitting || queuedTurnEdit.editing}
-          editDisabled={queuedTurnEdit.editDisabled}
+          disabled={submitting || queuedTurnEdit.retrieving}
           hasActiveTurn={Boolean(activeTurnId)}
-          items={queuedTurnEdit.visibleQueuedTurnInputs}
+          items={queuedTurnInputs}
           onDelete={deleteQueuedTurnInput}
           onEdit={queuedTurnEdit.edit}
           onReorder={queuedTurnActions.reorderQueuedTurnInputs}
@@ -802,17 +812,12 @@ export function ChatComposer({
           <ChatComposerFooter
             commandControl={{
               active: commandController.forcedSlashMenuOpen,
-              disabled: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
+              disabled: queuedTurnEdit.retrieving,
               onOpen: openSlashMenu,
             }}
             config={config}
             contextCompacting={contextCompacting}
             contextUsage={contextUsage}
-            editingControl={{
-              active: queuedTurnEdit.editing,
-              disabled: submitting,
-              onCancel: () => void queuedTurnEdit.cancel(),
-            }}
             hasActiveTurn={Boolean(activeTurnId)}
             modeBadges={{
               collaborationEnabled: multiAgentEnabled,
@@ -830,14 +835,14 @@ export function ChatComposer({
               attachmentOnlyReady,
               attachmentsBusy,
               queueReady: activeQueueReady,
-              submitting,
+              submitting: submitting || queuedTurnEdit.retrieving,
               onCancelActiveTurn,
               onSubmit: () => void submitDraft(draft),
             }}
             senderActions={actions}
             thinkingControl={{
               config: modeController.thinkingConfig,
-              disabled: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
+              disabled: queuedTurnEdit.retrieving,
               effort: modeController.thinkingEffort,
               enabled: modeController.thinkingEnabled,
               onEffortChange: modeController.setThinkingEffort,

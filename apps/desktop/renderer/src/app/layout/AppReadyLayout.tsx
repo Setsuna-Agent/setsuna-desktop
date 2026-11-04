@@ -59,6 +59,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     composerKey,
     draft,
     draftSkillReferences,
+    draftSendIntent,
+    retrievingQueuedInput,
     draftWorkspaceReferences,
     globalThreads,
     handleSidebarResizeStep,
@@ -630,6 +632,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
             conversationOverviewVisibility={conversationOverviewVisibility}
             draft={draft}
             draftSkillReferences={draftSkillReferences}
+            draftSendIntent={draftSendIntent}
+            retrievingQueuedInput={retrievingQueuedInput}
             draftWorkspaceReferences={draftWorkspaceReferences}
             projectWorkspace={projectWorkspace}
             runtime={runtime}

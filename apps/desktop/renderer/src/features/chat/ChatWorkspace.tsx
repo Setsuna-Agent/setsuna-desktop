@@ -1,6 +1,6 @@
 import { UserMessageEditor } from './conversation/messages/UserMessageEditor.js';
 import type { WorkspaceDraftReference } from './session/chatDraftReferences.js';
-import type { SetChatComposerDraft } from './hooks/useChatComposerSession.js';
+import type { ChatComposerSendIntent, SetChatComposerDraft } from './hooks/useChatComposerSession.js';
 import type {
   MessagePatch,
   WorkspaceFileChangeAction,
@@ -69,6 +69,8 @@ export function ChatWorkspace({
   currentThread,
   draft,
   draftSkillReferences,
+  draftSendIntent,
+  retrievingQueuedInput,
   draftWorkspaceReferences,
   focusComposerOnReveal = false,
   focusComposerRequest = 0,
@@ -122,6 +124,8 @@ export function ChatWorkspace({
   currentThread: RuntimeThread | null;
   draft: string;
   draftSkillReferences?: RuntimeSkillReference[];
+  draftSendIntent?: ChatComposerSendIntent;
+  retrievingQueuedInput?: boolean;
   draftWorkspaceReferences?: WorkspaceDraftReference[];
   focusComposerOnReveal?: boolean;
   focusComposerRequest?: number;
@@ -263,6 +267,8 @@ export function ChatWorkspace({
             currentThread={historyThread}
             draft={draft}
             draftSkillReferences={draftSkillReferences}
+            draftSendIntent={draftSendIntent}
+            retrievingQueuedInput={retrievingQueuedInput}
             draftWorkspaceReferences={draftWorkspaceReferences}
             focusOnReveal={focusComposerOnReveal}
             focusRequest={focusComposerRequest}

@@ -15,6 +15,7 @@ import {
 } from '../../../shared/i18n/I18nProvider.js';
 import { formatGoalExitSummary } from '../goalFormatting.js';
 import { isTranscriptHiddenRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
+import { projectShellProcessOutputs } from '../tool-runs/runtimeShellProcessOutputs.js';
 import { visibleMarkdownContent } from './chatThinkingContent.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
@@ -80,7 +81,7 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
         contextCompactions: assistantRunContextCompactions,
         handledSteerMessageIds: assistantRunHandledSteerMessageIds,
         messageIds: assistantRunMessageIds,
-        segments: assistantRun,
+        segments: projectShellProcessOutputs(assistantRun),
         steerMessages: [],
         ...(assistantRunToolAttachments.length ? { toolAttachments: assistantRunToolAttachments } : {}),
         turnId: assistantRunTurnId,

@@ -1,7 +1,5 @@
 import type {
   QueueTurnInput,
-  QueuedTurnInputEditRelease,
-  QueuedTurnInputPatch,
   SendTurnInput,
   SteerTurnInput,
 } from '@setsuna-desktop/contracts';
@@ -178,46 +176,9 @@ export async function handleRuntimeTurnRequest(
     return true;
   }
 
-  const queuedTurnInputReleaseMatch = url.pathname.match(
-    /^\/v1\/threads\/([^/]+)\/queued-turn-inputs\/([^/]+)\/release$/u,
-  );
-  if (queuedTurnInputReleaseMatch && request.method === 'POST') {
-    const threadId = decodeRuntimeId(queuedTurnInputReleaseMatch[1], 'Thread id');
-    const inputId = decodeRuntimeId(
-      queuedTurnInputReleaseMatch[2],
-      'Queued input id',
-    );
-    const input = await readBody<QueuedTurnInputEditRelease>(request);
-    sendJson(
-      response,
-      200,
-      await runtime.agentLoop.releaseQueuedTurnInputEdit(threadId, inputId, {
-        editToken: stringInput(input.editToken) ?? '',
-      }),
-    );
-    return true;
-  }
-
   const queuedTurnInputMatch = url.pathname.match(
     /^\/v1\/threads\/([^/]+)\/queued-turn-inputs\/([^/]+)$/u,
   );
-  if (queuedTurnInputMatch && request.method === 'PATCH') {
-    const threadId = decodeRuntimeId(queuedTurnInputMatch[1], 'Thread id');
-    const inputId = decodeRuntimeId(queuedTurnInputMatch[2], 'Queued input id');
-    const patch = await readBody<QueuedTurnInputPatch>(request);
-    sendJson(response, 202, await runtime.agentLoop.updateQueuedTurnInput(
-      threadId,
-      inputId,
-      {
-        editToken: stringInput(patch.editToken) ?? '',
-        input: typeof patch.input === 'string' ? patch.input : '',
-        attachments: Array.isArray(patch.attachments)
-          ? patch.attachments.filter(isRuntimeMessageAttachment)
-          : undefined,
-      },
-    ));
-    return true;
-  }
   if (queuedTurnInputMatch && request.method === 'DELETE') {
     const threadId = decodeRuntimeId(queuedTurnInputMatch[1], 'Thread id');
     const inputId = decodeRuntimeId(queuedTurnInputMatch[2], 'Queued input id');

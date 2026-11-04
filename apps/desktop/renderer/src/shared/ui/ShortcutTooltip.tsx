@@ -10,16 +10,19 @@ import { AppTooltip } from './primitives.js';
 export function ShortcutTooltip({
   children,
   commandId,
+  disabled = false,
   label,
   placement = 'top',
 }: {
   children: ReactNode;
   commandId: KeyboardShortcutCommandId;
+  /** 暂时不弹出但保留包裹结构，切换时不会重新挂载子节点。 */
+  disabled?: boolean;
   label: string;
   placement?: ComponentProps<typeof AppTooltip>['placement'];
 }) {
   return (
-    <AppTooltip placement={placement} title={<ShortcutTooltipContent commandId={commandId} label={label} />}>
+    <AppTooltip disabled={disabled} placement={placement} title={<ShortcutTooltipContent commandId={commandId} label={label} />}>
       <span className="sd-shortcut-tooltip-target" role="none">{children}</span>
     </AppTooltip>
   );

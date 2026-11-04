@@ -67,7 +67,6 @@
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  user-select: none;
 }
 
 .chat-memory-citations__list {
@@ -230,6 +229,7 @@
   color: color-mix(in srgb, var(--app-text-muted) 88%, transparent);
   font-size: 12px;
   line-height: 20px;
+  user-select: none;
 }
 
 .chat-guidance-message__bubble {
@@ -746,6 +746,8 @@
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 20px;
+  /* 时间、类型标签与复制/分叉按钮相邻，连点按钮不应选中时间文字。 */
+  user-select: none;
 }
 
 /* Keep the message kind visible while the timestamp and actions follow hover/focus. */
@@ -840,6 +842,31 @@
   height: 0;
   padding: 0 var(--chat-content-inline-padding);
   pointer-events: none;
+  /* 按钮自身的 transform 跟随概览偏移，显隐只在锚点上过渡 opacity / translate；
+     display 离散过渡让隐藏时先淡出，再移出布局和焦点顺序。 */
+  transition:
+    opacity 140ms ease,
+    translate 160ms var(--app-ease-out),
+    display 160ms allow-discrete;
+}
+
+.chat-scroll-bottom-anchor[hidden] {
+  display: none;
+  opacity: 0;
+  translate: 0 4px;
+}
+
+@starting-style {
+  .chat-scroll-bottom-anchor {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-scroll-bottom-anchor {
+    transition: none;
+  }
 }
 
 .chat-scroll-bottom {

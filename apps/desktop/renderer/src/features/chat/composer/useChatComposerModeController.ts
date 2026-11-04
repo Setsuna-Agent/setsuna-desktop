@@ -22,6 +22,8 @@ import {
   normalizeChatThinkingSelection,
   resetChatComposerModesAfterSend,
   resetThreadScopedChatComposerModes,
+  type ChatComposerLocalModes,
+  type ChatComposerSendIntent,
   type ChatThinkingSelection,
 } from './chatComposerModeState.js';
 import {
@@ -47,18 +49,29 @@ export function useChatComposerModeController({
   defaultThinking,
   model,
   provider,
+  sendIntentControl,
 }: {
   currentThreadId?: string | null;
   preferenceKey?: string;
   defaultThinking?: ChatThinkingSelection;
   model: ProviderModelConfig | null;
   provider: ProviderConfigState | null;
+  sendIntentControl?: { value: ChatComposerSendIntent; onChange: (intent: ChatComposerSendIntent) => void };
 }) {
   const modelCapabilities = useMemo(
     () => createChatComposerModelCapabilities(provider, model),
     [model, provider],
   );
-  const [localModes, setLocalModes] = useState(emptyChatComposerLocalModes);
+  const [uncontrolledModes, setUncontrolledModes] = useState(emptyChatComposerLocalModes);
+  const controlledIntent = sendIntentControl?.value;
+  const onSendIntentChange = sendIntentControl?.onChange;
+  const controlled = controlledIntent !== undefined;
+  const localModes = controlled ? { sendIntent: controlledIntent } : uncontrolledModes;
+  const setLocalModes = useCallback((update: (modes: ChatComposerLocalModes) => ChatComposerLocalModes) => {
+    if (controlledIntent !== undefined && onSendIntentChange) {
+      onSendIntentChange(update({ sendIntent: controlledIntent }).sendIntent);
+    } else setUncontrolledModes(update);
+  }, [controlledIntent, onSendIntentChange]);
   const [modelOpenSignal, setModelOpenSignal] = useState(0);
   const instanceId = useId();
   const [modelThinkingSelection, setModelThinkingSelection] = usePageSessionState<ModelThinkingSelectionState>(
@@ -103,8 +116,9 @@ export function useChatComposerModeController({
   ]);
 
   useEffect(() => {
-    setLocalModes(resetThreadScopedChatComposerModes);
-  }, [currentThreadId]);
+    // A retained composer session owns controlled intent, including late queue retrievals.
+    if (!controlled) setUncontrolledModes(resetThreadScopedChatComposerModes);
+  }, [controlled, currentThreadId]);
 
   const setThinkingEnabled = useCallback((enabled: boolean) => {
     setModelThinkingSelection((current) => {
@@ -132,19 +146,19 @@ export function useChatComposerModeController({
 
   const clearGoalMode = useCallback(() => {
     setLocalModes(clearChatComposerGoalMode);
-  }, []);
+  }, [setLocalModes]);
 
   const enableGoalMode = useCallback(() => {
     setLocalModes(enableChatComposerGoalMode);
-  }, []);
+  }, [setLocalModes]);
 
   const clearReviewMode = useCallback(() => {
     setLocalModes(clearChatComposerReviewMode);
-  }, []);
+  }, [setLocalModes]);
 
   const enableReviewMode = useCallback(() => {
     setLocalModes(enableChatComposerReviewMode);
-  }, []);
+  }, [setLocalModes]);
 
   const openModelPicker = useCallback(() => {
     setModelOpenSignal((value) => value + 1);
@@ -152,7 +166,7 @@ export function useChatComposerModeController({
 
   const resetAfterSend = useCallback(() => {
     setLocalModes(resetChatComposerModesAfterSend);
-  }, []);
+  }, [setLocalModes]);
 
   const createSendOptions = useCallback(({
     attachments,
@@ -187,8 +201,6 @@ export function useChatComposerModeController({
     enableGoalMode,
     enableReviewMode,
     goalModeEnabled: localModes.sendIntent === 'goal',
-    // Thinking is a persistent model preference; retrieving a queued draft does not overwrite it.
-    hasProtectedModeState: localModes.sendIntent !== 'message',
     modelOpenSignal,
     openModelPicker,
     resetAfterSend,

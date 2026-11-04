@@ -1,4 +1,4 @@
-import { Button, useToast } from '@setsuna-desktop/renderer-ui';
+import { Button, IconSwap, useToast } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { Check, Copy, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -58,9 +58,11 @@ export function ChatMessageFooter({
   const actionNodes = (
     <>
       <MessageFooterAction active={copied} disabled={!message.content} label={copied ? t('chat.message.copied') : t('chat.message.copy')} onClick={() => void copyMessage()}>
-        {copied
-          ? <Check size={14} strokeWidth={1.8} aria-hidden="true" />
-          : <Copy size={14} strokeWidth={1.8} aria-hidden="true" />}
+        <IconSwap swapKey={copied ? 'copied' : 'copy'}>
+          {copied
+            ? <Check size={14} strokeWidth={1.8} aria-hidden="true" />
+            : <Copy size={14} strokeWidth={1.8} aria-hidden="true" />}
+        </IconSwap>
       </MessageFooterAction>
       {forkMessageId && message.status !== 'streaming' ? (
         <ChatForkAction messageId={forkMessageId} disabled={actionsDisabled} />

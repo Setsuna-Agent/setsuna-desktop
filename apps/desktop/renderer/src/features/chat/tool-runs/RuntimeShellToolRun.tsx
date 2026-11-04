@@ -208,10 +208,7 @@ export function shellOutputSegments(
   value: string | undefined,
   t: Translate = defaultTranslate,
 ): Array<{ kind: 'stdout' | 'stderr' | 'message'; text: string }> {
-  const normalized = String(value || '')
-    .replace(/\r\n/g, '\n')
-    .replace(/\n\n(?:Process is still running\.|进程仍在运行。)[\s\S]*$/u, '')
-    .trimEnd();
+  const normalized = normalizeShellResultPreview(value);
   if (!normalized) return [];
   const lines = normalized.split('\n');
   const hasRuntimePreamble = lines.some((line) => /^Process Id:\s*/i.test(line));
@@ -266,6 +263,13 @@ export function shellOutputSegments(
   }
   flush();
   return segments;
+}
+
+export function normalizeShellResultPreview(value: string | undefined): string {
+  return String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n\n(?:Process is still running\.|进程仍在运行。)[\s\S]*$/u, '')
+    .trimEnd();
 }
 
 export function normalizeShellStreamText(value: string): string {

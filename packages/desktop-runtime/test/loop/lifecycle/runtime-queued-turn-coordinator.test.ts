@@ -49,8 +49,8 @@ describe('runtime queued turn coordinator', () => {
       .rejects.toThrow('queue has changed');
     expect((await harness.threadStore.getThread(harness.threadId))?.queuedTurnInputs?.map((item) => item.id))
       .toEqual(['queued_b']);
-    await harness.coordinator.retrieveForEditing(harness.threadId, 'queued_b');
-    await expect(harness.coordinator.reorder(harness.threadId, ['queued_b'])).rejects.toThrow('being edited');
+    await harness.coordinator.retrieve(harness.threadId, 'queued_b');
+    await expect(harness.coordinator.reorder(harness.threadId, [])).resolves.toBe(false);
     expect(harness.startRegularTurn).not.toHaveBeenCalled();
   });
 
@@ -90,9 +90,9 @@ describe('runtime queued turn coordinator', () => {
       'regular',
       Promise.resolve(),
     );
-    // 先让 done 回调把结算操作排入线程串行队列，再用 retrieve 作为操作屏障。
+    // 先让 done 回调把结算操作排入线程串行队列，再用 reorder 作为操作屏障。
     await Promise.resolve();
-    await harness.coordinator.retrieveForEditing(harness.threadId, 'queued_1');
+    await harness.coordinator.reorder(harness.threadId, ['queued_1']);
 
     expect(harness.startRegularTurn).not.toHaveBeenCalled();
     await expect(harness.threadStore.getThread(harness.threadId)).resolves.toMatchObject({
@@ -126,54 +126,26 @@ describe('runtime queued turn coordinator', () => {
     });
   });
 
-  it('only releases the matching edit session and resumes the queue', async () => {
+  it('takes an item exactly once without reserving or locking the remaining queue', async () => {
     const harness = await createHarness();
-    await appendQueuedInput(harness, 'queued_edit', 'Edit with a scoped token');
-    const staleSession = await harness.coordinator.retrieveForEditing(
-      harness.threadId,
-      'queued_edit',
-    );
-    const currentSession = await harness.coordinator.retrieveForEditing(
-      harness.threadId,
-      'queued_edit',
-    );
+    await appendQueuedInput(harness, 'queued_edit', 'Move into the composer');
+    await appendQueuedInput(harness, 'queued_next', 'Keep sending normally');
 
-    await expect(harness.coordinator.releaseEditing(harness.threadId, 'queued_edit', {
-      editToken: staleSession.editToken,
-    })).resolves.toEqual({ released: false, resumed: null });
-    expect(harness.startRegularTurn).not.toHaveBeenCalled();
-
-    await expect(harness.coordinator.releaseEditing(harness.threadId, 'queued_edit', {
-      editToken: currentSession.editToken,
-    })).resolves.toMatchObject({
-      released: true,
-      resumed: {
-        disposition: 'started',
-        queuedInputId: 'queued_edit',
-      },
-    });
-    expect(harness.startRegularTurn).toHaveBeenCalledOnce();
-  });
-
-  it('resumes the next item when the currently edited item is deleted', async () => {
-    const harness = await createHarness();
-    await appendQueuedInput(harness, 'queued_edit', 'Delete this edit');
-    await appendQueuedInput(harness, 'queued_next', 'Resume this input');
-    await harness.coordinator.retrieveForEditing(harness.threadId, 'queued_edit');
-
-    await expect(
-      harness.coordinator.delete(harness.threadId, 'queued_edit'),
-    ).resolves.toBe(true);
-
-    expect(harness.startRegularTurn).toHaveBeenCalledWith(
-      harness.threadId,
-      expect.objectContaining({ input: 'Resume this input' }),
-      'queued_next',
-    );
-    await expect(harness.threadStore.getThread(harness.threadId)).resolves.toMatchObject({
-      queuedTurnInputs: [expect.objectContaining({ id: 'queued_next' })],
+    const results = await Promise.allSettled([
+      harness.coordinator.retrieve(harness.threadId, 'queued_edit'),
+      harness.coordinator.retrieve(harness.threadId, 'queued_edit'),
+    ]);
+    expect(results).toMatchObject([
+      { status: 'fulfilled', value: { id: 'queued_edit', input: 'Move into the composer' } },
+      { status: 'rejected', reason: expect.objectContaining({ message: 'Queued input not found: queued_edit' }) },
+    ]);
+    expect((await harness.threadStore.getThread(harness.threadId))?.queuedTurnInputs?.map((input) => input.id))
+      .toEqual(['queued_next']);
+    await expect(harness.coordinator.sendNow(harness.threadId, 'queued_next')).resolves.toMatchObject({
+      disposition: 'started', queuedInputId: 'queued_next',
     });
   });
+
 });
 
 async function createHarness() {

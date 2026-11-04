@@ -16,10 +16,6 @@ import type {
   MessageDeleteInput,
   MessagePatch,
   QueueTurnInput,
-  QueuedTurnInputEditRelease,
-  QueuedTurnInputEditReleaseResponse,
-  QueuedTurnInputEditSession,
-  QueuedTurnInputPatch,
   QueuedTurnInputResponse,
   ReorderQueuedTurnInputsInput,
   ReorderQueuedTurnInputsResponse,
@@ -33,6 +29,7 @@ import type {
   RuntimeRequestInput,
   RuntimeFeatureOperationResponse,
   RuntimeThread,
+  RuntimeQueuedTurnInput,
   SendTurnInput,
   SendTurnResponse,
   StartTurnResponse,
@@ -202,23 +199,9 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       });
     },
     retrieveQueuedTurnInput(threadId: string, inputId: string) {
-      return request<QueuedTurnInputEditSession>({
+      return request<RuntimeQueuedTurnInput>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/queued-turn-inputs/${encodeURIComponent(inputId)}/retrieve`,
         method: 'POST',
-      });
-    },
-    releaseQueuedTurnInputEdit(threadId: string, inputId: string, input: QueuedTurnInputEditRelease) {
-      return request<QueuedTurnInputEditReleaseResponse>({
-        path: `/v1/threads/${encodeURIComponent(threadId)}/queued-turn-inputs/${encodeURIComponent(inputId)}/release`,
-        method: 'POST',
-        body: input,
-      });
-    },
-    updateQueuedTurnInput(threadId: string, inputId: string, patch: QueuedTurnInputPatch) {
-      return request<QueuedTurnInputResponse>({
-        path: `/v1/threads/${encodeURIComponent(threadId)}/queued-turn-inputs/${encodeURIComponent(inputId)}`,
-        method: 'PATCH',
-        body: patch,
       });
     },
     deleteQueuedTurnInput(threadId: string, inputId: string) {

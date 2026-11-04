@@ -55,7 +55,7 @@ Facade 负责依赖组装、准入和窄事件桥接。新增横切能力时先�
 | `turn-task-registry.ts` | 每线程 active task、取消和完成 |
 | `runtime-event-writer.ts` | 事件落盘后发布 |
 | `runtime-turn-input-coordinator.ts` | 用户输入、steer、mailbox |
-| `runtime-queued-turn-coordinator.ts` | 持久化 FIFO、edit token、调度 |
+| `runtime-queued-turn-coordinator.ts` | 持久化 FIFO、原子取回、调度 |
 | `runtime-compaction-turn-coordinator.ts` | 显式 compaction task |
 | `runtime-hook-coordinator.ts` | Session/UserPrompt/Stop/Compact hooks |
 | `runtime-turn-finalizer.ts` | Message、Feature title commit、memory、completed；保留 turn usage 投影，不重复写统计明细 |
@@ -211,7 +211,7 @@ Core 保留 sandbox/policy、人工审批、事件投影和审计 DTO；Feature 
 - 每线程 promise tail 串行操作。
 - 最多 20 个持久化队列项。
 - 默认 FIFO；显式排序以事件持久化，后续调度遵循新顺序。
-- Retrieve/edit 使用随机 token。
+- Retrieve 原子取走队列项，返回内容成为普通输入草稿。
 - 自动调度隔离旧 run 的迟到结算。
 - Cancel/error 后暂停自动发送。
 

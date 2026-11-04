@@ -46,6 +46,12 @@ button {
   cursor: default;
 }
 
+/* 控件文字不是正文：点击、双击或拖过控件时不留下选区。.sd-button 已自带，
+   这里兜住原生按钮、details 摘要与 ARIA 角色控件；:where 不抬高优先级，组件仍可显式开启。 */
+:where(button, summary, [role='button'], [role='tab'], [role='menuitem'], [role='option']) {
+  user-select: none;
+}
+
 /* 未定制焦点态的控件也应跟随主题色，避免回落到 Chromium 的平台默认色。 */
 :focus-visible {
   outline-color: var(--app-primary);

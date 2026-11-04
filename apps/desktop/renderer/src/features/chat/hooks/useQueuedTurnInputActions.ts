@@ -1,7 +1,6 @@
 import type {
   DesktopRuntimeClient,
-  QueuedTurnInputEditSession,
-  RuntimeInputMessageAttachment,
+  RuntimeQueuedTurnInput,
   RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
@@ -9,25 +8,10 @@ import type { IdentityRequestGuard } from '../../../shared/hooks/useIdentityRequ
 
 export type ChatQueuedTurnActions = {
   deleteQueuedTurnInput: (inputId: string) => Promise<boolean>;
-  releaseQueuedTurnInputEdit: (
-    session: ChatQueuedTurnEditSession,
-    options?: { silent?: boolean },
-  ) => Promise<boolean>;
   reorderQueuedTurnInputs: (inputIds: string[]) => Promise<boolean>;
-  retrieveQueuedTurnInput: (inputId: string) => Promise<ChatQueuedTurnEditSession | null>;
+  retrieveQueuedTurnInput: (inputId: string) => Promise<RuntimeQueuedTurnInput | null>;
   sendQueuedTurnInputNow: (inputId: string) => Promise<boolean>;
-  updateQueuedTurnInput: (
-    session: ChatQueuedTurnEditSession,
-    input: string,
-    attachments: RuntimeInputMessageAttachment[],
-  ) => Promise<ChatQueuedTurnUpdateResult>;
 };
-
-export type ChatQueuedTurnEditSession = QueuedTurnInputEditSession & {
-  threadId: string;
-};
-
-export type ChatQueuedTurnUpdateResult = 'released-after-error' | 'retained-after-error' | 'updated';
 
 export function useQueuedTurnInputActions({
   actionRequests,
@@ -49,19 +33,6 @@ export function useQueuedTurnInputActions({
   terminalTurnIdsRef: MutableRefObject<Set<string>>;
 }): ChatQueuedTurnActions {
   const threadId = currentThread?.id ?? null;
-  const releaseSessionWithoutUi = useCallback(async (session: ChatQueuedTurnEditSession) => {
-    try {
-      await client.releaseQueuedTurnInputEdit(
-        session.threadId,
-        session.input.id,
-        { editToken: session.editToken },
-      );
-      return true;
-    } catch {
-      return false;
-    }
-  }, [client]);
-
   const deleteQueuedTurnInput = useCallback(async (inputId: string) => {
     if (!threadId) return false;
     const isCurrentRequest = actionRequests.begin();
@@ -102,55 +73,20 @@ export function useQueuedTurnInputActions({
     const isCurrentRequest = actionRequests.begin();
     try {
       if (isCurrentRequest()) setError(null);
-      const session = await client.retrieveQueuedTurnInput(threadId, inputId);
-      const ownedSession = { ...session, threadId };
-      if (isCurrentRequest()) return ownedSession;
-
-      // 页面切换或其他操作让响应过期时，立即释放刚创建的服务端编辑会话。
-      await releaseSessionWithoutUi(ownedSession);
-      return null;
-    } catch (unknownError) {
-      if (isCurrentRequest()) setError(runtimeActionError(unknownError));
-      return null;
-    }
-  }, [actionRequests, client, releaseSessionWithoutUi, setError, threadId]);
-
-  const releaseQueuedTurnInputEdit = useCallback(async (
-    session: ChatQueuedTurnEditSession,
-    options: { silent?: boolean } = {},
-  ) => {
-    if (options.silent) return releaseSessionWithoutUi(session);
-    const isCurrentRequest = actionRequests.begin();
-    try {
-      if (isCurrentRequest()) setError(null);
-      const response = await client.releaseQueuedTurnInputEdit(
-        session.threadId,
-        session.input.id,
-        { editToken: session.editToken },
-      );
-      if (
-        isCurrentRequest()
-        && response.resumed?.turnId
-        && !terminalTurnIdsRef.current.has(response.resumed.turnId)
-      ) {
-        setActiveTurnId(response.resumed.turnId);
+      const input = await client.retrieveQueuedTurnInput(threadId, inputId);
+      if (isCurrentRequest()) {
+        setCurrentThread((current) => current?.id === threadId
+          ? { ...current, queuedTurnInputs: current.queuedTurnInputs?.filter((item) => item.id !== inputId) }
+          : current);
       }
-      await reloadThreads();
-      // released=false 表示该令牌已提交、已释放或已被新会话替代，旧 UI 同样可以安全退出。
-      return true;
+      // The caller keeps its originating draft callback, even after navigation.
+      // Returning the taken input prevents a late response from discarding it.
+      return input;
     } catch (unknownError) {
       if (isCurrentRequest()) setError(runtimeActionError(unknownError));
-      return false;
+      return null;
     }
-  }, [
-    actionRequests,
-    client,
-    reloadThreads,
-    releaseSessionWithoutUi,
-    setActiveTurnId,
-    setError,
-    terminalTurnIdsRef,
-  ]);
+  }, [actionRequests, client, setCurrentThread, setError, threadId]);
 
   const sendQueuedTurnInputNow = useCallback(async (inputId: string) => {
     if (!threadId) return false;
@@ -173,74 +109,11 @@ export function useQueuedTurnInputActions({
     }
   }, [actionRequests, client, reloadThreads, setActiveTurnId, setError, terminalTurnIdsRef, threadId]);
 
-  const updateQueuedTurnInput = useCallback(async (
-    session: ChatQueuedTurnEditSession,
-    input: string,
-    attachments: RuntimeInputMessageAttachment[],
-  ): Promise<ChatQueuedTurnUpdateResult> => {
-    const isCurrentRequest = actionRequests.begin();
-    try {
-      if (isCurrentRequest()) setError(null);
-      const response = await client.updateQueuedTurnInput(
-        session.threadId,
-        session.input.id,
-        {
-          attachments,
-          editToken: session.editToken,
-          input,
-        },
-      );
-      if (
-        isCurrentRequest()
-        && response.turnId
-        && !terminalTurnIdsRef.current.has(response.turnId)
-      ) {
-        setActiveTurnId(response.turnId);
-      }
-      if (isCurrentRequest()) {
-        setCurrentThread((current) => {
-          if (current?.id !== session.threadId) return current;
-          const queuedTurnInputs = response.disposition === 'started'
-            ? current.queuedTurnInputs?.filter((item) => item.id !== session.input.id)
-            : current.queuedTurnInputs?.map((item) => (
-                item.id === session.input.id
-                  ? {
-                      ...item,
-                      attachments: attachments.map((attachment) => ({ ...attachment })),
-                      input: input.trim(),
-                    }
-                  : item
-              ));
-          return { ...current, queuedTurnInputs };
-        });
-      }
-      await reloadThreads();
-      return 'updated';
-    } catch (unknownError) {
-      if (isCurrentRequest()) setError(runtimeActionError(unknownError));
-      // 更新失败时主动释放；若 release 也失败则保留编辑 UI，允许用户重试。
-      const released = await releaseSessionWithoutUi(session);
-      if (released) await reloadThreads().catch(() => undefined);
-      return released ? 'released-after-error' : 'retained-after-error';
-    }
-  }, [
-    actionRequests,
-    client,
-    reloadThreads,
-    releaseSessionWithoutUi,
-    setActiveTurnId,
-    setCurrentThread,
-    setError,
-    terminalTurnIdsRef,
-  ]);
-
   return {
     deleteQueuedTurnInput,
-    releaseQueuedTurnInputEdit,
     reorderQueuedTurnInputs,
     retrieveQueuedTurnInput,
     sendQueuedTurnInputNow,
-    updateQueuedTurnInput,
   };
 }
 

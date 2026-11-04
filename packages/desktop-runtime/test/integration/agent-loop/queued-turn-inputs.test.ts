@@ -207,203 +207,53 @@ describe('agent loop queued turn inputs', () => {
     });
   });
 
-  it('retrieves, updates, and deletes pending items without leaking removed content', async () => {
+  it('takes a queued draft without pausing other inputs and resubmits it at the FIFO tail', async () => {
     const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
     await loop.startTurn(threadId, { input: 'Initial prompt' });
     await waitForModelRequestCount(modelClient, 1);
-    const kept = await loop.queueTurnInput(threadId, {
-      clientId: 'client-edit',
-      input: 'Prompt before edit',
-    });
-    const removed = await loop.queueTurnInput(threadId, {
-      clientId: 'client-delete',
-      input: 'Prompt to delete',
-    });
+    const editing = await loop.queueTurnInput(threadId, { input: 'Original queued text' });
+    const next = await loop.queueTurnInput(threadId, { input: 'Send this next' });
+    const removed = await loop.queueTurnInput(threadId, { input: 'Delete this' });
 
-    const editSession = await loop.retrieveQueuedTurnInput(threadId, kept.queuedInputId);
-    expect(editSession).toMatchObject({
-      editToken: expect.any(String),
-      input: {
-        id: kept.queuedInputId,
-        input: 'Prompt before edit',
-      },
+    await expect(loop.retrieveQueuedTurnInput(threadId, editing.queuedInputId)).resolves.toMatchObject({
+      id: editing.queuedInputId, input: 'Original queued text',
     });
-    await expect(loop.updateQueuedTurnInput(threadId, kept.queuedInputId, {
-      editToken: editSession.editToken,
-      input: 'Prompt after edit',
-    })).resolves.toMatchObject({
-      disposition: 'queued',
-      queuedInputId: kept.queuedInputId,
-      turnId: null,
-    });
-    await expect(loop.deleteQueuedTurnInput(threadId, removed.queuedInputId)).resolves.toEqual({
-      deleted: true,
-    });
-    const pending = await threadStore.getThread(threadId);
-    expect(pending?.queuedTurnInputs).toMatchObject([
-      {
-        id: kept.queuedInputId,
-        input: 'Prompt after edit',
-        updatedAt: expect.any(String),
-      },
-    ]);
-    expect(pending?.messages.some((message) => message.clientId === 'client-delete')).toBe(false);
+    await expect(loop.retrieveQueuedTurnInput(threadId, editing.queuedInputId)).rejects.toThrow('not found');
+    await expect(loop.deleteQueuedTurnInput(threadId, removed.queuedInputId)).resolves.toEqual({ deleted: true });
+    const resubmitted = await loop.queueTurnInput(threadId, { input: 'Edited queued text' });
+    expect(resubmitted.queuedInputId).not.toBe(editing.queuedInputId);
+    expect((await threadStore.getThread(threadId))?.queuedTurnInputs?.map((input) => input.id))
+      .toEqual([next.queuedInputId, resubmitted.queuedInputId]);
 
     modelClient.releaseFirstResponse();
-    const completed = await waitForQueueDrain(threadStore, threadId, 2);
-
-    expect(completed.messages.filter((message) => message.role === 'user').map((message) => message.content)).toEqual([
-      'Initial prompt',
-      'Prompt after edit',
-    ]);
-    expect(modelClient.requests).toHaveLength(2);
+    const completed = await waitForQueueDrain(threadStore, threadId, 3);
+    expect(completed.messages.filter((message) => message.role === 'user').map((message) => message.content))
+      .toEqual(['Initial prompt', 'Send this next', 'Edited queued text']);
+    expect(modelClient.requests).toHaveLength(3);
   });
 
-  it('keeps a retrieved item durable and paused until the edited text is committed', async () => {
-    const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
-    await loop.startTurn(threadId, { input: 'Initial prompt' });
-    await waitForModelRequestCount(modelClient, 1);
-    const queued = await loop.queueTurnInput(threadId, {
-      clientId: 'client-retrieved-edit',
-      input: 'Original queued text',
-    });
-
-    const editSession = await loop.retrieveQueuedTurnInput(threadId, queued.queuedInputId);
-    modelClient.releaseFirstResponse();
-    const paused = await waitForThreadIdle(threadStore, threadId);
-
-    expect(paused?.queuedTurnInputs).toMatchObject([{
-      id: queued.queuedInputId,
-      input: 'Original queued text',
-    }]);
-    expect(modelClient.requests).toHaveLength(1);
-
-    await expect(loop.updateQueuedTurnInput(threadId, queued.queuedInputId, {
-      editToken: editSession.editToken,
-      input: 'Edited queued text',
-    })).resolves.toMatchObject({
-      disposition: 'started',
-      queuedInputId: queued.queuedInputId,
-      turnId: expect.any(String),
-    });
-    const completed = await waitForQueueDrain(threadStore, threadId, 2);
-
-    expect(completed.messages.filter((message) => message.role === 'user').map((message) => message.content)).toEqual([
-      'Initial prompt',
-      'Edited queued text',
-    ]);
-    expect(modelClient.requests).toHaveLength(2);
-  });
-
-  it('releases editing explicitly and rejects a stale release token', async () => {
-    const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
-    await loop.startTurn(threadId, { input: 'Initial prompt' });
-    await waitForModelRequestCount(modelClient, 1);
-    const queued = await loop.queueTurnInput(threadId, {
-      input: 'Queued prompt after release',
-    });
-    const firstSession = await loop.retrieveQueuedTurnInput(threadId, queued.queuedInputId);
-    const currentSession = await loop.retrieveQueuedTurnInput(threadId, queued.queuedInputId);
-
-    await expect(loop.releaseQueuedTurnInputEdit(threadId, queued.queuedInputId, {
-      editToken: firstSession.editToken,
-    })).resolves.toEqual({ released: false, resumed: null });
-
-    modelClient.releaseFirstResponse();
-    const paused = await waitForThreadIdle(threadStore, threadId);
-    expect(paused?.queuedTurnInputs).toHaveLength(1);
-    expect(modelClient.requests).toHaveLength(1);
-
-    await expect(loop.releaseQueuedTurnInputEdit(threadId, queued.queuedInputId, {
-      editToken: currentSession.editToken,
-    })).resolves.toMatchObject({
-      released: true,
-      resumed: {
-        disposition: 'started',
-        queuedInputId: queued.queuedInputId,
-      },
-    });
-    const completed = await waitForQueueDrain(threadStore, threadId, 2);
-    expect(completed.messages.filter((message) => message.role === 'user').at(-1)).toMatchObject({
-      content: 'Queued prompt after release',
-    });
-  });
-
-  it('updates attachments while preserving the durable queued item', async () => {
-    const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
-    await loop.startTurn(threadId, { input: 'Initial prompt' });
-    await waitForModelRequestCount(modelClient, 1);
-    const queued = await loop.queueTurnInput(threadId, {
-      input: 'Edit the attachment',
-      attachments: [inlineAttachment('attachment_old', 'old.png')],
-    });
-    const session = await loop.retrieveQueuedTurnInput(threadId, queued.queuedInputId);
-
-    await expect(loop.updateQueuedTurnInput(threadId, queued.queuedInputId, {
-      attachments: [inlineAttachment('attachment_new', 'new.png')],
-      editToken: session.editToken,
-      input: 'Edited attachment',
-    })).resolves.toMatchObject({
-      disposition: 'queued',
-      queuedInputId: queued.queuedInputId,
-    });
-    const pending = await threadStore.getThread(threadId);
-    expect(pending?.queuedTurnInputs?.[0]).toMatchObject({
-      id: queued.queuedInputId,
-      input: 'Edited attachment',
-      attachments: [expect.objectContaining({
-        id: 'attachment_new',
-        name: 'new.png',
-      })],
-    });
-
-    modelClient.releaseFirstResponse();
-    const completed = await waitForQueueDrain(threadStore, threadId, 2);
-    expect(completed.messages.filter((message) => message.role === 'user').at(-1)).toMatchObject({
-      content: 'Edited attachment',
-      attachments: [expect.objectContaining({ id: 'attachment_new' })],
-    });
-  });
-
-  it('preserves Skill references when only queued attachments change', async () => {
+  it('returns attachments and Skill references when taking a draft, and keeps them on normal resubmission', async () => {
     const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
     await loop.startTurn(threadId, { input: 'Initial prompt' });
     await waitForModelRequestCount(modelClient, 1);
     const input = 'Step Skill inspect the attachment';
-    const skillReferences = [{
-      skillId: 'skill_step',
-      start: 0,
-      end: 'Step Skill'.length,
-    }];
+    const skillReferences = [{ skillId: 'skill_step', start: 0, end: 'Step Skill'.length }];
     const queued = await loop.queueTurnInput(threadId, {
-      clientId: 'client-skill-attachment-edit',
-      input,
-      attachments: [inlineAttachment('attachment_old', 'old.png')],
-      skillIds: ['skill_step'],
-      skillReferences,
+      input, attachments: [inlineAttachment('attachment_old', 'old.png')],
+      skillIds: ['skill_step'], skillReferences,
     });
-    const session = await loop.retrieveQueuedTurnInput(threadId, queued.queuedInputId);
-
-    await expect(loop.updateQueuedTurnInput(threadId, queued.queuedInputId, {
+    const retrieved = await loop.retrieveQueuedTurnInput(threadId, queued.queuedInputId);
+    expect(retrieved).toMatchObject({ input, skillReferences, attachments: [expect.objectContaining({ id: 'attachment_old' })] });
+    expect((await threadStore.getThread(threadId))?.queuedTurnInputs).toEqual([]);
+    await loop.queueTurnInput(threadId, {
+      input: retrieved.input, skillIds: retrieved.skillIds, skillReferences: retrieved.skillReferences,
       attachments: [inlineAttachment('attachment_new', 'new.png')],
-      editToken: session.editToken,
-      input,
-    })).resolves.toMatchObject({
-      disposition: 'queued',
-      queuedInputId: queued.queuedInputId,
-    });
-    expect((await threadStore.getThread(threadId))?.queuedTurnInputs?.[0]).toMatchObject({
-      skillIds: ['skill_step'],
-      skillReferences,
     });
 
     modelClient.releaseFirstResponse();
     const completed = await waitForQueueDrain(threadStore, threadId, 2);
-    expect(completed.messages.find(
-      (message) => message.clientId === 'client-skill-attachment-edit',
-    )).toMatchObject({
-      skillIds: ['skill_step'],
-      skillReferences,
+    expect(completed.messages.filter((message) => message.role === 'user').at(-1)).toMatchObject({
+      content: input, skillReferences, attachments: [expect.objectContaining({ id: 'attachment_new' })],
     });
     expect(modelClient.requests[1]?.stepSnapshot?.messageIds).toContain('skill_skill_step');
   });
@@ -594,37 +444,18 @@ describe('agent loop queued turn inputs', () => {
     expect((await loop.getThreadGoal(thread.id))?.id).not.toBe(previousGoalId);
   });
 
-  it('returns queued success when an edit claim prevents immediate scheduling', async () => {
+  it('continues draining the queue while a taken draft remains outside it', async () => {
     const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
     await loop.startTurn(threadId, { input: 'Initial prompt' });
     await waitForModelRequestCount(modelClient, 1);
-    const first = await loop.queueTurnInput(threadId, {
-      input: 'Keep this item under edit.',
-    });
-    const editSession = await loop.retrieveQueuedTurnInput(threadId, first.queuedInputId);
+    const editing = await loop.queueTurnInput(threadId, { input: 'Edit this later' });
+    await loop.queueTurnInput(threadId, { input: 'Send while editing' });
+    await loop.retrieveQueuedTurnInput(threadId, editing.queuedInputId);
+
     modelClient.releaseFirstResponse();
-    await waitForThreadIdle(threadStore, threadId);
-
-    const persisted = await loop.startTurn(threadId, {
-      clientId: 'client-persisted-once',
-      input: 'Persist this exactly once.',
-    });
-    expect(persisted).toMatchObject({
-      accepted: true,
-      disposition: 'queued',
-      queuedInputId: expect.any(String),
-      turnId: null,
-    });
-    expect((await threadStore.getThread(threadId))?.queuedTurnInputs?.map((item) => item.input)).toEqual([
-      'Keep this item under edit.',
-      'Persist this exactly once.',
-    ]);
-
-    await loop.releaseQueuedTurnInputEdit(threadId, first.queuedInputId, {
-      editToken: editSession.editToken,
-    });
-    const completed = await waitForQueueDrain(threadStore, threadId, 3);
-    expect(completed.messages.filter((message) => message.clientId === 'client-persisted-once')).toHaveLength(1);
+    const completed = await waitForQueueDrain(threadStore, threadId, 2);
+    expect(completed.messages.filter((message) => message.role === 'user').map((message) => message.content))
+      .toEqual(['Initial prompt', 'Send while editing']);
   });
 
   it('pauses after an error and resumes old items before newly submitted input', async () => {

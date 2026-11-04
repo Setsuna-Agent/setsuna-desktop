@@ -35,6 +35,23 @@
   --chat-tool-run-title-color: color-mix(in srgb, var(--app-warning) 72%, var(--app-text));
 }
 
+/* 进入待审批时摘要底色只闪一次，提示需要处理；不循环，长时间等待也不持续打扰。 */
+.chat-tool-run--pending_approval > .chat-tool-run__summary {
+  animation: chat-tool-run-approval-attention 1200ms var(--app-ease-out);
+}
+
+@keyframes chat-tool-run-approval-attention {
+  from {
+    background-color: color-mix(in srgb, var(--app-warning) 16%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-tool-run--pending_approval > .chat-tool-run__summary {
+    animation: none;
+  }
+}
+
 .chat-tool-run--error,
 .chat-tool-run--rejected {
   --chat-tool-run-icon-color: var(--app-danger);
@@ -75,6 +92,14 @@
   display: none;
 }
 
+/* 工作记录的行标题是状态而非正文，扁平行用的是 div，不在全局 summary 规则内；
+   展开后的输出、预览和错误仍可选中复制。 */
+.chat-tool-run__summary,
+.chat-tool-run__group-title,
+.chat-tool-run__inspection-item {
+  user-select: none;
+}
+
 details.chat-tool-run[open] > .chat-tool-run__summary,
 details.chat-tool-run > .chat-tool-run__summary:hover {
   --chat-tool-run-title-color: var(--app-text);
@@ -88,12 +113,15 @@ details.chat-tool-run > .chat-tool-run__summary:hover > .chat-tool-run__icon {
 }
 
 /* 原生 details 的展开收起动画（参考 beUI Collapsible）：只过渡内容槽高度和透明度，
-   open 状态仍由 details 自己保存，流式更新不会改写用户的选择。 */
-details.chat-tool-run {
+   open 状态仍由 details 自己保存，流式更新不会改写用户的选择。
+   思考记录与工具运行共用同一节奏。 */
+details.chat-tool-run,
+details.chat-thinking-disclosure {
   interpolate-size: allow-keywords;
 }
 
-details.chat-tool-run::details-content {
+details.chat-tool-run::details-content,
+details.chat-thinking-disclosure::details-content {
   /* 将明细顶部 margin 留在动画高度内，避免 content-visibility 切换时再跳一次。 */
   display: flow-root;
   height: 0;
@@ -107,7 +135,8 @@ details.chat-tool-run::details-content {
     content-visibility 200ms allow-discrete;
 }
 
-details.chat-tool-run[open]::details-content {
+details.chat-tool-run[open]::details-content,
+details.chat-thinking-disclosure[open]::details-content {
   height: auto;
   opacity: 1;
   /* 展开保留原节奏；收起使用上面的短补间，避免接近零高度后继续拖尾。 */
@@ -119,7 +148,9 @@ details.chat-tool-run[open]::details-content {
 
 @media (prefers-reduced-motion: reduce) {
   details.chat-tool-run::details-content,
-  details.chat-tool-run[open]::details-content {
+  details.chat-tool-run[open]::details-content,
+  details.chat-thinking-disclosure::details-content,
+  details.chat-thinking-disclosure[open]::details-content {
     transition: none;
   }
 }
@@ -342,6 +373,8 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   background: var(--app-surface);
   border-radius: var(--app-radius-lg);
   overflow: hidden;
+  /* 卡片整体是审查入口：标题、计数与按钮相邻，双击按钮不应选中旁边的文字。 */
+  user-select: none;
 }
 
 .chat-file-changes__header,

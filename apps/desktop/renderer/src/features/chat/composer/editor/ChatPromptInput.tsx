@@ -1,10 +1,10 @@
 // Prompt surface adapted from beUI (MIT): https://beui.dev/components/agents/prompt-input
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { ArrowUp, Square } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { forwardRef, useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
 import { useI18n } from '../../../../shared/i18n/I18nProvider.js';
 import { applyComposerRange, composerFragment, composerRange, composerRangeAtTextOffset, extendCommandRange, readComposerDocument, slotText } from './composerDocument.js';
+import { ChatSubmitIcon } from './ChatSubmitIcon.js';
 import { useComposerCaretScroll } from './useComposerCaretScroll.js';
 import type { ComposerEditor, ComposerSlot } from './types.js';
 
@@ -132,7 +132,7 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
 
   const actions = <Button className="chat-prompt__submit" variant="primary" disabled={disabled || (!loading && empty && !allowEmptySubmit)} aria-label={loading ? t('chat.composer.stop') : t('chat.composer.send')}
     onClick={() => loading ? onCancel?.() : onSubmit?.(elementRef.current ? readComposerDocument(elementRef.current, references.current).map(slotText).join('') : value)}>
-    {loading ? <Square size={13} fill="currentColor" /> : <ArrowUp size={16} />}
+    <ChatSubmitIcon stop={Boolean(loading)} />
   </Button>;
   return <div className="chat-prompt" data-disabled={disabled || undefined}>
     {header}

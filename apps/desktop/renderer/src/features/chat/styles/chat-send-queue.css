@@ -16,25 +16,30 @@
   overscroll-behavior: contain;
 }
 
+/* li 只承担增删的高度动画与拖放占位，其 display / opacity 由动画持有；可见行样式放在 __row 上。 */
 .chat-send-queue__item {
   position: relative;
   flex: 0 0 auto;
+  list-style: none;
+  border-radius: var(--app-radius-sm);
+}
+
+.chat-send-queue__row {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   min-height: 32px;
   gap: 6px;
   padding: 3px 7px 3px 9px;
-  list-style: none;
   border-radius: var(--app-radius-sm);
   transition: background-color 120ms ease, opacity 120ms ease;
 }
 
-.chat-send-queue__item:hover {
+.chat-send-queue__row:hover {
   background: var(--desktop-agent-control-hover-bg);
 }
 
-.chat-send-queue__item.is-pending {
+.chat-send-queue__item.is-pending .chat-send-queue__row {
   opacity: 0.62;
 }
 

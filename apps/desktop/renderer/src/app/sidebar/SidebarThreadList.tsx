@@ -1,5 +1,5 @@
 import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, useListChangeLayout } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { useMemo, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -84,6 +84,13 @@ export function SidebarThreadList({
   const visibleCount = Math.max(expandedVisibleCount, minimumVisibleCount);
   const visibleThreads = orderedThreads.slice(0, visibleCount);
   const remainingCount = orderedThreads.length - visibleThreads.length;
+  // 新建、归档、置顶等改变会话集合时，相邻行滑入新位置；拖放提交和“显示更多”只改变可见顺序，不重播。
+  const membershipKey = useMemo(() => threads.map((thread) => thread.id).sort().join('\n'), [threads]);
+  useListChangeLayout(reorder.rootRef, {
+    layoutKey: visibleThreads.map((thread) => thread.id).join('\n'),
+    changeKey: membershipKey,
+    enabled: !reorder.dragging,
+  });
 
   return (
     <div ref={reorder.rootRef} className={`sidebar-reorder-list ${variant === 'project' ? 'desktop-agent-session-list' : 'app-sidebar__list'}`}>

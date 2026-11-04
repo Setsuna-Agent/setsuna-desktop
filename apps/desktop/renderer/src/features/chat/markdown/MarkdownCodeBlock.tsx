@@ -1,4 +1,4 @@
-import { Button, MermaidDiagram } from '@setsuna-desktop/renderer-ui';
+import { Button, IconSwap, MermaidDiagram } from '@setsuna-desktop/renderer-ui';
 import { Check, Copy } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { CodeFileView } from '../../../shared/code/PierreCode.js';
@@ -128,9 +128,11 @@ function CodeCopyButton({ code }: { code: string }) {
       aria-label={copied ? t('chat.markdown.codeCopied') : t('chat.markdown.copyCode')}
       onClick={() => void copyCode()}
     >
-      {copied
-        ? <Check aria-hidden="true" className="chat-code-highlighter__copy-icon" size={14} />
-        : <Copy aria-hidden="true" className="chat-code-highlighter__copy-icon" size={14} />}
+      <IconSwap swapKey={copied ? 'copied' : 'copy'}>
+        {copied
+          ? <Check aria-hidden="true" className="chat-code-highlighter__copy-icon" size={14} />
+          : <Copy aria-hidden="true" className="chat-code-highlighter__copy-icon" size={14} />}
+      </IconSwap>
       <span className="chat-code-highlighter__copy-label">
         {copied ? t('chat.markdown.copied') : t('chat.markdown.copy')}
       </span>

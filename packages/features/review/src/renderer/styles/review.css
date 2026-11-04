@@ -39,6 +39,8 @@
   padding: 2px var(--desktop-review-panel-x-padding);
   border-bottom: 1px solid var(--desktop-panel-divider);
   background: var(--app-bg);
+  /* 工具栏的来源、计数和标题紧挨按钮，连点按钮时选区会溢到这些文字上。 */
+  user-select: none;
 }
 
 .desktop-review-panel > .desktop-review-panel__toolbar {

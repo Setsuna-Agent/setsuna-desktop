@@ -1,10 +1,6 @@
 import type {
   DeleteQueuedTurnInputResponse,
   QueueTurnInput,
-  QueuedTurnInputEditRelease,
-  QueuedTurnInputEditReleaseResponse,
-  QueuedTurnInputEditSession,
-  QueuedTurnInputPatch,
   QueuedTurnInputResponse,
   ReorderQueuedTurnInputsInput,
   ReorderQueuedTurnInputsResponse,
@@ -15,6 +11,7 @@ import type {
   RuntimeEvent,
   StoredThreadEvent,
   RuntimeThread,
+  RuntimeQueuedTurnInput,
   RuntimeThreadGoal,
   RuntimeThreadGoalPatch,
   RuntimeTaskKind,
@@ -694,32 +691,10 @@ export class AgentLoop {
   async retrieveQueuedTurnInput(
     threadId: string,
     inputId: string,
-  ): Promise<QueuedTurnInputEditSession> {
+  ): Promise<RuntimeQueuedTurnInput> {
     return this.withThreadMutation(
       threadId,
-      () => this.queuedTurns.retrieveForEditing(threadId, inputId),
-    );
-  }
-
-  async releaseQueuedTurnInputEdit(
-    threadId: string,
-    inputId: string,
-    input: QueuedTurnInputEditRelease,
-  ): Promise<QueuedTurnInputEditReleaseResponse> {
-    return this.withThreadMutation(
-      threadId,
-      () => this.queuedTurns.releaseEditing(threadId, inputId, input),
-    );
-  }
-
-  async updateQueuedTurnInput(
-    threadId: string,
-    inputId: string,
-    patch: QueuedTurnInputPatch,
-  ): Promise<QueuedTurnInputResponse> {
-    return this.withThreadMutation(
-      threadId,
-      () => this.queuedTurns.updateAfterEditing(threadId, inputId, patch),
+      () => this.queuedTurns.retrieve(threadId, inputId),
     );
   }
 

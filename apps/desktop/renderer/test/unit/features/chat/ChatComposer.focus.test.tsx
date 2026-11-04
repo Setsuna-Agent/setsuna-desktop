@@ -107,8 +107,8 @@ function Harness({ send, sideConversation = false, visible = true, placeholder }
         return sent;
       }}
       queuedTurnActions={{
-        deleteQueuedTurnInput: vi.fn(), releaseQueuedTurnInputEdit: vi.fn(), retrieveQueuedTurnInput: vi.fn(),
-        reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(), updateQueuedTurnInput: vi.fn(),
+        deleteQueuedTurnInput: vi.fn(), retrieveQueuedTurnInput: vi.fn(),
+        reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(),
       }}
       onAccessModeChange={vi.fn()}
       onCancelActiveTurn={vi.fn()}

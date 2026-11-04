@@ -43,9 +43,8 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 - Slash command 与命令菜单。
 - Active turn 的 stop/queue 语义。
 - `ChatSendQueue`。
-- 取回编辑 footer。
 
-Composer state 由 `useChatComposerSession` 和专用 hooks 管理。应用运行期间，文字草稿、Skill ID 及其未裁剪文本引用范围、已选文件/目录的完整 entry 与引用范围、`chatAttachmentStore` 按 thread / new-thread-slot 独立保留，切换会话、新建会话或切换页面不会清空原草稿。选择空工作区、首次创建 runtime thread 时转移同一份草稿；目标已有文字或附件（包括上传中）时恢复目标草稿，并将来源草稿保留在原位置。恢复编辑器时按已保存的引用与范围重建槽位，未选择的 `@` 搜索文字保留为可编辑文本；发送时再把 Skill 范围换算到裁剪后的文本。附件上传和发送结果仍归原 session，成功发送只清理已提交附件，失败保留文字、Skill 引用和附件以便重试。`useChatAttachments` 只订阅附件状态，输入框卸载不再删除会话持有的附件；显式丢弃草稿或会话状态 owner 卸载时回收未发送资源。队列编辑仍按原流程释放编辑租约和临时副本。
+Composer state 由 `useChatComposerSession` 和专用 hooks 管理。应用运行期间，文字草稿、Skill ID 及其未裁剪文本引用范围、已选文件/目录的完整 entry 与引用范围、`chatAttachmentStore` 按 thread / new-thread-slot 独立保留，切换会话、新建会话或切换页面不会清空原草稿。选择空工作区、首次创建 runtime thread 时转移同一份草稿；目标已有文字或附件（包括上传中）时恢复目标草稿，并将来源草稿保留在原位置。恢复编辑器时按已保存的引用与范围重建槽位，未选择的 `@` 搜索文字保留为可编辑文本；发送时再把 Skill 范围换算到裁剪后的文本。附件上传和发送结果仍归原 session，成功发送只清理已提交附件，失败保留文字、Skill 引用和附件以便重试。`useChatAttachments` 只订阅附件状态，输入框卸载不再删除会话持有的附件；显式丢弃草稿或会话状态 owner 卸载时回收未发送资源。队列取回后的内容也按普通草稿保留。
 
 Renderer Slot 的实例身份沿用这套 session 语义：Conversation/Details 跟随具体 thread surface，Composer 则使用 `variant + composerKey`。首次发送把 new-thread slot claim 为新 thread 时，Composer Slot 不会因 threadId 出现而中途 remount。空白 starter 的可替换 Conversation 内容与宿主 Composer 是同级所有权；Conversation winner 即使完全替换默认内容，也不能让发送入口消失。
 
@@ -76,7 +75,7 @@ Renderer Slot 的实例身份沿用这套 session 语义：Conversation/Details 
 
 ### `useQueuedTurnInputActions.ts`
 
-负责持久化队列的 retrieve、release、update、reorder、delete、send-now，并与 composer identity guard 协作。
+负责持久化队列的 retrieve、reorder、delete、send-now，并与 composer identity guard 协作。取回会原子移除队列项，返回的内容归普通草稿所有。
 
 Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Goal 保持独立调度。完整状态机见 [Active turn 发送队列](../../designs/current/queued-turn-inputs.md)。
 
@@ -99,8 +98,8 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `chatComposerCursorOffset.ts`：菜单定位需要的光标偏移。编辑器在原子引用节点记录序列化值的长度，统一换算所有引用的偏移；不依赖标签显示名称、应用改名或 portal 挂载时机。
 - `chatComposerSlots.tsx`：workspace、Skill、Plugin、浏览器标签页、会话引用和文本输入 slots。切换会话和重启时按草稿引用元数据重建词槽，保留文件根目录身份、引号、完整路径和周围空白。不扫描目录，也不把未选中的草稿搜索文字转换为词槽。
 - `useChatComposerDrop.ts`：统一接收侧栏会话引用与系统文件拖拽，保留现有草稿和选区内的文字。文件在 drop 事件内读取为 `File` 并交给现有附件 store，沿用文件选择器的本地引用、托管上传、数量限制与错误处理；不递归导入目录。禁用或附件已满时仍拦截文件默认行为，避免导航或把文件 URL 插入草稿。进入 composer 区域后高亮输入卡片，移出、结束拖动或窗口失焦时清除接收状态。会话引用追加去重，采用 Core contract 的 `thread://` 格式，草稿、队列编辑和结构化复制粘贴共用同一解析器。
-- `useQueuedTurnComposerEdit.ts`：带 token 的队列项取回编辑。
-- `useChatComposerHistory.ts`：光标折叠在首行开头时，用上下箭头遍历当前对话已加载的用户提问；消息来自 `ChatWorkspace` 合并后的分页历史，按消息 ID 保持浏览位置，分页新增的旧提问可继续向上取回。向下越过最新提问时恢复原草稿及结构化引用。输入法、修饰键、命令菜单和队列编辑保留原有键盘行为。
+- `useQueuedTurnComposerEdit.ts`：把队列项取回到普通输入草稿，取回请求的 pending 状态由原 composer session 保留，切换后返回仍会阻止重复取回和提交；请求结束后释放。
+- `useChatComposerHistory.ts`：光标折叠在首行开头时，用上下箭头遍历当前对话已加载的用户提问；消息来自 `ChatWorkspace` 合并后的分页历史，按消息 ID 保持浏览位置，分页新增的旧提问可继续向上取回。向下越过最新提问时恢复原草稿及结构化引用。输入法、修饰键和命令菜单保留原有键盘行为。
 
 粘贴超过 10,000 个 UTF-16 字符的文本时，`useChatComposerClipboard` 将原文转换为 UTF-8 TXT 附件，沿用附件准备、发送和清理流程；附件已满或当前模式不允许附件时保留为内联文本。普通文本、结构化引用粘贴和 Shift+Enter 换行后，按未替换的后缀重新定位插入结束点，再同步引用标签，避免 Chromium 把光标留在末尾换行前或被标签更新影响。`useComposerCaretScroll` 在编辑器更新后按实际光标位置滚动输入框；末尾空行直接使用滚动范围，中间空行用相邻字符测量行位置，不改变外层对话的滚动位置。
 
@@ -108,11 +107,9 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 
 `useChatSendQueueReorder` 管理拖动、插入位置、边缘滚动和方向键排序；队列变化时取消旧拖动，落下后以持久化事件更新顺序。
 
-取回队列项不会先删除持久化数据。Runtime 返回 edit token，renderer 暂时把内容接管到 composer；提交、取消、卸载和失败路径都要 release 或携 token 更新。
+点击队列“编辑”会原子取走该项，并用其文本、附件和 Skill 引用覆盖当前输入；Goal 类型恢复到输入框的 Goal 模式。取回后就是普通草稿，沿用草稿持久化和失败恢复，不保留编辑标签、edit token 或队列占用。其他队列项继续正常发送、删除和排序；再次发送走普通发送入口，生成新队列项并排到队尾，使用提交时选择的模型和 thinking 设置。
 
-取回副本在 composer session 中标记为 `queued-edit`，包括后续输入和提交失败后保留的内容，均不写入普通草稿恢复记录；开始编辑时清除该会话待写入的旧记录。结束编辑后恢复普通草稿保存，重载或异常退出仍由持久化队列恢复原项，避免把没有 edit token 的副本再次发送。
-
-Command controller 只拥有输入菜单交互，不负责发送、附件、Goal 或 queued edit 事务。Mention 菜单优先于强制打开的 slash 菜单；dismiss 只绑定当前 draft；queued edit 只阻止 slash menu。Project entry 搜索切换 query 或关闭菜单时会取消旧请求的写回。
+取回请求的迟到响应仍写入发起操作的 composer session，包括 Goal 发送类型，不覆盖切换后的对话草稿。取回时完整替换编辑器引用槽位，即使新旧文本相同也不会沿用旧 Skill 身份。Command controller 只拥有输入菜单交互，不负责发送、附件、Goal 或队列取回事务。Mention 菜单优先于强制打开的 slash 菜单；dismiss 只绑定当前 draft。Project entry 搜索切换 query 或关闭菜单时会取消旧请求的写回。
 
 新建对话、底部和侧边对话输入框的 `@`、`/`、`$` 候选保留输入框上方的等宽菜单。只有对话内消息编辑使用共享 `AnchoredPopover` 挂到浮层容器，贴近光标展示窄菜单，空间不足时自动翻转和避让视口边缘。光标定位仅在消息编辑菜单打开时跟随选区、滚动和布局变化，保留编辑器焦点与原生撤销记录。菜单样式统一放在 `styles/chat-command-menu.css`，紧凑样式限定在 `.chat-command-popover` 内；窄菜单名称按内容占宽，说明与路径截断，来源放在行尾，只有一种分类时省略分类标题。`@` 的完整路径仍可悬停查看。
 
@@ -120,7 +117,7 @@ Command controller 只拥有输入菜单交互，不负责发送、附件、Goal
 
 模型选择器的按钮同时显示当前模型和思考强度。上下文用量由独立的 `ChatContextUsageIndicator` 展示在模型按钮左侧，悬停查看用量详情，压缩期间显示加载状态。一级菜单直接选择该模型支持的思考档位（或开启/关闭），底部“模型”进入带搜索和独立滚动的二级列表。列表按配置的厂商分组，搜索后仅保留有匹配项的分组；模型行仅显示图标和模型名，完整名称、模型 ID、服务商、上下文窗口、最大输出与能力放在行悬停详情中。选模型后保持菜单打开，便于接着调整思考强度。模型选择和思考偏好仍由原 controller 持有，思考偏好按模型保存，不支持思考的模型不显示思考选项。
 
-Mode controller 只拥有本地 Goal 选择和发送参数快照；切换 thread 会重置 thread-scoped Goal 和 usage panel，成功发送后重置 Goal，thinking 继续保留。附件 begin/settle、实际 `onSend`、queued-edit token 和 Sender clear 仍由各自原 owner 管理。
+Mode controller 组合 Goal/Review 选择、模型偏好和发送参数快照；主聊天与侧边对话的发送类型由 composer session 在应用运行期间保留，成功发送或显式丢弃后重置，thinking 继续保留。未提供 session 控制的独立输入框仍使用本地模式状态。附件 begin/settle、实际 `onSend`、队列取回和 Sender clear 仍由各自原 owner 管理。
 
 编辑消息后重新生成和重试在 `useChatTurnActions` 中读取该线程绑定模型的最新 thinking 偏好，沿用 composer 的模型能力归一化规则，并显式传递 `thinking` / `thinkingEffort`，避免重试遗漏参数而回落为关闭思考。
 
@@ -140,6 +137,8 @@ Runtime 一轮可能包含：
 - Feature-owned persistent tool result / Plugin use。
 
 因此 UI 不能假设“一轮等于一条 assistant message”。
+
+Shell 输出轮询匹配到同一回合的原命令时不单独展示或计数。`read_shell_process` 和空输入的 `write_stdin` 按进程归属，将增量输出和最终结果合并到原命令详情，包括失败输出；未匹配到原命令的跨轮次或分页读取保留独立显示。原始工具记录保留，非空 stdin 与待授权操作仍独立展示。
 
 关键纯投影：
 
@@ -316,7 +315,7 @@ OpenUI 的下拉菜单、日期面板及 tooltip 会 portal 到 `body`，不在 
 - Runtime event/snapshot 是 transcript 真源。
 - Assistant 一轮可以有多个 segment 和 tool run。
 - Active turn 的普通提交默认 queue，不默认 steer。
-- Queue edit 必须持有有效 token。
+- 队列取回原子移除原项，重发以新 ID 进入队尾。
 - Streaming UI 可丢弃并从 snapshot 恢复。
 - 外部 Markdown/page/tool 内容不能升级为可信 UI 命令。
 - 异步动作必须绑定 thread/composer identity。
