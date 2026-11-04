@@ -63,6 +63,9 @@ void app.whenReady().then(async () => {
   await delay(1_500);
   assert.equal(loaded, 3);
   assert.equal(prepared, 1);
+  // Release the deliberately crashed final document before native fixture teardown.
+  mark('restoring document for fixture cleanup');
+  await window.loadFile(path.join(root, 'dist/renderer/index.html'));
   window.destroy();
   clearTimeout(watchdog);
   console.log('RENDERER_RECOVERY_OK');

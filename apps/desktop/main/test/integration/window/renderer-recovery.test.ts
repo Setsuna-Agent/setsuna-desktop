@@ -15,9 +15,11 @@ it.skipIf(!['darwin', 'win32'].includes(process.platform))('recovers a real cras
       outfile: entry, bundle: true, platform: 'node', format: 'cjs', external: ['electron'],
       alias: { '@setsuna-desktop/contracts': path.resolve('packages/contracts/src/index.ts') } });
     const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
-    const { stdout } = await promisify(execFile)(electron as unknown as string, [entry, root], {
+    const execution = promisify(execFile)(electron as unknown as string, [entry, root], {
       env, windowsHide: true, timeout: 25_000, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024,
-    }).catch(error => { throw new Error(`${error.message}\n${error.stdout}\n${error.stderr}`); });
+    });
+    execution.child.once('exit', (code, signal) => console.log('Renderer recovery fixture exit', { code, signal }));
+    const { stdout } = await execution.catch(error => { throw new Error(`${error.message}\n${error.stdout}\n${error.stderr}`); });
     expect(stdout).toContain('RENDERER_RECOVERY_OK');
   } finally { await rm(root, { recursive: true, force: true }); }
 }, 35_000);
