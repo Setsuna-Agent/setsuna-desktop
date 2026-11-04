@@ -38,6 +38,16 @@ void app.whenReady().then(async () => {
   let prepared = 0;
   let loaded = 0;
   window.webContents.on('did-finish-load', () => { loaded += 1; });
+  if (process.argv.includes('--baseline')) {
+    // Separate Electron's visible-window shutdown behavior from recovery ownership.
+    await window.loadFile(path.join(root, 'dist/renderer/index.html'));
+    window.show();
+    await delay(1_200);
+    console.log('RENDERER_RECOVERY_BASELINE_OK');
+    mark('exiting baseline fixture');
+    app.exit(0);
+    return;
+  }
   mark('loading initial document');
   await loadDesktopRenderer(window, { appRoot: root, prepare: async () => { prepared += 1; } });
   mark('crashing hidden renderer');
@@ -52,7 +62,8 @@ void app.whenReady().then(async () => {
   assert.equal(loaded, 1);
   const restored = once(window.webContents, 'did-finish-load');
   mark('revealing crashed renderer');
-  window.show();
+  if (process.argv.includes('--inactive')) window.showInactive();
+  else window.show();
   setTimeout(() => console.log('RENDERER_RECOVERY_WINDOW after-show', state()), 1_100);
   await restored;
   mark('checking restored document');
@@ -70,7 +81,7 @@ void app.whenReady().then(async () => {
   const finalGone = once(window.webContents, 'render-process-gone');
   killRenderer();
   await finalGone;
-  window.focus();
+  if (!process.argv.includes('--inactive')) window.focus();
   await delay(1_500);
   assert.equal(loaded, 3);
   assert.equal(prepared, 1);
