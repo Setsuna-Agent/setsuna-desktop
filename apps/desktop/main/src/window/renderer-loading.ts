@@ -1,11 +1,13 @@
 import { ipcMain, type BrowserWindow } from 'electron';
 import path from 'node:path';
 import { registerRendererImagePolicy } from './renderer-image-policy.js';
+import { registerDesktopRendererRecovery } from './renderer-recovery.js';
 
 type RendererLoadOptions = {
   appRoot: string;
   devServerUrl?: string;
   prepare?: () => Promise<void>;
+  canRecover?: () => boolean;
 };
 
 const readinessBySender = new Map<number, () => Promise<void>>();
@@ -38,13 +40,16 @@ export async function loadDesktopRenderer(window: BrowserWindow, options: Render
     if (!readinessBySender.size) ipcMain.removeHandler('desktop:when-ready');
   });
 
-  const loaded = Promise.resolve().then(() => {
+  const load = () => {
     assertAvailable();
     return options.devServerUrl
       ? window.loadURL(options.devServerUrl)
       : window.loadFile(path.join(options.appRoot, 'dist/renderer/index.html'));
-  });
+  };
+  const loaded = Promise.resolve().then(load);
   // Observe both failures immediately, including a page load that fails before services finish.
   await Promise.all([ready, loaded]);
   assertAvailable();
+  // Reuse settled readiness and the same session slot; do not prepare services again.
+  registerDesktopRendererRecovery(window, { load, canRecover: options.canRecover ?? (() => true) });
 }

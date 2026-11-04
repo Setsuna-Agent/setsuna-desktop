@@ -407,6 +407,7 @@ async function createWindow(): Promise<void> {
   await loadDesktopRenderer(currentMainWindow, {
     appRoot: app.getAppPath(),
     devServerUrl: process.env.SETSUNA_DESKTOP_DEV_SERVER_URL,
+    canRecover: () => !isAppQuitting && !desktopRelaunchRequested && !updateInstallCoordinator.active,
     prepare: async () => {
       try {
         await currentRuntimeHost.start();
@@ -468,6 +469,7 @@ async function createWindow(): Promise<void> {
       registerThreadWindowIpc({
         appRoot: app.getAppPath(),
         devServerUrl: process.env.SETSUNA_DESKTOP_DEV_SERVER_URL,
+        canRecover: () => !isAppQuitting && !desktopRelaunchRequested && !updateInstallCoordinator.active,
         validateThread: (threadId) => currentRuntimeHost.request({ path: `/v1/threads/${encodeURIComponent(threadId)}` }),
         createWindow: (bounds) => {
           const window = createMainBrowserWindow(desktopIcon, bounds);
@@ -528,6 +530,7 @@ async function createDataRootMaintenanceWindow(): Promise<void> {
   await loadDesktopRenderer(currentMainWindow, {
     appRoot: app.getAppPath(),
     devServerUrl: process.env.SETSUNA_DESKTOP_DEV_SERVER_URL,
+    canRecover: () => !isAppQuitting && !desktopRelaunchRequested && !updateInstallCoordinator.active,
   });
   await waitForRendererFirstPaint(currentMainWindow);
   currentMainWindow.show();

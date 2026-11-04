@@ -1,0 +1,86 @@
+import type { BrowserWindow, RenderProcessGoneDetails } from 'electron';
+
+const RETRY_DELAY_MS = 1_000;
+const STABLE_UPTIME_MS = 60_000;
+const MAX_RECOVERY_ATTEMPTS = 2;
+
+type RecoveryOptions = {
+  load(): Promise<void>;
+  canRecover(): boolean;
+};
+
+/** Recover a lost desktop renderer, never a merely slow or background-throttled page. */
+export function registerDesktopRendererRecovery(window: BrowserWindow, options: RecoveryOptions): void {
+  let disposed = false;
+  let pending = false;
+  let loading = false;
+  let attempts = 0;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let stable: ReturnType<typeof setTimeout> | undefined;
+  const available = () => !disposed && !window.isDestroyed() && !window.webContents.isDestroyed() && options.canRecover();
+  const schedule = () => {
+    if (!pending || loading || retry || !available() || !window.isVisible() || window.isMinimized()) return;
+    if (attempts >= MAX_RECOVERY_ATTEMPTS) return;
+    retry = setTimeout(() => {
+      retry = undefined;
+      if (!pending || !available() || !window.isVisible() || window.isMinimized()) return;
+      pending = false;
+      loading = true;
+      attempts += 1;
+      void Promise.resolve().then(() => {
+        if (available()) return options.load();
+      }).then(() => {
+        if (!available() || pending) return;
+        // A successful file load alone must not reset a repeated renderer crash loop.
+        stable = setTimeout(() => { attempts = 0; }, STABLE_UPTIME_MS);
+      }).catch((error: unknown) => {
+        pending = true;
+        console.error('[desktop-renderer] recovery load failed', { senderId: window.webContents.id, attempt: attempts }, error);
+      }).finally(() => {
+        loading = false;
+        if (pending && attempts >= MAX_RECOVERY_ATTEMPTS) {
+          console.error('[desktop-renderer] automatic recovery limit reached', { senderId: window.webContents.id });
+        }
+        schedule();
+      });
+    }, RETRY_DELAY_MS);
+  };
+  const gone = (_event: unknown, details: RenderProcessGoneDetails) => {
+    clearTimeout(stable);
+    stable = undefined;
+    console.error('[desktop-renderer] render process gone', {
+      senderId: window.webContents.id, reason: details.reason, exitCode: details.exitCode,
+    });
+    if (details.reason === 'clean-exit' || !available()) return;
+    pending = true;
+    if (attempts >= MAX_RECOVERY_ATTEMPTS) {
+      console.error('[desktop-renderer] automatic recovery limit reached', { senderId: window.webContents.id });
+    }
+    // Hidden windows stay idle until shown; recovery never steals focus or restarts runtime.
+    schedule();
+  };
+  const unresponsive = () => {
+    console.warn('[desktop-renderer] window unresponsive', { senderId: window.webContents.id });
+  };
+  window.webContents.on('render-process-gone', gone);
+  window.on('unresponsive', unresponsive);
+  window.on('show', schedule);
+  window.on('restore', schedule);
+  window.on('focus', schedule);
+  // Resources may have loaded before slow service preparation finished. Catch a
+  // process lost in that gap without adding work to the startup readiness path.
+  if (window.webContents.isCrashed()) {
+    pending = true;
+    schedule();
+  }
+  window.once('closed', () => {
+    disposed = true;
+    clearTimeout(retry);
+    clearTimeout(stable);
+    window.webContents.removeListener('render-process-gone', gone);
+    window.removeListener('unresponsive', unresponsive);
+    window.removeListener('show', schedule);
+    window.removeListener('restore', schedule);
+    window.removeListener('focus', schedule);
+  });
+}

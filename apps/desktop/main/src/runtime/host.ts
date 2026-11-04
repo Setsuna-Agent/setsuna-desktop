@@ -23,6 +23,7 @@ import { fetchRuntimeResponse } from './runtime-request.js';
 import { readRuntimeProgressResponse } from './runtime-progress-response.js';
 import { RuntimeProcess, type RuntimeProcessOptions } from './runtime-process.js';
 import { abortableDelay } from './runtime-process-control.js';
+import { trackRendererSubscription } from './renderer-subscription-lifecycle.js';
 export { stopRuntimeChild, type RuntimeChildProcess } from './runtime-process-control.js';
 export {
   resolveBuiltinPluginsDir, resolveBuiltinSkillsDir, resolvePackagedRuntimeEntry,
@@ -37,8 +38,7 @@ type RuntimeHostOptions = RuntimeProcessOptions & {
 type Subscription = {
   abort: AbortController;
   batcher: RuntimeEventBatcher;
-  handleWebContentsDestroyed: () => void;
-  webContents: WebContents;
+  disposeLifecycle: () => void;
 };
 
 const DEFAULT_SSE_RETRY_BASE_DELAY_MS = 250;
@@ -233,15 +233,9 @@ export class RuntimeHost {
       const payload: DesktopRuntimeEventPayload = { batch, subscriptionId };
       sendRuntimeEventPayload(webContents, payload);
     });
-    const handleWebContentsDestroyed = () => this.unsubscribe(subscriptionId);
-    // 每个 renderer 订阅都有独立 AbortController，窗口切换或销毁时可以精确断开。
-    this.subscriptions.set(subscriptionId, {
-      abort,
-      batcher,
-      handleWebContentsDestroyed,
-      webContents,
-    });
-    webContents.once('destroyed', handleWebContentsDestroyed);
+    const disposeLifecycle = trackRendererSubscription(webContents, () => this.unsubscribe(subscriptionId));
+    // 每个 renderer 文档独立拥有订阅；崩溃或重载后不能遗留旧连接。
+    this.subscriptions.set(subscriptionId, { abort, batcher, disposeLifecycle });
     void this.readSse(subscriptionId, webContents, input, abort.signal);
     return subscriptionId;
   }
@@ -255,7 +249,7 @@ export class RuntimeHost {
     const subscription = this.subscriptions.get(subscriptionId);
     subscription?.abort.abort();
     subscription?.batcher.cancel();
-    subscription?.webContents.removeListener('destroyed', subscription.handleWebContentsDestroyed);
+    subscription?.disposeLifecycle();
     this.subscriptions.delete(subscriptionId);
   }
 
@@ -301,7 +295,7 @@ export class RuntimeHost {
       const subscription = this.subscriptions.get(subscriptionId);
       if (subscription?.abort.signal === signal) {
         subscription.batcher.cancel();
-        subscription.webContents.removeListener('destroyed', subscription.handleWebContentsDestroyed);
+        subscription.disposeLifecycle();
         this.subscriptions.delete(subscriptionId);
       }
     }

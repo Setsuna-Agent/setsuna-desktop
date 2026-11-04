@@ -5,6 +5,7 @@ import { loadDesktopRenderer } from './renderer-loading.js';
 export function registerThreadWindowIpc(options: {
   appRoot: string;
   devServerUrl?: string;
+  canRecover?: () => boolean;
   createWindow(bounds: Rectangle): BrowserWindow;
   validateThread(threadId: string): Promise<unknown>;
 }): void {

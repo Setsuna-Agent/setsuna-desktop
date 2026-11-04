@@ -1,0 +1,53 @@
+import { app, BrowserWindow } from 'electron';
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+import { loadDesktopRenderer } from '../../src/window/renderer-loading.js';
+
+app.setPath('userData', path.join(process.argv[2]!, 'profile'));
+app.disableHardwareAcceleration();
+app.dock?.hide();
+
+void app.whenReady().then(async () => {
+  const root = process.argv[2]!;
+  await mkdir(path.join(root, 'dist/renderer'), { recursive: true });
+  await writeFile(path.join(root, 'dist/renderer/index.html'), '<!doctype html><title>Recovery fixture</title><body>Ready</body>');
+  const window = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+  let prepared = 0;
+  let loaded = 0;
+  window.webContents.on('did-finish-load', () => { loaded += 1; });
+  await loadDesktopRenderer(window, { appRoot: root, prepare: async () => { prepared += 1; } });
+  assert.equal(loaded, 1);
+  // A hidden renderer can die without destroying its BrowserWindow/WebContents.
+  const gone = once(window.webContents, 'render-process-gone');
+  window.webContents.forcefullyCrashRenderer();
+  await gone;
+  assert.equal(window.isDestroyed(), false);
+  assert.equal(window.webContents.isDestroyed(), false);
+  await delay(1_200);
+  assert.equal(loaded, 1);
+  const restored = once(window.webContents, 'did-finish-load');
+  window.show();
+  await restored;
+  assert.equal(await window.webContents.executeJavaScript('document.title'), 'Recovery fixture');
+  assert.equal(prepared, 1);
+  assert.equal(loaded, 2);
+  const nextGone = once(window.webContents, 'render-process-gone');
+  const nextRestored = once(window.webContents, 'did-finish-load');
+  window.webContents.forcefullyCrashRenderer();
+  await nextGone;
+  await nextRestored;
+  assert.equal(loaded, 3);
+  const finalGone = once(window.webContents, 'render-process-gone');
+  window.webContents.forcefullyCrashRenderer();
+  await finalGone;
+  window.focus();
+  await delay(1_500);
+  assert.equal(loaded, 3);
+  assert.equal(prepared, 1);
+  window.destroy();
+  console.log('RENDERER_RECOVERY_OK');
+  app.exit(0);
+}).catch((error: unknown) => { console.error(error); app.exit(1); });
