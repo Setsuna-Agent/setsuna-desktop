@@ -84,6 +84,11 @@ void app.whenReady().then(async () => {
   }
   assert.equal(prepared, managed ? 1 : 0);
   console.log(`RENDERER_RECOVERY_OK ${scenario}`);
+  mark('closing fixture window');
+  const destroyed = once(window.webContents, 'destroyed');
+  window.destroy();
+  // Let asynchronous WebContents/session cleanup finish before stopping the app loop.
+  await destroyed;
   mark('exiting fixture');
-  app.exit(0);
+  app.quit();
 }).catch((error: unknown) => { console.error(error); app.exit(1); });
