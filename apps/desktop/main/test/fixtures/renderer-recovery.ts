@@ -30,6 +30,11 @@ void app.whenReady().then(async () => {
   window.on('hide', () => console.log('RENDERER_RECOVERY_WINDOW hide', state()));
   window.on('focus', () => console.log('RENDERER_RECOVERY_WINDOW focus', state()));
   window.on('restore', () => console.log('RENDERER_RECOVERY_WINDOW restore', state()));
+  const killRenderer = () => {
+    const pid = window.webContents.getOSProcessId();
+    assert.ok(Number.isSafeInteger(pid) && pid > 0 && pid !== process.pid, 'fault injection must only target the renderer helper');
+    process.kill(pid, 'SIGKILL');
+  };
   let prepared = 0;
   let loaded = 0;
   window.webContents.on('did-finish-load', () => { loaded += 1; });
@@ -39,7 +44,7 @@ void app.whenReady().then(async () => {
   assert.equal(loaded, 1);
   // A hidden renderer can die without destroying its BrowserWindow/WebContents.
   const gone = once(window.webContents, 'render-process-gone');
-  window.webContents.forcefullyCrashRenderer();
+  killRenderer();
   await gone;
   assert.equal(window.isDestroyed(), false);
   assert.equal(window.webContents.isDestroyed(), false);
@@ -57,13 +62,13 @@ void app.whenReady().then(async () => {
   mark('crashing foreground renderer');
   const nextGone = once(window.webContents, 'render-process-gone');
   const nextRestored = once(window.webContents, 'did-finish-load');
-  window.webContents.forcefullyCrashRenderer();
+  killRenderer();
   await nextGone;
   await nextRestored;
   assert.equal(loaded, 3);
   mark('checking crash loop limit');
   const finalGone = once(window.webContents, 'render-process-gone');
-  window.webContents.forcefullyCrashRenderer();
+  killRenderer();
   await finalGone;
   window.focus();
   await delay(1_500);
