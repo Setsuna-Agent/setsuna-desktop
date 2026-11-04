@@ -9,87 +9,81 @@ import { loadDesktopRenderer } from '../../src/window/renderer-loading.js';
 app.setPath('userData', path.join(process.argv[2]!, 'profile'));
 app.disableHardwareAcceleration();
 app.dock?.hide();
-// Keep a single explicit shutdown path, rather than racing the default last-window quit.
 app.on('window-all-closed', () => undefined);
 let phase = 'waiting for app readiness';
 const mark = (value: string) => { phase = value; console.log(`RENDERER_RECOVERY_PHASE ${value}`); };
 const watchdog = setTimeout(() => { console.error(`Renderer recovery fixture stalled: ${phase}`); app.exit(1); }, 15_000);
 app.once('quit', (_event, code) => {
   clearTimeout(watchdog);
-  console.log('RENDERER_RECOVERY_QUIT', code);
+  console.log('RENDERER_RECOVERY_QUIT', code, process.getActiveResourcesInfo());
 });
 
 void app.whenReady().then(async () => {
-  mark('creating window');
   const root = process.argv[2]!;
+  const scenario = process.argv[3]!;
+  assert.ok(['baseline', 'loaded-baseline', 'manual-loss', 'recovery'].includes(scenario));
   await mkdir(path.join(root, 'dist/renderer'), { recursive: true });
-  await writeFile(path.join(root, 'dist/renderer/index.html'), '<!doctype html><title>Recovery fixture</title><body>Ready</body>');
+  const entry = path.join(root, 'dist/renderer/index.html');
+  await writeFile(entry, '<!doctype html><title>Recovery fixture</title><body>Ready</body>');
+  mark(`creating ${scenario} window`);
   const window = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
   const state = () => ({ visible: window.isVisible(), minimized: window.isMinimized(), focused: window.isFocused() });
   window.on('show', () => console.log('RENDERER_RECOVERY_WINDOW show', state()));
-  window.on('hide', () => console.log('RENDERER_RECOVERY_WINDOW hide', state()));
   window.on('focus', () => console.log('RENDERER_RECOVERY_WINDOW focus', state()));
-  window.on('restore', () => console.log('RENDERER_RECOVERY_WINDOW restore', state()));
-  const killRenderer = () => {
-    const pid = window.webContents.getOSProcessId();
-    assert.ok(Number.isSafeInteger(pid) && pid > 0 && pid !== process.pid, 'fault injection must only target the renderer helper');
-    process.kill(pid, 'SIGKILL');
-  };
+  window.on('closed', () => console.log('RENDERER_RECOVERY_WINDOW closed'));
+  window.webContents.on('destroyed', () => console.log('RENDERER_RECOVERY_CONTENTS destroyed'));
   let prepared = 0;
   let loaded = 0;
   window.webContents.on('did-finish-load', () => { loaded += 1; });
-  if (process.argv.includes('--baseline')) {
-    // Separate Electron's visible-window shutdown behavior from recovery ownership.
-    await window.loadFile(path.join(root, 'dist/renderer/index.html'));
+  mark('loading initial document');
+  const managed = scenario === 'recovery' || scenario === 'loaded-baseline';
+  if (managed) await loadDesktopRenderer(window, { appRoot: root, prepare: async () => { prepared += 1; } });
+  else await window.loadFile(entry);
+  assert.equal(loaded, 1);
+  if (scenario === 'baseline' || scenario === 'loaded-baseline') {
     window.show();
     await delay(1_200);
-    console.log('RENDERER_RECOVERY_BASELINE_OK');
-    mark('exiting baseline fixture');
-    app.exit(0);
-    return;
+  } else {
+    mark('terminating hidden renderer');
+    const gone = once(window.webContents, 'render-process-gone');
+    const pid = window.webContents.getOSProcessId();
+    assert.ok(Number.isSafeInteger(pid) && pid > 0 && pid !== process.pid, 'fault injection must only target the renderer helper');
+    process.kill(pid, 'SIGKILL');
+    await gone;
+    assert.equal(window.isDestroyed(), false);
+    assert.equal(window.webContents.isDestroyed(), false);
+    await delay(1_200);
+    assert.equal(loaded, 1, 'hidden windows must not reload in the background');
+    const restored = once(window.webContents, 'did-finish-load');
+    mark('revealing lost renderer');
+    window.show();
+    if (scenario === 'manual-loss') { await delay(1_000); await window.loadFile(entry); }
+    await restored;
+    mark('checking restored document');
+    assert.equal(await window.webContents.executeJavaScript('document.title'), 'Recovery fixture');
+    assert.equal(loaded, 2);
+    for (let attempt = 2; attempt <= 3; attempt += 1) {
+      mark(`terminating renderer ${attempt}`);
+      const nextGone = once(window.webContents, 'render-process-gone');
+      const nextPid = window.webContents.getOSProcessId();
+      assert.ok(Number.isSafeInteger(nextPid) && nextPid > 0 && nextPid !== process.pid);
+      process.kill(nextPid, 'SIGKILL');
+      await nextGone;
+      if (attempt === 2) {
+        const nextRestored = once(window.webContents, 'did-finish-load');
+        if (scenario === 'manual-loss') { await delay(1_000); await window.loadFile(entry); }
+        await nextRestored;
+        assert.equal(loaded, 3);
+      } else {
+        await delay(1_500);
+        assert.equal(loaded, 3, 'automatic recovery must stop after two attempts');
+        mark('restoring document for cleanup');
+        await window.loadFile(entry);
+      }
+    }
   }
-  mark('loading initial document');
-  await loadDesktopRenderer(window, { appRoot: root, prepare: async () => { prepared += 1; } });
-  mark('crashing hidden renderer');
-  assert.equal(loaded, 1);
-  // A hidden renderer can die without destroying its BrowserWindow/WebContents.
-  const gone = once(window.webContents, 'render-process-gone');
-  killRenderer();
-  await gone;
-  assert.equal(window.isDestroyed(), false);
-  assert.equal(window.webContents.isDestroyed(), false);
-  await delay(1_200);
-  assert.equal(loaded, 1);
-  const restored = once(window.webContents, 'did-finish-load');
-  mark('revealing crashed renderer');
-  if (process.argv.includes('--inactive')) window.showInactive();
-  else window.show();
-  setTimeout(() => console.log('RENDERER_RECOVERY_WINDOW after-show', state()), 1_100);
-  await restored;
-  mark('checking restored document');
-  assert.equal(await window.webContents.executeJavaScript('document.title'), 'Recovery fixture');
-  assert.equal(prepared, 1);
-  assert.equal(loaded, 2);
-  mark('crashing foreground renderer');
-  const nextGone = once(window.webContents, 'render-process-gone');
-  const nextRestored = once(window.webContents, 'did-finish-load');
-  killRenderer();
-  await nextGone;
-  await nextRestored;
-  assert.equal(loaded, 3);
-  mark('checking crash loop limit');
-  const finalGone = once(window.webContents, 'render-process-gone');
-  killRenderer();
-  await finalGone;
-  if (!process.argv.includes('--inactive')) window.focus();
-  await delay(1_500);
-  assert.equal(loaded, 3);
-  assert.equal(prepared, 1);
-  // Release the deliberately crashed final document before native fixture teardown.
-  mark('restoring document for fixture cleanup');
-  await window.loadFile(path.join(root, 'dist/renderer/index.html'));
-  console.log('RENDERER_RECOVERY_OK');
+  assert.equal(prepared, managed ? 1 : 0);
+  console.log(`RENDERER_RECOVERY_OK ${scenario}`);
   mark('exiting fixture');
-  // Exit owns window destruction; do not start default last-window quit first.
   app.exit(0);
 }).catch((error: unknown) => { console.error(error); app.exit(1); });
