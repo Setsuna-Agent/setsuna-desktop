@@ -44,7 +44,7 @@ describe('desktop data root coordinator', () => {
     const fixture = await createMigrationFixture();
     const legacyFiles = {
       'webdav-sync.json': '{"enabled":true,"credentialKey":"webdav.legacy"}',
-      '.webdav-sync-restore.json': '{"phase":"awaiting-validation"}',
+      '.webdav-sync-restore.json': '{"phase":"committed"}',
       'secure-credentials.json': '{"webdav.legacy":"encrypted-secret"}',
     };
     for (const [relativePath, content] of Object.entries(legacyFiles)) {
