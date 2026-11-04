@@ -44,6 +44,7 @@ export type AppRouteContentProps = Readonly<{
   draft: string;
   draftSkillReferences?: RuntimeSkillReference[];
   draftSendIntent?: ChatComposerSendIntent;
+  retrievingQueuedInput?: boolean;
   draftWorkspaceReferences?: WorkspaceDraftReference[];
   focusComposerRequest: number;
   findInChatRequest?: number;

@@ -122,6 +122,7 @@ export function ChatComposer({
   currentThread,
   draft,
   draftSendIntent,
+  retrievingQueuedInput,
   draftSkillReferences = EMPTY_SKILL_REFERENCES,
   draftWorkspaceReferences = EMPTY_WORKSPACE_REFERENCES,
   attachmentStore,
@@ -164,6 +165,7 @@ export function ChatComposer({
   currentThread: RuntimeThread | null;
   draft: string;
   draftSendIntent?: ChatComposerSendIntent;
+  retrievingQueuedInput?: boolean;
   draftSkillReferences?: RuntimeSkillReference[];
   draftWorkspaceReferences?: WorkspaceDraftReference[];
   attachmentStore?: ChatAttachmentStore;
@@ -237,6 +239,9 @@ export function ChatComposer({
   const setDraftSendIntent = useCallback((sendIntent: ChatComposerSendIntent) => {
     onDraftChange((current) => current, undefined, undefined, { sendIntent });
   }, [onDraftChange]);
+  const setRetrievingQueuedInput = useCallback((retrievingQueuedInput: boolean) => {
+    onDraftChange((current) => current, undefined, undefined, { retrievingQueuedInput });
+  }, [onDraftChange]);
   const modeController = useChatComposerModeController({
     currentThreadId: currentThread?.id,
     preferenceKey,
@@ -291,6 +296,7 @@ export function ChatComposer({
   const queuedTurnEdit = useQueuedTurnComposerEdit({
     actions: queuedTurnActions,
     replaceComposer: replaceQueuedTurnComposer,
+    retrievingControl: retrievingQueuedInput === undefined ? undefined : { value: retrievingQueuedInput, onChange: setRetrievingQueuedInput },
     submitting,
   });
   const attachmentPickerDisabled = attachmentLimitReached

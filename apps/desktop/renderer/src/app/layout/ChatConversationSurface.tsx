@@ -57,6 +57,7 @@ export type ChatConversationSurfaceModel = Readonly<{
   draft: string;
   draftSkillReferences?: RuntimeSkillReference[];
   draftSendIntent?: ChatComposerSendIntent;
+  retrievingQueuedInput?: boolean;
   draftWorkspaceReferences?: WorkspaceDraftReference[];
   focusComposerRequest: number;
   findInChatRequest?: number;
@@ -141,6 +142,7 @@ export function ChatConversationSurface({
         draft={model.draft}
         draftSkillReferences={model.draftSkillReferences}
         draftSendIntent={model.draftSendIntent}
+        retrievingQueuedInput={model.retrievingQueuedInput}
         draftWorkspaceReferences={model.draftWorkspaceReferences}
         focusComposerOnReveal
         focusComposerRequest={model.focusComposerRequest}

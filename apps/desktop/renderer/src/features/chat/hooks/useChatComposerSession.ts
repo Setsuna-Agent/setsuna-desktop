@@ -23,7 +23,7 @@ export type SetChatComposerDraft = (
   value: SetStateAction<string>,
   skillReferences?: RuntimeSkillReference[],
   workspaceReferences?: WorkspaceDraftReference[],
-  options?: { sendIntent?: ChatComposerSendIntent },
+  options?: { sendIntent?: ChatComposerSendIntent; retrievingQueuedInput?: boolean },
 ) => void;
 
 export type ChatComposerSessionClaim = {
@@ -61,6 +61,7 @@ export function transitionChatComposerSession(
 type RetainedComposerSession = ChatComposerSessionState & {
   attachments: ChatAttachmentStore;
   sendIntent: ChatComposerSendIntent;
+  retrievingQueuedInput: boolean;
 };
 type ComposerSessions = {
   windowKey: string | null;
@@ -80,7 +81,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
   const writer = useSessionWriter(windowKey, 'draft');
   const restoreSession = (identity: ChatComposerTargetIdentity, sessionId: number): RetainedComposerSession => ({
     ...readChatDraft(windowKey, identity), sessionId, targetIdentity: identity,
-    attachments: createChatAttachmentStore(client, t), sendIntent: 'message',
+    attachments: createChatAttachmentStore(client, t), sendIntent: 'message', retrievingQueuedInput: false,
   });
   const [storedSessions, setStoredSessions] = useState<ComposerSessions>(() => ({
     windowKey,
@@ -104,6 +105,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     const next = {
       ...transition.state,
       sendIntent: transition.claimed ? current.sendIntent : saved.sendIntent,
+      retrievingQueuedInput: transition.claimed ? current.retrievingQueuedInput : saved.retrievingQueuedInput,
       attachments: transition.claimed ? current.attachments : saved?.attachments ?? createChatAttachmentStore(client, t),
     };
     const entries = new Map(sessions.entries);
@@ -157,11 +159,13 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
       if (!entry) return current;
       const nextDraft = typeof value === 'function' ? value(entry.draft) : value;
       const sendIntent = options?.sendIntent ?? entry.sendIntent;
-      if (typeof value === 'function' && nextDraft === entry.draft && sendIntent === entry.sendIntent) return current;
+      const retrievingQueuedInput = options?.retrievingQueuedInput ?? entry.retrievingQueuedInput;
+      const sameControls = sendIntent === entry.sendIntent && retrievingQueuedInput === entry.retrievingQueuedInput;
+      if (typeof value === 'function' && nextDraft === entry.draft && sameControls) return current;
       // Plain-text appends retain existing offsets; replacements must supply their own references.
       const nextReferences = skillReferences ?? (nextDraft.startsWith(entry.draft) ? entry.skillReferences : []);
       const nextWorkspaceReferences = workspaceReferences ?? (nextDraft.startsWith(entry.draft) ? entry.workspaceReferences : []);
-      if (sendIntent === entry.sendIntent && nextDraft === entry.draft && nextReferences.length === entry.skillReferences.length
+      if (sameControls && nextDraft === entry.draft && nextReferences.length === entry.skillReferences.length
         && nextReferences.every((reference, index) => {
           const previous = entry.skillReferences[index];
           return reference.skillId === previous.skillId && reference.start === previous.start && reference.end === previous.end;
@@ -171,7 +175,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
           return reference.start === previous.start && reference.end === previous.end && reference.entry === previous.entry;
         })) return current;
       const entries = new Map(current.entries);
-      entries.set(entry.targetIdentity, { ...entry, draft: nextDraft, sendIntent, skillReferences: nextReferences, workspaceReferences: nextWorkspaceReferences });
+      entries.set(entry.targetIdentity, { ...entry, draft: nextDraft, sendIntent, retrievingQueuedInput, skillReferences: nextReferences, workspaceReferences: nextWorkspaceReferences });
       return { ...current, entries };
     });
   }, [sessionId]);
@@ -182,6 +186,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     const next: RetainedComposerSession = {
       draft: '', skillReferences: [], workspaceReferences: [], sessionId: nextSessionIdRef.current++, targetIdentity: identity,
       sendIntent: 'message',
+      retrievingQueuedInput: false,
       attachments: createChatAttachmentStore(servicesRef.current.client, servicesRef.current.t),
     };
     setStoredSessions((current) => ({
@@ -205,6 +210,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     const next: RetainedComposerSession = {
       draft, skillReferences: [], workspaceReferences: [], sessionId, targetIdentity: identity,
       sendIntent: 'message',
+      retrievingQueuedInput: false,
       attachments: createChatAttachmentStore(servicesRef.current.client, servicesRef.current.t),
     };
     // Prefills get a local identity so neither visible nor hidden unsent input is replaced.
@@ -233,6 +239,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
       entries.set(identity, {
         ...entry, draft: '', skillReferences: [], workspaceReferences: [], sessionId: nextSessionIdRef.current++,
         sendIntent: 'message',
+        retrievingQueuedInput: false,
         attachments: createChatAttachmentStore(servicesRef.current.client, servicesRef.current.t),
       });
       return { ...current, entries };
@@ -246,6 +253,7 @@ export function useChatComposerSession(targetIdentity: ChatComposerTargetIdentit
     composerKey: `chat-composer-session:${sessionId}`,
     draft: session.draft,
     draftSendIntent: session.sendIntent,
+    retrievingQueuedInput: session.retrievingQueuedInput,
     draftSkillReferences: session.skillReferences,
     draftWorkspaceReferences: session.workspaceReferences,
     discardThread,

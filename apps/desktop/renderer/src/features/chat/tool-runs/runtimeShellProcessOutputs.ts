@@ -53,7 +53,9 @@ function shellResultProcessId(run: RuntimeToolRun): string {
   const data = isRecord(run.data) ? run.data : {};
   const resultId = stringField(data.process_id)
     || shellContentLine(run.resultPreview ?? '', /^Process Id:\s*(.+)$/im);
-  if (resultId || !isShellOutputRead(run)) return resultId;
+  // Arguments identify an active poll, but a settled read needs actual process
+  // metadata: validation failures must not overwrite a completed command.
+  if (resultId || !isShellOutputRead(run) || run.status !== 'running') return resultId;
   const args = recordFromJson(run.argumentsPreview);
   const inputId = args.process_id ?? args.processId ?? args.session_id;
   return typeof inputId === 'number' ? String(inputId) : stringField(inputId);

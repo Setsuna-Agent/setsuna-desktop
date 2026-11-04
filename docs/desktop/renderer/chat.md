@@ -98,7 +98,7 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `chatComposerCursorOffset.ts`：菜单定位需要的光标偏移。编辑器在原子引用节点记录序列化值的长度，统一换算所有引用的偏移；不依赖标签显示名称、应用改名或 portal 挂载时机。
 - `chatComposerSlots.tsx`：workspace、Skill、Plugin、浏览器标签页、会话引用和文本输入 slots。切换会话和重启时按草稿引用元数据重建词槽，保留文件根目录身份、引号、完整路径和周围空白。不扫描目录，也不把未选中的草稿搜索文字转换为词槽。
 - `useChatComposerDrop.ts`：统一接收侧栏会话引用与系统文件拖拽，保留现有草稿和选区内的文字。文件在 drop 事件内读取为 `File` 并交给现有附件 store，沿用文件选择器的本地引用、托管上传、数量限制与错误处理；不递归导入目录。禁用或附件已满时仍拦截文件默认行为，避免导航或把文件 URL 插入草稿。进入 composer 区域后高亮输入卡片，移出、结束拖动或窗口失焦时清除接收状态。会话引用追加去重，采用 Core contract 的 `thread://` 格式，草稿、队列编辑和结构化复制粘贴共用同一解析器。
-- `useQueuedTurnComposerEdit.ts`：把队列项取回到普通输入草稿，只在取回请求期间持有 pending 状态。
+- `useQueuedTurnComposerEdit.ts`：把队列项取回到普通输入草稿，取回请求的 pending 状态由原 composer session 保留，切换后返回仍会阻止重复取回和提交；请求结束后释放。
 - `useChatComposerHistory.ts`：光标折叠在首行开头时，用上下箭头遍历当前对话已加载的用户提问；消息来自 `ChatWorkspace` 合并后的分页历史，按消息 ID 保持浏览位置，分页新增的旧提问可继续向上取回。向下越过最新提问时恢复原草稿及结构化引用。输入法、修饰键和命令菜单保留原有键盘行为。
 
 粘贴超过 10,000 个 UTF-16 字符的文本时，`useChatComposerClipboard` 将原文转换为 UTF-8 TXT 附件，沿用附件准备、发送和清理流程；附件已满或当前模式不允许附件时保留为内联文本。普通文本、结构化引用粘贴和 Shift+Enter 换行后，按未替换的后缀重新定位插入结束点，再同步引用标签，避免 Chromium 把光标留在末尾换行前或被标签更新影响。`useComposerCaretScroll` 在编辑器更新后按实际光标位置滚动输入框；末尾空行直接使用滚动范围，中间空行用相邻字符测量行位置，不改变外层对话的滚动位置。

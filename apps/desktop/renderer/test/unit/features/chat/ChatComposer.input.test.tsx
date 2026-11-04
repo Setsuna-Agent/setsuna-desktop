@@ -527,6 +527,35 @@ it('waits for queue retrieval before sending through the active-turn footer or k
   expect(send).toHaveBeenCalledExactlyOnceWith(queued.input, expect.any(Object));
 });
 
+it('retains the retrieval lock when returning to the original conversation', async () => {
+  const first: RuntimeQueuedTurnInput = { id: 'first', input: 'First recovered draft', createdAt: '' };
+  const second: RuntimeQueuedTurnInput = { id: 'second', input: 'Second recovered draft', createdAt: '' };
+  let resolveRetrieve!: (input: RuntimeQueuedTurnInput) => void;
+  const pending = new Promise<RuntimeQueuedTurnInput>((resolve) => { resolveRetrieve = resolve; });
+  const actions: ChatQueuedTurnActions = {
+    deleteQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(),
+    retrieveQueuedTurnInput: vi.fn(() => pending),
+  };
+  const client = {} as DesktopRuntimeClient;
+  const send = vi.fn(async () => false);
+  const conversation = (target: ChatComposerTargetIdentity) => <SessionHarness target={target} client={client} send={send}
+    queuedTurnInputs={[first, second]} queuedTurnActions={actions} />;
+  const view = render(conversation('thread:A'));
+  paste(screen.getByRole('textbox'), 'Existing draft');
+  fireEvent.click(screen.getAllByRole('button', { name: '编辑' })[0]);
+  view.rerender(conversation('thread:B'));
+  view.rerender(conversation('thread:A'));
+  fireEvent.click(screen.getAllByRole('button', { name: '编辑' })[1]);
+  fireEvent.click(screen.getByRole('button', { name: '发送' }));
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+  expect(actions.retrieveQueuedTurnInput).toHaveBeenCalledExactlyOnceWith(first.id);
+  expect(send).not.toHaveBeenCalled();
+  await act(async () => { resolveRetrieve(first); });
+  expect(screen.getByRole('textbox').textContent).toBe(first.input);
+  await act(async () => { fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' }); });
+  expect(send).toHaveBeenCalledExactlyOnceWith(first.input, expect.any(Object));
+});
+
 it.each(['', 'Restored draft'])('keeps project default skills out of the composer draft %j', async (initialDraft) => {
   const project: WorkspaceProject = { id: 'project', name: 'Project', createdAt: '', updatedAt: '', conversationDefaults: { skillIds: ['review'] } };
   const skill: RuntimeSkillSummary = { id: 'review', name: 'Review', enabled: true, kind: 'builtin' };
@@ -574,6 +603,7 @@ function Harness({ preferenceKey, project, newThread = false, initialDraft = '',
     key={session?.composerKey} attachmentStore={session?.attachmentStore}
     draftSkillReferences={session?.draftSkillReferences}
     draftSendIntent={session?.draftSendIntent}
+    retrievingQueuedInput={session?.retrievingQueuedInput}
     draftWorkspaceReferences={session?.draftWorkspaceReferences}
     activeTurnId={activeTurnId} client={client} config={null} canClearContext={false}
     contextUsage={{ compactedMessageCount: 0, percent: 0, totalTokens: 256_000, triggerScopes: [], usedTokens: 0, visiblePercent: 0 }}

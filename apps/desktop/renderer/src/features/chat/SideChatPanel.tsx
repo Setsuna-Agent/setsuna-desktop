@@ -192,6 +192,7 @@ export function SideChatPanel({
           draft={sideChat.draft}
           draftSkillReferences={sideChat.draftSkillReferences}
           draftSendIntent={sideChat.draftSendIntent}
+          retrievingQueuedInput={sideChat.retrievingQueuedInput}
           draftWorkspaceReferences={sideChat.draftWorkspaceReferences}
           focusComposerOnReveal={!hidden}
           plugins={plugins}

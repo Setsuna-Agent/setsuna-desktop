@@ -93,6 +93,24 @@ describe('shell process output projection', () => {
       .toEqual(['command', 'approval', 'stdin', 'unrelated']);
   });
 
+  it('keeps a later poll validation error separate from the completed command', () => {
+    const command = observation('command', 'exec_command', 'process', 'starting', { running: true });
+    const completed = observation('completed', 'read_shell_process', 'process', 'finished');
+    const invalidPoll: RuntimeToolRun = {
+      id: 'invalid-poll', name: 'read_shell_process', status: 'error',
+      argumentsPreview: '{"process_id":"process"}',
+      data: { ok: false, failure_kind: 'process_not_found', failure_stage: 'validation' },
+      resultPreview: 'Shell process not found or already closed: process',
+    };
+    const projected = projectShellProcessOutputs([message('command', [command]), message('polls', [completed, invalidPoll])]);
+
+    expect(projected[0].toolRuns![0]).toMatchObject({ status: 'success', data: completed.data });
+    expect(shellOutputSegments(projected[0].toolRuns![0].resultPreview))
+      .toEqual([{ kind: 'stdout', text: 'starting' }, { kind: 'stdout', text: 'finished' }]);
+    expect(projected.flatMap((item) => item.toolRuns ?? []).filter(isDisplayableRuntimeToolRun).map((run) => run.id))
+      .toEqual(['command', 'invalid-poll']);
+  });
+
   it('treats omitted or empty stdin as polling while retaining whitespace and control characters as input', () => {
     for (const input of [undefined, '', ' ', '\n', '\u0003']) {
       const run = observation('stdin', 'write_stdin', 'process', '');

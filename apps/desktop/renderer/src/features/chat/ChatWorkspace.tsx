@@ -70,6 +70,7 @@ export function ChatWorkspace({
   draft,
   draftSkillReferences,
   draftSendIntent,
+  retrievingQueuedInput,
   draftWorkspaceReferences,
   focusComposerOnReveal = false,
   focusComposerRequest = 0,
@@ -124,6 +125,7 @@ export function ChatWorkspace({
   draft: string;
   draftSkillReferences?: RuntimeSkillReference[];
   draftSendIntent?: ChatComposerSendIntent;
+  retrievingQueuedInput?: boolean;
   draftWorkspaceReferences?: WorkspaceDraftReference[];
   focusComposerOnReveal?: boolean;
   focusComposerRequest?: number;
@@ -266,6 +268,7 @@ export function ChatWorkspace({
             draft={draft}
             draftSkillReferences={draftSkillReferences}
             draftSendIntent={draftSendIntent}
+            retrievingQueuedInput={retrievingQueuedInput}
             draftWorkspaceReferences={draftWorkspaceReferences}
             focusOnReveal={focusComposerOnReveal}
             focusRequest={focusComposerRequest}
