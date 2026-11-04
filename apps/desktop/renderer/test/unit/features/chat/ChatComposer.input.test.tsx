@@ -556,6 +556,33 @@ it('retains the retrieval lock when returning to the original conversation', asy
   expect(send).toHaveBeenCalledExactlyOnceWith(first.input, expect.any(Object));
 });
 
+it('waits for a retained submission before retrieving a Goal after navigation', async () => {
+  const queued: RuntimeQueuedTurnInput = { id: 'goal', kind: 'goal', input: 'Recovered objective', createdAt: '' };
+  const actions: ChatQueuedTurnActions = {
+    deleteQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn(),
+    retrieveQueuedTurnInput: vi.fn(async () => queued),
+  };
+  let completeSend!: (sent: boolean) => void;
+  const pending = new Promise<boolean>((resolve) => { completeSend = resolve; });
+  const send = vi.fn<(...args: unknown[]) => Promise<boolean>>()
+    .mockImplementationOnce(() => pending).mockResolvedValue(false);
+  const client = {} as DesktopRuntimeClient;
+  const conversation = (target: ChatComposerTargetIdentity) => <SessionHarness target={target} client={client} send={send}
+    queuedTurnInputs={[queued]} queuedTurnActions={actions} />;
+  const view = render(conversation('thread:A'));
+  paste(screen.getByRole('textbox'), 'Submitting draft');
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+  view.rerender(conversation('thread:B'));
+  view.rerender(conversation('thread:A'));
+  fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+  expect(actions.retrieveQueuedTurnInput).not.toHaveBeenCalled();
+  await act(async () => { completeSend(true); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '编辑' })); });
+  expect(actions.retrieveQueuedTurnInput).toHaveBeenCalledExactlyOnceWith(queued.id);
+  await act(async () => { fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' }); });
+  expect(send).toHaveBeenLastCalledWith(queued.input, expect.objectContaining({ goalMode: true }));
+});
+
 it.each(['', 'Restored draft'])('keeps project default skills out of the composer draft %j', async (initialDraft) => {
   const project: WorkspaceProject = { id: 'project', name: 'Project', createdAt: '', updatedAt: '', conversationDefaults: { skillIds: ['review'] } };
   const skill: RuntimeSkillSummary = { id: 'review', name: 'Review', enabled: true, kind: 'builtin' };

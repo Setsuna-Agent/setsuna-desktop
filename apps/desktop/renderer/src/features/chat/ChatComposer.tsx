@@ -206,7 +206,6 @@ export function ChatComposer({
   const [selectedSkills, setSelectedSkills] = useState(() => filterSelectedSkillsBySlots(skills, initialSlotConfigRef.current!));
   const selectedPluginIds = useMemo(() => [...new Set(parsePluginMentions(draft).map((mention) => mention.pluginId))], [draft]);
   const [localSubmitting, setSubmitting] = useState(false);
-  const submitting = localSubmitting || submissionPending;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const senderRef = useRef<ComponentRef<typeof ChatPromptInput>>(null);
   const lastEditorDraftRef = useRef(draft);
@@ -263,6 +262,7 @@ export function ChatComposer({
     sending: attachmentsSending,
     settleSend: settleAttachmentSend,
   } = useChatAttachments({ client, store: attachmentStore });
+  const submitting = localSubmitting || submissionPending || attachmentsSending;
   const attachmentOnlyAllowed = !modeController.goalModeEnabled && !modeController.reviewModeEnabled;
   const attachmentOnlyReady = attachmentOnlyAllowed && sendableAttachments.length > 0 && !draft.trim();
   const activeQueueReady = Boolean(
