@@ -196,6 +196,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       provideHostCapability(
         artifactRendererHostCapability,
         Object.freeze({
+          platform: desktop.platform,
           startFileDrag: typeof desktop.startFileDrag === 'function'
             ? (input) => desktop.startFileDrag(input)
             : null,
@@ -204,6 +205,9 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
             : null,
           openWorkspaceFile: typeof desktop.openWorkspaceFile === 'function'
             ? (workspaceRoot, filePath) => desktop.openWorkspaceFile(workspaceRoot, filePath)
+            : null,
+          revealWorkspaceFile: typeof desktop.revealWorkspaceFile === 'function'
+            ? (workspaceRoot, filePath) => desktop.revealWorkspaceFile(workspaceRoot, filePath)
             : null,
         } satisfies ArtifactRendererHost),
       ),

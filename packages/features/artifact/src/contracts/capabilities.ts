@@ -72,6 +72,7 @@ export const artifactWorkspaceFilesCapability: CapabilityToken<ArtifactWorkspace
 });
 
 export interface ArtifactRendererHost {
+  readonly platform: string;
   readonly startFileDrag: ((input: DesktopFileDragInput) => Promise<DesktopOpenPathResult>) | null;
   readonly createWorkspaceFilePreview: ((
     workspaceRoot: string,
@@ -81,9 +82,13 @@ export interface ArtifactRendererHost {
     workspaceRoot: string,
     filePath: string,
   ) => Promise<DesktopOpenPathResult>) | null;
+  readonly revealWorkspaceFile: ((
+    workspaceRoot: string,
+    filePath: string,
+  ) => Promise<DesktopOpenPathResult>) | null;
 }
 
 export const artifactRendererHostCapability: CapabilityToken<ArtifactRendererHost> = defineCapability({
   id: 'artifact.renderer-host',
-  description: 'Native file open and preview actions used by Artifact result cards',
+  description: 'Native file open, reveal, and preview actions used by Artifact result cards',
 });

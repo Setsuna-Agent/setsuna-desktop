@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RuntimeArtifact } from '../../src/contracts/index.js';
 import {
   openArtifactInBrowser,
-  openArtifactWithDefaultApp,
+  runArtifactNativeFileAction,
 } from '../../src/renderer/artifact-actions.js';
 
 const artifact: RuntimeArtifact = {
@@ -20,7 +20,7 @@ describe('Artifact open actions', () => {
   it('opens the workspace-relative file with the default application', async () => {
     const openWorkspaceFile = vi.fn().mockResolvedValue({ ok: true });
 
-    await expect(openArtifactWithDefaultApp(artifact, openWorkspaceFile)).resolves.toBeNull();
+    await expect(runArtifactNativeFileAction(artifact, openWorkspaceFile)).resolves.toBeNull();
     expect(openWorkspaceFile).toHaveBeenCalledWith('/workspace', 'output/report.pdf');
   });
 
