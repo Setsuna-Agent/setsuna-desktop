@@ -255,7 +255,6 @@ Skills 的 renderer snapshot 与命令由 `packages/features/skills/src/renderer
 
 Settings：
 
-- `apps/desktop/renderer/test/unit/features/settings/SettingsPage.test.ts`
 - `packages/features/model-provider/test/renderer/`
 - `packages/features/network-proxy/test/renderer/`
 - `packages/features/workspace-dependencies/test/renderer/`

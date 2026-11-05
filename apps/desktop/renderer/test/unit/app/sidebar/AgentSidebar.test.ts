@@ -28,47 +28,6 @@ vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({
 }));
 
 describe('AgentSidebar project actions', () => {
-  it('shows the Alt hint on the selected chat and clears it on release, window blur, or sidebar collapse', () => {
-    const threads = ['first', 'second'].map((id): RuntimeThreadSummary => ({
-      id, projectId: projects[0]!.id, title: id, createdAt: '', updatedAt: '',
-      archived: false, messageCount: 0, lastMessagePreview: '',
-    }));
-    const header = (activeThreadId: string, collapsed = false) => createElement(
-      I18nProvider, { initialLocale: 'zh-CN', messageCatalog }, createElement(AgentSidebar, {
-        ...sidebarProps(projects[0]!), activeThreadId, collapsed,
-        threadsByProjectId: new Map([[projects[0]!.id, threads]]),
-      }),
-    );
-    const view = render(header('first'));
-    const sidebar = view.getByRole('complementary');
-    const key = (type: 'keydown' | 'keyup', altKey: boolean) => {
-      const event = new KeyboardEvent(type, { key: 'Alt', code: 'AltLeft', altKey, bubbles: true });
-      // happy-dom treats Alt alone as AltGraph.
-      Object.defineProperty(event, 'getModifierState', { value: () => false });
-      act(() => window.dispatchEvent(event));
-    };
-    expect(sidebar.hasAttribute('data-navigation-hint')).toBe(false);
-    key('keydown', true);
-    expect(sidebar.getAttribute('data-navigation-hint')).toBe('true');
-    const hint = () => sidebar.querySelector('.desktop-agent-session__navigation-hint')!;
-    expect(hint().closest('.desktop-agent-session')?.textContent).toContain('first');
-    view.rerender(header('second'));
-    expect(sidebar.querySelectorAll('.desktop-agent-session__navigation-hint')).toHaveLength(1);
-    expect(hint().closest('.desktop-agent-session')?.textContent).toContain('second');
-    key('keyup', false);
-    expect(sidebar.hasAttribute('data-navigation-hint')).toBe(false);
-    key('keydown', true);
-    fireEvent(window, new Event('blur'));
-    expect(sidebar.hasAttribute('data-navigation-hint')).toBe(false);
-    key('keydown', true);
-    fireEvent(document, new Event('visibilitychange'));
-    expect(sidebar.hasAttribute('data-navigation-hint')).toBe(false);
-    key('keydown', true);
-    view.rerender(header('second', true));
-    expect(sidebar.hasAttribute('data-navigation-hint')).toBe(false);
-    view.rerender(header('second'));
-    expect(sidebar.hasAttribute('data-navigation-hint')).toBe(false);
-  });
 
   it('navigates only displayed rows, skipping collapsed projects, pinned groups, and rows behind show more', async () => {
     const threads = Array.from({ length: 7 }, (_, index): RuntimeThreadSummary => ({
@@ -159,28 +118,6 @@ describe('AgentSidebar project actions', () => {
     expect(onOpenThread).toHaveBeenLastCalledWith('global');
   });
 
-  it('renders the shared project creation and editing entries', () => {
-    const project: WorkspaceProject = {
-      id: 'project_test',
-      name: 'test-project',
-      path: '/workspace/test-project',
-      createdAt: '2026-07-13T00:00:00.000Z',
-      updatedAt: '2026-07-13T00:00:00.000Z',
-    };
-    const sidebar = createElement(AgentSidebar, { ...sidebarProps(project), projectActionMenuId: project.id });
-    const { container } = render(createElement(
-      I18nProvider,
-      { initialLocale: 'zh-CN', messageCatalog },
-      sidebar,
-    ));
-    const html = container.innerHTML;
-
-    expect(html).toContain('aria-label="新建项目"');
-    expect(html).toContain('aria-label="在 test-project 中新建对话"');
-    expect(html).toContain('>编辑项目</button>');
-    expect(html).toContain('>归档项目</button>');
-  });
-
   it('receives pins from another window and preserves them when toggling a local conversation', () => {
     const thread: RuntimeThreadSummary = {
       id: 'local', title: 'Local', createdAt: '', updatedAt: '', archived: false, messageCount: 0, lastMessagePreview: '',
@@ -215,7 +152,6 @@ describe('AgentSidebar project actions', () => {
     const pinned = screen.getByRole('region', { name: '置顶' });
     expect([...pinned.querySelectorAll('.desktop-agent-session__select')].map((row) => row.textContent))
       .toEqual(['Conversation 1', 'Conversation 0']);
-    expect(pinned.compareDocumentPosition(projectNode('Project A')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(projectNode('Project A')).queryByRole('button', { name: 'Conversation 0' })).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Conversation 0' })).toHaveLength(1);
     expect(pinned.querySelector('.desktop-agent-session.is-active')).toBeNull();

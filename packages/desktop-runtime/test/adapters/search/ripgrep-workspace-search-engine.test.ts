@@ -309,9 +309,5 @@ function request(root: string, overrides: Partial<WorkspaceTextSearchRequest> = 
 }
 
 async function waitFor(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 1));
-  }
-  throw new Error('Condition was not met in time.');
+  await vi.waitUntil(predicate);
 }

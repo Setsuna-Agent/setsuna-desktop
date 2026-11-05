@@ -5,16 +5,6 @@ import { MarkdownNavigationProvider } from '../../../../../src/features/chat/mar
 import { RuntimeToolRuns, groupToolRuns } from '../../../../../src/features/chat/tool-runs/RuntimeToolRuns.js';
 import { withRendererPluginTestHost } from '../../../support/RendererPluginTestHost.js';
 
-export function shellRun(status: RuntimeToolRun['status']): RuntimeToolRun {
-  return {
-    id: `call_${status}`,
-    name: 'run_shell_command',
-    status,
-    argumentsPreview: '{"command":"pnpm test"}',
-    resultPreview: status === 'running' ? 'stdout: running\n' : '$ pnpm test\nexit: 0',
-  };
-}
-
 export function toolRun(id: string, name: string, args: Record<string, unknown>, status: RuntimeToolRun['status'] = 'success'): RuntimeToolRun {
   return {
     id,
@@ -66,58 +56,8 @@ export function fileRunWithDiff(
   };
 }
 
-export function hookBearingMultiFileRunWithDiff(): RuntimeToolRun {
-  const paths = ['src/first.ts', 'src/second.ts'];
-  return {
-    ...toolRun('patch_with_hooks', 'apply_patch', { files: paths }, 'pending_approval'),
-    approvalId: 'approval_patch_with_hooks',
-    resultPreview: JSON.stringify({
-      diff: {
-        diffs: paths.map((path) => ({
-          path,
-          action: 'Edited',
-          additions: 1,
-          deletions: 1,
-          truncated: false,
-          lines: [
-            { type: 'del', oldLine: 1, content: 'before' },
-            { type: 'add', newLine: 1, content: 'after' },
-          ],
-        })),
-      },
-    }),
-    hookRuns: [{
-      id: 'hook_patch',
-      eventName: 'PreToolUse',
-      handlerType: 'command',
-      status: 'completed',
-    }],
-  };
-}
-
-export function preparingFileRun(id: string, path: string): RuntimeToolRun {
-  return {
-    ...toolRun(id, 'edit_file', { file_path: path, old_string: 'before', new_string: 'after' }, 'running'),
-    phase: 'preparing',
-    resultPreview: JSON.stringify({
-      diff: {
-        path,
-        action: 'Modified',
-        additions: 47,
-        deletions: 19,
-        truncated: false,
-        lines: [],
-      },
-    }),
-  };
-}
-
 export function groupLabel(group: ReturnType<typeof groupToolRuns>[number]): string {
   return group.type === 'group' ? `${group.kind}:${group.runs.length}` : `single:${group.run.name}`;
-}
-
-export function renderedText(runs: RuntimeToolRun[], summaryMode?: 'aggregate' | 'latest'): string {
-  return renderedTextFromHtml(renderedHtml(runs, summaryMode));
 }
 
 export function renderedTextFromHtml(html: string): string {
@@ -135,12 +75,6 @@ export function renderedTextFromHtml(html: string): string {
   }
 
   return text.replace(/\s+/gu, ' ').trim();
-}
-
-export function firstToolRunSummaryHtml(html: string): string {
-  const start = html.indexOf('<summary');
-  const end = html.indexOf('</summary>', start);
-  return start >= 0 && end >= 0 ? html.slice(start, end + '</summary>'.length) : html;
 }
 
 export function renderedHtml(runs: RuntimeToolRun[], summaryMode?: 'aggregate' | 'latest'): string {

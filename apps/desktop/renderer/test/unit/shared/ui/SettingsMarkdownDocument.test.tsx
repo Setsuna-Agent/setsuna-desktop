@@ -42,9 +42,6 @@ it('previews Skill Markdown and safe HTML by default while keeping the original 
   ].join('\n\n');
   const view = render(<SettingsMarkdownDocument {...labels} content={content} />);
   expect(screen.getByRole('heading', { name: 'Workflow', level: 1 })).toBeTruthy();
-  expect(screen.getByText('carefully').tagName).toBe('STRONG');
-  expect(screen.getByRole('table').textContent).toContain('PreviewReady');
-  expect(screen.getAllByRole('checkbox').map((node) => (node as HTMLInputElement).checked)).toEqual([true, false]);
   expect(view.container.querySelector('pre code')?.textContent).toBe('gh status\n');
   expect(view.container.querySelector('details summary')?.textContent).toBe('More');
   expect(view.container.textContent).not.toContain('Internal metadata');

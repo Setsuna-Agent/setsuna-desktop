@@ -15,15 +15,28 @@ import { ExtensionManager } from '../../src/extensions/extension-manager.js';
 import { buildAppProject } from '../../src/adapters/plugin-app/vite-build.js';
 import { createPluginFixture, createPluginRuntime, patchPluginManifest } from '../adapters/plugin/support/file-plugin-bundle-store-fixture.js';
 import { verifyPackagedAppCompiler } from '../support/plugin-app-compiler-package.js';
+import { prepareInstalledAppDependencies } from '../support/plugin-app-dependencies.js';
+
+vi.mock('../../src/adapters/plugin-app/process.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/adapters/plugin-app/process.js')>();
+  return {
+    ...actual,
+    runAppProcess: (...args: Parameters<typeof actual.runAppProcess>) => {
+      // Package download speed is outside this test. Typechecking, compilation and native IPC stay real.
+      if (args[0][1] === 'install') return prepareInstalledAppDependencies(args[1], args[3]);
+      return actual.runAppProcess(...args);
+    },
+  };
+});
 
 const require = createRequire(import.meta.url);
 const context = { contributionId: 'notes.page', surface: 'renderer.plugin.page' as const };
 
-// Budget real package installs, ASAR compilation and one failed/successful update.
+// Budget ASAR compilation and failed/successful updates against the locked dependency fixtures.
 // Individual production builds still retain their own 180 s timeout.
 const appLifecycleTimeoutMs = 240_000;
 
-it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('installs a multi-file React app with packages, routes and the existing state/action bridge; reopens from cache and preserves a failed update', async () => {
+it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('builds a multi-file React app with isolated packages, routes and the existing state/action bridge; reopens from cache and preserves a failed update', async () => {
   let phaseStarted = performance.now();
   const finishPhase = (name: string) => {
     const now = performance.now();
@@ -175,7 +188,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('instal
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('Missing test bridge');
     const native = path.join(root, 'native'); await mkdir(native);
     await writeFile(path.join(native, 'source.json'), JSON.stringify(source));
-    await build({ entryPoints: { main: 'apps/desktop/main/test/fixtures/plugin-react-app.ts', preload: 'apps/desktop/main/test/fixtures/plugin-ui-page.preload.ts' },
+    await build({ entryPoints: { main: 'apps/desktop/main/test/fixtures/plugin-react-app.ts', preload: 'apps/desktop/main/test/fixtures/plugin-react-app.preload.ts' },
       outdir: native, outExtension: { '.js': '.cjs' }, platform: 'node', format: 'cjs', bundle: true, external: ['electron'],
       alias: { '@setsuna-desktop/contracts': path.resolve('packages/contracts/src/index.ts') } });
     await build({ entryPoints: ['apps/desktop/renderer/test/fixtures/plugin-react-app.tsx'], outfile: path.join(native, 'frame.js'),

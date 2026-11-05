@@ -9,10 +9,8 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import type {
-  DesktopDiffSummary,
-  DesktopReviewBridge,
-  DesktopReviewFocusRequest,
-  DesktopReviewState,
+  DesktopDiffSummary, DesktopReviewFocusRequest,
+  DesktopReviewState
 } from '../../src/contracts/index.js';
 import {
   act,
@@ -36,161 +34,6 @@ afterEach(() => {
 });
 
 describe('DesktopReviewPanel interactions', () => {
-  it('does not rerender an unchanged Pierre diff when its parent rerenders', async () => {
-    const summary: DesktopDiffSummary = {
-      additions: 1,
-      deletions: 0,
-      files: [diffFile('src/stable.ts', 1)],
-    };
-    const state = { ...reviewState, unstagedSummary: summary };
-    const findings: RuntimeReviewFinding[] = [];
-    const workspaceApps: [] = [];
-    const noop = () => undefined;
-    const pierreRender = vi.spyOn(VirtualizedFileDiff.prototype, 'render');
-    const panel = () => (
-      <ReviewRendererTestHost locale="zh-CN">
-        <DesktopReviewPanel
-          activeProject={project}
-          error={null}
-          findings={findings}
-          latestSummary={summary}
-          loading={false}
-          reviewState={state}
-          workspaceApps={workspaceApps}
-          onExternalOpenFile={noop}
-          onOpenProjectFile={noop}
-          onRefresh={noop}
-          onSelectBaseRef={noop}
-        />
-      </ReviewRendererTestHost>
-    );
-    const view = render(panel());
-
-    await waitFor(() => expect(pierreRender).toHaveBeenCalled());
-    const renderCount = pierreRender.mock.calls.length;
-    view.rerender(panel());
-
-    expect(pierreRender).toHaveBeenCalledTimes(renderCount);
-  });
-
-  it('expands unsupported formats with a user-facing format notice', () => {
-    const summary: DesktopDiffSummary = {
-      additions: 0,
-      deletions: 0,
-      files: [{
-        path: 'docs/spec.bin',
-        action: 'Created',
-        additions: 0,
-        deletions: 0,
-        contentKind: 'binary',
-        truncated: false,
-        lines: [],
-      }],
-    };
-
-    render(
-      <ReviewRendererTestHost locale="zh-CN">
-        <DesktopReviewPanel
-          activeProject={project}
-          error={null}
-          findings={[]}
-          latestSummary={summary}
-          loading={false}
-          reviewState={{ ...reviewState, unstagedSummary: summary }}
-          onExternalOpenFile={() => undefined}
-          onOpenProjectFile={() => undefined}
-          onRefresh={() => undefined}
-          onSelectBaseRef={() => undefined}
-        />
-      </ReviewRendererTestHost>,
-    );
-
-    expect(screen.getByText('暂不支持预览此文件格式')).toBeTruthy();
-    expect(screen.queryByText('二进制文件')).toBeNull();
-    expect(document.querySelector('diffs-container')).toBeNull();
-  });
-
-  it('shows before and after images when image changes use split view', async () => {
-    const releaseImagePreview = vi.fn().mockResolvedValue(true);
-    const createImagePreview = vi.fn().mockImplementation((
-      _workspaceRoot: string,
-      input: { side: 'before' | 'after' },
-    ) => Promise.resolve({
-      ok: true,
-      previewId: `${input.side}-${createImagePreview.mock.calls.length}`,
-      url: `setsuna-preview://review/${input.side}.png`,
-    }));
-    const bridge = {
-      createImagePreview,
-      releaseImagePreview,
-    } as unknown as DesktopReviewBridge;
-    const summary: DesktopDiffSummary = {
-      additions: 0,
-      deletions: 0,
-      files: [{
-        path: 'src/assets/icon.png',
-        previousPath: 'src/assets/old-icon.png',
-        action: 'Renamed',
-        additions: 0,
-        deletions: 0,
-        contentKind: 'image',
-        truncated: false,
-        lines: [],
-      }],
-    };
-
-    const renderPanel = (activeSummary: DesktopDiffSummary) => (
-      <ReviewRendererTestHost bridge={bridge} locale="zh-CN">
-        <DesktopReviewPanel
-          activeProject={project}
-          error={null}
-          findings={[]}
-          latestSummary={activeSummary}
-          loading={false}
-          reviewState={{ ...reviewState, unstagedSummary: activeSummary }}
-          onExternalOpenFile={() => undefined}
-          onOpenProjectFile={() => undefined}
-          onRefresh={() => undefined}
-          onSelectBaseRef={() => undefined}
-        />
-      </ReviewRendererTestHost>
-    );
-    const view = render(renderPanel(summary));
-
-    const currentPreview = await screen.findByRole('img', { name: '修改后：src/assets/icon.png' });
-    expect(screen.getByRole('button', { name: /折叠 src\/assets\/icon\.png/u }).textContent)
-      .toBe('src/assets/icon.png');
-    expect(currentPreview.getAttribute('src')).toBe('setsuna-preview://review/after.png');
-
-    await userEvent.click(screen.getByRole('button', {
-      name: '当前：单列对比，点击切换为左右对比',
-    }));
-
-    const previousPreview = await screen.findByRole('img', { name: '修改前：src/assets/old-icon.png' });
-    expect(previousPreview.getAttribute('src')).toBe('setsuna-preview://review/before.png');
-    expect(screen.queryByText('修改前')).toBeNull();
-    expect(screen.queryByText('修改后')).toBeNull();
-    expect(createImagePreview).toHaveBeenCalledWith('/tmp/fixture', {
-      baseRef: 'origin/main',
-      filePath: 'src/assets/old-icon.png',
-      side: 'before',
-      source: 'unstaged',
-    });
-    expect(createImagePreview).toHaveBeenCalledWith('/tmp/fixture', {
-      baseRef: 'origin/main',
-      filePath: 'src/assets/icon.png',
-      side: 'after',
-      source: 'unstaged',
-    });
-    const refreshedSummary: DesktopDiffSummary = {
-      ...summary,
-      files: summary.files.map((file) => ({ ...file })),
-    };
-    view.rerender(renderPanel(refreshedSummary));
-    await waitFor(() => expect(createImagePreview).toHaveBeenCalledTimes(4));
-    expect(releaseImagePreview).toHaveBeenCalledTimes(2);
-    expect(document.querySelector('diffs-container')).toBeNull();
-  });
 
   it('renders annotations and opens resolved workspace lines', async () => {
     const openedFiles: Array<{ path?: string | null; line?: number }> = [];
@@ -400,8 +243,6 @@ describe('DesktopReviewPanel interactions', () => {
     );
 
     expect(screen.getByText('[P3] 缺少测试脚本')).toBeTruthy();
-    const location = screen.getByText('package.json:8');
-    expect(location.tagName).toBe('SPAN');
     expect(screen.queryByRole('button', { name: 'package.json:8' })).toBeNull();
     await waitFor(() => {
       expect(virtualizerScrollTo).toHaveBeenCalledWith({

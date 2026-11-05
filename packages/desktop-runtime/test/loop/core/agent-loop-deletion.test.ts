@@ -64,11 +64,9 @@ describe('agent loop thread deletion barrier', () => {
       enteredDelete = true;
       await threadStore.deleteThread(thread.id);
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(enteredDelete).toBe(false);
     await expect(loop.startTurn(thread.id, { input: 'must not start during deletion' }))
       .rejects.toThrow('being deleted');
+    expect(enteredDelete).toBe(false);
 
     modelClient.release();
     await deletion;
@@ -145,10 +143,8 @@ describe('agent loop thread deletion barrier', () => {
       enteredDelete = true;
       await threadStore.deleteThread(thread.id);
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(enteredDelete).toBe(false);
     await expect(loop.startTurn(thread.id, { input: 'late admission' })).rejects.toThrow('being deleted');
+    expect(enteredDelete).toBe(false);
 
     attachmentStore.releaseClaim();
     await startingResult;
@@ -192,10 +188,8 @@ describe('agent loop thread deletion barrier', () => {
       enteredDelete = true;
       await threadStore.deleteThread(thread.id);
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(enteredDelete).toBe(false);
     await expect(loop.withThreadMutation(thread.id, async () => undefined)).rejects.toThrow('being deleted');
+    expect(enteredDelete).toBe(false);
 
     releaseMutation();
     await mutation;
@@ -252,15 +246,8 @@ describe('agent loop thread deletion barrier', () => {
 });
 
 async function waitForMigrationReadiness(loop: AgentLoop): Promise<void> {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    const readiness = loop.prepareDataMigration();
-    if (readiness.ready) {
-      loop.cancelDataMigrationPreparation();
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  throw new Error('Agent loop did not become ready for migration.');
+  await vi.waitUntil(() => loop.prepareDataMigration().ready);
+  loop.cancelDataMigrationPreparation();
 }
 
 class DeferredClaimAttachmentStore implements AttachmentStore {

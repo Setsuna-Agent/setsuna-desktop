@@ -4,12 +4,6 @@ import {
   resolveBrowserFaviconUrls,
 } from '../../src/renderer/browserFaviconCoordinator.js';
 
-async function flushPromises(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
 afterEach(() => vi.useRealTimers());
 
 describe('resolveBrowserFaviconUrls', () => {
@@ -38,10 +32,9 @@ describe('createBrowserFaviconCoordinator', () => {
     expect(onChange).not.toHaveBeenCalled();
     coordinator.loadingStopped();
     await vi.advanceTimersByTimeAsync(250);
-    await flushPromises();
-
     expect(resolve).toHaveBeenCalledWith([]);
-    expect(onChange).toHaveBeenCalledWith('data:image/png;base64,ZmFsbGJhY2s=');
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalledWith('data:image/png;base64,ZmFsbGJhY2s='));
+    coordinator.dispose();
   });
 
   it('cancels the delayed fallback when page candidates arrive', async () => {
@@ -54,28 +47,30 @@ describe('createBrowserFaviconCoordinator', () => {
     coordinator.loadingStopped();
     coordinator.faviconUpdated(['https://example.com/icon.png']);
     await vi.advanceTimersByTimeAsync(250);
-    await flushPromises();
-
     expect(resolve).toHaveBeenCalledTimes(1);
     expect(resolve).toHaveBeenCalledWith(['https://example.com/icon.png']);
-    expect(onChange).toHaveBeenCalledWith('https://example.com/icon.png');
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalledWith('https://example.com/icon.png'));
+    coordinator.dispose();
   });
 
   it('ignores a favicon request that finishes after the next navigation starts', async () => {
     let finishRequest: (value: string | null) => void = () => undefined;
     const pendingRequest = new Promise<string | null>((resolve) => { finishRequest = resolve; });
     const onChange = vi.fn();
+    const resolve = vi.fn()
+      .mockReturnValueOnce(pendingRequest)
+      .mockResolvedValueOnce('https://new.example/icon.png');
     const coordinator = createBrowserFaviconCoordinator({
       onChange,
-      resolve: () => pendingRequest,
+      resolve,
     });
 
     coordinator.faviconUpdated(['https://old.example/icon.png']);
-    await Promise.resolve();
+    await vi.waitFor(() => expect(resolve).toHaveBeenCalledOnce());
     coordinator.navigationStarted();
     finishRequest('data:image/png;base64,b2xk');
-    await flushPromises();
-
-    expect(onChange).not.toHaveBeenCalled();
+    coordinator.faviconUpdated(['https://new.example/icon.png']);
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalledExactlyOnceWith('https://new.example/icon.png'));
+    coordinator.dispose();
   });
 });

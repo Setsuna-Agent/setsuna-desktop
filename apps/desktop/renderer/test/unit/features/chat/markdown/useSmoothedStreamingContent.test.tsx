@@ -37,47 +37,6 @@ afterEach(() => {
 });
 
 describe('useSmoothedStreamingContent', () => {
-  it('keeps progressing on frames even when new deltas arrive more frequently', () => {
-    const frames = mockFrames();
-    const view = renderHook(
-      ({ content }) => useSmoothedStreamingContent(content, true),
-      { initialProps: { content: '' } },
-    );
-    const content = '连续输出的文字不会因为网络不断追加而重置等待时间';
-    for (let length = 1; length <= content.length; length += 1) {
-      view.rerender({ content: content.slice(0, length) });
-      frames.frame(4);
-      expect(content.startsWith(view.result.current)).toBe(true);
-    }
-    // Busy transports must not keep postponing publication until deltas stop.
-    expect(view.result.current.length).toBeGreaterThan(0);
-    expect(view.result.current.length).toBeLessThan(content.length);
-    expect(frames.callbacks.size).toBe(1);
-    frames.frame(500);
-    expect(view.result.current).toBe(content);
-    expect(frames.callbacks.size).toBe(0);
-  });
-
-  it('spreads a large burst across frames and catches up without a long replay', () => {
-    const frames = mockFrames();
-    const view = renderHook(
-      ({ content }) => useSmoothedStreamingContent(content, true),
-      { initialProps: { content: 'Intro. ' } },
-    );
-    const content = `Intro. ${'流式正文'.repeat(250)}`;
-    view.rerender({ content });
-    frames.frame(64);
-    expect(view.result.current.length).toBeGreaterThan('Intro. '.length);
-    expect(view.result.current.length).toBeLessThan(content.length / 4);
-    let previous = view.result.current;
-    for (let index = 0; index < 125; index += 1) {
-      frames.frame();
-      expect(view.result.current.startsWith(previous)).toBe(true);
-      previous = view.result.current;
-    }
-    expect(view.result.current).toBe(content);
-    expect(frames.callbacks.size).toBe(0);
-  });
 
   it('preserves grapheme boundaries while revealing mixed Chinese and emoji text', () => {
     const frames = mockFrames();

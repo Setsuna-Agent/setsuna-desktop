@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, protocol } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol } from 'electron';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -15,6 +15,18 @@ async function main() {
   await app.whenReady();
   const owner = new BrowserWindow({ show: false, webPreferences: { sandbox: true, nodeIntegration: false,
     contextIsolation: true, backgroundThrottling: false, preload: path.join(process.argv[2], 'preload.cjs') } });
+  // Keep the fixture's HTTP transport in main, just like the desktop's native bridge.
+  // Renderer fetch from a file origin depends on Chromium network permissions and CORS.
+  ipcMain.handle('setsuna-test:react-app-request', async (event, route: string, body?: unknown) => {
+    assert.equal(event.sender, owner.webContents);
+    assert.equal(event.senderFrame, owner.webContents.mainFrame);
+    assert.ok(['/state', '/action', '/runtime'].includes(route));
+    const response = await fetch(process.argv[3] + route, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  });
   desktopWindows.add(owner); registerPluginUiDocumentIpc();
   owner.webContents.on('console-message', event => { if (event.level === 'error') console.error(event.message); });
   let approvals = 0;
@@ -24,7 +36,7 @@ async function main() {
     await owner.loadFile(host);
     await owner.webContents.executeJavaScript(await readFile(path.join(process.argv[2], 'frame.js'), 'utf8'));
     const source = JSON.parse(await readFile(path.join(process.argv[2], 'source.json'), 'utf8'));
-    const mount = () => owner.webContents.executeJavaScript(`window.reactApp.mount(${JSON.stringify(source)}, ${JSON.stringify(process.argv[3])})`);
+    const mount = () => owner.webContents.executeJavaScript(`window.reactApp.mount(${JSON.stringify(source)})`);
     const frame = async () => {
       for (let attempt = 0; attempt < 200; attempt++) {
         const child = owner.webContents.mainFrame.frames.find(frame => frame.url.startsWith('setsuna-plugin-ui:'));
@@ -93,7 +105,10 @@ async function main() {
     assert.equal(owner.webContents.getURL(), pathToFileURL(host).href);
     assert.equal(approvals, 1);
     process.stdout.write('PLUGIN_REACT_APP_PASSED\n');
-  } finally { owner.destroy(); }
+  } finally {
+    ipcMain.removeHandler('setsuna-test:react-app-request');
+    owner.destroy();
+  }
 }
 
 void main().then(() => app.exit(0), error => { console.error(error); app.exit(1); });

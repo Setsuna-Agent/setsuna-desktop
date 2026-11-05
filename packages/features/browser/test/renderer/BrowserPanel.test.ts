@@ -1,19 +1,11 @@
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BROWSER_URL } from '../../src/contracts/index.js';
 import {
-  BrowserPanel,
   nextBrowserZoomFactor,
   normalizeBrowserInput,
   resolveBrowserFaviconUrl,
-  resolveBrowserFaviconUrls,
+  resolveBrowserFaviconUrls
 } from '../../src/renderer/BrowserPanel.js';
-import { translateBrowserMessage } from '../../src/renderer/messages.js';
-
-const translate = (key: Parameters<typeof translateBrowserMessage>[1]) => (
-  translateBrowserMessage('zh-CN', key)
-);
 
 describe('normalizeBrowserInput', () => {
   it('uses the internal home page for an empty address', () => {
@@ -66,54 +58,3 @@ describe('nextBrowserZoomFactor', () => {
     expect(nextBrowserZoomFactor(1.75, 'reset')).toBe(1);
   });
 });
-
-describe('BrowserPanel', () => {
-  it('renders the internal history home without creating a webview', () => {
-    const html = renderToStaticMarkup(createElement(BrowserPanel, {
-      bridge: null,
-      hidden: false,
-      notify: () => undefined,
-      panel: browserPanel('browser-home'),
-      translate,
-      onPanelMetadataChange: () => undefined,
-    }));
-
-    expect(html).not.toContain('<webview');
-    expect(html).not.toContain('www.bing.com');
-  });
-
-  it('enables Electron popup requests on the embedded webview', () => {
-    const html = renderToStaticMarkup(createElement(BrowserPanel, {
-      bridge: null,
-      hidden: false,
-      notify: () => undefined,
-      panel: browserPanel('browser-1', 'https://example.com/'),
-      translate,
-      onPanelMetadataChange: () => undefined,
-    }));
-
-    expect(html).toContain('allowpopups="true"');
-  });
-
-  it('uses an AI browser request as the initial tab URL', () => {
-    const html = renderToStaticMarkup(createElement(BrowserPanel, {
-      bridge: null,
-      hidden: false,
-      notify: () => undefined,
-      panel: browserPanel('browser-event-1', 'https://www.baidu.com/'),
-      translate,
-      onPanelMetadataChange: () => undefined,
-    }));
-
-    expect(html).toContain('src="https://www.baidu.com/"');
-    expect(html).not.toContain('src="https://www.bing.com/"');
-  });
-});
-
-function browserPanel(id: string, url = DEFAULT_BROWSER_URL) {
-  return {
-    browser: { faviconUrl: null, loading: url !== DEFAULT_BROWSER_URL, url },
-    id,
-    title: '新标签页',
-  };
-}

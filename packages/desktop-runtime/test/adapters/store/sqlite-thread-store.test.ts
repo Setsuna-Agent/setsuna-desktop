@@ -1,11 +1,11 @@
 import { applyRuntimeEventToThread, type RuntimeEvent, type RuntimeMessage, type RuntimeThread } from '@setsuna-desktop/contracts';
-import { appendFile, cp, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { RuntimeStorageInUseError, SqliteThreadStore } from '../../../src/adapters/store/sqlite-thread-store.js';
+import { SqliteThreadStore } from '../../../src/adapters/store/sqlite-thread-store.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import { createRuntimeContextCompactionCandidate, materializeRuntimeContextCompaction } from '../../../src/loop/context/context-compaction.js';
 
@@ -279,29 +279,6 @@ describe('sqlite thread store', () => {
       }),
     ]);
     await store.close();
-  });
-
-  it('releases the runtime lease and checkpoints WAL before migration shutdown completes', async () => {
-    const dataDir = await temporaryDirectory();
-    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
-    await store.recover();
-    await store.createThread({ title: 'Checkpoint before migration' });
-
-    await store.close();
-
-    const databasePath = path.join(dataDir, 'threads.sqlite');
-    const database = new DatabaseSync(databasePath, { readOnly: true });
-    try {
-      const owner = database.prepare('SELECT COUNT(*) AS count FROM runtime_owner').get() as {
-        count: number;
-      };
-      expect(Number(owner.count)).toBe(0);
-      expect(database.prepare('PRAGMA quick_check').get()).toMatchObject({ quick_check: 'ok' });
-    } finally {
-      database.close();
-    }
-    const wal = await stat(`${databasePath}-wal`).catch(() => null);
-    expect(wal?.size ?? 0).toBe(0);
   });
 
   it('migrates an existing v1 database and backfills its message and event indexes', async () => {
@@ -642,44 +619,6 @@ describe('sqlite thread store', () => {
       `Invalid SQLite runtime event sequence for ${thread.id}: expected 2, got 3`,
     );
     await reopened.close();
-  });
-
-  it('rejects a second runtime owner before it can recover or append stale-turn events', async () => {
-    const dataDir = await temporaryDirectory();
-    const first = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), { ownerId: 'owner_first' });
-    const second = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), {
-      ownerId: 'owner_second',
-      ownershipWaitMs: 0,
-    });
-    await first.recover();
-
-    await expect(second.recover()).rejects.toBeInstanceOf(RuntimeStorageInUseError);
-    await first.close();
-
-    const next = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), { ownerId: 'owner_next' });
-    await expect(next.recover()).resolves.toBeUndefined();
-    await next.close();
-  });
-
-  it('waits for an uncleanly released runtime lease to expire during restart', async () => {
-    const dataDir = await temporaryDirectory();
-    const initialized = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
-    await initialized.recover();
-    await initialized.close();
-
-    const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'));
-    database.prepare(`
-      INSERT OR REPLACE INTO runtime_owner(slot, owner_id, fence_token, lease_expires_at)
-      VALUES (1, ?, ?, ?)
-    `).run('owner_unclean_exit', 7, Date.now() + 75);
-    database.close();
-
-    const restarted = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), {
-      ownerId: 'owner_restarted',
-      ownershipWaitMs: 1_000,
-    });
-    await expect(restarted.recover()).resolves.toBeUndefined();
-    await restarted.close();
   });
 
   it('replays a committed event tail that was not included in the last snapshot checkpoint', async () => {

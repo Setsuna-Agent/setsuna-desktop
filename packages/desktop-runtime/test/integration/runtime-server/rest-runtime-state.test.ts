@@ -624,12 +624,11 @@ function configuredProvider(id: string, modelId: string) {
 async function waitForDataMigrationPreparation(
   harness: RuntimeServerTestHarness,
 ): Promise<RuntimeDataMigrationReadiness> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  return vi.waitFor(async () => {
     const readiness = await harness.runtimeFetch('/v1/data-migration/prepare', {
       method: 'POST',
     }) as RuntimeDataMigrationReadiness;
-    if (readiness.ready) return readiness;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('Runtime did not become ready for data migration.');
+    expect(readiness.ready).toBe(true);
+    return readiness;
+  }, { timeout: 5_000 });
 }

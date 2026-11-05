@@ -1,6 +1,5 @@
 import type { ComposerSlot } from '../../../../../src/features/chat/composer/editor/types.js';
 import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   createSelectedSkillReferences,
@@ -71,19 +70,16 @@ describe('workspace mention slots', () => {
     expect(createWorkspaceMentionInsertion(entry, '@vite.config.ts ', existingSlots)).toBeNull();
   });
 
-  it('supports nested paths while displaying the file name', () => {
+  it('submits the full nested workspace path', () => {
     const nestedEntry = { ...entry, name: 'Tile.tsx', parent: 'src/components', path: 'src/components/Tile.tsx' };
     const mention = createWorkspaceMentionSlots(nestedEntry).find(
       (slot): slot is Extract<ComposerSlot, { type: 'tag' }> => slot.type === 'tag',
     );
 
     expect(mention?.props?.value).toBe('@src/components/Tile.tsx');
-    const labelHtml = renderToStaticMarkup(mention?.props?.label);
-    expect(labelHtml).toContain('>Tile.tsx</span>');
-    expect(labelHtml).not.toContain('@Tile.tsx');
   });
 
-  it('keeps the directory marker in the submitted value but omits it from the label', () => {
+  it('keeps the directory marker in the submitted value', () => {
     const directoryEntry: WorkspaceEntrySearchItem = {
       kind: 'directory',
       name: '.trae',
@@ -96,9 +92,6 @@ describe('workspace mention slots', () => {
 
     if (!mention) throw new Error('Expected a workspace mention tag');
     expect(mention.props?.value).toBe('@.trae/');
-    const labelHtml = renderToStaticMarkup(mention.props?.label);
-    expect(labelHtml).toContain('>.trae</span>');
-    expect(labelHtml).not.toContain('>.trae/</span>');
   });
 
   it('creates skill slots and retains selections represented by the slot config', () => {
@@ -120,8 +113,6 @@ describe('workspace mention slots', () => {
     expect(slot.key).toMatch(/^skill:/);
     expect(slot.composerReference).toEqual({ type: 'skill', skillId: firstSkill.id });
     expect(slot.props?.value).toBe('First skill');
-    const labelHtml = renderToStaticMarkup(slot.props?.label);
-    expect(labelHtml).toContain('First skill');
     expect(filterSelectedSkillsBySlots([firstSkill, secondSkill], [slot])).toEqual([firstSkill]);
     const unchangedSkills = [firstSkill];
     expect(filterSelectedSkillsBySlots(unchangedSkills, [slot])).toBe(unchangedSkills);

@@ -24,10 +24,7 @@ describe('NetworkProxyRendererStateService', () => {
     const pushed = proxyState('pushed');
     pushState?.(pushed);
     initial.resolve(proxyState('initial'));
-    await initial.promise;
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-    expect(service.snapshot()).toMatchObject({ loading: false, state: pushed });
+    await vi.waitFor(() => expect(service.snapshot()).toMatchObject({ loading: false, state: pushed }));
 
     service.dispose();
     expect(unsubscribe).toHaveBeenCalledOnce();

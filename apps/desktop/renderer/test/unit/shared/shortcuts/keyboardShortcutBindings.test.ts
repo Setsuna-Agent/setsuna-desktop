@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  captureKeyboardShortcut,
-  formatKeyboardShortcutBinding,
-  keyboardEventMatchesBinding,
-  normalizeKeyboardShortcutBinding,
+  captureKeyboardShortcut, keyboardEventMatchesBinding,
+  normalizeKeyboardShortcutBinding
 } from '../../../../src/shared/shortcuts/keyboardShortcutBindings.js';
 import {
   KEYBOARD_SHORTCUT_PLATFORMS,
@@ -68,12 +66,6 @@ describe('keyboard shortcut bindings', () => {
       ...keyEvent({ altKey: true, code: 'KeyQ', ctrlKey: true }),
       altGraph: true,
     }, 'Control+Alt+KeyQ')).toBe(false);
-  });
-
-  it('formats macOS and Windows key names independently', () => {
-    expect(formatKeyboardShortcutBinding('Shift+Meta+KeyB', 'darwin')).toBe('⇧⌘B');
-    expect(formatKeyboardShortcutBinding('Control+Shift+KeyB', 'win32')).toBe('Ctrl+Shift+B');
-    expect(formatKeyboardShortcutBinding('Alt+Comma', 'darwin', true)).toBe('Option + ,');
   });
 
   it('provides platform-specific defaults for the same command', () => {

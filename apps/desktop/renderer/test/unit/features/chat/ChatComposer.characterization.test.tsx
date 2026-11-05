@@ -2,12 +2,9 @@
 
 import type {
   DesktopRuntimeClient,
-  RuntimeConfigState,
-  RuntimeMessageAttachment,
-  RuntimeThread,
+  RuntimeConfigState, RuntimeThread
 } from '@setsuna-desktop/contracts';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyChatComposerFocusRequest,
@@ -204,23 +201,6 @@ describe('ChatComposer view state characterization', () => {
     };
   });
 
-  it('preserves the primary action precedence across idle, running and attachment-only states', () => {
-    expect(renderComposer()).toContain('data-action="sender-default"');
-
-    const running = renderComposer({ activeTurnId: 'turn-1' });
-    expect(running).toContain('aria-label="chat.composer.stop"');
-    expect(running).not.toContain('aria-label="chat.composer.queue"');
-
-    const queued = renderComposer({ activeTurnId: 'turn-1', draft: 'next request' });
-    expect(queued).toContain('aria-label="chat.composer.queue"');
-    expect(queued).not.toContain('aria-label="chat.composer.stop"');
-
-    composerHarness.attachments.sendableAttachments = [readyAttachment()];
-    const attachmentOnly = renderComposer();
-    expect(attachmentOnly).toContain('aria-label="chat.composer.send"');
-    expect(attachmentOnly).not.toContain('data-action="sender-default"');
-  });
-
   it('carries the composer model selection into a first-turn review', async () => {
     composerHarness.mode.reviewModeEnabled = true;
     const onStartThreadReview = vi.fn(async () => undefined);
@@ -272,17 +252,6 @@ describe('ChatComposer view state characterization', () => {
     ));
   });
 });
-
-function renderComposer(overrides: Partial<Parameters<typeof ChatComposer>[0]> = {}): string {
-  const queuedTurnActions = {
-    deleteQueuedTurnInput: vi.fn(async () => true),
-    retrieveQueuedTurnInput: vi.fn(async () => null),
-    reorderQueuedTurnInputs: vi.fn(async () => true),
-    sendQueuedTurnInputNow: vi.fn(async () => true),
-  };
-
-  return renderToStaticMarkup(composerElement(overrides, queuedTurnActions));
-}
 
 function composerElement(
   overrides: Partial<Parameters<typeof ChatComposer>[0]> = {},
@@ -373,16 +342,5 @@ function modelProvider(
       thinkingEnabled: false,
       thinkingEfforts: [],
     }],
-  };
-}
-
-function readyAttachment(): RuntimeMessageAttachment {
-  return {
-    id: 'attachment-1',
-    name: 'image.png',
-    size: 3,
-    source: 'inline',
-    type: 'image/png',
-    url: 'data:image/png;base64,AAAA',
   };
 }

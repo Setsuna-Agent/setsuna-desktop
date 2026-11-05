@@ -133,7 +133,6 @@ Electron Builder 收集文件前：
 测试：
 
 - `scripts/test/ripgrep/prepare-ripgrep.test.ts`
-- `scripts/test/build-electron.test.ts`
 
 ## Release
 
