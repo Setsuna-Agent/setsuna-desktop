@@ -2,6 +2,8 @@
 
 测试按模块放在独立 `test/`，镜像生产 `src/`。生产目录不放 `*.test.*`，构建 tsconfig 不包含测试。
 
+新增、修改或重写测试前，必须完整阅读 [测试编写规范](writing-tests.md)。本文维护运行命令、测试分层和验证范围，测试价值与编写规则统一在该规范中维护。
+
 ## 测试层
 
 ### Unit / lightweight
@@ -161,16 +163,4 @@ pnpm benchmark:context-compaction --data-dir /path/to/runtime --provider provide
 
 ## 测试编写规则
 
-- 不新增 UI 展示和样式单测：不锁定 CSS、类名、颜色、字体、图标、DOM 排列、布局尺寸或动画效果。混合用例只保留业务行为、数据处理、安全边界和实际功能交互断言。
-- Production 与 test 严格分离。
-- Test 路径镜像 source path。
-- 共享大型 setup 放对应模块的 `test/support/`。
-- Integration fixture 放对应模块的 `test/fixtures/`。
-- 使用临时目录和随机 loopback port。
-- Cleanup 放 `finally/afterEach`。
-- 不依赖用户 home、全局 Git config、系统 rg 或现有数据根。
-- 时间、ID、provider、port 尽量注入 fake。
-- 下一步依赖哪个状态，就等待那个状态：消息完成不代表 turn task 已退出；连续启动轮次或修改历史使用 harness 的 `waitForCompletedTurn`。
-- 取消/迟到回复测试先通过信号确认目标处理函数已进入，再触发取消；不要用固定 sleep 猜测子进程启动进度。
-- 调度器测试显式推进受控时钟，保留真实 HTTP/文件 I/O；事件流读取先消费已有缓冲，超时后复用未完成的读取，并清理定时器。
-- 同时测试失败/取消/recovery，不只 happy path。
+详见必读的 [测试编写规范](writing-tests.md)，涵盖高收益测试的判断、低价值用例的删除、真实边界与 mock、异步时序、环境隔离和不稳定测试处理。
