@@ -188,7 +188,7 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('builds
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('Missing test bridge');
     const native = path.join(root, 'native'); await mkdir(native);
     await writeFile(path.join(native, 'source.json'), JSON.stringify(source));
-    await build({ entryPoints: { main: 'apps/desktop/main/test/fixtures/plugin-react-app.ts', preload: 'apps/desktop/main/test/fixtures/plugin-ui-page.preload.ts' },
+    await build({ entryPoints: { main: 'apps/desktop/main/test/fixtures/plugin-react-app.ts', preload: 'apps/desktop/main/test/fixtures/plugin-react-app.preload.ts' },
       outdir: native, outExtension: { '.js': '.cjs' }, platform: 'node', format: 'cjs', bundle: true, external: ['electron'],
       alias: { '@setsuna-desktop/contracts': path.resolve('packages/contracts/src/index.ts') } });
     await build({ entryPoints: ['apps/desktop/renderer/test/fixtures/plugin-react-app.tsx'], outfile: path.join(native, 'frame.js'),
