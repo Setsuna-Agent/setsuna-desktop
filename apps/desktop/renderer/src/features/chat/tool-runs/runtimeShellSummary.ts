@@ -7,18 +7,22 @@ import { automaticApprovalReviewTitle, isPreparingToolRun, isRecord, stringField
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export function shellCountSummary(runs: RuntimeToolRun[], t: Translate = defaultTranslate): string {
-  const counts = new Map<RuntimeToolRun['status'], number>();
-  for (const run of runs) counts.set(run.status, (counts.get(run.status) ?? 0) + 1);
   const keys = {
     pending_approval: 'toolRun.shell.awaitingCount',
     running: 'toolRun.shell.runningCount',
     success: 'toolRun.shell.completedCount',
-    error: 'toolRun.shell.failedCount',
+    error: 'toolRun.shell.completedCount',
     cancelled: 'toolRun.shell.cancelledCount',
     rejected: 'toolRun.shell.rejectedCount',
   } as const;
-  // 分组状态只决定提示优先级，计数必须来自每条命令自身的状态。
-  return [...counts].map(([status, count]) => t(keys[status], { count })).join(t('toolRun.joiner'));
+  const counts = new Map<typeof keys[RuntimeToolRun['status']], number>();
+  // A finished command is one activity regardless of exit status. Approval and
+  // active counts still come from each run, without changing its stored outcome.
+  for (const run of runs) {
+    const key = keys[run.status];
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts].map(([key, count]) => t(key, { count })).join(t('toolRun.joiner'));
 }
 
 export function shellGroupSummary(runs: RuntimeToolRun[], t: Translate = defaultTranslate): { title: string; target?: string } {
@@ -57,7 +61,6 @@ export function shellRunSummary(run: RuntimeToolRun, command: string, t: Transla
     if (isPreparingToolRun(run)) return { title: displayCommand ? t('toolRun.shell.preparingCommand', { command: displayCommand }) : t('toolRun.shell.generatingCommand') };
     return { title: displayCommand ? t('toolRun.shell.runningCommand', { command: displayCommand }) : t('toolRun.shell.running') };
   }
-  if (run.status === 'error') return { title: displayCommand ? t('toolRun.shell.failedCommand', { command: displayCommand }) : t('toolRun.shell.failed') };
   if (run.status === 'cancelled') return { title: displayCommand ? t('toolRun.shell.cancelledCommand', { command: displayCommand }) : t('toolRun.shell.cancelled') };
   if (run.status === 'rejected') return { title: displayCommand ? t('toolRun.shell.rejectedCommand', { command: displayCommand }) : t('toolRun.shell.rejected') };
   return { title: displayCommand ? t('toolRun.shell.completedCommand', { command: displayCommand }) : t('toolRun.shell.completed') };

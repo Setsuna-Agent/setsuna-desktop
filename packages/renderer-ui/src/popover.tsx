@@ -4,6 +4,7 @@ import { floatingPlacement, overlayContainer, type Placement } from './portal.js
 import { cn } from './utils.js';
 
 export type PopoverProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'content'> & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>, 'onOpenAutoFocus' | 'onCloseAutoFocus'> & {
+  'data-overlay-open'?: '';
   children: ReactElement; content: ReactNode; contentLabel?: string; open?: boolean; onOpenChange?(open: boolean): void;
   /** Keep outside clicks in the host document, including over embedded webviews. */
   modal?: boolean;
@@ -11,13 +12,21 @@ export type PopoverProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'conte
   mouseEnterDelay?: number; mouseLeaveDelay?: number;
 };
 export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ children, content, contentLabel, open, onOpenChange, modal = false, trigger = 'click', placement, className, style, mouseEnterDelay = 0.15, mouseLeaveDelay = 0.15, onOpenAutoFocus, onCloseAutoFocus, ...triggerProps }, ref) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const actualOpen = open ?? internalOpen;
+  const changeOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChange?.(next);
+  };
+  // Multiple overlays may share a trigger; any open owner keeps that trigger active.
+  const overlayOpen = actualOpen ? '' : triggerProps['data-overlay-open'];
   const panel = { ...floatingPlacement(placement), className: cn('sd-popover', className), style, sideOffset: 6, collisionPadding: 8 };
-  if (trigger === 'hover') return <HoverCard.Root open={open} onOpenChange={onOpenChange} openDelay={mouseEnterDelay * 1000} closeDelay={mouseLeaveDelay * 1000}>
-    <HoverCard.Trigger asChild><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></HoverCard.Trigger>
+  if (trigger === 'hover') return <HoverCard.Root open={actualOpen} onOpenChange={changeOpen} openDelay={mouseEnterDelay * 1000} closeDelay={mouseLeaveDelay * 1000}>
+    <HoverCard.Trigger asChild><Slot.Root {...triggerProps} data-overlay-open={overlayOpen} ref={ref}>{children}</Slot.Root></HoverCard.Trigger>
     <HoverCard.Portal container={overlayContainer()}><HoverCard.Content {...panel} hideWhenDetached>{content}</HoverCard.Content></HoverCard.Portal>
   </HoverCard.Root>;
-  return <Primitive.Root open={open} onOpenChange={onOpenChange} modal={modal}>
-    <Primitive.Trigger asChild><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></Primitive.Trigger>
+  return <Primitive.Root open={actualOpen} onOpenChange={changeOpen} modal={modal}>
+    <Primitive.Trigger asChild><Slot.Root {...triggerProps} data-overlay-open={overlayOpen} ref={ref}>{children}</Slot.Root></Primitive.Trigger>
     <Primitive.Portal container={overlayContainer()}><Primitive.Content {...panel} aria-label={contentLabel} onOpenAutoFocus={onOpenAutoFocus} onCloseAutoFocus={onCloseAutoFocus}>{content}</Primitive.Content></Primitive.Portal>
   </Primitive.Root>;
 });

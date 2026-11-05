@@ -26,6 +26,7 @@ import type {
 } from './runtime-tool-run-types.js';
 import { isDisplayableRuntimeToolRun } from './runtimeToolRunVisibility.js';
 import { isActiveRuntimeToolRun } from './runtimeToolRunState.js';
+import { displayedGenericToolRunDiagnostic, genericToolRunDetailRuns, toolRunHasDetails } from './runtimeToolRunDetails.js';
 import {
   ChangeCounts,
 } from './RuntimeFileChangesSummaryCard.js';
@@ -60,7 +61,6 @@ import {
   FileOperationTarget,
   fileOperationVerb,
   formatPreview,
-  genericToolRunDiagnostic,
   groupToolRuns,
   inspectionEntries,
   inspectionEntryFromRun,
@@ -348,7 +348,7 @@ function toolRunGroupPanelNode(
 ): JSX.Element {
   const status = toolRunGroupStatus(group.runs);
   const summary = toolRunGroupSummary(group, t);
-  const showRunTitles = group.kind !== 'shell' && group.kind !== 'fileMutation';
+  const detailRuns = group.kind === 'generic' ? genericToolRunDetailRuns(group.runs, t) : group.runs;
   const firstPlugin = group.runs[0]?.plugin;
   const sharedPlugin = firstPlugin && group.runs.every((run) => run.plugin?.id === firstPlugin.id)
     ? firstPlugin : undefined;
@@ -361,19 +361,25 @@ function toolRunGroupPanelNode(
   const fileOperationSummaryChangeCounts = fileOperationSummary?.target && isConcreteFileOperationTarget(fileOperationSummary.target)
     ? fileOperationSummary.changeCounts
     : undefined;
+  const heading = (expanded: boolean) => (
+    <ToolRunGroupHeading
+      icon={group.kind === 'generic' && group.runs[0] ? toolRunIcon(group.runs[0]) : toolRunGroupIcon(group.kind, sharedPlugin)}
+      status={status}
+      summary={expanded
+        ? mixedToolRunGroupSummary([group], 'aggregate', t)
+        : { ...summary, inspectionKind: summaryInspectionKind, targetKind: group.kind, changeCounts: fileOperationSummaryChangeCounts }}
+    />
+  );
+  if (!detailRuns.length && !nestedDetails) {
+    return <div className={`chat-tool-run chat-tool-run--flat ${toolRunGroupKindClassName(group.kind)} chat-tool-run--${status}`}>
+      <div className="chat-tool-run__summary">{heading(false)}</div>
+    </div>;
+  }
   return (
     <ToolRunDisclosure
       autoOpenKey={autoOpenKey}
       className={`chat-tool-run chat-tool-run--group ${toolRunGroupKindClassName(group.kind)} chat-tool-run--${status}`}
-      summary={(expanded) => (
-        <ToolRunGroupHeading
-          icon={toolRunGroupIcon(group.kind, status, sharedPlugin)}
-          status={status}
-          summary={expanded
-            ? mixedToolRunGroupSummary([group], 'aggregate', t)
-            : { ...summary, inspectionKind: summaryInspectionKind, targetKind: group.kind, changeCounts: fileOperationSummaryChangeCounts }}
-        />
-      )}
+      summary={heading}
     >
       <div
         className={`chat-tool-run__body ${
@@ -403,21 +409,17 @@ function toolRunGroupPanelNode(
             />
           ))
         ) : (
-          group.runs.map((run) => {
+          detailRuns.map((run) => {
             const pendingApproval = isPendingApprovalRun(run);
             const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
             const runSummary = toolRunSummary(run, t);
             return (
               <div className="chat-tool-run__group-item" key={run.id}>
-                {showRunTitles ? (
-                  <div className="chat-tool-run__group-title">
-                    <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
-                      {toolRunIcon(run)}
-                    </span>
-                    <span className="chat-tool-run__title">{runSummary.title}</span>
-                    <ToolRunSummaryTarget kind={group.kind} target={runSummary.target} />
-                  </div>
-                ) : null}
+                <div className="chat-tool-run__group-title">
+                  <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">{toolRunIcon(run)}</span>
+                  <span className="chat-tool-run__title">{runSummary.title}</span>
+                  <ToolRunSummaryTarget kind={group.kind} target={runSummary.target} />
+                </div>
                 <ToolRunDetails run={run} onAnswerApproval={onAnswerApproval} pendingApprovalId={pendingApprovalId} />
               </div>
             );
@@ -494,6 +496,10 @@ function renderMixedToolRunChildGroup(
         <ToolRunGroupApprovals runs={runs} onAnswerApproval={onAnswerApproval} />
       </div>
     );
+  }
+  // Keep consecutive repetitions compressed inside a mixed batch as well.
+  if (kind === 'generic' || kind === 'search') {
+    return <ToolRunDisplayPanel key={toolRunDisplayStableKey(group)} group={group} onAnswerApproval={onAnswerApproval} />;
   }
   // 外层已负责聚合；单项和多项共用稳定容器，追加调用时保留已展开的详情。
   return (
@@ -810,38 +816,6 @@ function ToolRunDetails({
       {approvalActions}
     </>
   );
-}
-
-function toolRunHasDetails(run: RuntimeToolRun, pendingApprovalId: string | undefined, t: Translate): boolean {
-  if (isShellRun(run) || toolRunGroupKind(run) === 'inspection' || isFileOperationRun(run)) return true;
-  if (pendingApprovalId) return true;
-  if (run.proposedExecPolicyAmendment?.length) return true;
-  if (run.networkApprovalContext) return true;
-  if (run.permissionApprovalContext) return true;
-  if (run.approvalReviewAssessment?.status === 'denied') return true;
-  return Boolean(displayedGenericToolRunDiagnostic(run, t));
-}
-
-function displayedGenericToolRunDiagnostic(run: RuntimeToolRun, t: Translate): string {
-  const diagnostic = genericToolRunDiagnostic(run);
-  if (!diagnostic) return '';
-
-  // Terminal summaries already carry the status and tool label. Suppress only
-  // their exact boilerplate; policy explanations and other diagnostics remain
-  // available behind the disclosure.
-  if (toolRunSummary(run, t).title.includes(diagnostic)) return '';
-  if (run.status === 'cancelled' && /^Turn cancelled(?: by approval decision)?\.?$/iu.test(diagnostic)) return '';
-  if (run.status === 'rejected' && /^Tool\s+.+?\s+was rejected(?: by runtime policy)?\.?$/iu.test(diagnostic)) return '';
-
-  const assessment = run.approvalReviewAssessment;
-  if (
-    assessment?.status === 'denied'
-    && [assessment.rationale, assessment.riskSummary, assessment.potentialImpact]
-      .some((value) => value?.trim() === diagnostic)
-  ) {
-    return '';
-  }
-  return diagnostic;
 }
 
 export {

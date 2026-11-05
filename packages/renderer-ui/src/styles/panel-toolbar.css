@@ -1,0 +1,72 @@
+/* Workspace panel headers share geometry and capsule surfaces; each feature owns its contents. */
+.sd-panel-toolbar {
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: calc(var(--desktop-panel-toolbar-height) + 12px);
+  padding: 8px;
+  border-bottom: 1px solid var(--desktop-panel-divider);
+  background: var(--app-bg);
+  color: var(--app-text);
+  font-family: var(--app-font-family);
+  font-size: 13px;
+  font-weight: var(--app-font-weight);
+  line-height: 18px;
+  user-select: none;
+}
+
+/* Feature spacing must win regardless of stylesheet load order. */
+:where(.sd-panel-toolbar__surface) {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: var(--app-control-height);
+  padding: 1px 2px;
+}
+
+.sd-panel-toolbar__surface {
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card);
+}
+
+.sd-panel-toolbar__actions {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.sd-panel-toolbar__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sd-panel-toolbar__group + .sd-panel-toolbar__group::before {
+  width: 1px;
+  height: 16px;
+  margin-inline: 4px;
+  background: var(--desktop-panel-divider);
+  content: '';
+}
+
+.sd-panel-toolbar .app-shell-icon-control.sd-button,
+.sd-panel-toolbar__text-button.sd-button {
+  border-radius: var(--app-radius-full);
+}
+
+.sd-panel-toolbar .sd-button {
+  font-weight: var(--app-font-weight);
+}
+
+.sd-panel-toolbar__text-button.sd-button {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}

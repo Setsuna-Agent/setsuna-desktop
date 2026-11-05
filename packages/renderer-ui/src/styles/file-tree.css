@@ -30,7 +30,7 @@
   transition: color 150ms ease, background 150ms ease;
 }
 
-.sd-file-tree__row:hover:not(:disabled) {
+.sd-file-tree__row:is(:hover, [data-overlay-open], [data-context-menu-open]):not(:disabled) {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
 }

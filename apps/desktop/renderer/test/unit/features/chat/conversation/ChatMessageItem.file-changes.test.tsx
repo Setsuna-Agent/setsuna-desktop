@@ -8,6 +8,8 @@ import { MessageItem } from '../../../../../src/features/chat/conversation/ChatM
 import { createChatRenderWindow, type ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
 import { ChatThreadProvider } from '../../../../../src/features/chat/conversation/ChatThreadProvider.js';
 import { ThreadFileChangesProvider } from '../../../../../src/features/chat/hooks/ThreadFileChangesProvider.js';
+import { MarkdownNavigationProvider } from '../../../../../src/features/chat/markdown/MarkdownNavigationProvider.js';
+import { FileChangesSummaryCard } from '../../../../../src/features/chat/tool-runs/RuntimeFileChangesSummaryCard.js';
 import { createDesktopRuntimeClient } from '../../../../../src/services/runtime-client/client.js';
 import { RendererPluginTestHost } from '../../../support/RendererPluginTestHost.js';
 import { fileRun } from '../tool-runs/RuntimeToolRuns.support.js';
@@ -15,6 +17,29 @@ import { fileRun } from '../tool-runs/RuntimeToolRuns.support.js';
 afterEach(() => {
   cleanup();
   Reflect.deleteProperty(window, 'setsunaDesktop');
+});
+
+it.each([
+  { path: 'docs/guide.md', absolutePath: undefined, target: 'docs/guide.md' },
+  { path: 'src/app.ts', absolutePath: '/other-root/src/app.ts', target: '/other-root/src/app.ts' },
+  { path: 'src\\app.ts', absolutePath: 'C:\\other-root\\src\\app.ts', target: 'C:\\other-root\\src\\app.ts' },
+])('routes a diff-card file context menu to its recorded target: $target', ({ path, absolutePath, target }) => {
+  const onOpenWorkspaceFileContextMenu = vi.fn();
+  const onOpenReview = vi.fn();
+  const view = render(<ConfirmationProvider>
+    <MarkdownNavigationProvider workspaceRoot="/active-root" onOpenWorkspaceFileContextMenu={onOpenWorkspaceFileContextMenu}>
+      <FileChangesSummaryCard summary={{ additions: 1, deletions: 1, files: [{
+        path, absolutePath, action: 'Edited', additions: 1, deletions: 1, truncated: false, lines: [],
+      }] }} onOpenReview={onOpenReview} />
+    </MarkdownNavigationProvider>
+  </ConfirmationProvider>);
+  const fileRow = view.getByRole('button', { name: /(?:guide\.md|app\.ts)/u });
+  const defaultAllowed = fireEvent.contextMenu(fileRow, { clientX: 120, clientY: 240 });
+  expect(defaultAllowed).toBe(false);
+  expect(onOpenWorkspaceFileContextMenu).toHaveBeenCalledExactlyOnceWith({ filePath: target, triggerId: expect.any(String), x: 120, y: 240 });
+  expect(onOpenReview).not.toHaveBeenCalled();
+  fireEvent.click(fileRow);
+  expect(onOpenReview).toHaveBeenCalledExactlyOnceWith(path);
 });
 
 it('toggles a merged card between undo and reapply, showing a blocking error dialog without advancing on failure', async () => {

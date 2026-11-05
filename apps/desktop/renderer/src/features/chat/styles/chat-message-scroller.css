@@ -1,10 +1,12 @@
+.chat-main-conversation {
+  --chat-message-rail-inset: 4px;
+  --chat-message-rail-width: 36px;
+  --chat-message-rail-gap: 4px;
+}
+
 .chat-messages {
   /* Follow and history prepends have explicit anchors; native anchoring must not compete. */
   overflow-anchor: none;
-}
-
-.chat-messages:has(~ .chat-message-rail) {
-  padding-inline: max(var(--chat-content-inline-padding), 44px);
 }
 
 .chat-messages:focus-visible {
@@ -14,11 +16,11 @@
 
 .chat-message-rail {
   position: absolute;
-  left: 4px;
+  left: var(--chat-message-rail-inset);
   z-index: 7;
   display: flex;
   align-items: center;
-  width: 36px;
+  width: var(--chat-message-rail-width);
   pointer-events: none;
 }
 

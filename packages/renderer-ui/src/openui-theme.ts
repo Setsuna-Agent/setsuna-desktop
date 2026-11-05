@@ -1,3 +1,13 @@
+import type { Theme } from '@openuidev/react-ui';
+
+type FontFamily = 'body' | 'heading' | 'label' | 'numbers' | 'code';
+type FontSize = 'xs' | 'sm' | 'md' | 'lg' | '2xl' | '3xl' | '4xl';
+
+function fontStyle(family: FontFamily, size: FontSize, weight: 'regular' | 'medium' | 'bold' = 'regular') {
+  const lineHeight = family === 'numbers' ? 'body' : family;
+  return `var(--openui-font-weight-${weight}) var(--openui-font-size-${size})/var(--openui-line-height-${lineHeight}) var(--openui-font-${family})`;
+}
+
 // Shared tokens only; importing the regular UI package must not load OpenUI.
 export const openUiTheme = {
   fontBody: 'var(--app-font-family)',
@@ -5,6 +15,62 @@ export const openUiTheme = {
   fontLabel: 'var(--app-font-family)',
   fontNumbers: 'var(--app-font-family)',
   fontCode: 'var(--app-code-font-family)',
+  // OpenUI's font shorthands contain fixed sizes and families, so changing only
+  // fontBody or the wrapper font-size leaves controls at its 16px baseline.
+  // Use the host's base size; body zoom already applies the user's page scale.
+  fontSize2xs: 'calc(var(--app-font-size) - 4px)',
+  fontSizeXs: 'calc(var(--app-font-size) - 2px)',
+  fontSizeSm: 'calc(var(--app-font-size) - 1px)',
+  fontSizeMd: 'var(--app-font-size)',
+  fontSizeLg: 'calc(var(--app-font-size) + 2px)',
+  fontSizeXl: 'calc(var(--app-font-size) + 4px)',
+  fontSize2xl: 'calc(var(--app-font-size) + 8px)',
+  fontSize3xl: 'calc(var(--app-font-size) + 10px)',
+  fontSize4xl: 'calc(var(--app-font-size) + 14px)',
+  fontSize5xl: 'calc(var(--app-font-size) + 18px)',
+  fontWeightRegular: 'var(--app-font-weight)',
+  fontWeightMedium: '500',
+  fontWeightBold: '600',
+  fontWeightHeavy: '600',
+  fontVariationRegular: '"wght" var(--app-font-weight)',
+  fontVariationMedium: '"wght" 500',
+  textBodyXs: fontStyle('body', 'xs'),
+  textBodyXsHeavy: fontStyle('body', 'xs', 'medium'),
+  textBodySm: fontStyle('body', 'sm'),
+  textBodySmHeavy: fontStyle('body', 'sm', 'medium'),
+  textBodyDefault: fontStyle('body', 'md'),
+  textBodyDefaultHeavy: fontStyle('body', 'md', 'medium'),
+  textBodyLg: fontStyle('body', 'lg'),
+  textBodyLgHeavy: fontStyle('body', 'lg', 'medium'),
+  textHeadingXs: fontStyle('heading', 'md', 'bold'),
+  textHeadingSm: fontStyle('heading', 'lg', 'bold'),
+  textHeadingMd: fontStyle('heading', '2xl', 'bold'),
+  textHeadingLg: fontStyle('heading', '3xl', 'bold'),
+  textHeadingXl: fontStyle('heading', '4xl', 'bold'),
+  textLabelXs: fontStyle('label', 'xs'),
+  textLabelXsHeavy: fontStyle('label', 'xs', 'medium'),
+  textLabelSm: fontStyle('label', 'sm'),
+  textLabelSmHeavy: fontStyle('label', 'sm', 'medium'),
+  textLabelDefault: fontStyle('label', 'md'),
+  textLabelDefaultHeavy: fontStyle('label', 'md', 'medium'),
+  textLabelLg: fontStyle('label', 'lg'),
+  textLabelLgHeavy: fontStyle('label', 'lg', 'medium'),
+  textNumbersXs: fontStyle('numbers', 'xs'),
+  textNumbersXsHeavy: fontStyle('numbers', 'xs', 'medium'),
+  textNumbersSm: fontStyle('numbers', 'sm'),
+  textNumbersSmHeavy: fontStyle('numbers', 'sm', 'medium'),
+  textNumbersDefault: fontStyle('numbers', 'md'),
+  textNumbersDefaultHeavy: fontStyle('numbers', 'md', 'medium'),
+  textNumbersLg: fontStyle('numbers', 'lg'),
+  textNumbersLgHeavy: fontStyle('numbers', 'lg', 'medium'),
+  textNumbersHeadingSm: fontStyle('numbers', 'lg', 'bold'),
+  textNumbersHeadingMd: fontStyle('numbers', '2xl', 'bold'),
+  textNumbersHeadingLg: fontStyle('numbers', '3xl', 'bold'),
+  textNumbersHeadingXl: fontStyle('numbers', '4xl', 'bold'),
+  textCodeSm: fontStyle('code', 'xs'),
+  textCodeSmHeavy: fontStyle('code', 'xs', 'bold'),
+  textCodeDefault: fontStyle('code', 'sm'),
+  textCodeDefaultHeavy: fontStyle('code', 'sm', 'bold'),
   background: 'var(--app-bg)',
   foreground: 'var(--app-surface)',
   popoverBackground: 'var(--app-surface)',
@@ -23,4 +89,4 @@ export const openUiTheme = {
   borderInteractive: 'var(--app-border-strong)',
   radiusM: 'var(--app-radius-md)',
   radiusL: 'var(--app-radius-lg)',
-} as const;
+} as const satisfies Theme;

@@ -7,11 +7,47 @@
   overflow: hidden;
 }
 
+.desktop-review-file-tree-slot {
+  width: var(--desktop-review-file-tree-track-width, 248px);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    width var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing),
+    opacity 130ms ease 70ms,
+    visibility 0s linear 0s;
+}
+
+.desktop-review-file-tree-slot[aria-hidden='true'] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    width var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing),
+    opacity 110ms ease,
+    visibility 0s linear var(--app-sidebar-motion-duration);
+}
+
+body.desktop-review-file-tree-resizing .desktop-review-file-tree-slot {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-review-file-tree-slot,
+  .desktop-review-file-tree-slot[aria-hidden='true'] {
+    transition: none;
+  }
+}
+
+/* Keep the contents at their preferred width while the outer slot clips them. */
 .desktop-review-file-tree {
   position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: var(--desktop-review-file-tree-width, 248px);
+  height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;

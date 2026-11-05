@@ -21,7 +21,7 @@ import {
   type ReactNode,
 } from 'react';
 import { BrowserAddressBar } from './BrowserAddressBar.js';
-import { BrowserContextMenu } from './BrowserContextMenu.js';
+import { useBrowserContextMenu } from './useBrowserContextMenu.js';
 import { BrowserDeviceToolbar } from './BrowserDeviceToolbar.js';
 import { BrowserDeviceViewport } from './BrowserDeviceViewport.js';
 import { BrowserHomePage } from './BrowserHomePage.js';
@@ -168,6 +168,7 @@ export function BrowserPanel({
   const registeredTabIdRef = useRef<string | null>(null);
   const menuButtonRef = useRef<HTMLElement>(null);
   const [tab, setTab] = useState<BrowserTab>(() => createBrowserTab(panel, translate));
+  const contextMenu = useBrowserContextMenu({ bridge, active: !hidden && !tab.showingHome, webviewRef });
   const [extensionWebContentsId, setExtensionWebContentsId] = useState<number>();
   const extensions = useBrowserExtensions(bridge, notify, translate, extensionWebContentsId);
   const extensionPanelSlot = useBrowserExtensionPanelSlot({ id: panel.id, visible: !hidden,
@@ -454,26 +455,29 @@ export function BrowserPanel({
       {placement === 'side' ? (
         resizeHandle
       ) : null}
-      <div className="desktop-browser-navigation">
-        <Button variant="ghost" className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoBack} aria-label={translate('feature.browser.back')} onClick={() => navigateHistory('back')}>
-          <ArrowLeft size={14} />
-        </Button>
-        <Button variant="ghost" className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoForward} aria-label={translate('feature.browser.forward')} onClick={() => navigateHistory('forward')}>
-          <ArrowRight size={14} />
-        </Button>
-        <Button variant="ghost" className="desktop-browser-navigation__button" type="button" disabled={tab.showingHome} aria-label={translate(tab.loading ? 'feature.browser.stop' : 'feature.browser.refresh')} onClick={reload} onContextMenu={showReloadMenu}>
-          {tab.loading ? <X size={13} /> : <RefreshCw size={13} />}
-        </Button>
-        {preferences.showHomeButton ? <Button variant="ghost"
-          aria-label={translate('feature.browser.home')}
-          aria-pressed={showingNewTab}
-          className={`desktop-browser-navigation__button ${showingNewTab ? 'is-active' : ''}`}
-          title={translate('feature.browser.home')}
-          type="button"
-          onClick={showBrowserHome}
-        >
-          <House size={13} />
-        </Button> : null}
+      <header className="desktop-browser-navigation sd-panel-toolbar">
+        <div className="desktop-browser-navigation__controls sd-panel-toolbar__surface">
+          <Button variant="ghost" className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoBack} aria-label={translate('feature.browser.back')} onClick={() => navigateHistory('back')}>
+            <ArrowLeft size={14} />
+          </Button>
+          <Button variant="ghost" className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoForward} aria-label={translate('feature.browser.forward')} onClick={() => navigateHistory('forward')}>
+            <ArrowRight size={14} />
+          </Button>
+          <Button variant="ghost" className="desktop-browser-navigation__button" type="button" disabled={tab.showingHome} aria-label={translate(tab.loading ? 'feature.browser.stop' : 'feature.browser.refresh')} onClick={reload} onContextMenu={showReloadMenu}
+            data-overlay-open={contextMenu.reloadMenuOpen ? '' : undefined}>
+            {tab.loading ? <X size={13} /> : <RefreshCw size={13} />}
+          </Button>
+          {preferences.showHomeButton ? <Button variant="ghost"
+            aria-label={translate('feature.browser.home')}
+            aria-pressed={showingNewTab}
+            className={`desktop-browser-navigation__button ${showingNewTab ? 'is-active' : ''}`}
+            title={translate('feature.browser.home')}
+            type="button"
+            onClick={showBrowserHome}
+          >
+            <House size={13} />
+          </Button> : null}
+        </div>
         <BrowserAddressBar
           showFullUrl={preferences.showFullUrl}
           searchEngine={preferences.searchEngine}
@@ -490,52 +494,54 @@ export function BrowserPanel({
           onRefreshBookmarks={refreshBrowserBookmarks}
           onRemoveHistory={removeBrowserHistoryEntry}
         />
-        <Button variant="ghost"
-          aria-label={translate(activePageBookmarked ? 'feature.browser.removeBookmark' : 'feature.browser.addBookmark')}
-          aria-pressed={activePageBookmarked}
-          className={`desktop-browser-navigation__button ${activePageBookmarked ? 'is-active' : ''}`}
-          disabled={showingNewTab}
-          title={translate(activePageBookmarked ? 'feature.browser.removeBookmark' : 'feature.browser.addBookmark')}
-          type="button"
-          onClick={toggleActivePageBookmark}
-        >
-          <BrowserFavoritesIcon aria-hidden="true" fill={activePageBookmarked ? 'currentColor' : 'none'} size={13} />
-        </Button>
-        <Button variant="ghost" type="button" className={`desktop-browser-navigation__button${annotations.open ? ' is-active' : ''}`}
-          aria-label={translate('feature.browser.annotation.label')} title={translate('feature.browser.annotation.label')}
-          aria-pressed={annotations.open} disabled={tab.showingHome || tab.loading || annotations.sending}
-          onClick={annotations.toggle}><SquareDashedMousePointer size={13} /></Button>
-        <BrowserPasswords bridge={bridge} tabId={tab.id} active={!tab.showingHome} hidden={hidden} notify={notify} translate={translate} />
-        <BrowserExtensions extensions={extensions} hidden={hidden} translate={translate}
-          onOpenSettings={settingsNavigation?.openExtensionSettings} onOpenStore={() => navigateToUrl(BROWSER_WEB_STORE_URL)} />
-        <BrowserRecordsToolbar state={records} hidden={hidden} menuButtonRef={menuButtonRef}
-          translate={translate} onNavigate={navigateToUrl}
-          currentPage={showingNewTab ? undefined : { title: tab.title, url: tab.url }} />
-        <BrowserWindowMenu
-          hidden={hidden}
-          menuButtonRef={menuButtonRef}
-          onOpenRecords={records.open}
-          onOpenSettings={settingsNavigation ? () => settingsNavigation.openSettings('browser') : undefined}
-          capturingScreenshot={screenshotCapturing}
-          deviceToolbarVisible={tab.deviceEmulation.enabled}
-          disabled={tab.showingHome}
-          suspended={pageSleep.suspended}
-          sleepDisabled={pageSleep.pending || Boolean(tab.error)}
-          onToggleSleep={() => void pageSleep.change(!pageSleep.suspended)}
-          key={tab.id}
-          loading={tab.loading}
-          zoomFactor={tab.zoomFactor}
-          onOpenDevTools={openActivePageDevTools}
-          onCaptureScreenshot={() => void captureScreenshot()}
-          onPrint={printActivePage}
-          onReload={reload}
-          onToggleDeviceToolbar={toggleActiveDeviceToolbar}
-          onZoomIn={() => changeActivePageZoom('in')}
-          onZoomOut={() => changeActivePageZoom('out')}
-          onZoomReset={() => changeActivePageZoom('reset')}
-          translate={translate}
-        />
-      </div>
+        <div className="desktop-browser-navigation__actions sd-panel-toolbar__surface sd-panel-toolbar__actions">
+          <Button variant="ghost"
+            aria-label={translate(activePageBookmarked ? 'feature.browser.removeBookmark' : 'feature.browser.addBookmark')}
+            aria-pressed={activePageBookmarked}
+            className={`desktop-browser-navigation__button ${activePageBookmarked ? 'is-active' : ''}`}
+            disabled={showingNewTab}
+            title={translate(activePageBookmarked ? 'feature.browser.removeBookmark' : 'feature.browser.addBookmark')}
+            type="button"
+            onClick={toggleActivePageBookmark}
+          >
+            <BrowserFavoritesIcon aria-hidden="true" fill={activePageBookmarked ? 'currentColor' : 'none'} size={13} />
+          </Button>
+          <Button variant="ghost" type="button" className={`desktop-browser-navigation__button${annotations.open ? ' is-active' : ''}`}
+            aria-label={translate('feature.browser.annotation.label')} title={translate('feature.browser.annotation.label')}
+            aria-pressed={annotations.open} disabled={tab.showingHome || tab.loading || annotations.sending}
+            onClick={annotations.toggle}><SquareDashedMousePointer size={13} /></Button>
+          <BrowserPasswords bridge={bridge} tabId={tab.id} active={!tab.showingHome} hidden={hidden} notify={notify} translate={translate} />
+          <BrowserExtensions extensions={extensions} hidden={hidden} translate={translate}
+            onOpenSettings={settingsNavigation?.openExtensionSettings} onOpenStore={() => navigateToUrl(BROWSER_WEB_STORE_URL)} />
+          <BrowserRecordsToolbar state={records} hidden={hidden} menuButtonRef={menuButtonRef}
+            translate={translate} onNavigate={navigateToUrl}
+            currentPage={showingNewTab ? undefined : { title: tab.title, url: tab.url }} />
+          <BrowserWindowMenu
+            hidden={hidden}
+            menuButtonRef={menuButtonRef}
+            onOpenRecords={records.open}
+            onOpenSettings={settingsNavigation ? () => settingsNavigation.openSettings('browser') : undefined}
+            capturingScreenshot={screenshotCapturing}
+            deviceToolbarVisible={tab.deviceEmulation.enabled}
+            disabled={tab.showingHome}
+            suspended={pageSleep.suspended}
+            sleepDisabled={pageSleep.pending || Boolean(tab.error)}
+            onToggleSleep={() => void pageSleep.change(!pageSleep.suspended)}
+            key={tab.id}
+            loading={tab.loading}
+            zoomFactor={tab.zoomFactor}
+            onOpenDevTools={openActivePageDevTools}
+            onCaptureScreenshot={() => void captureScreenshot()}
+            onPrint={printActivePage}
+            onReload={reload}
+            onToggleDeviceToolbar={toggleActiveDeviceToolbar}
+            onZoomIn={() => changeActivePageZoom('in')}
+            onZoomOut={() => changeActivePageZoom('out')}
+            onZoomReset={() => changeActivePageZoom('reset')}
+            translate={translate}
+          />
+        </div>
+      </header>
       {!tab.showingHome && tab.deviceEmulation.enabled ? (
         <BrowserDeviceToolbar
           selectField={selectField}
@@ -589,7 +595,7 @@ export function BrowserPanel({
         <div ref={extensionPanelSlot.slotRef} className="browser-extension-panel__slot" aria-hidden="true"
           style={{ width: extensionPanelSlot.width }} />
       </div>
-      <BrowserContextMenu bridge={bridge} active={!hidden && !tab.showingHome} webviewRef={webviewRef} />
+      {contextMenu.menu}
     </aside>
   );
 }

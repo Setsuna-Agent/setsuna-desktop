@@ -171,35 +171,53 @@ describe('Git change navigation', () => {
     expect(await screen.findByText('unstaged:README.md')).toBeTruthy();
   });
 
-  it('selects the first diff after worktree data arrives and preserves an explicit file selection on refresh', () => {
-    const renderPanel = (reviewState: DesktopReviewState | null, reviewLoading: boolean) => (
-      <GitChangesPanel workspaceRoot="/repo" reviewState={reviewState} reviewError={null}
-        reviewLoading={reviewLoading} onRefresh={noop} actions={actions} />
-    );
-    const view = render(renderPanel(null, true), { wrapper: host({ getHistory: vi.fn().mockResolvedValue(page()) }) });
-    view.rerender(renderPanel(state, false));
-    const detail = () => within(view.container.querySelector<HTMLElement>('.git-history-diff')!);
-    const nav = within(screen.getByRole('navigation', { name: '变更' }));
-    expect(detail().getByText('staged.txt')).toBeTruthy();
-    expect(nav.getByRole('button', { name: 'staged.txt' }).getAttribute('aria-pressed')).toBe('true');
-    expect(view.container.querySelector('.git-changes-panel__body.has-detail')).toBeTruthy();
+  it('selects breadcrumb files within the active Git version and only loads a commit file after selection', async () => {
+    const readme = file('src/README.md');
+    const guide = file('src/docs/guide.md');
+    const changedFiles = [readme, guide];
+    const readTextFile = vi.fn().mockImplementation(async (_root: string, input: { source: string; filePath: string }) => ({
+      ok: true, content: `${input.source}:${input.filePath}`,
+    }));
+    const getCommitFileDiff = vi.fn().mockImplementation(async (_root: string, input: { filePath: string }) => file(input.filePath));
+    const user = userEvent.setup();
+    render(<GitChangesPanel workspaceRoot="/repo" reviewState={{
+      ...state,
+      stagedSummary: { files: changedFiles, additions: 2, deletions: 2 },
+      unstagedSummary: { files: changedFiles, additions: 2, deletions: 2 },
+    }} reviewError={null} reviewLoading={false} onRefresh={noop} actions={actions} />, {
+      wrapper: host({
+        getHistory: vi.fn().mockResolvedValue(page()), readTextFile, getCommitFileDiff,
+        getCommitDetails: vi.fn().mockResolvedValue({ commit: commit(one), message: 'Commit', baseOid: null, files: changedFiles }),
+      }),
+    });
+    fireEvent.click(screen.getByRole('button', { name: '查看预览' }));
+    await screen.findByText('staged:src/README.md');
+    const openDirectory = async () => {
+      await user.click(within(screen.getByRole('navigation', { name: '文件路径' })).getByRole('button', { name: 'src', exact: true }));
+      return within(await screen.findByRole('dialog', { name: 'src', exact: true }));
+    };
+    await openDirectory();
+    await user.keyboard('{Escape}');
+    expect(readTextFile).toHaveBeenCalledTimes(1);
+    expect(getCommitFileDiff).not.toHaveBeenCalled();
 
-    fireEvent.click(nav.getByRole('button', { name: 'working.txt' }));
-    view.rerender(renderPanel({ ...state }, false));
-    expect(detail().getByText('working.txt')).toBeTruthy();
-    expect(nav.getByRole('button', { name: 'working.txt' }).getAttribute('aria-pressed')).toBe('true');
-    expect(detail().queryByText('staged.txt')).toBeNull();
-
-    view.rerender(renderPanel({ ...state, stagedSummary: null, unstagedSummary: null }, false));
-    expect(detail().getByText('没有变更文件')).toBeTruthy();
-    const navigation = within(screen.getByRole('navigation', { name: '文件导航' }));
-    for (const name of ['上一文件', '下一文件', '查看所有 diff 文件', '打开文件', '复制文件路径', '添加到对话']) {
-      expect(navigation.getByRole<HTMLButtonElement>('button', { name }).disabled).toBe(true);
+    for (const source of ['staged', 'unstaged', 'commit']) {
+      if (source === 'unstaged') {
+        fireEvent.click(within(screen.getByRole('navigation', { name: '文件导航' })).getByRole('button', { name: '下一文件' }));
+      } else if (source === 'commit') {
+        fireEvent.click(await screen.findByRole('button', { name: /Commit aaaaaaaa/u }));
+      }
+      await screen.findByText(`${source}:src/README.md`);
+      const before = getCommitFileDiff.mock.calls.length;
+      const directory = await openDirectory();
+      await user.click(directory.getByRole('button', { name: 'src/docs', exact: true }));
+      expect(getCommitFileDiff).toHaveBeenCalledTimes(before);
+      await user.click(directory.getByRole('button', { name: guide.path, exact: true }));
+      await screen.findByText(`${source}:${guide.path}`);
+      expect(readTextFile).toHaveBeenLastCalledWith('/repo', expect.objectContaining({ source, filePath: guide.path }));
     }
-    fireEvent.click(navigation.getByRole('button', { name: '收起变更侧栏' }));
-    expect(screen.queryByRole('navigation', { name: '变更' })).toBeNull();
-    fireEvent.click(navigation.getByRole('button', { name: '展开变更侧栏' }));
-    expect(screen.getByRole('navigation', { name: '变更' })).toBeTruthy();
+    expect(getCommitFileDiff).toHaveBeenCalledTimes(2);
+    expect(getCommitFileDiff).toHaveBeenLastCalledWith('/repo', { oid: one, filePath: guide.path, previousPath: undefined });
   });
 
   it.each([

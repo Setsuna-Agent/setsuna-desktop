@@ -23,7 +23,7 @@ export function RuntimePluginUses({
         const title = t('chat.plugin.title', { name: plugin.name });
         return (
           <div className="chat-plugin-use-record" key={plugin.id}>
-            <PluginIcon name={plugin.icon} iconImage={plugin.iconImage} pluginId={plugin.id} variant="inline" />
+            <PluginIcon className="chat-work-history__plugin-icon" name={plugin.icon} iconImage={plugin.iconImage} pluginId={plugin.id} variant="inline" />
             <span className="chat-plugin-uses__status">{status}</span>
             {onOpenPlugin ? (
               <Button variant="ghost"

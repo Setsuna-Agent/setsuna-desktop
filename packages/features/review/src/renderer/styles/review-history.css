@@ -134,34 +134,6 @@
   user-select: none !important;
 }
 
-.git-changes-nav__header {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  height: var(--desktop-panel-toolbar-height);
-  padding: 0 var(--app-topbar-item-gap) 0 var(--git-gutter);
-}
-
-.git-changes-nav__project {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  min-width: 0;
-}
-
-.git-changes-nav__title {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  color: var(--app-text);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 22px;
-  text-align: left;
-}
-
 .git-changes-files__group-toggle > svg,
 .git-history-section-heading > svg:first-child,
 .git-changes-file__select > :first-child {
@@ -552,7 +524,7 @@ button.git-history-section-heading { cursor: pointer; }
 .git-history-ref span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .git-history-ref svg { flex-shrink: 0; }
 .git-history-ref__more.sd-button { flex: 0 0 20px; width: 20px; height: 20px; min-height: 0; padding: 0; justify-content: center; border: 0; border-radius: var(--app-radius-full); color: var(--app-text-muted); }
-.git-history-row:hover,
+.git-history-row:is(:hover, [data-overlay-open], :has([data-overlay-open])),
 .git-changes-file:hover,
 .git-changes-nav__workspace > button:hover { background: var(--git-row-hover-bg); }
 .git-history-row.is-selected,
@@ -560,12 +532,12 @@ button.git-history-section-heading { cursor: pointer; }
 /* The full row owns hover/selection, not a second rectangle inside it. */
 .git-changes-file__select.sd-button:is(:hover, :active):not(:disabled),
 .git-changes-files__group-toggle.sd-button:is(:hover, :active):not(:disabled),
-.git-history-row__commit.sd-button:is(:hover, :active):not(:disabled) { background: transparent; }
+.git-history-row__commit.sd-button:is(:hover, :active, [data-overlay-open]):not(:disabled) { background: transparent; }
 .git-changes-files__group-heading:hover .git-changes-files__group-toggle,
 button.git-history-section-heading:hover,
 .git-changes-file:hover .git-changes-file__select,
 .git-changes-file.is-selected .git-changes-file__select,
-.git-history-row:hover .git-history-row__commit,
+.git-history-row:is(:hover, [data-overlay-open], :has([data-overlay-open])) .git-history-row__commit,
 .git-history-row.is-selected .git-history-row__commit { color: var(--app-text); }
 .git-changes-file.is-selected .git-changes-file__select,
 .git-history-row.is-selected .git-history-row__commit { font-weight: 500; }
@@ -587,22 +559,6 @@ button.git-history-section-heading:hover,
 .git-history-status[role='alert'] { color: var(--desktop-review-deletion-marker); }
 
 .git-history-diff { background: var(--desktop-agent-main-bg); }
-.git-history-diff > .desktop-review-panel__toolbar {
-  box-sizing: border-box;
-  flex-shrink: 0;
-  gap: 4px;
-  height: var(--desktop-panel-toolbar-height);
-  min-height: var(--desktop-panel-toolbar-height);
-  padding-inline: var(--git-gutter) var(--app-topbar-item-gap);
-  border-bottom: 1px solid var(--git-border);
-  background: transparent;
-}
-.git-history-diff__heading { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; }
-/* Match the file row's icon column while retaining the full toolbar-button hit area. */
-.git-history-diff__back {
-  margin-inline: calc((var(--desktop-review-file-icon-size) - var(--app-topbar-navigation-control-size)) / 2);
-}
-.git-history-diff__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; }
 .git-history-diff__commit {
   display: flex;
   flex-shrink: 0;
@@ -625,7 +581,6 @@ button.git-history-section-heading:hover,
 .git-history-diff__commit code { font-family: var(--app-code-font-family); font-size: 11px; }
 .git-history-diff__empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px; color: var(--app-text-muted); font-size: 12px; text-align: center; }
 .git-history-diff__empty > svg { color: var(--app-text-muted); }
-.git-changes-panel .git-history-diff__back.app-shell-icon-control { display: none; }
 
 /* A narrow right panel keeps the navigation intact behind an explicit back action. */
 @container git-changes (max-width: 560px) {
@@ -634,7 +589,7 @@ button.git-history-section-heading:hover,
   .git-changes-panel__body.has-detail:not(.has-message-editor) { --git-navigation-track-width: 0px; }
   .git-changes-nav { border-left: 0; }
   .git-changes-panel__body:not(.has-message-editor) > .git-changes-panel__resize-handle { display: none; }
-  .git-changes-panel .git-history-diff__back.app-shell-icon-control { display: inline-flex; }
+  .git-changes-toolbar .git-changes-toolbar__back.app-shell-icon-control { display: inline-flex; }
   /* Message editing keeps the SCM split visible instead of replacing the navigation. */
   .git-changes-panel__body.has-message-editor .git-changes-nav {
     border-left: 1px solid var(--git-border);
@@ -671,7 +626,8 @@ button.git-history-section-heading:hover,
 .git-conflict-history__entry > svg { flex-shrink: 0; color: var(--app-text-muted); }
 .git-conflict-history__entry > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .git-conflict-history__entry > time { flex-shrink: 0; color: var(--app-text-muted); font-size: 10px; }
-.git-conflict-history__entry:hover { background: var(--git-row-hover-bg); }
+.git-conflict-history__entry:hover,
+.git-conflict-history__row[data-overlay-open] .git-conflict-history__entry { background: var(--git-row-hover-bg); }
 .git-conflict-history__entry[aria-pressed='true'] { background: var(--git-row-active-bg); }
 
 .git-conflict-history__header { position: relative; flex-shrink: 0; height: var(--git-history-heading-height); }
@@ -683,10 +639,8 @@ button.git-history-section-heading:hover,
 .git-conflict-history__row { position: relative; }
 /* Hover actions replace the timestamp without changing the title's available width. */
 .git-conflict-history__archive.sd-icon-button { position: absolute; top: 3px; right: var(--git-gutter); opacity: 0; pointer-events: none; }
-.git-conflict-history__row:hover .git-conflict-history__archive,
-.git-conflict-history__row:focus-within .git-conflict-history__archive { opacity: 1; pointer-events: auto; }
-.git-conflict-history__row:hover time,
-.git-conflict-history__row:focus-within time { visibility: hidden; }
+.git-conflict-history__row:is(:hover, :focus-within, [data-overlay-open]) .git-conflict-history__archive { opacity: 1; pointer-events: auto; }
+.git-conflict-history__row:is(:hover, :focus-within, [data-overlay-open]) time { visibility: hidden; }
 
 .git-conflict-archive-preview { height: min(65vh, 720px); border: 0; }
 .git-conflict-archive-path { display: block; overflow-wrap: anywhere; }

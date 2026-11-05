@@ -6,6 +6,7 @@ import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
 import { useChatThreadId } from '../conversation/ChatThreadProvider.js';
 import { useThreadFileChanges } from '../hooks/ThreadFileChangesProvider.js';
+import { useWorkspaceFileContextMenu } from '../markdown/useWorkspaceFileContextMenu.js';
 import type { RuntimeFileChange, RuntimeFileChangeSummary } from './runtimeFileChanges.js';
 import {
   completedFileOperationActionLabel,
@@ -174,10 +175,15 @@ function FileChangeItem({ file, onOpenReview }: {
   file: RuntimeFileChange;
   onOpenReview?: DesktopReviewOpenHandler;
 }) {
+  const { contextMenuOpen, openContextMenu } = useWorkspaceFileContextMenu();
   return (
-    <div className="chat-file-changes__item">
+    <div className="chat-file-changes__item" onContextMenu={(event) => {
+      // Recorded targets retain their workspace-root identity even if the active directory changed.
+      openContextMenu(event, { filePath: file.absolutePath ?? file.path });
+    }}>
       <Button variant="ghost"
         className="chat-file-changes__row"
+        data-context-menu-open={contextMenuOpen ? '' : undefined}
         type="button"
         disabled={!onOpenReview}
         title={file.path}

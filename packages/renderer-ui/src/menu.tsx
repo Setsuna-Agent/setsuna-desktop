@@ -1,6 +1,6 @@
 import { Slot, ContextMenu, DropdownMenu } from 'radix-ui';
 import { Check, ChevronRight } from 'lucide-react';
-import { forwardRef, useEffect, useRef, type HTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode, type RefObject } from 'react';
+import { forwardRef, useEffect, useRef, useState, type HTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { floatingPlacement, overlayContainer, type Placement } from './portal.js';
 import { cn } from './utils.js';
@@ -24,6 +24,8 @@ export type MenuProps = {
   onClick?(action: MenuAction): void;
 };
 export type DropdownProps = Omit<HTMLAttributes<HTMLElement>, 'children'> & {
+  /** Preserve an outer overlay's state when triggers share the same DOM element. */
+  'data-overlay-open'?: '';
   children: ReactElement;
   menu: MenuProps;
   disabled?: boolean;
@@ -46,16 +48,24 @@ export type DropdownProps = Omit<HTMLAttributes<HTMLElement>, 'children'> & {
 export const Dropdown = forwardRef<HTMLElement, DropdownProps>(function Dropdown({ children, menu, disabled, modal = false, open, onOpenChange, onCloseAutoFocus, placement, trigger, rootClassName, initialFocusRef, className, align, popupRender, ...triggerProps }, ref) {
   const keyboardInteraction = useRef(false);
   const context = trigger?.includes('contextMenu') ?? false;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const actualOpen = context ? internalOpen : open ?? internalOpen;
+  const changeOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChange?.(next);
+  };
+  // Radix data-state can belong to a nested tooltip. Keep overlay activation independent.
+  const overlayOpen = actualOpen ? '' : triggerProps['data-overlay-open'];
   const rows = <MenuItems menu={menu} context={context} />;
   const contents = popupRender ? popupRender(rows) : rows;
   const classes = cn('sd-menu', rootClassName, className);
-  if (context) return <ContextMenu.Root onOpenChange={onOpenChange} modal={modal}>
-    <ContextMenu.Trigger asChild disabled={disabled}><Slot.Root {...triggerProps} ref={ref}>{children}</Slot.Root></ContextMenu.Trigger>
+  if (context) return <ContextMenu.Root onOpenChange={changeOpen} modal={modal}>
+    <ContextMenu.Trigger asChild disabled={disabled}><Slot.Root {...triggerProps} data-overlay-open={overlayOpen} ref={ref}>{children}</Slot.Root></ContextMenu.Trigger>
     <ContextMenu.Portal container={overlayContainer()}><ContextMenu.Content asChild className={classes} collisionPadding={8} onCloseAutoFocus={onCloseAutoFocus}><MenuSurface>{contents}</MenuSurface></ContextMenu.Content></ContextMenu.Portal>
   </ContextMenu.Root>;
-  return <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={modal}>
+  return <DropdownMenu.Root open={actualOpen} onOpenChange={changeOpen} modal={modal}>
     <DropdownMenu.Trigger asChild disabled={disabled}>
-      <Slot.Root {...triggerProps} ref={ref}
+      <Slot.Root {...triggerProps} data-overlay-open={overlayOpen} ref={ref}
         onPointerDownCapture={(event) => { keyboardInteraction.current = false; triggerProps.onPointerDownCapture?.(event); }}
         onKeyDownCapture={(event) => { keyboardInteraction.current = true; triggerProps.onKeyDownCapture?.(event); }}>
         {children}

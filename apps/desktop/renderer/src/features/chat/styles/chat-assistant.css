@@ -464,11 +464,23 @@
   width: 100%;
   max-width: 100%;
   min-height: 24px;
-  color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
+  color: color-mix(in srgb, var(--app-text-muted) 76%, transparent);
   font-size: 13px;
   line-height: 20px;
   /* 与工具记录行一致，属于状态行；也避免双击插件名时选中前面的状态文字。 */
   user-select: none;
+}
+
+.chat-plugin-use-record:is(:hover, :has(:focus-visible)) {
+  color: var(--app-text);
+}
+
+/* Plugin presets and custom artwork share the history's neutral default;
+   only the active row restores its original avatar colors and surface. */
+:is(.chat-plugin-use-record, .chat-tool-run__summary, .chat-tool-run__inspection-item):not(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])) .chat-work-history__plugin-icon {
+  color: inherit;
+  background: transparent;
+  filter: grayscale(1);
 }
 
 .chat-plugin-uses__status {
@@ -490,19 +502,20 @@
 button.chat-plugin-use {
   padding: 0;
   border: 0;
-  color: var(--app-primary);
+  color: inherit;
   background: transparent;
   cursor: pointer;
   text-align: left;
 }
 
-/* 插件名按文字链接呈现：压住 ghost 按钮 hover 的底色和正文色，只保留下划线反馈。 */
-button.chat-plugin-use:is(:hover, :active):not(:disabled) {
+/* Match file activity: emphasize the hovered/focused row without a button fill. */
+button.chat-plugin-use:is(:hover, :active):not(:disabled),
+.chat-plugin-use-record:is(:hover, :has(:focus-visible)) button.chat-plugin-use:not(:disabled) {
   color: var(--app-primary);
   background: transparent;
 }
 
-button.chat-plugin-use:hover .chat-plugin-use__name {
+.chat-plugin-use-record:is(:hover, :has(:focus-visible)) button.chat-plugin-use .chat-plugin-use__name {
   text-decoration: underline;
   text-underline-offset: 2px;
 }

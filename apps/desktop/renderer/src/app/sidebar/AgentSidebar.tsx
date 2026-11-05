@@ -481,6 +481,7 @@ function ProjectActionMenu({
         type="button"
         aria-label={t('sidebar.projectActions')}
         aria-expanded={open}
+        data-overlay-open={open && !anchorPoint ? '' : undefined}
         aria-haspopup="menu"
         onClick={handleTriggerClick}
       >

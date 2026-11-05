@@ -35,7 +35,7 @@
 }
 
 /* Press feedback only changes color so controls and popup anchors stay still. */
-.sd-button:is(:hover, :active):not(:disabled) {
+.sd-button:is(:hover, :active, [data-overlay-open]):not(:disabled) {
   background: var(--desktop-agent-control-hover-bg);
   border-color: var(--app-border-strong);
 }
@@ -56,7 +56,7 @@
   border-color: transparent;
 }
 
-.sd-button--primary:is(:hover, :active):not(:disabled) {
+.sd-button--primary:is(:hover, :active, [data-overlay-open]):not(:disabled) {
   color: var(--app-primary-text);
   background: var(--app-primary-hover);
   border-color: transparent;
@@ -68,7 +68,7 @@
   color: var(--app-text-secondary);
 }
 
-.sd-button--ghost:is(:hover, :active):not(:disabled) {
+.sd-button--ghost:is(:hover, :active, [data-overlay-open]):not(:disabled) {
   border-color: transparent;
   color: var(--app-text);
 }
@@ -79,7 +79,7 @@
   background: var(--app-danger-bg);
 }
 
-.sd-button--danger:is(:hover, :active):not(:disabled) {
+.sd-button--danger:is(:hover, :active, [data-overlay-open]):not(:disabled) {
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 14%, var(--app-surface));
   border-color: var(--app-danger);
@@ -106,8 +106,7 @@
   flex-shrink: 0;
 }
 
-/* File, review, settings documents and changes toolbars share one source/preview
-   segmented switch; the selected segment lifts on the theme-aware card shadow. */
+/* Segmented document-view controls lift the selected option on the themed card shadow. */
 .sd-markdown-view-toggle {
   display: inline-flex;
   flex-shrink: 0;
@@ -148,7 +147,7 @@
   border-radius: var(--app-radius-sm);
 }
 
-.sd-icon-button[data-state='open'] {
+.sd-icon-button[data-overlay-open]:not(:disabled) {
   color: var(--app-text);
   background: var(--desktop-agent-control-active-bg);
 }

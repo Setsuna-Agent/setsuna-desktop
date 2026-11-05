@@ -16,6 +16,13 @@
   font-family: inherit;
 }
 
+/* The value is positioned inside a narrow thumb; inherited prose wrapping must
+ * not shrink its bubble or split a number across lines. */
+.chat-openui .openui-slider-thumb-value {
+  width: max-content;
+  white-space: nowrap;
+}
+
 .chat-openui-stack {
   display: contents;
 }

@@ -69,7 +69,7 @@ Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一
 
 文件目录通过 `desktop.watchWorkspaceEntries` 订阅 Main 的目录变更；`entry-watcher.ts` 在 macOS 上非递归监听根目录及已加载的目录，筛选时包含结果的祖先目录，不依赖 Git。Windows 使用单个原生递归根目录句柄，避免子目录句柄阻止父目录重命名；事件只接受已订阅目录、直接子项及祖先变化，忽略未展开子树。每次通知前会校验订阅路径；macOS 同时检查目录 inode，为后来创建或重建的目录补建监听。工具、终端或外部编辑器的写入会触发后台重新读取，监听就绪及窗口重新聚焦时也会校正缓存。`useWorkspaceEntriesSync` 合并读取期间的重复通知，操作对话框提交期间暂停同步。目录快照按父子顺序替换，清理已删除/重命名的旧节点及后代，保留现存目录的展开状态、宽度和滚动位置；刷新失败保留最后可用的目录，不清空文件树或覆盖编辑草稿。切换工作区、窗口导航或 renderer 退出会释放旧监听。
 
-可编辑的文本文件打开后自动进入编辑状态；预览内容被截断时，`useWorkspaceFileDraft` 先读取完整内容。`Ctrl+S` / `⌘S` 保存当前草稿，保存后继续编辑，保存期间新增的输入仍保留为未保存内容。对应侧栏或底栏标签在关闭按钮旁显示未保存小点；保存失败保留草稿与错误提示。文件页不再提供进入编辑、取消或保存按钮。
+可编辑的文本文件打开后自动进入编辑状态；预览内容被截断时，`useWorkspaceFileDraft` 先读取完整内容。文件源码预览和编辑视图统一自动换行，长行按面板宽度折行，不需要横向滚动；折行只影响展示，保留文件原始换行与行号。`Ctrl+S` / `⌘S` 保存当前草稿，保存后继续编辑，保存期间新增的输入仍保留为未保存内容。对应侧栏或底栏标签在关闭按钮旁显示未保存小点；保存失败保留草稿与错误提示。文件页不再提供进入编辑、取消或保存按钮。
 
 Runtime 的 `workspace-file-preview-reader.ts` 先通过文件句柄读取最多 64 KiB 文件头判断格式，不支持的二进制和超限图片直接返回，不读取正文或计算全文件哈希。Office 的完整字节留到预览组件按需读取；图片最多读取 8 MiB，文本最多读取编辑预算 8 MiB，超过预算的文本只返回请求范围内的前缀。可编辑文本仍使用完整内容哈希保证保存冲突检查；未完整读取的预览使用文件元数据版本供外部修改刷新。
 
@@ -149,6 +149,7 @@ Review presentation 与 Workspace 级 Git 状态由 `packages/features/review/sr
 - `ReviewPanel.tsx`：review 来源、比较基准和 diff 展示交互；提交与推送操作由变更记录页提供。
 - `ReviewDiffView.tsx`：文件卡、展开、聚焦和 context menu 编排。
 - `ReviewFileBrowser.tsx` / `ReviewFileNavigator.tsx`：大型变更的单文件浏览和导航。
+- `hooks/useReviewFileSelection.ts`：大型变更的当前文件与定位请求选择，工具栏和单文件内容共用同一选择。
 - `hooks/useDesktopReviewState.ts`：比较基准、变更订阅与 latest-wins 请求保护；不依赖 review panel 是否打开。
 - `git/WorkspaceGitCommitDialog.tsx` / `ConversationGitControls.tsx`：共享 Git 操作 surface。
 - `ReviewChangeCounts.tsx`：统计。
@@ -158,6 +159,14 @@ Review presentation 与 Workspace 级 Git 状态由 `packages/features/review/sr
 宿主 `composition/review-feature-adapter.tsx` 只注入 preload bridge、i18n、通知和通用 diff/Markdown/文件菜单 UI；`review-feature-panel-adapter.ts` 单独承接 Workspace 懒加载的 Review panel 入口。Workspace panel 与 Chat overview 均通过 composition adapter 使用 Review 的公开 surface。`runtimeReviewSummary.ts` 留在宿主侧，负责把 chat tool-run 投影转换为 Review contract。
 
 Review preference 按 workspace 持久化在 localStorage。Main 才执行 Git 操作；renderer 不拼 Git 命令。
+
+审查面板 header 将来源与增删统计、分支比较和操作图标组放在同一行，使用统一的胶囊轮廓与宿主字体；分支名按可用宽度省略，窄面板允许工具栏换行，保留原有来源选择、比较基准和显示操作。
+
+变更的整页工具栏、提交消息编辑头，文件的路径与操作头，以及浏览器的导航、地址栏和操作组，均复用同一套 `sd-panel-toolbar` 样式。主头部留出与审查相同的高度和上下间距；文件路径与标题允许收缩省略，浏览器地址保持弹性宽度。
+
+审查的文件侧栏复用文件、变更面板的侧栏动画时长与曲线，通过外层宽度过渡裁切固定宽度的导航内容。收起时保留筛选、目录状态与滚动位置，立即退出焦点和辅助技术导航；拖动调宽及减少动态效果模式下不执行过渡。树行布局动画只跟随内容变化，不重复响应整个侧栏的显隐。
+
+审查使用单文件浏览时，顶部的预览切换只对当前文件提供；不支持预览的文件隐藏切换。多文件列表仍按当前列表中的可预览文件提供面板级切换。
 
 审查和变更在面板顶部提供统一的“预览 / 源码”切换，作用于面板中的所有 Markdown 和 CSV，默认使用源码，切换文件和分组后保持选择。源码模式保留原有增删对照和行级批注；行号或审查发现定位会将整个面板切回源码。`ReviewFileDocument` 经 preload 的 `readTextFile` 读取完整 Markdown 预览内容，不从 diff 片段拼接文档；Main 的 `file-version.ts` 与图片预览共用工作区、暂存区和固定提交版本的选择。删除文件读取删除前版本，最近改动中没有删除前快照的文件仍展示源码对照。读取限制在 workspace 内，拒绝越界链接、二进制及超过 2 MiB 的文本。宿主通过 `composition/review/ReviewFileDocument.tsx` 注入已有 Markdown 预览；相对图片读取相同版本，并在切换或关闭预览时释放临时资源。
 
@@ -172,7 +181,9 @@ Office/PDF 变更，以及切到预览模式的 CSV，由 `ReviewDocumentDiff` �
 
 Diff 文件侧栏支持手动收起，筛选、分组折叠、提交草稿和导航宽度保持挂载。`GitChangesFileNavigation` 在变更面板底部常驻，采用紧凑的 beUI Dock，以绝对定位悬浮在内容上，不占用底部布局行；宽面板对齐 diff 中心，窄面板切回侧栏后仍可操作。Dock 外的透明区域允许鼠标事件穿透，滚动内容末尾保留避让空间。Dock 使用上一文件、下一文件、所有文件和最右侧的侧栏开关图标；悬停所有文件图标即在上方打开可滚动的文件选择小窗，也支持点击和键盘打开。没有文件时禁用文件操作，侧栏开关仍可使用。导航沿用侧栏的分组与文件顺序，以来源和路径共同标识文件，区分同一路径的暂存、未暂存版本；历史提交仍只按需读取选中文件的 diff。提交消息编辑与冲突处理保留原有导航流程。
 
-单文件 diff 的文件头固定在滚动区域外，只有正文由 `Virtualizer` 滚动；整组 diff 继续使用共享滚动区域。变更面板的文件头保留路径和增删行数，打开操作与 diff 显示设置由 Dock 提供。
+变更页工具栏横跨 diff 与侧栏，保留当前文件路径、增删行数、预览切换、刷新和 Git 菜单；侧栏从提交消息框开始。单文件 diff 直接滚动正文，不重复显示文件头；整组 diff 继续保留各文件头及共享滚动区域，打开操作与 diff 显示设置由 Dock 提供。
+
+`GitChangesBreadcrumb` 将当前文件路径按目录分段，点击目录或文件名打开文件树弹层。树只包含当前暂存、未暂存或提交版本中的变更文件，选择后沿用同一个选择入口；展开目录不加载文件内容或提交 diff。树构建与审查侧栏共用 `model/reviewFileTree.ts`，弹层打开后才构建并展开当前路径；旧侧栏继续压缩单分支目录。预览模式由变更页持有，切换文件和提交后保持。
 
 Dock 的文件选择小窗完整显示文件名，右侧复用 `ReviewChangeCounts` 显示新增和删除行数，目录作为次行信息；顶部搜索支持按文件名或路径筛选，保留暂存、未暂存分组，只滚动结果列表。筛选不改变上一文件、下一文件的导航顺序，也不影响侧栏筛选；关闭小窗后清空搜索。
 

@@ -46,6 +46,7 @@ export function EditableWorkspaceFile({
   const options = usePierreFileOptions({
     layout: workspaceCodeViewLayout,
     unsafeCSS: workspaceCodeViewUnsafeCSS,
+    wrap: true,
   });
   const itemId = workspaceFileKey(file);
   const { items, onEditorChange } = useWorkspaceEditorDocument({ content, file, language, onChange });

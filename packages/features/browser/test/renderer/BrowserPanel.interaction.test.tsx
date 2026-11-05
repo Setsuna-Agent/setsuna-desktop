@@ -524,7 +524,7 @@ describe('BrowserPanel interactions', () => {
     renderBrowserPanel();
     Object.assign(document.querySelector('webview') as unknown as WebviewTag, { getWebContentsId: () => 42 });
     const request: BrowserContextMenuRequest = {
-      id: 'menu-session', webContentsId: 99, x: 180, y: 64,
+      id: 'menu-session', webContentsId: 99, source: 'page', x: 180, y: 64,
       items: [{ key: 'copy', label: 'Copy image' }, { key: 'paste', label: 'Paste', disabled: true }],
     };
     act(() => publishMenu(request));

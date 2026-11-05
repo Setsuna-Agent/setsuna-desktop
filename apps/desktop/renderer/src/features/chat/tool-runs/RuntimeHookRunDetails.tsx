@@ -1,5 +1,5 @@
 import type { RuntimeHookRun } from '@setsuna-desktop/contracts';
-import { CheckCircle2, ChevronDown, CircleAlert, CircleStop, Grip } from 'lucide-react';
+import { ChevronDown, Webhook } from 'lucide-react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { ToolPreview } from './ToolPreview.js';
 
@@ -18,15 +18,13 @@ function HookRunRecord({ run }: { run: RuntimeHookRun }) {
   const status = run.status === 'completed' ? 'success'
     : run.status === 'failed' || run.status === 'blocked' ? 'error'
       : run.status === 'stopped' ? 'cancelled' : 'running';
-  const Icon = status === 'running' ? Grip : status === 'error' ? CircleAlert
-    : status === 'cancelled' ? CircleStop : CheckCircle2;
   // Output is diagnostic content, never a Hook's display name.
   const name = run.statusMessage?.trim() || [run.pluginId, run.eventName, run.matcher].filter(Boolean).join(' · ');
   const statusText = hookRunStatusText(run.status, t);
   return (
     <details className={`chat-tool-run chat-tool-run--${status}`}>
       <summary className="chat-tool-run__summary" title={statusText || undefined}>
-        <span className="chat-tool-run__icon"><Icon aria-hidden="true" size={14} /></span>
+        <span className="chat-tool-run__icon"><Webhook aria-hidden="true" size={14} /></span>
         <span className="chat-tool-run__summary-text">
           <span className="chat-tool-run__title">{t(run.status === 'running' ? 'toolRun.hook.calling' : 'toolRun.hook.called')}</span>
           <span className="chat-tool-run__target" title={name}>{name}</span>
@@ -66,6 +64,5 @@ function hookRunStatusText(
   if (status === 'running') return t('toolRun.hook.status.running');
   if (status === 'blocked') return t('toolRun.hook.status.blocked');
   if (status === 'stopped') return t('toolRun.hook.status.stopped');
-  if (status === 'failed') return t('toolRun.hook.status.failed');
   return '';
 }

@@ -15,7 +15,7 @@
 .chat-browser-annotations__tag .sd-button__icon { color: var(--app-text-muted); }
 
 .chat-browser-annotations__tag.sd-button:hover,
-.chat-browser-annotations__tag.sd-button[data-state='open'] {
+.chat-browser-annotations__tag.sd-button[data-overlay-open] {
   border-color: var(--app-border-strong);
   background: var(--app-surface-subtle);
 }

@@ -14,6 +14,7 @@ import type { ReviewTranslate } from './messages.js';
 
 export type ReviewFileContextTarget = {
   filePath: string;
+  triggerId?: string;
   line?: number;
   x: number;
   y: number;

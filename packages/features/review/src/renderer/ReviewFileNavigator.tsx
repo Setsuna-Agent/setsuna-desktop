@@ -24,11 +24,8 @@ import {
 } from './primitives.js';
 import { ReviewChangeCounts } from './ReviewChangeCounts.js';
 import { ReviewFileIcon } from './ReviewFileVisuals.js';
+import { buildReviewFileTree, type ReviewFileTreeNode as FileTreeNode } from './model/reviewFileTree.js';
 
-const reviewFilePathCollator = new Intl.Collator('en', {
-  numeric: true,
-  sensitivity: 'base',
-});
 const REVIEW_FILE_TREE_DEFAULT_WIDTH = 248;
 const REVIEW_FILE_TREE_MIN_WIDTH = 190;
 const REVIEW_FILE_TREE_MAX_WIDTH = 360;
@@ -36,19 +33,7 @@ const REVIEW_FILE_TREE_LAYOUT_STORAGE_KEY = 'setsuna-desktop:review-file-browser
 const REVIEW_FILE_TREE_WIDTH_STORAGE_KEY = 'setsuna-desktop:review-file-browser-width';
 
 type ReviewFileListLayout = 'flat' | 'tree';
-type ReviewFileTreeNode = ReviewFileDirectoryNode | ReviewFileLeafNode;
-type ReviewFileDirectoryNode = {
-  children: ReviewFileTreeNode[];
-  name: string;
-  path: string;
-  type: 'directory';
-};
-type ReviewFileLeafNode = {
-  file: DesktopDiffFile;
-  name: string;
-  path: string;
-  type: 'file';
-};
+type ReviewFileTreeNode = FileTreeNode<DesktopDiffFile>;
 
 /**
  * Directory state stays below ReviewFileBrowser so filtering, folding and
@@ -81,8 +66,16 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
     () => (layout === 'tree' ? buildReviewFileTree(visibleFiles) : []),
     [layout, visibleFiles],
   );
+  // The slot owns sidebar motion; tree rows only animate when their contents change.
+  const treeLayoutDependency = useMemo(
+    () => [visibleFiles, collapsedPaths, layout],
+    [visibleFiles, collapsedPaths, layout],
+  );
 
   useEffect(() => () => resizeCleanupRef.current?.(), []);
+  useEffect(() => {
+    if (!visible) resizeCleanupRef.current?.();
+  }, [visible]);
 
   const toggleDirectory = useCallback((directoryPath: string) => {
     setCollapsedPaths((current) => {
@@ -175,148 +168,83 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
   const layoutToggleLabel = layout === 'tree'
     ? t('feature.review.workspace.fileBrowser.showFlat')
     : t('feature.review.workspace.fileBrowser.showTree');
-  // Keep local filters, layout and width mounted while releasing all navigator space.
-  if (!visible) return null;
   const rows = layout === 'tree'
     ? tree.map((node) => renderNode(node))
     : visibleFiles.map((file) => renderFileRow(file, file.path, 0));
   const navigatorStyle = {
     '--desktop-review-file-tree-width': `${width}px`,
+    '--desktop-review-file-tree-track-width': `${visible ? width : 0}px`,
   } as CSSProperties;
 
   return (
-    <aside
-      aria-label={t('feature.review.workspace.fileBrowser.label')}
-      className="desktop-review-file-tree"
+    <div
+      className="desktop-review-file-tree-slot"
+      aria-hidden={!visible || undefined}
+      {...(!visible ? { inert: '' } : {})}
       style={navigatorStyle}
     >
-      <ResizeHandle
-        aria-label={t('feature.review.workspace.fileBrowser.resize')}
-        aria-orientation="vertical"
-        aria-valuemax={REVIEW_FILE_TREE_MAX_WIDTH}
-        aria-valuemin={REVIEW_FILE_TREE_MIN_WIDTH}
-        aria-valuenow={width}
-        className="desktop-review-file-tree__resize-handle"
-        role="separator"
-        title={t('feature.review.workspace.fileBrowser.resizeHint')}
-        type="button"
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowLeft') {
-            event.preventDefault();
-            adjustWidth(16);
-          } else if (event.key === 'ArrowRight') {
-            event.preventDefault();
-            adjustWidth(-16);
-          } else if (event.key === 'Home') {
-            event.preventDefault();
-            adjustWidth(REVIEW_FILE_TREE_MIN_WIDTH - width);
-          } else if (event.key === 'End') {
-            event.preventDefault();
-            adjustWidth(REVIEW_FILE_TREE_MAX_WIDTH - width);
-          }
-        }}
-        onPointerDown={startResize}
-      />
-      <div className="desktop-review-file-tree__toolbar">
-        <TextField
-          appearance="search"
-          leadingIcon={<Search size={13} />}
-          aria-label={t('feature.review.workspace.fileBrowser.filter')}
-          placeholder={t('feature.review.workspace.fileBrowser.filter')}
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
+      <aside aria-label={t('feature.review.workspace.fileBrowser.label')} className="desktop-review-file-tree">
+        <ResizeHandle
+          aria-label={t('feature.review.workspace.fileBrowser.resize')}
+          aria-orientation="vertical"
+          aria-valuemax={REVIEW_FILE_TREE_MAX_WIDTH}
+          aria-valuemin={REVIEW_FILE_TREE_MIN_WIDTH}
+          aria-valuenow={width}
+          className="desktop-review-file-tree__resize-handle"
+          role="separator"
+          title={t('feature.review.workspace.fileBrowser.resizeHint')}
+          type="button"
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowLeft') {
+              event.preventDefault();
+              adjustWidth(16);
+            } else if (event.key === 'ArrowRight') {
+              event.preventDefault();
+              adjustWidth(-16);
+            } else if (event.key === 'Home') {
+              event.preventDefault();
+              adjustWidth(REVIEW_FILE_TREE_MIN_WIDTH - width);
+            } else if (event.key === 'End') {
+              event.preventDefault();
+              adjustWidth(REVIEW_FILE_TREE_MAX_WIDTH - width);
+            }
+          }}
+          onPointerDown={startResize}
         />
-        <ActionTooltip title={layoutToggleLabel}>
-          <IconButton
-            aria-pressed={layout === 'flat'}
-            className="desktop-review-file-tree__layout-toggle"
-            label={layoutToggleLabel}
-            title=""
-            variant="ghost"
-            onClick={toggleLayout}
-          >
-            {layout === 'tree' ? <List size={14} /> : <ListTree size={14} />}
-          </IconButton>
-        </ActionTooltip>
-      </div>
-      <FileTreeSurface className="desktop-review-file-tree__items">
-        {rows.length ? rows : (
-          <div className="desktop-review-file-tree__empty">
-            {t('feature.review.workspace.fileBrowser.noMatch')}
-          </div>
-        )}
-      </FileTreeSurface>
-    </aside>
+        <div className="desktop-review-file-tree__toolbar">
+          <TextField
+            appearance="search"
+            leadingIcon={<Search size={13} />}
+            aria-label={t('feature.review.workspace.fileBrowser.filter')}
+            placeholder={t('feature.review.workspace.fileBrowser.filter')}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <ActionTooltip title={layoutToggleLabel}>
+            <IconButton
+              aria-pressed={layout === 'flat'}
+              className="desktop-review-file-tree__layout-toggle"
+              label={layoutToggleLabel}
+              title=""
+              variant="ghost"
+              onClick={toggleLayout}
+            >
+              {layout === 'tree' ? <List size={14} /> : <ListTree size={14} />}
+            </IconButton>
+          </ActionTooltip>
+        </div>
+        <FileTreeSurface className="desktop-review-file-tree__items" layoutDependency={treeLayoutDependency}>
+          {rows.length ? rows : (
+            <div className="desktop-review-file-tree__empty">
+              {t('feature.review.workspace.fileBrowser.noMatch')}
+            </div>
+          )}
+        </FileTreeSurface>
+      </aside>
+    </div>
   );
 });
-
-export function buildReviewFileTree(files: DesktopDiffFile[]): ReviewFileTreeNode[] {
-  const root: ReviewFileDirectoryNode = {
-    children: [],
-    name: '',
-    path: '',
-    type: 'directory',
-  };
-
-  for (const file of files) {
-    const parts = file.path.split(/[\\/]+/u).filter(Boolean);
-    let parent = root;
-    let currentPath = '';
-    parts.forEach((name, index) => {
-      currentPath = currentPath ? `${currentPath}/${name}` : name;
-      const isFile = index === parts.length - 1;
-      if (isFile) {
-        parent.children.push({ file, name, path: currentPath, type: 'file' });
-        return;
-      }
-      let directory = parent.children.find((node): node is ReviewFileDirectoryNode => (
-        node.type === 'directory' && node.path === currentPath
-      ));
-      if (!directory) {
-        directory = {
-          children: [],
-          name,
-          path: currentPath,
-          type: 'directory',
-        };
-        parent.children.push(directory);
-      }
-      parent = directory;
-    });
-  }
-
-  sortReviewFileTree(root);
-  return root.children.map(compactReviewFileTreeNode);
-}
-
-function compactReviewFileTreeNode(node: ReviewFileTreeNode): ReviewFileTreeNode {
-  if (node.type === 'file') return node;
-
-  const names = [node.name];
-  let directory = node;
-  while (directory.children.length === 1 && directory.children[0]?.type === 'directory') {
-    directory = directory.children[0];
-    names.push(directory.name);
-  }
-
-  // The final directory owns folding; file paths remain unchanged for selection.
-  return {
-    ...directory,
-    name: names.join('/'),
-    children: directory.children.map(compactReviewFileTreeNode),
-  };
-}
-
-function sortReviewFileTree(directory: ReviewFileDirectoryNode): void {
-  directory.children.sort((left, right) => {
-    if (left.type !== right.type) return left.type === 'directory' ? -1 : 1;
-    return reviewFilePathCollator.compare(left.name, right.name);
-  });
-  directory.children.forEach((node) => {
-    if (node.type === 'directory') sortReviewFileTree(node);
-  });
-}
 
 function clampReviewFileTreeWidth(width: number): number {
   return Math.min(

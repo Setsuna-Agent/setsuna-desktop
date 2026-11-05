@@ -301,22 +301,18 @@ it('reports a sync failure after a successful local commit without leaving a dup
   expect(input.value).toBe('');
 });
 
-it('opens files without selecting a diff and scopes stage, unstage, and confirmed discard to the row', async () => {
+it('scopes stage, unstage, and confirmed discard to the requested files', async () => {
   const stageFiles = vi.fn().mockResolvedValue({ ok: true, state });
   const unstageFiles = vi.fn().mockResolvedValue({ ok: true, state });
   const discardUnstaged = vi.fn().mockResolvedValue({ ok: true, state });
-  const onOpen = vi.fn();
   const onRefresh = vi.fn();
-  render(surface(createBridge({ stageFiles, unstageFiles, discardUnstaged }), { onOpen, onRefresh }));
-  const selectedFile = screen.getByRole('button', { name: 'new.txt' });
-  const row = within(selectedFile.closest<HTMLElement>('.git-changes-file')!);
-  fireEvent.click(row.getByRole('button', { name: '打开文件' }));
-  expect(onOpen).toHaveBeenCalledWith('new.txt');
-  expect(selectedFile.getAttribute('aria-pressed')).toBe('false');
+  render(surface(createBridge({ stageFiles, unstageFiles, discardUnstaged }), { onRefresh }));
+  const navigation = within(screen.getByRole('navigation', { name: '变更' }));
+  const row = within(navigation.getByRole('button', { name: 'new.txt' }).closest<HTMLElement>('.git-changes-file')!);
   fireEvent.click(row.getByRole('button', { name: '暂存更改' }));
   await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
   expect(stageFiles).toHaveBeenCalledWith('/repo', ['old.txt', 'new.txt']);
-  const stagedRow = within(screen.getByRole('button', { name: 'staged.txt' }).closest<HTMLElement>('.git-changes-file')!);
+  const stagedRow = within(navigation.getByRole('button', { name: 'staged.txt' }).closest<HTMLElement>('.git-changes-file')!);
   expect(stagedRow.queryByRole('button', { name: '丢弃更改' })).toBeNull();
   fireEvent.click(stagedRow.getByRole('button', { name: '取消暂存' }));
   await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(2));
@@ -343,14 +339,11 @@ it('batches only the selected group, includes filtered files and rename paths, a
 
   fireEvent.click(screen.getByRole('button', { name: '更改', expanded: true }));
   fireEvent.change(screen.getByRole('textbox', { name: '筛选变更文件' }), { target: { value: 'new.txt' } });
-  const group = within(screen.getByRole('button', { name: 'new.txt' }).closest<HTMLElement>('.git-changes-files__group')!);
-  const heading = group.getByRole('button', { name: '更改', expanded: true });
   const stageButton = screen.getByRole('button', { name: '暂存全部更改' });
   fireEvent.click(stageButton);
   fireEvent.click(stageButton);
   expect(stageFiles).toHaveBeenCalledExactlyOnceWith('/repo', ['old.txt', 'new.txt', 'hidden.txt']);
   expect((screen.getByRole('button', { name: '丢弃全部更改' }) as HTMLButtonElement).disabled).toBe(true);
-  expect(heading.getAttribute('aria-expanded')).toBe('true');
   await act(async () => { finishStage({ ok: true, state }); });
   expect(onRefresh).toHaveBeenCalledTimes(1);
 
@@ -365,28 +358,11 @@ it('batches only the selected group, includes filtered files and rename paths, a
   expect(discardUnstaged).toHaveBeenCalledExactlyOnceWith('/repo', ['old.txt', 'new.txt', 'hidden.txt']);
 
   fireEvent.change(screen.getByRole('textbox', { name: '筛选变更文件' }), { target: { value: '' } });
-  expect(screen.getByRole('button', { name: '更改', expanded: false })).toBeTruthy();
   const stagedGroup = within(screen.getByRole('button', { name: '暂存的更改' }).closest<HTMLElement>('.git-changes-files__group')!);
   expect(stagedGroup.queryByRole('button', { name: '丢弃全部更改' })).toBeNull();
   fireEvent.click(stagedGroup.getByRole('button', { name: '取消全部暂存' }));
   await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(3));
   expect(unstageFiles).toHaveBeenCalledExactlyOnceWith('/repo', ['staged.txt']);
-});
-
-it('opens the complete group diff, including deleted files, and can return to a single file', async () => {
-  const reviewState = { ...state, unstagedSummary: { files: [file('first.txt'), { ...file('deleted.txt'), action: 'Deleted' as const }], additions: 1, deletions: 2 } };
-  const view = render(surface(createBridge({}), { reviewState }));
-  const group = within(screen.getByRole('button', { name: 'first.txt' }).closest<HTMLElement>('.git-changes-files__group')!);
-  fireEvent.click(group.getByRole('button', { name: '更改' }));
-  fireEvent.click(group.getByRole('button', { name: '打开全部更改' }));
-  const diff = within(view.container.querySelector<HTMLElement>('.git-history-diff')!);
-  expect(diff.getByText('变更文件 · 2')).toBeTruthy();
-  expect(diff.getByText('first.txt')).toBeTruthy();
-  expect(diff.getByText('deleted.txt')).toBeTruthy();
-  fireEvent.click(group.getByRole('button', { name: '更改' }));
-  fireEvent.click(group.getByRole('button', { name: 'first.txt' }));
-  expect(diff.queryByText('deleted.txt')).toBeNull();
-  await waitFor(() => expect(group.getByRole('button', { name: 'first.txt' }).getAttribute('aria-pressed')).toBe('true'));
 });
 
 it.each(['pull', 'sync'] as const)('keeps %s recovery details available until dismissed and shows subsequent failures', async (kind) => {
@@ -456,51 +432,11 @@ it('keeps multiple conflict transcripts per workspace, deduplicates the active t
   expect(screen.getByRole('region', { name: 'Conflict task' }).getAttribute('data-thread-id')).toBe('second-repair');
   fireEvent.click(history.getByRole('button', { name: /拉取冲突 · 1/ }));
   expect(screen.getByRole('region', { name: 'Conflict task' }).getAttribute('data-thread-id')).toBe('first-repair');
-  fireEvent.click(history.getByRole('button', { name: /^冲突\s*2$/ }));
-  expect(history.queryByRole('list')).toBeNull();
-  fireEvent.click(history.getByRole('button', { name: /^冲突\s*2$/ }));
-  expect(history.getAllByRole('listitem')).toHaveLength(2);
   view.rerender(surface(bridge, { service, root: '/another-repo' }));
   expect(screen.queryByRole('region', { name: '冲突处理记录' })).toBeNull();
   view.rerender(surface(bridge, { service }));
   expect(within(screen.getByRole('region', { name: '冲突处理记录' })).getAllByRole('listitem')).toHaveLength(2);
   expect(screen.queryByRole('region', { name: 'Conflict task' })).toBeNull();
-  expect(screen.getByRole('button', { name: 'staged.txt' }).getAttribute('aria-pressed')).toBe('true');
-});
-
-it.each([
-  { label: 'staged files', reviewState: state, expectedFile: 'staged.txt' },
-  { label: 'only unstaged files', reviewState: { ...state, stagedSummary: null }, expectedFile: 'new.txt' },
-  { label: 'no changed files', reviewState: { ...state, stagedSummary: null, unstagedSummary: null }, expectedFile: null },
-])('opens $label instead of durable conflict records, including after reopening the panel', async ({ reviewState, expectedFile }) => {
-  const records = [
-    { threadId: 'repair-new', turnId: 'turn-new', createdAt: '2026-09-10T01:00:00Z', operation: 'rebase' as const },
-    { threadId: 'repair-old', turnId: 'turn-old', createdAt: '2026-09-09T01:00:00Z', operation: 'pull' as const },
-  ];
-  const readGitConflictHistory = vi.fn<ReviewRendererService['readGitConflictHistory']>(async ({ workspaceRoot }) => workspaceRoot === '/repo' ? records : []);
-  const service = { ...createNoopReviewRendererService(), available: true, readGitConflictHistory };
-  const bridge = createBridge();
-  const expectDefaultDetail = (container: HTMLElement) => {
-    expect(screen.queryByRole('region', { name: 'Conflict task' })).toBeNull();
-    expect(container.querySelector('.git-changes-panel__body.has-detail')).toBeTruthy();
-    const detail = within(container.querySelector<HTMLElement>('.git-history-diff')!);
-    expect(detail.getByText(expectedFile ?? '没有变更文件')).toBeTruthy();
-    if (expectedFile) expect(screen.getByRole('button', { name: expectedFile }).getAttribute('aria-pressed')).toBe('true');
-  };
-  const first = render(surface(bridge, { service, reviewState }));
-  await screen.findByRole('button', { name: /变基冲突 · 2/ });
-  expectDefaultDetail(first.container);
-  fireEvent.click(screen.getByRole('button', { name: /拉取冲突 · 1/ }));
-  expect(screen.getByRole('region', { name: 'Conflict task' }).getAttribute('data-thread-id')).toBe('repair-old');
-  first.unmount();
-  const reopened = render(surface(bridge, { service, reviewState }));
-  const older = await screen.findByRole('button', { name: /拉取冲突 · 1/ });
-  expectDefaultDetail(reopened.container);
-  fireEvent.click(older);
-  expect(screen.getByRole('region', { name: 'Conflict task' }).getAttribute('data-thread-id')).toBe('repair-old');
-  expect(readGitConflictHistory).toHaveBeenCalledTimes(2);
-  reopened.rerender(surface(bridge, { service, root: '/another-repo', reviewState }));
-  expect(screen.queryByRole('region', { name: '冲突处理记录' })).toBeNull();
 });
 
 it.each(['no-conflicts', 'disabled'] as const)('retains pull errors when conflict resolution is %s', async (reason) => {

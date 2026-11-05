@@ -7,7 +7,7 @@
   border-start-start-radius: 0;
   border-end-start-radius: 0;
 }
-.pr-merge-actions > .sd-button:last-child[data-state='open'] { background: var(--app-primary-hover); }
+.pr-merge-actions > .sd-button:last-child[data-overlay-open] { background: var(--app-primary-hover); }
 .pr-merge-dialog > .sd-dialog__body { padding-bottom: 6px; }
 .pr-merge-dialog > .sd-dialog__footer { padding-block: 16px 20px; }
 .pr-merge-confirm { display: grid; gap: 14px; min-width: 0; }

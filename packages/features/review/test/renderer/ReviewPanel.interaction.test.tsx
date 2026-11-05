@@ -644,7 +644,7 @@ describe('DesktopReviewPanel interactions', () => {
     });
     const treeToggle = screen.getByRole('button', { name: '收起变更文件', expanded: true, pressed: true });
     fireEvent.click(treeToggle);
-    expect(document.querySelector('.desktop-review-file-tree')).toBeNull();
+    expect(screen.queryByRole('complementary', { name: '变更文件' })).toBeNull();
     expect(screen.queryByRole('separator', { name: '调整变更文件栏宽度' })).toBeNull();
     expect(screen.getByRole('button', { name: '展开变更文件', expanded: false, pressed: false })).toBe(treeToggle);
     expect(window.localStorage.getItem('setsuna-desktop:review-file-browser-visible')).toBe('false');

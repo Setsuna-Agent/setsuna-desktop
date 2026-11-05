@@ -9,7 +9,6 @@ import {
   shellDiagnosticText,
   shellOutputSegments,
   shellRuntimeDetailLines,
-  shellStatusLabel,
 } from '../../../../../src/features/chat/tool-runs/RuntimeShellToolRun.js';
 
 const currentShellResult = [
@@ -115,7 +114,7 @@ describe('RuntimeShellToolRun', () => {
     expect(englishHtml).toContain('typecheck passed');
   });
 
-  it('keeps metadata-looking command output and surfaces only failure diagnostics', () => {
+  it('keeps metadata-looking command output and preserves nonzero exit diagnostics', () => {
     expect(shellOutputSegments('Status: application ready')).toEqual([
       { kind: 'message', text: 'Status: application ready' },
     ]);
@@ -126,7 +125,6 @@ describe('RuntimeShellToolRun', () => {
       status: 'success',
       resultPreview: currentShellResult.replace('Exit Code: 0', 'Exit Code: 2'),
     };
-    expect(shellStatusLabel(failedRun)).toBe('失败');
     expect(shellDiagnosticText(failedRun)).toBe('退出码 2');
     expect(shellDiagnosticText(failedRun, (key, params) => translate('en-US', key, params))).toBe('exit 2');
   });

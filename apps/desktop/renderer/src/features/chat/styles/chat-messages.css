@@ -98,12 +98,13 @@
   align-items: stretch;
   min-width: 0;
   min-height: 0;
-  padding: 18px var(--chat-content-inline-padding);
+  /* Balance the scrollbar gutter without changing the composer's shared content inset. */
+  padding: 18px calc(var(--chat-content-inline-padding) - var(--chat-scrollbar-width));
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scroll-padding-bottom: var(--chat-message-bottom-gap, 18px);
-  scrollbar-gutter: auto;
+  scrollbar-gutter: stable both-edges;
 }
 
 /* 对话记录负责滚动条，嵌套消息内容不应再绘制次级滚动条。 */
@@ -157,7 +158,6 @@
 .chat-messages--starter {
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-gutter: auto;
 }
 
 .chat-messages--starter .chat-content-frame {

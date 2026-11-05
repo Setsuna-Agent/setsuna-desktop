@@ -133,7 +133,7 @@
   background: var(--app-toolbar-control-hover-bg);
 }
 
-.app-shell-icon-control.sd-button:is(.is-active, [aria-pressed='true'], [aria-expanded='true'], [data-state='open']):not(:disabled) {
+.app-shell-icon-control.sd-button:is(.is-active, [aria-pressed='true'], [aria-expanded='true'], [data-overlay-open]):not(:disabled) {
   color: var(--app-text);
   background: var(--app-toolbar-control-active-bg);
 }

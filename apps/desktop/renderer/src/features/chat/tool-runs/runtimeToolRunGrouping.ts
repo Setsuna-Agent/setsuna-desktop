@@ -19,7 +19,12 @@ export function toolRunGroupingKey(run: RuntimeToolRun, resolvedFeatureResultKin
   // kind also covers owner-local legacy decoders whose old data has no envelope.
   const featureResultKind = toolResultKind(run.data) || resolvedFeatureResultKind;
   if (featureResultKind) return `feature:${featureResultKind}:${run.id}`;
-  return kind === 'generic' ? `${kind}:${run.name}` : kind;
+  return kind === 'generic' ? `generic:${toolRunIdentity(run)}` : kind;
+}
+
+/** A plugin's identically named tool is a separate activity source. */
+export function toolRunIdentity(run: RuntimeToolRun): string {
+  return JSON.stringify([run.plugin?.id ?? '', run.name]);
 }
 
 function toolResultKind(value: unknown): string {

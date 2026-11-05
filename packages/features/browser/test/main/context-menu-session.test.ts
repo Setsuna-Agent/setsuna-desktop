@@ -17,12 +17,13 @@ describe('browser menu action sessions', () => {
     session.show(contents, [{ label: 'Copy', click: copy }, { label: 'Delete', enabled: false, click: remove }], { x: 80, y: 120 });
     const first = publish.mock.calls.at(-1)![0];
     expect(JSON.parse(JSON.stringify(first))).toEqual({
-      id: first.id, webContentsId: 42, x: 80, y: 120,
+      id: first.id, webContentsId: 42, source: 'page', x: 80, y: 120,
       items: [{ key: '0', label: 'Copy', disabled: false }, { key: '1', label: 'Delete', disabled: true }],
     });
     expect(session.execute(first.id, '1')).toBe(false);
-    session.show(contents, [{ label: 'Copy', click: copy }], { x: 90, y: 130 });
+    session.show(contents, [{ label: 'Copy', click: copy }], { x: 90, y: 130 }, 'reload');
     const second = publish.mock.calls.at(-1)![0];
+    expect(second.source).toBe('reload');
     session.dismiss(first.id);
     expect(session.execute(first.id, '0')).toBe(false);
     expect(session.execute(second.id, '0')).toBe(true);

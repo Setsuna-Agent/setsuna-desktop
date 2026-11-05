@@ -72,7 +72,9 @@ a.chat-markdown__file-link {
 }
 
 a.chat-markdown__file-link:hover,
-a.chat-markdown__file-link:focus-visible {
+a.chat-markdown__file-link:focus-visible,
+a.chat-markdown__file-link[data-context-menu-open],
+:is(.chat-tool-run__summary, .chat-tool-run__inspection-item):is(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])) a.chat-markdown__file-link {
   color: color-mix(in srgb, var(--app-primary-hover) 82%, var(--app-text));
   background: transparent;
   text-decoration: underline;
