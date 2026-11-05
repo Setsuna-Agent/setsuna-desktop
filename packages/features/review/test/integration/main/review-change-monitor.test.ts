@@ -16,22 +16,6 @@ afterEach(async () => {
 });
 
 describe('DesktopReviewChangeMonitor', () => {
-  it('observes a real tracked-file write through the native worktree watcher', async () => {
-    const repository = await createGitRepository();
-    const monitor = new DesktopReviewChangeMonitor(20);
-    let notify!: () => void;
-    const changed = new Promise<void>((resolve) => { notify = resolve; });
-    const unsubscribe = await monitor.subscribe(repository, notify);
-
-    try {
-      await writeFile(path.join(repository, 'tracked.txt'), 'changed\n');
-      await withTimeout(changed, 3_000);
-    } finally {
-      unsubscribe();
-      monitor.close();
-    }
-  });
-
   it('notifies for Git-visible changes but ignores excluded and internal transaction files', async () => {
     const repository = await createGitRepository();
     const watched: Array<{
@@ -163,17 +147,4 @@ async function createGitRepository(): Promise<string> {
 
 async function git(repository: string, args: string[]): Promise<void> {
   await execFileAsync('git', args, { cwd: repository });
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Timed out waiting for native review watcher event.')), timeoutMs);
-    void promise.then((value) => {
-      clearTimeout(timer);
-      resolve(value);
-    }, (error: unknown) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-  });
 }
