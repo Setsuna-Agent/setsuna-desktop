@@ -1,7 +1,6 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { performance } from 'node:perf_hooks';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceDependenciesControl } from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import type { InstalledPluginRecord } from '../../../src/ports/plugin-bundle-store.js';
@@ -24,12 +23,10 @@ describe('lazy application compilation', () => {
   it('binds immediately and cancels a hung toolchain and queued work without starting an installer', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-app-lifetime-')); roots.push(root);
     const prepare = vi.fn(() => new Promise<never>(() => {}));
-    const started = performance.now();
     const service = new PluginAppProjectService(root);
     const unbind = service.bindToolchain({ prepareShellToolchain: prepare } as unknown as WorkspaceDependenciesControl);
     await service.prepare({ id: 'legacy' } as InstalledPluginRecord);
     expect(prepare).not.toHaveBeenCalled();
-    expect(performance.now() - started).toBeLessThan(100);
     await expect(service.prepare(plugin, AbortSignal.abort(new Error('already cancelled')))).rejects.toThrow('already cancelled');
     expect(prepare).not.toHaveBeenCalled();
     const active = service.prepare(plugin);

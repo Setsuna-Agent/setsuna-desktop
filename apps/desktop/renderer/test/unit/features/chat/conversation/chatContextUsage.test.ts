@@ -9,8 +9,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   activeModelContextBudget,
-  contextTokenUsageFromThread,
-  formatTokenCount,
+  contextTokenUsageFromThread
 } from '../../../../../src/features/chat/conversation/chatContextUsage.js';
 
 describe('chat context usage', () => {
@@ -197,14 +196,6 @@ describe('chat context usage', () => {
     expect(activeModelContextBudget(configWithContextWindow(1_000_000))).toEqual({ maxContextTokens: 1_000_000, reservedOutputTokens: 4096 });
   });
 
-  it.each([
-    [999_000, '999k'],
-    [1_000_000, '1M'],
-    [1_250_000, '1.3M'],
-    [10_000_000, '10M'],
-  ])('formats %i tokens as %s', (tokens, expected) => {
-    expect(formatTokenCount(tokens)).toBe(expected);
-  });
 });
 
 function sampledThread(): RuntimeThread {

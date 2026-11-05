@@ -11,6 +11,7 @@ const execFileAsync = promisify(execFile);
 const repositories: string[] = [];
 
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(repositories.splice(0).map((repository) => rm(repository, { force: true, recursive: true })));
 });
 
@@ -22,11 +23,13 @@ describe('DesktopReviewChangeMonitor', () => {
     const changed = new Promise<void>((resolve) => { notify = resolve; });
     const unsubscribe = await monitor.subscribe(repository, notify);
 
-    await writeFile(path.join(repository, 'tracked.txt'), 'changed\n');
-    await withTimeout(changed, 3_000);
-
-    unsubscribe();
-    monitor.close();
+    try {
+      await writeFile(path.join(repository, 'tracked.txt'), 'changed\n');
+      await withTimeout(changed, 3_000);
+    } finally {
+      unsubscribe();
+      monitor.close();
+    }
   });
 
   it('notifies for Git-visible changes but ignores excluded and internal transaction files', async () => {
@@ -35,40 +38,48 @@ describe('DesktopReviewChangeMonitor', () => {
       closeCount: number;
       listener: (eventType: string, filename: string | Buffer | null) => void;
     }> = [];
+    const resolveVisiblePath = vi.fn(async (_gitRoot: string, paths: string[]) => paths.includes('tracked.txt'));
     const monitor = new DesktopReviewChangeMonitor(10, (_directoryPath, listener) => {
       const watcher = new EventEmitter() as EventEmitter & { close: () => void };
       const record = { closeCount: 0, listener };
       watcher.close = () => { record.closeCount += 1; };
       watched.push(record);
       return watcher as never;
-    });
+    }, resolveVisiblePath);
     let notificationCount = 0;
     const unsubscribe = await monitor.subscribe(repository, () => { notificationCount += 1; });
     expect(watched).toHaveLength(2);
+    vi.useFakeTimers();
+    try {
+      watched[0]!.listener('change', 'ignored.log');
+      await vi.advanceTimersByTimeAsync(10);
+      expect(resolveVisiblePath).toHaveBeenLastCalledWith(expect.any(String), ['ignored.log']);
+      expect(notificationCount).toBe(0);
+      resolveVisiblePath.mockClear();
 
-    watched[0]!.listener('change', 'ignored.log');
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    expect(notificationCount).toBe(0);
+      watched[0]!.listener('rename', 'src/.setsuna-stage-42-123e4567-e89b-42d3-a456-426614174000');
+      watched[0]!.listener('rename', 'src/.setsuna-backup-42-123e4567-e89b-42d3-a456-426614174000');
+      await vi.advanceTimersByTimeAsync(40);
+      expect(resolveVisiblePath).not.toHaveBeenCalled();
+      expect(notificationCount).toBe(0);
 
-    watched[0]!.listener('rename', 'src/.setsuna-stage-42-123e4567-e89b-42d3-a456-426614174000');
-    watched[0]!.listener('rename', 'src/.setsuna-backup-42-123e4567-e89b-42d3-a456-426614174000');
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    expect(notificationCount).toBe(0);
+      watched[0]!.listener('change', 'tracked.txt');
+      await vi.advanceTimersByTimeAsync(10);
+      expect(notificationCount).toBe(1);
 
-    watched[0]!.listener('change', 'tracked.txt');
-    await waitForCondition(() => notificationCount === 1);
+      watched[1]!.listener('rename', 'index.lock');
+      watched[1]!.listener('rename', 'refs/heads/main.lock');
+      await vi.advanceTimersByTimeAsync(40);
+      expect(notificationCount).toBe(1);
 
-    watched[1]!.listener('rename', 'index.lock');
-    watched[1]!.listener('rename', 'refs/heads/main.lock');
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    expect(notificationCount).toBe(1);
-
-    watched[1]!.listener('change', 'HEAD');
-    await waitForCondition(() => notificationCount === 2);
-
-    unsubscribe();
+      watched[1]!.listener('change', 'HEAD');
+      await vi.advanceTimersByTimeAsync(10);
+      expect(notificationCount).toBe(2);
+    } finally {
+      unsubscribe();
+      monitor.close();
+    }
     expect(watched.every((entry) => entry.closeCount === 1)).toBe(true);
-    monitor.close();
   });
 
   it('waits for a quiet period before notifying a sustained metadata burst', async () => {
@@ -152,14 +163,6 @@ async function createGitRepository(): Promise<string> {
 
 async function git(repository: string, args: string[]): Promise<void> {
   await execFileAsync('git', args, { cwd: repository });
-}
-
-async function waitForCondition(predicate: () => boolean, timeoutMs = 1_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() >= deadline) throw new Error('Timed out waiting for review monitor event.');
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

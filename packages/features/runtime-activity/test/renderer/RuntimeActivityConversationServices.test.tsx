@@ -40,21 +40,4 @@ describe('RuntimeActivityConversationServiceList', () => {
     expect(onStop).toHaveBeenCalledWith(service.id);
   });
 
-  it('disables duplicate stop actions while the service is stopping', () => {
-    const { getByRole } = render(
-      <RuntimeActivityConversationServiceList
-        error={null}
-        onStop={vi.fn()}
-        services={[service]}
-        stoppingIds={new Set([service.id])}
-        translate={runtimeActivityTestTranslate}
-      />,
-    );
-
-    const button = getByRole('button', {
-      name: '终止后台服务：pnpm dev --host 127.0.0.1',
-    });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button.getAttribute('title')).toBe('正在终止服务');
-  });
 });

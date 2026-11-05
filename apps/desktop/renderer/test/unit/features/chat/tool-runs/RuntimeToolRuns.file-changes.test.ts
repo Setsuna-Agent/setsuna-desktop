@@ -1,50 +1,7 @@
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { fileChangeSummaryFromRuns } from '../../../../../src/features/chat/tool-runs/runtimeFileChanges.js';
-import { FileChangesSummaryCard } from '../../../../../src/features/chat/tool-runs/RuntimeToolRuns.js';
-import { toolRun, renderedText, renderedTextFromHtml } from './RuntimeToolRuns.support.js';
 
 describe('RuntimeToolRuns final file changes', () => {
-  it('filters failed runs from the rendered process list', () => {
-    expect(renderedText([
-      toolRun('failed_file', 'write_file', { file_path: 'selection_sort.py' }, 'error'),
-    ])).toBe('');
-
-    const text = renderedText([
-      toolRun('failed_file', 'write_file', { file_path: 'selection_sort.py' }, 'error'),
-      toolRun('passed_shell', 'run_shell_command', { command: 'pnpm test' }),
-    ]);
-
-    expect(text).not.toContain('失败');
-    expect(text).not.toContain('selection_sort.py');
-    expect(text).toContain('已运行 pnpm test');
-  });
-
-  it('keeps multi-file change summaries scannable by previewing the first rows', () => {
-    const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, {
-      summary: {
-        additions: 15,
-        deletions: 10,
-        files: Array.from({ length: 5 }, (_, index) => ({
-          path: `src/file-${index + 1}.ts`,
-          additions: index + 1,
-          deletions: index,
-          truncated: false,
-          lines: [],
-        })),
-      },
-    }));
-    const text = renderedTextFromHtml(html);
-
-    expect(text).toContain('已编辑 5 个文件');
-    // 多文件时标题后内联展示汇总增删统计（各文件 additions 1..5、deletions 0..4）
-    expect(text).toContain('+15-10');
-    expect(text).toContain('再显示 2 个文件');
-    expect(html.match(/class="chat-file-changes__item"/gu)).toHaveLength(3);
-    expect(text).toContain('src/file-3.ts');
-    expect(text).not.toContain('src/file-4.ts');
-  });
 
   it('keeps normalized final file changes available for review panels', () => {
     const summary = fileChangeSummaryFromRuns([

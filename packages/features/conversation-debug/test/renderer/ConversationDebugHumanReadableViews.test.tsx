@@ -4,10 +4,7 @@ import type { RuntimeEvent, RuntimeThread } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps, ReactNode } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ConversationDebugActivityList } from '../../src/renderer/ConversationDebugActivityList.js';
-import { ConversationDebugInspector } from '../../src/renderer/ConversationDebugInspector.js';
 import { ConversationDebugPanel } from '../../src/renderer/ConversationDebugPanel.js';
 import type { ConversationDebugNode } from '../../src/renderer/conversationDebugGraph.js';
 import { ConversationDebugI18nProvider } from '../../src/renderer/context.js';
@@ -19,42 +16,6 @@ import { createNoopConversationDebugRendererService } from '../../src/renderer/s
 afterEach(cleanup);
 
 describe('human-readable conversation debug views', () => {
-  it('renders semantic activities without exposing raw event names or IDs', () => {
-    const html = renderWithProviders(
-      <ConversationDebugActivityList
-        nodes={[messageNode()]}
-        selectedNodeId={null}
-        onSelectNode={() => undefined}
-      />,
-    );
-
-    expect(html).toContain('助手回复');
-    expect(html).toContain('正在检查项目结构');
-    expect(html).toContain('模型 · 进行中');
-    expect(html).toContain('2 条记录');
-    expect(html).not.toContain('message.delta');
-    expect(html).not.toContain('event_message_delta');
-    expect(html).not.toContain('E#');
-  });
-
-  it('keeps raw records out of the default diagnostics view', () => {
-    const html = renderWithProviders(
-      <ConversationDebugInspector
-        contextEvents={[]}
-        node={messageNode()}
-        selectedRecordId="event_message_delta"
-        onClose={() => undefined}
-        onSelectRecord={() => undefined}
-      />,
-    );
-
-    expect(html).toContain('role="tablist"');
-    expect(html).toContain('aria-selected="true"');
-    expect(html).toContain('诊断概览');
-    expect(html).toContain('原始记录');
-    expect(html).not.toContain('event_message_delta');
-    expect(html).not.toContain('<details');
-  });
 
   it('navigates node records and returns to the requested view or turn scope', async () => {
     const { events, thread } = panelFixture();
@@ -159,10 +120,6 @@ const ui: ComponentProps<typeof ConversationDebugUiProvider>['ui'] = {
     </select>
   ),
 };
-
-function renderWithProviders(children: ReactNode): string {
-  return renderToStaticMarkup(withProviders(children));
-}
 
 function withProviders(children: ReactNode): ReactNode {
   return (

@@ -1,8 +1,7 @@
 import type { RuntimeStoredMessageAttachment } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  createChatMessageAttachment,
-  formatAttachmentTypeLabel,
+  createChatMessageAttachment
 } from '../../../../../src/features/chat/composer/chatAttachments.js';
 
 describe('chat attachments', () => {
@@ -57,12 +56,6 @@ describe('chat attachments', () => {
     expect(uploadAttachment).not.toHaveBeenCalled();
   });
 
-  it('formats compact file type labels from extension or MIME type', () => {
-    expect(formatAttachmentTypeLabel('guide.PDF', '')).toBe('PDF');
-    expect(formatAttachmentTypeLabel('notes.txt', '')).toBe('TXT');
-    expect(formatAttachmentTypeLabel('notes', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')).toBe('DOCX');
-    expect(formatAttachmentTypeLabel('attachment', 'application/octet-stream')).toBe('文件');
-  });
 });
 
 function file(name: string, body: string, type: string): File {

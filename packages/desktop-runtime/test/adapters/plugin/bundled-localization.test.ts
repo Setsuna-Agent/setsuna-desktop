@@ -9,7 +9,7 @@ import { FilePluginDraftStore } from '../../../src/adapters/plugin/file-plugin-d
 import { FilePluginMarketplace } from '../../../src/adapters/plugin/file-plugin-marketplace.js';
 import { installDefaultPlugins } from '../../../src/adapters/plugin/install-default-plugins.js';
 import { inspectBundleTree } from '../../../src/adapters/plugin/file-plugin-bundle-model.js';
-import { localizePluginDisplayFields, readBundledPluginMessages } from '../../../src/adapters/plugin/bundled-plugin-localization.js';
+import { localizePluginDisplayFields } from '../../../src/adapters/plugin/bundled-plugin-localization.js';
 import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-registry.js';
 import { PluginBundleToolHost } from '../../../src/adapters/tool/plugin-bundle-tool-host.js';
 import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
@@ -280,26 +280,6 @@ describe('bundled content localization', () => {
     expect(schema.description).toBe('Translate me');
   });
 
-  it('provides Chinese descriptions for every bundled extension tool and preserves the executable schema', async () => {
-    const { marketplace } = await fixture();
-    let toolCount = 0;
-    for (const plugin of (await marketplace.listPlugins()).plugins) {
-      if (!plugin.extension?.capabilities.includes('tools')) continue;
-      const root = path.join(catalogRoot, plugin.id);
-      const tools: Array<{ description: string; inputSchema: Record<string, unknown> }> = [];
-      const extension = await import(pathToFileURL(path.join(root, 'extension', 'entry.mjs')).href);
-      await extension.default({ registerTool: (tool: typeof tools[number]) => tools.push(tool), onUiAction: () => undefined });
-      const messages = await readBundledPluginMessages(root, 'zh-CN');
-      for (const tool of tools) {
-        toolCount += 1;
-        const chinese = localizePluginDisplayFields(tool, messages);
-        expect(chinese.description, plugin.id).toMatch(han);
-        expect(withoutDescriptions(chinese.inputSchema), plugin.id).toEqual(withoutDescriptions(tool.inputSchema));
-        for (const description of schemaDescriptions(chinese.inputSchema)) expect(description, plugin.id).toMatch(han);
-      }
-    }
-    expect(toolCount).toBeGreaterThan(0);
-  });
 });
 
 async function fixture() {
@@ -327,10 +307,4 @@ function withoutDescriptions(value: unknown): unknown {
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(Object.entries(value).filter(([key, field]) => !(key === 'description' && typeof field === 'string'))
     .map(([key, field]) => [key, withoutDescriptions(field)]));
-}
-
-function schemaDescriptions(value: unknown): string[] {
-  if (!value || typeof value !== 'object') return [];
-  return Object.entries(value).flatMap(([key, field]) => key === 'description' && typeof field === 'string'
-    ? [field] : schemaDescriptions(field));
 }

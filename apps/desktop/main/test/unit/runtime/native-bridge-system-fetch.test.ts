@@ -2,8 +2,9 @@ import {
   DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   type DesktopSystemProxyFetchRequest,
 } from '@setsuna-desktop/contracts';
-import { createServer, request as httpRequest } from 'node:http';
-import { describe, expect, it } from 'vitest';
+import { once } from 'node:events';
+import { createServer, request as httpRequest, type ServerResponse } from 'node:http';
+import { describe, expect, it, vi } from 'vitest';
 import { serveDesktopSystemProxyFetch } from '../../../src/runtime/native-bridge-system-fetch.js';
 
 describe('serveDesktopSystemProxyFetch', () => {
@@ -11,7 +12,9 @@ describe('serveDesktopSystemProxyFetch', () => {
     let handlerSettled!: () => void;
     const settled = new Promise<void>((resolve) => { handlerSettled = resolve; });
     let upstreamAborted = false;
+    let bridgeResponse: ServerResponse | undefined;
     const server = createServer((request, response) => {
+      bridgeResponse = response;
       void serveDesktopSystemProxyFetch(request, response, async (_input, init) => {
         const signal = init?.signal;
         return new Response(new ReadableStream<Uint8Array>({
@@ -36,11 +39,9 @@ describe('serveDesktopSystemProxyFetch', () => {
       method: 'POST',
       path: '/',
       port: address.port,
-    }, (response) => {
-      response.pause();
-      setTimeout(() => response.destroy(), 20).unref();
     });
     client.on('error', () => undefined);
+    const responding = once(client, 'response');
     client.end(systemFetchFrame({
       headers: [],
       method: 'GET',
@@ -48,15 +49,16 @@ describe('serveDesktopSystemProxyFetch', () => {
     }));
 
     try {
-      await Promise.race([
-        settled,
-        new Promise<never>((_resolve, reject) => {
-          setTimeout(() => reject(new Error('Bridge handler did not settle after disconnect.')), 2_000).unref();
-        }),
-      ]);
+      const [response] = await responding;
+      response.pause();
+      // Disconnect only after the bridge is actually waiting for the client to drain.
+      await vi.waitUntil(() => bridgeResponse?.writableNeedDrain === true);
+      response.destroy();
+      await settled;
       expect(upstreamAborted).toBe(true);
     } finally {
       client.destroy();
+      server.closeAllConnections();
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }
   });

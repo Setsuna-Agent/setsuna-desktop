@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import { setTimeout as delay } from 'node:timers/promises';
 import { RUNTIME_PROCESS_SHUTDOWN_MESSAGE } from '@setsuna-desktop/contracts';
 import type { DiagnosticReporter } from '@setsuna-desktop/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -56,11 +57,11 @@ function fixture(onExit = vi.fn<() => Promise<void>>(async () => undefined)) {
 
 async function settle(predicate: () => boolean) {
   // Port allocation uses real I/O; only recovery/readiness deadlines use the fake clock.
-  for (let i = 0; i < 100; i++) {
-    if (predicate()) return;
-    await new Promise<void>((resolve) => setImmediate(resolve));
+  const deadline = Date.now() + 5_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error('Runtime did not reach the expected recovery state.');
+    await delay(5);
   }
-  expect(predicate()).toBe(true);
 }
 
 describe('runtime crash recovery', () => {

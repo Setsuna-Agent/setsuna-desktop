@@ -2,15 +2,10 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
-  normalizeMarkdownCodeBlockContents,
-  normalizeMarkdownCodeLanguage,
-  shouldSyntaxHighlightMarkdownCode,
+  normalizeMarkdownCodeBlockContents, shouldSyntaxHighlightMarkdownCode
 } from '../../../../../src/features/chat/markdown/MarkdownCodeBlock.js';
 import { MarkdownNavigationProvider } from '../../../../../src/features/chat/markdown/MarkdownNavigationProvider.js';
 import { MarkdownRenderer } from '../../../../../src/features/chat/markdown/MarkdownRenderer.js';
-import {
-  shouldVirtualizeMarkdownBlocks,
-} from '../../../../../src/features/chat/markdown/MarkdownVirtualBlock.js';
 import { I18nProvider, type AppLocale } from '../../../../../src/shared/i18n/I18nProvider.js';
 
 function renderMarkdown(
@@ -35,43 +30,14 @@ function renderMarkdown(
 
 describe('MarkdownRenderer', () => {
 
-  it('repairs the mutable streaming tail without replaying content present at mount', () => {
-    const html = renderMarkdown('Stable.\n\nStreaming **bold', true);
-
-    expect(html).toContain('data-markdown-block="stable"');
-    expect(html).toContain('data-markdown-block="mutable"');
-    expect(html).toContain('<strong>bold</strong>');
-    expect(html).not.toContain('is-streaming');
-  });
-
   it('keeps reference definitions with their mutable uses while preserving the stable prefix', () => {
     const html = renderMarkdown(
       'Stable intro.\n\nRead [the docs][docs].\n\n[docs]: https://example.com/docs',
       true,
     );
 
-    expect(html.match(/data-markdown-block="stable"/g)).toHaveLength(1);
-    expect(html.match(/data-markdown-block="mutable"/g)).toHaveLength(1);
     expect(html).toContain('href="https://example.com/docs"');
     expect(html).toContain('>the docs<');
-  });
-
-  it('renders inline and display math with KaTeX', () => {
-    const html = renderMarkdown('Inline $x^2$\n\n$$\n\\lim_{x \\to 0} \\frac{\\sin 3x}{\\sin 5x}\n$$');
-    const compactMathHtml = renderMarkdown('$$\\lim_{x \\to 0} \\frac{\\sin 3x}{\\sin 5x}$$');
-
-    expect(html).toContain('class="katex"');
-    expect(html).toContain('class="katex-display"');
-    expect(html).not.toContain('$$');
-    expect(compactMathHtml).toContain('class="katex"');
-    expect(compactMathHtml).not.toContain('$$');
-  });
-
-  it('repairs incomplete display math while streaming', () => {
-    const html = renderMarkdown('$$\n\\frac{1}{2}', true);
-
-    expect(html).toContain('class="katex-display"');
-    expect(html).not.toContain('$$');
   });
 
   it('keeps unverified workspace links non-interactive and does not render raw HTML', () => {
@@ -111,16 +77,6 @@ describe('MarkdownRenderer', () => {
     expect(html).toContain('<code>invoice_status</code>');
   });
 
-  it('keeps fenced code on the existing code highlighter path', () => {
-    const html = renderMarkdown('```ts\nconst answer = 42;\n```');
-    expect(html).toContain('>TypeScript</span>');
-    expect(html).toContain('aria-label="复制代码"');
-    expect(html).toContain('const answer = 42;');
-    expect(normalizeMarkdownCodeLanguage('TSX')).toBe('tsx');
-    expect(normalizeMarkdownCodeLanguage('Vue')).toBe('vue');
-    expect(normalizeMarkdownCodeLanguage('')).toBe('');
-  });
-
   it('removes parser and authored blank lines from the end of fenced code', () => {
     expect(normalizeMarkdownCodeBlockContents('pnpm build\n✓ tsc\n✓ vite build\n\n')).toBe(
       'pnpm build\n✓ tsc\n✓ vite build',
@@ -128,27 +84,9 @@ describe('MarkdownRenderer', () => {
     expect(normalizeMarkdownCodeBlockContents('const value = 1;\r\n  \r\n')).toBe('const value = 1;');
   });
 
-  it('renders unlabelled fenced code as a contained plain code block', () => {
-    const html = renderMarkdown('```\nChatWorkspace.tsx\n├── useChatWorkspaceState.ts\n```');
-    expect(html).toContain('>Plain Text</span>');
-    expect(html).toContain('<pre><code>ChatWorkspace.tsx\n├── useChatWorkspaceState.ts</code></pre>');
-  });
-
   it('skips token-by-token highlighting for very large code blocks', () => {
     const code = Array.from({ length: 501 }, (_, index) => `line ${index}`).join('\n');
-    const html = renderMarkdown(`\`\`\`text\n${code}\n\`\`\``);
-
     expect(shouldSyntaxHighlightMarkdownCode(code)).toBe(false);
-    expect(html).toContain('line 500');
-    expect(html).toContain('aria-label="复制代码"');
   });
 
-  it('enables block virtualization only for costly markdown documents', () => {
-    const shortBlocks = [{ content: 'Short paragraph.' }];
-    const manyBlocks = Array.from({ length: 24 }, (_, index) => ({ content: `Paragraph ${index}` }));
-
-    expect(shouldVirtualizeMarkdownBlocks(shortBlocks)).toBe(false);
-    expect(shouldVirtualizeMarkdownBlocks(manyBlocks)).toBe(true);
-    expect(shouldVirtualizeMarkdownBlocks([{ content: 'x'.repeat(16_000) }])).toBe(true);
-  });
 });

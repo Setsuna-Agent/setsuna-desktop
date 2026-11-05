@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import type { PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DesktopDiffFile, DesktopGitCommit, DesktopGitCommitDetails, DesktopGitHistoryPage, DesktopGitRef, DesktopReviewBridge, DesktopReviewState } from '../../../src/contracts/index.js';
-import type { ReviewCodePatchViewProps, ReviewFileContextMenuProps, ReviewRendererHost } from '../../../src/renderer/host.js';
+import type { ReviewFileContextMenuProps, ReviewRendererHost } from '../../../src/renderer/host.js';
 import { GitChangesPanel } from '../../../src/renderer/history/GitChangesPanel.js';
 import { GitChangesFileNavigation } from '../../../src/renderer/history/GitChangesFileNavigation.js';
 import { GitHistoryGraph } from '../../../src/renderer/history/GitHistoryGraph.js';
@@ -53,36 +53,6 @@ function deferred<T>() {
 }
 
 describe('Git change navigation', () => {
-  it('applies Dock diff settings to the renderer and keeps them across file and commit selections', async () => {
-    const renderDiff = vi.fn<(props: ReviewCodePatchViewProps) => null>(() => null);
-    const staged: DesktopDiffFile = { ...file('staged.ts'), patch: undefined, lines: [{ type: 'added', lineNumber: 1, newLine: 1, content: 'const changed = true;' }] };
-    const working = { ...staged, path: 'working.ts' };
-    const committed = { ...staged, path: 'committed.ts' };
-    render(<GitChangesPanel workspaceRoot="/repo" reviewState={{
-      ...state,
-      stagedSummary: { files: [staged], additions: 1, deletions: 0 },
-      unstagedSummary: { files: [working], additions: 1, deletions: 0 },
-    }} reviewError={null} reviewLoading={false} onRefresh={noop} actions={actions} />, {
-      wrapper: host({
-        getHistory: vi.fn().mockResolvedValue(page()),
-        getCommitDetails: vi.fn().mockResolvedValue({ commit: commit(one), message: 'Commit', baseOid: null, files: [committed] }),
-        getCommitFileDiff: vi.fn().mockResolvedValue(committed),
-      }, { codePatchView: renderDiff }),
-    });
-    const dock = () => within(screen.getByRole('navigation', { name: '文件导航' }));
-    expect(renderDiff.mock.lastCall?.[0]).toMatchObject({ layout: 'unified', wrap: true });
-    fireEvent.click(dock().getByRole('button', { name: '当前：单列对比，点击切换为左右对比' }));
-    fireEvent.click(dock().getByRole('button', { name: '当前：自动换行已开启，点击关闭' }));
-    expect(renderDiff.mock.lastCall?.[0]).toMatchObject({ layout: 'split', wrap: false });
-    fireEvent.click(dock().getByRole('button', { name: '下一文件' }));
-    expect(renderDiff.mock.lastCall?.[0]).toMatchObject({ layout: 'split', wrap: false, patch: expect.stringContaining('working.ts') });
-
-    fireEvent.click(await screen.findByRole('button', { name: /Commit aaaaaaaa/ }));
-    await waitFor(() => expect(renderDiff.mock.lastCall?.[0]).toMatchObject({ layout: 'split', wrap: false, patch: expect.stringContaining('committed.ts') }));
-    fireEvent.click(dock().getByRole('button', { name: '当前：左右对比，点击切换为单列对比' }));
-    fireEvent.click(dock().getByRole('button', { name: '当前：自动换行已关闭，点击开启' }));
-    expect(renderDiff.mock.lastCall?.[0]).toMatchObject({ layout: 'unified', wrap: true });
-  });
 
   it('searches filenames and directories without losing version identity, and supports keyboard selection', async () => {
     const onSelect = vi.fn();

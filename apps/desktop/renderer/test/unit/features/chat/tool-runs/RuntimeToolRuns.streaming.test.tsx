@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
-import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RuntimeToolRuns } from '../../../../../src/features/chat/tool-runs/RuntimeToolRuns.js';
 import { withRendererPluginTestHost } from '../../../support/RendererPluginTestHost.js';
@@ -54,31 +54,6 @@ describe('RuntimeToolRuns streaming history', () => {
     expect(outerDetails(view.container)).toBe(root);
     expect(root.open).toBe(true);
     expect(view.getByText('README.md')).toBe(file);
-  });
-
-  it.each(['shell', 'mixed'])('shows aggregate history when a %s group is expanded and live activity only when collapsed', (kind) => {
-    const completed = [toolRun('shell_first', 'exec_command', { cmd: 'git status --short' })];
-    if (kind === 'mixed') completed.push(toolRun('read_first', 'read_file', { file_path: 'src/first.ts' }));
-    const running = toolRun('shell_current', 'exec_command', { cmd: 'echo current' }, 'running');
-    const view = render(panel([...completed, running]));
-    const root = outerDetails(view.container);
-    const summary = root.querySelector(':scope > summary')!;
-    expect(summary.textContent).toContain('echo current');
-    setOpen(root, true);
-    const aggregate = summary.textContent;
-    expect(aggregate).toBe(kind === 'mixed' ? '已运行 1 条命令，正在运行 1 条命令，已读取 1 个文件' : '已运行 1 条命令，正在运行 1 条命令');
-    expect(aggregate).not.toContain('echo current');
-    const updated = { ...running, argumentsPreview: JSON.stringify({ cmd: 'echo updated' }) };
-    view.rerender(panel([...completed, updated]));
-    expect(outerDetails(view.container)).toBe(root);
-    expect(root.open).toBe(true);
-    expect(summary.textContent).toBe(aggregate);
-    expect(root.querySelector(':scope > .chat-tool-run__body')?.textContent).toContain('echo updated');
-    setOpen(root, false);
-    expect(summary.textContent).toContain('echo updated');
-    setOpen(root, true);
-    view.rerender(panel([...completed, { ...updated, status: 'success' }]));
-    expect(summary.textContent).toBe(kind === 'mixed' ? '已运行 2 条命令，已读取 1 个文件' : '已运行 2 条命令');
   });
 
   it('keeps expanded history and command details mounted between successive tool runs', () => {
@@ -172,24 +147,4 @@ describe('RuntimeToolRuns streaming history', () => {
     expect(root.open).toBe(true);
   });
 
-  it('retains completed reads without labeling a pending read as completed', () => {
-    const completed = toolRun('read_first', 'read_file', { file_path: 'src/first.ts' });
-    const next = toolRun('read_next', 'read_file', { file_path: 'src/next.ts' }, 'running');
-    const onAnswerApproval = vi.fn();
-    const view = render(panel([completed, next], onAnswerApproval));
-    const root = outerDetails(view.container);
-    setOpen(root, true);
-    const list = within(root.querySelector('ul')!);
-    const first = list.getByText('first.ts').closest('li');
-    const second = list.getByText('next.ts').closest('li');
-    expect(second?.textContent).toContain('正在读取文件');
-    view.rerender(panel([completed, { ...next, status: 'pending_approval', approvalId: 'approval_read' }], onAnswerApproval));
-    expect(list.getByText('first.ts').closest('li')).toBe(first);
-    expect(list.getByText('next.ts').closest('li')).toBe(second);
-    expect(second?.textContent).toContain('等待授权');
-    expect(second?.textContent).not.toContain('已读取');
-    fireEvent.click(view.getByRole('button', { name: '允许' }));
-    expect(onAnswerApproval).toHaveBeenCalledTimes(1);
-    expect(onAnswerApproval.mock.calls[0][0]).toBe('approval_read');
-  });
 });

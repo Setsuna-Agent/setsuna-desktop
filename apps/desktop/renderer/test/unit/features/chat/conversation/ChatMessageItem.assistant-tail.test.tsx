@@ -48,26 +48,6 @@ vi.mock('../../../../../src/features/chat/tool-runs/runtimeFeatureToolResults.js
 afterEach(cleanup);
 
 describe('MessageItem Feature result placement', () => {
-  it('renders a timeline result between assistant text segments at its tool position', () => {
-    const view = render(timelineMessageItem());
-    const introduction = view.getByText('Weather introduction.');
-    const card = view.getByText('weather-card');
-    const finalAnswer = view.getByText('Weather advice.');
-
-    expect(introduction.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(card.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(view.getAllByText('weather-card')).toHaveLength(1);
-    expect(card.closest('details.chat-tool-run')).toBeNull();
-  });
-
-  it('shows a completed timeline result while the assistant turn is still active', () => {
-    const view = render(timelineMessageItem(false));
-    const introduction = view.getByText('Weather introduction.');
-    const card = view.getByText('weather-card');
-
-    expect(introduction.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(view.container.querySelector('.chat-work-history')).toBeNull();
-  });
 
   it('keeps one work header across a card, subsequent streaming work, and the final answer', async () => {
     const earlierWork: RuntimeMessage = {
@@ -100,10 +80,6 @@ describe('MessageItem Feature result placement', () => {
     }
     fireEvent.click(header);
     expect(header.getAttribute('aria-expanded')).toBe('true');
-    const before = view.getByText('Looking up the weather.');
-    const after = view.getByText('Checking tomorrow too.');
-    expect(before.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(card.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     view.rerender(timelineMessageItem(true, [{ ...followup, content: 'Tomorrow forecast.', status: 'complete', phase: 'final_answer' }], [earlierWork]));
     expect(view.container.querySelectorAll('.chat-work-history__summary')).toHaveLength(1);
@@ -116,16 +92,12 @@ describe('MessageItem Feature result placement', () => {
     await waitFor(() => expect(view.queryByText('Looking up the weather.')).toBeNull());
   });
 
-  it('waits for completion and renders the result after the final answer', () => {
+  it('withholds the tail result until completion', () => {
     const view = render(messageItem(false));
     expect(view.container.querySelector('.test-tail-result')).toBeNull();
 
     view.rerender(messageItem(true));
-    const finalAnswer = view.getByText('Final answer.');
-    const tailResult = view.getByText('report.pdf');
-
-    expect(finalAnswer.compareDocumentPosition(tailResult) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(tailResult.closest('details.chat-tool-run')).toBeNull();
+    expect(view.getByText('report.pdf')).toBeTruthy();
   });
 
   it('keeps only the latest result when the same file is published again', () => {

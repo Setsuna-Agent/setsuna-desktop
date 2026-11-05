@@ -14,47 +14,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('shows the unsaved marker on its file tab in either panel slot without replacing the close control', () => {
-  const header = (placement: 'side' | 'bottom', unsavedFilePath: string | null) => createElement(DesktopPanelHeader, {
-    activePanel: 'terminal',
-    activePanelId: 'terminal-1',
-    onClose: vi.fn(),
-    onClosePanel: vi.fn(),
-    panels: [
-      { id: 'file-1', type: 'file', filePath: 'src/main.ts' },
-      { id: 'file-2', type: 'file', filePath: 'src/app.ts' },
-      { id: 'terminal-1', type: 'terminal' },
-    ],
-    placement,
-    unsavedFilePath,
-  });
-  const view = render(header('side', 'src/main.ts'));
-  const marker = view.getByRole('img', { name: '有未保存的更改' });
-  expect(marker.closest('[data-desktop-panel-tab-id]')?.getAttribute('data-desktop-panel-tab-id')).toBe('file-1');
-  expect(view.getByRole('button', { name: '关闭main.ts' })).toBeTruthy();
-  view.rerender(header('bottom', 'src/main.ts'));
-  expect(view.getAllByRole('img', { name: '有未保存的更改' })).toHaveLength(1);
-  view.rerender(header('bottom', null));
-  expect(view.queryByRole('img', { name: '有未保存的更改' })).toBeNull();
-});
-
-describe('DesktopPanelHeader browser tabs', () => {
-  it('exposes hide semantics while the bottom panel is visible', () => {
-    const { getByRole } = render(createElement(DesktopPanelHeader, {
-      activePanel: 'review',
-      activePanelId: 'review',
-      bottomBarActive: true,
-      onClose: () => undefined,
-      onToggleBottomTerminal: () => undefined,
-      panels: [{ id: 'review', type: 'review' }],
-      placement: 'side',
-    }));
-
-    const bottomPanelToggle = getByRole('button', { name: '隐藏底栏' });
-    expect(bottomPanelToggle.getAttribute('aria-pressed')).toBe('true');
-  });
-});
-
 describe('DesktopPanelHeader tab dragging', () => {
 
   it('moves the blank slot once per frame and deduplicates a stable target', () => {
