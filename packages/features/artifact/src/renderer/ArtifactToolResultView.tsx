@@ -98,7 +98,12 @@ export function ArtifactToolResultView({
 
   return (
     <section className="artifact-result" aria-label={translate('feature.artifact.list')}>
-      <article className="artifact-card" draggable={Boolean(host.startFileDrag)} onDragStart={handleDragStart}>
+      <article className="artifact-card" draggable={Boolean(host.startFileDrag)} onDragStart={handleDragStart}
+        onDoubleClick={(event) => {
+          // The open-mode button and its portalled menu keep their own actions.
+          if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('button, [role="menuitem"]'))) return;
+          void handleOpenWithDefaultApp();
+        }}>
         <div className="artifact-card__body">
           <span className="artifact-card__icon"><ArtifactFileIcon path={payload.path} /></span>
           <span className="artifact-card__metadata">
