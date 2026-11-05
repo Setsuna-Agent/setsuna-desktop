@@ -46,6 +46,8 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 - 拦截外链和 `<webview>` attach。
 - 等待 renderer 首帧后揭示工作台。
 
+窗口首轮 renderer 资源和本机服务就绪后，`window/renderer-recovery.ts` 监听桌面文档的 `render-process-gone`，记录 reason/exitCode；非正常退出仅在窗口可见且未最小化时延迟重载同一受信入口，不重新准备服务、不创建另一套 runtime、不抢焦点。隐藏窗口等到 show/restore/focus 后再恢复；正常退出、应用退出和更新安装期间不启动恢复。自动恢复最多连续尝试两次，成功加载后须稳定运行一分钟才重置预算，避免崩溃循环；`unresponsive` 只记录诊断，不因暂时卡顿强制丢弃编辑。恢复沿用窗口 session slot 和已持久化会话，无法挽回进程退出前尚未保存的内存状态。Runtime SSE 订阅随文档的崩溃、销毁或非同文档主框架导航释放，防止旧连接在重载后继续存活。
+
 Windows 任务栏和系统托盘使用无透明外边距的 `assets/build/icon-windows.png`，安装包/可执行文件使用由同一画面生成的多尺寸 `assets/build/icon.ico`；macOS 继续使用保留平台留白的 `icon.icns` / `icon.png`。
 
 Windows 开发窗口在显示前通过 `setAppDetails` 配置开发 AppUserModelID、`icon.ico` 和完整的 relaunch 信息。首帧后后台准备该身份的开始菜单快捷方式：Windows 优先读取匹配快捷方式的图标，单独设置窗口属性不足以覆盖 Electron 自动创建的入口。宿主保留 Electron 的快捷方式文件名、目标、工作目录与通知激活 CLSID，更新 Setsuna 图标和应用参数；不会修改其他应用的入口。正式版由安装器快捷方式和应用可执行文件提供任务栏身份。

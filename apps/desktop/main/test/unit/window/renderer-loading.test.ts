@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron';
 import path from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const handlers = vi.hoisted(() => new Map<string, (event: IpcMainInvokeEvent) => Promise<void>>());
 vi.mock('electron', () => ({ ipcMain: {
@@ -11,6 +11,7 @@ vi.mock('electron', () => ({ ipcMain: {
 import { loadDesktopRenderer } from '../../../src/window/renderer-loading.js';
 
 beforeEach(() => handlers.clear());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('renderer startup loading', () => {
   it('loads resources while services start and gates business initialization until they are ready', async () => {
@@ -37,6 +38,41 @@ describe('renderer startup loading', () => {
     await loading;
     // Reloads can query readiness after the original startup has completed.
     await expect(fixture.whenReady()).resolves.toBeUndefined();
+  });
+
+  it('recovers the same renderer entry without repeating preparation or replacing readiness', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const fixture = createWindowFixture();
+    const prepare = vi.fn(async () => undefined);
+    await loadDesktopRenderer(fixture.browserWindow, { appRoot: '/app', prepare });
+    fixture.window.webContents.emit('render-process-gone', {}, { reason: 'crashed', exitCode: 1 });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fixture.window.loadFile).toHaveBeenCalledTimes(2);
+    expect(fixture.window.loadFile).toHaveBeenLastCalledWith(path.join('/app', 'dist/renderer/index.html'));
+    expect(prepare).toHaveBeenCalledOnce();
+    await expect(fixture.whenReady()).resolves.toBeUndefined();
+    fixture.close();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('detects a renderer lost after resource load while slow service preparation is still pending', async () => {
+    vi.useFakeTimers();
+    const fixture = createWindowFixture();
+    const services = deferred();
+    const prepare = vi.fn(() => services.promise);
+    const loading = loadDesktopRenderer(fixture.browserWindow, { appRoot: '/app', prepare });
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.markCrashed();
+    fixture.window.webContents.emit('render-process-gone', {}, { reason: 'crashed', exitCode: 1 });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fixture.window.loadFile).toHaveBeenCalledOnce();
+    services.resolve();
+    await loading;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fixture.window.loadFile).toHaveBeenCalledTimes(2);
+    expect(prepare).toHaveBeenCalledOnce();
+    fixture.close();
   });
 
   it('propagates service failure to both the host and early or reloaded renderers', async () => {
@@ -95,15 +131,19 @@ describe('renderer startup loading', () => {
 
 function createWindowFixture() {
   let destroyed = false;
+  let crashed = false;
   const window = Object.assign(new EventEmitter(), {
     isDestroyed: () => destroyed,
-    webContents: { id: 1, session: { webRequest: { onBeforeRequest: vi.fn() } } },
+    isVisible: () => true,
+    isMinimized: () => false,
+    webContents: Object.assign(new EventEmitter(), { id: 1, isDestroyed: () => destroyed, isCrashed: () => crashed, session: { webRequest: { onBeforeRequest: vi.fn() } } }),
     loadURL: vi.fn(async (_url: string): Promise<void> => undefined),
     loadFile: vi.fn(async (_file: string): Promise<void> => undefined),
   });
   return {
     window,
     browserWindow: window as unknown as BrowserWindow,
+    markCrashed: () => { crashed = true; },
     whenReady: () => handlers.get('desktop:when-ready')!({ sender: window.webContents } as unknown as IpcMainInvokeEvent),
     close: () => { destroyed = true; window.emit('closed'); },
   };
