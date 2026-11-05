@@ -187,7 +187,7 @@
 .pr-comment__byline time { flex-shrink: 0; color: var(--app-text-subtle); font-size: 12px; font-variant-numeric: tabular-nums; }
 /* Actions stay out of the reading path until the card is hovered or focused. */
 .pr-comment__actions { display: flex; flex-shrink: 0; align-items: center; gap: 2px; margin-left: auto; color: var(--app-text-muted); opacity: 0.55; transition: opacity 120ms ease; }
-.pr-comment:is(:hover, :focus-within) .pr-comment__actions { opacity: 1; }
+.pr-comment:is(:hover, :focus-within, :has([data-overlay-open])) .pr-comment__actions { opacity: 1; }
 .pr-comment__actions .sd-button:not(.sd-icon-button) { color: var(--app-text-muted); }
 .pr-comment__body { display: grid; gap: 12px; min-width: 0; padding: 16px var(--pr-card-inset, 16px); }
 .pr-comment__body:empty { display: none; }
@@ -255,7 +255,7 @@
 .pr-quote-slot > button { display: inline-flex; flex-shrink: 0; padding: 2px; border: 0; border-radius: var(--app-radius-xs); background: transparent; color: var(--app-text-muted); cursor: pointer; }
 .pr-quote-slot > button:focus-visible { outline: 2px solid var(--app-focus-outline); }
 .pr-reactions__count.sd-button { gap: 4px; min-height: 24px; padding: 0 8px; border-radius: var(--app-radius-full); background: var(--app-surface-subtle); color: var(--app-text-muted); font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
-.pr-reactions__count.sd-button[aria-pressed='true'], .pr-reactions .sd-icon-button[data-state='open'] { background: var(--app-accent-soft); color: var(--app-text); }
+.pr-reactions__count.sd-button[aria-pressed='true'], .pr-reactions .sd-icon-button[data-overlay-open] { background: var(--app-accent-soft); color: var(--app-text); }
 .pr-reaction-picker__grid { display: grid; grid-template-columns: repeat(4, auto); gap: 4px; padding: 4px; }
 .pr-reaction-picker__grid .sd-icon-button { font-size: 17px; }
 .pr-reaction-picker__grid .sd-icon-button[aria-pressed='true'] { background: var(--app-accent-soft); }

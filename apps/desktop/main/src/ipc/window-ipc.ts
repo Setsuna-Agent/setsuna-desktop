@@ -1,6 +1,6 @@
 import type { DesktopActivityPreferences, DesktopWindowCloseBehavior } from '@setsuna-desktop/contracts';
 import { BrowserWindow, ipcMain } from 'electron';
-import { toggleWindowMaximized } from '../window/frame.js';
+import { readWindowControlsState, toggleWindowMaximized } from '../window/frame.js';
 import { showApplicationMenu } from '../window/application-menu.js';
 import { isDesktopRendererSender } from './sender.js';
 
@@ -27,7 +27,7 @@ export function registerWindowIpc({
     'window-control:close',
     'window-control:get-close-behavior',
     'window-control:set-close-behavior',
-    'window-control:is-maximized',
+    'window-control:get-state',
     'window-control:set-titlebar-scale',
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
@@ -75,9 +75,11 @@ export function registerWindowIpc({
     if (!isDesktopWindowCloseBehavior(value)) throw new Error('Unsupported window close behavior.');
     return setCloseBehavior(value);
   });
-  ipcMain.handle('window-control:is-maximized', (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender);
-    return window ? window.isMaximized() || window.isFullScreen() : false;
+  ipcMain.handle('window-control:get-state', (event) => {
+    const window = isDesktopRendererSender(event.sender) && event.senderFrame === event.sender.mainFrame
+      ? BrowserWindow.fromWebContents(event.sender) : null;
+    return window && !window.isDestroyed()
+      ? readWindowControlsState(window) : { maximized: false, fullScreen: false };
   });
   ipcMain.handle('window-control:set-titlebar-scale', (event, input) => {
     if (process.platform !== 'darwin') return false;

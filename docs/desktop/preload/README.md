@@ -11,6 +11,7 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 | `runtime` | request、attachment upload、SSE | `ipc/runtime-ipc.ts`、`RuntimeHost` |
 | `dataRoot` | 状态、扫描、迁移、恢复、旧根清理 | `ipc/data-root-ipc.ts` |
 | `desktop` | 平台、目录选择、profile、图片、workspace 文件、本地路径 | `ipc/desktop-ipc.ts` |
+| `diagnostics` | 获取和打开固定诊断日志目录 | `packages/features/diagnostics/src/{preload,main}/` |
 | `links` | 打开受控外链 | `ipc/desktop-ipc.ts` |
 | `browser` | tab 注册、截图、favicon、设备模拟、新标签事件 | `packages/features/browser/src/{preload,main}/` |
 | `computerUse` | 授权设置、状态、预览与停止 | `packages/features/computer-use/src/{preload,main}/` |
@@ -21,13 +22,17 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 | `workspaceApps` | 应用列表与打开 workspace/file | `packages/features/workspace-apps/src/{preload,main}/` |
 | `updater` | 状态、检查、下载源、安装包打开与状态事件 | `packages/features/updater/src/{preload,main}/` |
 | `windowsSandbox` | 状态检测与安装、修复、卸载 | `packages/features/windows-sandbox/src/{preload,main}/` |
-| `windowControls` | minimize/maximize/close/scale、应用菜单、原生文本编辑、会话窗口与恢复上下文 | `ipc/window-ipc.ts`、`window/thread-windows.ts` |
+| `windowControls` | minimize/maximize/close/scale、窗口状态、应用菜单、原生文本编辑、会话窗口与恢复上下文 | `ipc/window-ipc.ts`、`window/frame.ts`、`window/thread-windows.ts` |
 
 准确方法面由 `packages/contracts/src/desktop.ts`、`http.ts` 和相关 Feature/领域 contract 定义；Updater、Workspace Apps 等 bridge 由各自 Feature contracts 定义。Host namespaces 与 Feature contributions 由 `src/composition/builtin-preload-features.ts` 组装，最后只调用一次 `contextBridge.exposeInMainWorld`。
 
 `windowControls.executeTextEdit` 只接受 `cut`、`copy`、`paste`，Main 校验调用来自登记的宿主窗口主 frame，并在该窗口执行原生编辑命令。Renderer 在菜单关闭后恢复原选区；剪贴板数据继续经过现有编辑器的 clipboard 事件，不通过此 API 直接读写。
 
+`windowControls.getState` 与 `onStateChange` 传递 `DesktopWindowControlsState`，分别提供 `maximized`、`fullScreen`。初始读取校验宿主主 frame，原生变化只发送给对应窗口；renderer 先订阅再异步读取，避免迟到的初始状态覆盖刚发生的全屏切换，不进入启动等待链路。
+
 `desktop.revealPath` 用于在系统文件管理器中定位 Skill 等工作区外的应用文档。Main 限制调用来自登记的宿主窗口主 frame，校验绝对路径和目标存在后调用 `shell.showItemInFolder`；它不读取文件内容，也不执行文件。工作区引用仍通过 `revealWorkspaceFile` 的 root + 相对路径边界校验。
+
+`diagnostics.getLogDirectory` 和 `diagnostics.openLogDirectory` 不接受路径参数，仅向登记的宿主主 frame 返回或打开 main 选定的 bootstrap 日志目录。读取位置不触发磁盘访问，打开时才按需创建目录；调用不依赖 runtime，也不向 renderer 暴露日志写入或任意文件读取能力。
 
 `desktop.startFileDrag` 接收 workspace root + 相对文件路径，或现有 `DesktopImageInput` 图片引用。Main 校验宿主主 frame，复用工作区 canonical path 或受管图片资产边界，按需读取系统图标后调用来源窗口的 `webContents.startDrag`，支持拖到桌面、系统文件管理器和接收文件的其他应用。启动只注册 handler，不扫描或预读文件。`desktop.resolveWorkspaceFileDrop` 在 preload 用 `webUtils.getPathForFile` 读取真实 `File` 路径，再由 Main 校验并返回工作区内的相对文件路径；外部文件、目录和越界路径返回 null。文件树用它接回原生拖拽后执行已有移动操作，目录仍走内部拖拽。
 

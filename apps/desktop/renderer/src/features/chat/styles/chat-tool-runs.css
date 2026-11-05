@@ -13,10 +13,10 @@
 }
 
 .chat-tool-run {
-  /* 普通工具汇总、展开子项和思考记录共用同一灰度；异常与审批状态仍由状态类覆盖。 */
-  --chat-tool-run-title-color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
-  /* 每层工具记录重置图标颜色，避免分组的异常状态染色成功的子项。 */
-  --chat-tool-run-icon-color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
+  /* 工具汇总与子项统一使用中性色，图标与文字不按执行结果染色。 */
+  --chat-tool-run-title-color: color-mix(in srgb, var(--app-text-muted) 76%, transparent);
+  /* 每层工具记录重置图标颜色，避免分组状态染色子项。 */
+  --chat-tool-run-icon-color: var(--chat-tool-run-title-color);
   /* 根节点保持确定宽度，避免 fit-content 与子项百分比上限形成内在尺寸循环，
      导致文件名和工具名在仍有可用空间时就按 min-content 提前省略。 */
   width: 100%;
@@ -27,42 +27,6 @@
   background: transparent;
   overflow: visible;
   transition: color 220ms ease;
-}
-
-.chat-tool-run--pending_approval {
-  --chat-tool-run-icon-color: var(--app-warning);
-  color: color-mix(in srgb, var(--app-warning) 72%, var(--app-text));
-  --chat-tool-run-title-color: color-mix(in srgb, var(--app-warning) 72%, var(--app-text));
-}
-
-/* 进入待审批时摘要底色只闪一次，提示需要处理；不循环，长时间等待也不持续打扰。 */
-.chat-tool-run--pending_approval > .chat-tool-run__summary {
-  animation: chat-tool-run-approval-attention 1200ms var(--app-ease-out);
-}
-
-@keyframes chat-tool-run-approval-attention {
-  from {
-    background-color: color-mix(in srgb, var(--app-warning) 16%, transparent);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-tool-run--pending_approval > .chat-tool-run__summary {
-    animation: none;
-  }
-}
-
-.chat-tool-run--error,
-.chat-tool-run--rejected {
-  --chat-tool-run-icon-color: var(--app-danger);
-  color: color-mix(in srgb, var(--app-danger) 78%, var(--app-text));
-  --chat-tool-run-title-color: color-mix(in srgb, var(--app-danger) 78%, var(--app-text));
-}
-
-.chat-tool-run--cancelled {
-  --chat-tool-run-icon-color: var(--app-text-muted);
-  color: color-mix(in srgb, var(--app-text-muted) 88%, var(--app-text));
-  --chat-tool-run-title-color: color-mix(in srgb, var(--app-text-muted) 88%, var(--app-text));
 }
 
 .chat-tool-run__summary {
@@ -78,7 +42,7 @@
   padding: 2px 6px;
   border: 0;
   border-radius: var(--app-radius-sm);
-  color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
+  color: var(--chat-tool-run-title-color);
   background: transparent;
   cursor: pointer;
   font: inherit;
@@ -100,15 +64,13 @@
   user-select: none;
 }
 
-details.chat-tool-run[open] > .chat-tool-run__summary,
-details.chat-tool-run > .chat-tool-run__summary:hover {
+details.chat-tool-run[open] > .chat-tool-run__summary {
   --chat-tool-run-title-color: var(--app-text);
   color: var(--app-text);
   background: transparent;
 }
 
-details.chat-tool-run[open] > .chat-tool-run__summary > .chat-tool-run__icon,
-details.chat-tool-run > .chat-tool-run__summary:hover > .chat-tool-run__icon {
+details.chat-tool-run[open] > .chat-tool-run__summary > .chat-tool-run__icon {
   color: var(--app-text);
 }
 
@@ -178,11 +140,6 @@ details.chat-tool-run[open] > .chat-tool-run__summary > .chat-tool-run__chevron 
   cursor: default;
 }
 
-.chat-tool-run--flat .chat-tool-run__summary:hover {
-  color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
-  background: transparent;
-}
-
 .chat-tool-run--file-mutation.chat-tool-run--flat {
   display: grid;
   gap: var(--chat-tool-run-row-gap);
@@ -205,6 +162,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 .chat-workspace-path-label.chat-tool-run__file-list-target {
   display: inline-flex;
   align-items: center;
+  color: var(--chat-tool-run-title-color);
   line-height: var(--chat-tool-run-line-height);
 }
 
@@ -214,6 +172,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
+  filter: grayscale(1);
   vertical-align: 0;
 }
 
@@ -278,11 +237,11 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-change-counts__add {
-  color: var(--app-success);
+  color: var(--chat-change-count-add-color, var(--app-success));
 }
 
 .chat-change-counts__del {
-  color: var(--app-danger);
+  color: var(--chat-change-count-del-color, var(--app-danger));
 }
 
 .chat-change-counts__item {
@@ -499,7 +458,8 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-file-changes__row:is(:hover, :active):not(:disabled),
-.chat-file-changes__row:focus-visible {
+.chat-file-changes__row:focus-visible,
+.chat-file-changes__row[data-context-menu-open] {
   background: color-mix(in srgb, var(--app-text) 4%, transparent);
 }
 
@@ -584,7 +544,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   color: var(--chat-tool-run-icon-color);
 }
 
-.chat-tool-run__icon:has(> .desktop-plugin-icon) {
+.chat-tool-run__icon:has(> .chat-work-history__plugin-icon) {
   width: var(--desktop-inline-icon-size);
   flex-basis: var(--desktop-inline-icon-size);
 }
@@ -677,6 +637,8 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   --chat-tool-run-scrollbar-gap: 8px;
   --chat-tool-run-scrollbar-space: calc(var(--chat-scrollbar-width) + var(--chat-tool-run-scrollbar-gap));
   max-height: min(360px, 50vh);
+  /* Keep the gap in layout: an asymmetric thumb border clips its rounded caps. */
+  padding-right: var(--chat-tool-run-scrollbar-gap);
   overflow-x: hidden;
   overflow-y: auto;
   /* 到达边界后交给外层对话滚动，原生滚动与 Lenis 共用这一规则。 */
@@ -714,16 +676,13 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar {
   display: block !important;
-  /* 间距随滚动条占位，未溢出时不压缩内容宽度。 */
-  width: var(--chat-tool-run-scrollbar-space) !important;
+  width: var(--chat-scrollbar-width) !important;
 }
 
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar-thumb {
   border: 0 !important;
-  border-left: var(--chat-tool-run-scrollbar-gap) solid transparent !important;
   border-radius: var(--app-radius-full);
   background: var(--sd-scrollbar-thumb) !important;
-  background-clip: content-box !important;
 }
 
 .chat-tool-runs > .chat-tool-run--group > .chat-tool-run__body::-webkit-scrollbar-thumb:hover,
@@ -783,7 +742,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   gap: 8px;
   min-height: var(--chat-tool-run-row-min-height);
   min-width: 0;
-  color: var(--app-text-muted);
+  color: var(--chat-tool-run-title-color);
   font-size: var(--chat-tool-run-font-size);
   line-height: var(--chat-tool-run-line-height);
 }
@@ -808,7 +767,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   gap: 8px;
   min-height: var(--chat-tool-run-row-min-height);
   min-width: 0;
-  color: var(--app-text-muted);
+  color: var(--chat-tool-run-title-color);
   font-size: var(--chat-tool-run-font-size);
   line-height: var(--chat-tool-run-line-height);
 }
@@ -819,13 +778,36 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   white-space: nowrap;
 }
 
-details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__target,
-details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__file-target,
-details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-label,
-.chat-file-diff__summary:hover .chat-tool-run__action-label,
-.chat-file-diff__summary:hover .chat-tool-run__file-list-target {
+/* Reset each row so highlighting a group heading cannot color its descendants.
+ * Change-count colors outside the tool history keep their semantic defaults. */
+.chat-tool-run__summary,
+.chat-tool-run__inspection-item {
+  --chat-change-count-add-color: var(--chat-tool-run-title-color);
+  --chat-change-count-del-color: var(--chat-tool-run-title-color);
+}
+
+.chat-tool-run__summary:is(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])),
+.chat-tool-run__inspection-item:is(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])) {
+  --chat-tool-run-title-color: var(--app-text);
+  --chat-tool-run-icon-color: var(--app-text);
+  --chat-change-count-add-color: var(--app-success);
+  --chat-change-count-del-color: var(--app-danger);
+  color: var(--app-text);
+}
+
+:is(.chat-tool-run__summary, .chat-tool-run__inspection-item):is(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])) :is(
+  .chat-tool-run__target,
+  .chat-tool-run__action-label
+) {
   color: var(--app-text);
   text-decoration: none;
+}
+
+:is(.chat-tool-run__summary, .chat-tool-run__inspection-item):is(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])) :is(
+  .chat-tool-run__file-target,
+  .chat-tool-run__file-list-target
+) .chat-markdown__file-icon {
+  filter: none;
 }
 
 .chat-tool-run__inspection-item .chat-tool-run__file-list-target .chat-markdown__file-icon {
@@ -1418,10 +1400,6 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   margin-top: 8px;
 }
 
-.chat-mcp-terminal__stream--stderr {
-  color: var(--app-danger);
-}
-
 .chat-mcp-terminal__footer {
   display: flex;
   align-items: center;
@@ -1432,10 +1410,6 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   font-family: var(--app-font-family);
   font-size: 12px;
   line-height: 18px;
-}
-
-.chat-mcp-terminal--error .chat-mcp-terminal__footer {
-  color: var(--app-danger);
 }
 
 .chat-plan-card {

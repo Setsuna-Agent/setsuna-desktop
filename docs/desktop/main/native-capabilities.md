@@ -19,7 +19,7 @@
 
 ### `frame.ts`
 
-处理 Windows 自定义标题栏双击等原生交互。Renderer 只负责按钮展示，最终窗口状态由 main 决定并广播。
+处理 Windows 自定义标题栏双击等原生交互。`readWindowControlsState` 和 `observeWindowControlsState` 将最大化、全屏作为独立字段读取与广播，监听四个原生状态事件；订阅由窗口 registry 在关闭或注销时清理。Renderer 只负责按钮展示，最终窗口状态由 main 决定并广播。
 
 ### `splash/`
 

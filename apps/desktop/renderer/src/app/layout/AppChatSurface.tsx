@@ -120,6 +120,7 @@ export function AppChatSurface({
           workspaceMentionRequest={workspaceMentionRequest}
           onImageAttachmentRequestConsumed={resolveImageAttachmentRequest}
           onOpenWorkspaceFileContextMenu={setWorkspaceFileContextTarget}
+          activeFileMenuTriggerId={workspaceFileContextTarget?.triggerId}
           onWorkspaceMentionRequestConsumed={consumeWorkspaceMentionRequest}
         />
         <DesktopWorkspacePanelLayer

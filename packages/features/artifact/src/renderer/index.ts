@@ -1,5 +1,5 @@
 export { artifactRendererFeature } from './feature.js';
-export { openArtifactInBrowser, openArtifactWithDefaultApp } from './artifact-actions.js';
+export { openArtifactInBrowser, runArtifactNativeFileAction } from './artifact-actions.js';
 export {
   ArtifactNavigationProvider,
   type ArtifactBrowserOpenHandler,

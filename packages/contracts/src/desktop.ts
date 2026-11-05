@@ -33,6 +33,11 @@ export type DesktopApplicationMenuInput = {
 
 export type DesktopTextEditCommand = 'cut' | 'copy' | 'paste';
 
+export type DesktopWindowControlsState = Readonly<{
+  maximized: boolean;
+  fullScreen: boolean;
+}>;
+
 export const DESKTOP_CLIPBOARD_WRITE_PATH = '/v1/clipboard/write-text';
 
 export type DesktopClipboardWriteInput = Readonly<{ text: string }>;
@@ -207,8 +212,8 @@ export type SetsunaDesktopBridge = {
     onNewChat(callback: () => void): () => void;
     getCloseBehavior(): Promise<DesktopWindowCloseBehavior>;
     setCloseBehavior(behavior: DesktopWindowCloseBehavior): Promise<DesktopWindowCloseBehavior>;
-    isMaximized(): Promise<boolean>;
-    onMaximizedChange(callback: (maximized: boolean) => void): () => void;
+    getState(): Promise<DesktopWindowControlsState>;
+    onStateChange(callback: (state: DesktopWindowControlsState) => void): () => void;
     setTitlebarScale(scale: number): Promise<boolean>;
   };
 };

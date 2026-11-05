@@ -233,6 +233,7 @@ export function WorkspacePanel({
           animateEntry={level > 0}
           expanded={directory ? expanded : undefined}
           selected={selected}
+          data-context-menu-open={contextMenu?.triggerId === `tree:${node.path}` ? '' : undefined}
           label={node.name}
           icon={directory ? undefined : <WorkspaceFileIcon path={node.path} type={node.type} />}
           extra={loading ? <span className="sd-spinner" aria-hidden="true" /> : undefined}
@@ -249,7 +250,7 @@ export function WorkspacePanel({
           onContextMenu={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            setContextMenu({ filePath: node.path, type: node.type, x: event.clientX, y: event.clientY,
+            setContextMenu({ filePath: node.path, type: node.type, triggerId: `tree:${node.path}`, x: event.clientX, y: event.clientY,
               image: !directory && activeProject && isWorkspaceImagePath(node.path)
                 ? { filePath: node.path, workspace: workspaceTarget(activeProject.id, activePanel.rootId) } : undefined,
             });
@@ -262,29 +263,29 @@ export function WorkspacePanel({
   };
 
   const fileEditorHeader = showsFileExplorer ? (
-    <div className="desktop-editor__crumb">
-      <span className="desktop-editor__crumb-path">
+    <header className="desktop-editor__crumb sd-panel-toolbar">
+      <span className="desktop-editor__crumb-path sd-panel-toolbar__surface">
         <WorkspaceFilePath path={editorPath} />
       </span>
-      <span className="desktop-editor__crumb-actions">
+      <span className="desktop-editor__crumb-actions sd-panel-toolbar__surface sd-panel-toolbar__actions">
         {fileView.canPreview ? (
-          <span className="sd-markdown-view-toggle desktop-editor__view-toggle" role="group" aria-label={t('workspace.files.previewMode')}>
-            {(['source', 'preview'] as const).map((mode) => (
-              <Button key={mode} variant="ghost" type="button" aria-pressed={fileView.mode === mode}
-                className="sd-markdown-view-option" onClick={() => fileView.setMode(mode)}>
-                {t(mode === 'source' ? 'workspace.files.viewSource' : 'workspace.files.viewPreview')}
-              </Button>
-            ))}
+          <span className="sd-panel-toolbar__group">
+            <Button variant="ghost" size="small" type="button" className="sd-panel-toolbar__text-button"
+              onClick={() => fileView.setMode(fileView.mode === 'source' ? 'preview' : 'source')}>
+              {t(fileView.mode === 'source' ? 'workspace.files.viewPreview' : 'workspace.files.viewSource')}
+            </Button>
           </span>
         ) : null}
-        <FileTreeToggle
-          className="app-shell-icon-control"
-          label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
-          expanded={treeVisible}
-          onToggle={toggleTreeVisible}
-        />
+        <span className="sd-panel-toolbar__group">
+          <FileTreeToggle
+            className="app-shell-icon-control"
+            label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
+            expanded={treeVisible}
+            onToggle={toggleTreeVisible}
+          />
+        </span>
       </span>
-    </div>
+    </header>
   ) : null;
 
   const mainPanel =
@@ -618,6 +619,7 @@ function CodeEditorPreview({
           name={file.path}
           unsafeCSS={workspaceCodeViewUnsafeCSS}
           virtualized
+          wrap
         />
         <WorkspaceCodeViewScrollbar surface={codeViewSurface} />
         {file.truncated ? (

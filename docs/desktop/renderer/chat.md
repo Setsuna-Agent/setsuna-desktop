@@ -140,6 +140,14 @@ Runtime 一轮可能包含：
 
 Shell 输出轮询匹配到同一回合的原命令时不单独展示或计数。`read_shell_process` 和空输入的 `write_stdin` 按进程归属，将增量输出和最终结果合并到原命令详情，包括失败输出；未匹配到原命令的跨轮次或分页读取保留独立显示。原始工具记录保留，非空 stdin 与待授权操作仍独立展示。
 
+连续同来源、同名称的普通工具调用聚合计数，混合工具批次内也保持聚合；没有独立目标、授权或诊断内容的重复标题不再展开为空列表。有效目标、待授权决定和诊断仍逐条保留；搜索分组继续提供各次搜索范围与查询。原始调用与顺序不变，不跨中间工具或插件来源合并明细。
+
+工作记录中的文件引用、文件类型图标、插件名称与图标和增删统计默认使用中性色，仅当前条目悬停或获得键盘焦点时强调，文件链接复用 Markdown 的链接高亮色与虚线下划线；插件使用记录和工具行的插件图标共用灰度规则，覆盖预设头像与自定义图片。分组展开不连带高亮子项，文件变更汇总卡片继续保留增删语义色。
+
+工具与 Hook 的前置图标只表示工具类型或来源，不随运行状态切换成成功、失败或时钟图标。已执行命令统一使用“已运行”摘要，分组计数合并执行结束的成功与失败项，不显示失败角标或结果染色；原始执行状态、输出和退出码仍保留在详情中，审批、取消与拒绝继续表达实际流程。
+
+展开的终端输出统一使用中性色，不因为来自 stderr 就判定为错误并标红；Git 等工具也会向 stderr 输出正常进度。终端底部只保留非零退出码或信号诊断，不追加成功、失败标签，也不根据执行结果染色。
+
 关键纯投影：
 
 - `chatMessageDisplay.ts`：消息是否显示及 display item。
@@ -175,6 +183,8 @@ Shell 输出轮询匹配到同一回合的原命令时不单独展示或计数�
 环境信息默认按聊天区可用空间自动显示或收起：卡片能与正文并排时显示，必要时平移正文保留间距；空间不足时收起，宽度恢复后重新显示。顶栏按钮与快捷键在新对话和已有对话中均可手动显示或隐藏完整卡片。未发送的新对话复用所选项目的环境与快捷操作，不为打开面板创建对话；用量、PR、后台服务和协作信息只在真实对话创建后挂载。空白页与正文通过节点回调绑定尺寸监听，正文挂载或替换后重新观察；窗口变化和面板拖动都会触发测量，以 CSS 像素计算正文与卡片之间的留白和偏移，避免页面缩放影响阈值。
 
 消息导航参考 [beUI Message Scroller](https://beui.dev/components/agents/message-scroller)，放在聊天区左侧，避开右侧环境信息面板。`ChatMessageRail` 展示当前已渲染消息的刻度和向右展开的悬停/键盘焦点预览；阅读位置显示为一段连续的主题色刻度，按视口边界在消息间插值，边缘深浅随滚动平滑变化，长回复也保留至少三个刻度宽的标记（消息不足三条时覆盖现有刻度）。默认刻度等长，仅 hover 时展开长度层次；点击历史刻度定位消息，点击最后一条回到底部并恢复跟随。`chatMessageNavigation` 从 transcript 数据生成摘要，`useChatMessageRail` 按稳定的 `data-message-id` 测量位置并换算页面缩放，不随每个文本 delta 重建观察器。
+
+指示器按正文实际左边界与页面缩放检查可用留白；空间不足时整组隐藏，正文位移动画期间暂隐，位置稳定后重新判断。概览切换、面板调宽和缩放都会更新判断；显隐不改变正文内边距，避免测量与布局互相触发，隐藏时清除悬停与焦点预览。
 
 SSE 丢帧或组件重挂载时依赖 thread snapshot 恢复；局部 streaming state 不能成为唯一数据源。
 Thread 首屏以最新 160 条底层记录为目标，`getThreadPage` 在不超过 200 条时向前扩到用户轮次起点；
@@ -238,6 +248,10 @@ Enter / Shift+Enter 循环跳转，Esc 或关闭按钮清理观察器和高亮�
 
 成功的撤销和重新应用通过 `thread.file_changes_applied` 事件持久化，投影到线程的 `fileChangeStates`，按 tool-call IDs 分组；重新加载会话或重启应用后都能恢复按钮方向。`ThreadFileChangesProvider` 在应用层共享进行中的请求与响应，卡片通过 `useThreadFileChanges` 订阅，并按事件序号合并 HTTP 响应与线程投影，避免较晚到达的旧状态覆盖操作结果。事件写入失败时，文件事务一起回滚。
 
+文件改动卡片中的文件行通过 `MarkdownNavigationProvider` 打开现有工作区文件右键菜单。菜单优先使用工具记录的绝对目标，兼容旧记录中的相对路径；打开、复制路径和显示目录等操作继续由宿主按项目目录解析与校验，普通点击仍打开该文件的审查。
+
+文件行与 `WorkspaceFileLink` 共用 `useWorkspaceFileContextMenu`，用触发项 ID 关联宿主持有的菜单目标。入口高亮持续到菜单关闭或目标切换，不依赖鼠标停留或 DOM 焦点；同一路径在正文、工具行和 diff 卡片中出现时，只激活实际发起右键的那一项。
+
 还原时按父目录的文件身份及实际文件系统大小写规则合并同一文件的路径别名，保留大小写敏感目录中不同文件的语义。删除记录在生成时校验原始字节可无损转换为 UTF-8，并记录文件权限；非 UTF-8、符号链接及缺少删除元数据的旧记录不允许还原。还原事务保留原权限，不受当前 umask 影响。
 
 结构化用户输入的 schema 可以持久化，用户答案不写 approval event；答案只在 normal tool result 中回到模型上下文。UI 和 runtime 都要验证字段。
@@ -281,7 +295,7 @@ Assistant 正文、工作记录中的可见回复和计划正文可使用顶层 
 
 组件边界记录渲染异常，包括上游默认忽略的流式异常；成功解析不会清除同一源码的失败，新源码到达后允许重试。图片、图库、图文、列表缩略图和卡片背景通过 `useWorkspaceImageSources` 复用 Markdown 的路径校验、文件确认与预览桥接，只有 HTTP(S) URL 能进入实际图片字段。主进程 `renderer-image-policy` 在页面加载前同步注册文件图片请求限制，除内置 renderer 资源外禁止直接加载本地图片，覆盖第三方内部 Markdown 等额外入口；无目录扫描或新增就绪等待。
 
-`OpenUiBlock` 是局部 lazy / Suspense 边界，OpenUI JS、图表和 CSS 只在出现展示块时加载，不进入 runtime/main 启动链路。ThemeProvider 使用独立作用域和宿主主题 token；映射位于 `renderer-ui/openui-theme`，与独立应用的 `@setsuna/app/openui` 共用。Vite 仅对 `@openuidev/react-lang` 选择其同 API 的 native 入口，避开 web 入口自动挂载 devtools 和远程 CDN 加载；这不是切换应用的 React 平台。
+`OpenUiBlock` 是局部 lazy / Suspense 边界，OpenUI JS、图表和 CSS 只在出现展示块时加载，不进入 runtime/main 启动链路。ThemeProvider 使用独立作用域和宿主主题 token；映射位于 `renderer-ui/openui-theme`，与独立应用的 `@setsuna/app/openui` 共用。组件目录与 ThemeProvider 统一从 `@openuidev/react-ui` 主入口导入：上游 `genui-lib` 子入口独立打包主题上下文，会使日期面板、Modal 等 body portal 丢失当前主题。Vite 仅对 `@openuidev/react-lang` 选择其同 API 的 native 入口，避开 web 入口自动挂载 devtools 和远程 CDN 加载；这不是切换应用的 React 平台。
 
 OpenUI 的下拉菜单、日期面板及 tooltip 会 portal 到 `body`，不在 `.chat-openui` 内。`openui.css` 沿用共享控件的缩放约定：定位层抵消 `body` 的页面缩放，内容层恢复应用密度；下拉宽度和可用高度从 Radix 的视口像素换回 CSS 像素。规则仅匹配 OpenUI 的顶层 portal，日历内部已有定位容器的菜单保留自身坐标系。
 

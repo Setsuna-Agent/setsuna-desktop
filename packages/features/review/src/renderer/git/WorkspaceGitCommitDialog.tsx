@@ -396,8 +396,9 @@ export function WorkspaceGitCommitProvider({
           <div className="chat-git-commit-popover__branch-wrap">
             <Button variant="ghost"
               type="button"
-              className={`chat-git-commit-popover__branch ${branchMenuVisible ? 'is-open' : ''}`}
+              className="chat-git-commit-popover__branch"
               aria-expanded={branchMenuVisible}
+              data-overlay-open={branchMenuVisible ? '' : undefined}
               disabled={branchLocked || Boolean(busyAction)}
               onClick={() => {
                 setBranchMenuOpen((current) => !current);

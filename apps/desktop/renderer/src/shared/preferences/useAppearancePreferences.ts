@@ -5,8 +5,8 @@ export const fontSizeOptions = ['80', '85', '90', '95', '100', '105', '110', '11
 export type FontSizeMode = typeof fontSizeOptions[number];
 
 export const fontWeightOptions = [
-  { label: '较细', value: '400' },
-  { label: '标准（默认）', value: '500' },
+  { label: '较细（默认）', value: '400' },
+  { label: '标准', value: '500' },
   { label: '较粗', value: '600' },
 ] as const;
 export type FontWeightMode = typeof fontWeightOptions[number]['value'];
@@ -307,7 +307,7 @@ function getInitialFontFamily(): FontFamilyMode {
 function getInitialFontWeight(): FontWeightMode {
   const saved = readBrowserStorageValue(fontWeightStorageKey);
   if (fontWeightOptions.some((item) => item.value === saved)) return saved as FontWeightMode;
-  return '500';
+  return '400';
 }
 
 function applyAppearance(fontSize: FontSizeMode, fontFamily: FontFamilyMode, fontWeight: FontWeightMode): void {

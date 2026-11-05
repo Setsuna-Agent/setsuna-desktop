@@ -9,7 +9,7 @@ export class BrowserContextMenuSession {
 
   constructor(private readonly publish: (request: BrowserContextMenuRequest | null) => void) {}
 
-  show(guest: WebContents, entries: BrowserMenuEntry[], point: { x: number; y: number }): boolean {
+  show(guest: WebContents, entries: BrowserMenuEntry[], point: { x: number; y: number }, source: BrowserContextMenuRequest['source'] = 'page'): boolean {
     this.dismiss();
     if (guest.isDestroyed()) return false;
     const id = randomUUID();
@@ -27,7 +27,7 @@ export class BrowserContextMenuSession {
       guest.off('did-start-navigation', invalidate);
       guest.off('destroyed', invalidate);
     } };
-    this.publish({ id, webContentsId: guest.id, ...point, items });
+    this.publish({ id, webContentsId: guest.id, source, ...point, items });
     return true;
   }
 

@@ -6,7 +6,6 @@ import {
   type Translate,
 } from '../../../shared/i18n/I18nProvider.js';
 import {
-  isRecord,
   recordFromJson,
   stringField,
   toolDisplayName,
@@ -20,11 +19,10 @@ export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
   const resultPreview = shellResultPreviewForDisplay(run);
   const segments = shellOutputSegments(resultPreview, t);
   const runtimeDetails = shellRuntimeDetailLines(resultPreview, t);
-  const status = shellStatusLabel(run, t);
   const diagnostic = shellDiagnosticText(run, t);
   const runtimeDetailsLabel = t('toolRun.shell.runtimeDetails');
   return (
-    <div className={`chat-mcp-terminal chat-mcp-terminal--${shellTerminalStatus(run)}`}>
+    <div className="chat-mcp-terminal">
       <div className="chat-mcp-terminal__header">{t('toolRun.shell.title')}</div>
       {runtimeDetails.length ? (
         <details className="chat-mcp-terminal__metadata">
@@ -61,11 +59,11 @@ export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
           </div>
         ) : null}
       </div>
-      {run.status !== 'pending_approval'
+      {diagnostic && run.status !== 'pending_approval'
         && run.status !== 'cancelled'
         && run.status !== 'rejected' ? (
         <div className="chat-mcp-terminal__footer">
-          {diagnostic ? `${status} · ${diagnostic}` : status}
+          {diagnostic}
         </div>
       ) : null}
     </div>
@@ -165,37 +163,10 @@ function isApprovalMetadataPreview(run: RuntimeToolRun, preview: string): boolea
   ].some((value) => value?.trim() === normalized);
 }
 
-export function shellStatusLabel(
-  run: RuntimeToolRun,
-  t: Translate = defaultTranslate,
-): string {
-  if (run.status === 'running' || run.status === 'pending_approval') {
-    return t('toolRun.shell.status.running');
-  }
-  if (run.status === 'error') return t('toolRun.shell.status.failed');
-  if (run.status === 'cancelled') return t('toolRun.shell.status.cancelled');
-  if (run.status === 'rejected') return t('toolRun.shell.status.rejected');
-  if (shellExitIsFailure(run)) return t('toolRun.shell.status.failed');
-  return t('toolRun.shell.status.success');
-}
-
-export function shellTerminalStatus(run: RuntimeToolRun): string {
-  if (run.status === 'success') {
-    return shellExitIsFailure(run)
-      ? 'error'
-      : 'completed';
-  }
-  if (run.status === 'pending_approval') return 'pending';
-  if (run.status === 'cancelled') return 'cancelled';
-  return run.status === 'error' || run.status === 'rejected'
-    ? 'error'
-    : run.status;
-}
-
 export function shellDiagnosticText(run: RuntimeToolRun, t: Translate = defaultTranslate): string {
   const content = run.resultPreview ?? '';
   const exit = shellExitCode(content);
-  if (isFailedShellExit(exit)) return t('toolRun.shell.exit', { code: exit });
+  if (exit && exit !== '0' && exit !== '(none)') return t('toolRun.shell.exit', { code: exit });
   const signal = shellContentLine(content, /^signal:\s*(.+)$/im);
   return signal && signal !== '(none)' ? t('toolRun.shell.signal', { signal }) : '';
 }
@@ -344,15 +315,4 @@ function localizedShellMetadataLine(line: string, t: Translate): string {
 
 function shellExitCode(content: string): string {
   return shellContentLine(content, /^(?:exit|Exit Code):\s*(.+)$/im);
-}
-
-function shellExitIsFailure(run: RuntimeToolRun): boolean {
-  // Runtime owns command exit semantics (for example, rg exit 1 is no matches).
-  // Keep the preview fallback for older results without structured metadata.
-  if (run.status === 'success' && isRecord(run.data) && run.data.ok === true) return false;
-  return isFailedShellExit(shellExitCode(run.resultPreview ?? ''));
-}
-
-function isFailedShellExit(exit: string): boolean {
-  return Boolean(exit && exit !== '0' && exit !== '(none)');
 }

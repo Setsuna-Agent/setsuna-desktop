@@ -101,7 +101,7 @@
   cursor: pointer;
 }
 
-.chat-conversation-overview-panel__row:not(.chat-conversation-overview-panel__row--static):hover {
+.chat-conversation-overview-panel__row:not(.chat-conversation-overview-panel__row--static):is(:hover, [data-overlay-open]) {
   background: color-mix(in srgb, var(--app-surface) 90%, var(--app-text) 10%);
 }
 

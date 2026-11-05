@@ -8,7 +8,7 @@
 
 .desktop-workspace-body--file-explorer {
   grid-template-columns: minmax(280px, 1fr) var(--desktop-file-tree-track-width, 248px);
-  grid-template-rows: var(--desktop-panel-toolbar-height) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   transition: grid-template-columns var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
 }
 
@@ -93,25 +93,16 @@ body.desktop-file-tree-resizing .desktop-workspace-body--file-explorer {
 }
 
 .desktop-editor__crumb {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  min-width: 0;
-  padding: 0 var(--app-topbar-item-gap) 0 var(--desktop-panel-gutter);
-  border-bottom: 1px solid var(--desktop-panel-divider);
-  color: var(--app-text-muted);
-  background: var(--app-bg);
-  font-size: 12px;
-  line-height: 1;
 }
 
 .desktop-editor__crumb-path {
   display: inline-flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  padding-inline: 10px;
   overflow: hidden;
 }
 
@@ -122,18 +113,14 @@ body.desktop-file-tree-resizing .desktop-workspace-body--file-explorer {
 }
 
 .desktop-editor__crumb-path .desktop-workspace-file-path__filename {
-  font-weight: 500;
+  font-weight: var(--app-font-weight);
 }
 
 .desktop-editor__crumb-actions {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--app-toolbar-action-gap);
-}
-
-.desktop-editor__view-toggle {
-  margin-right: 4px;
+  gap: 2px;
 }
 
 .desktop-file-document,

@@ -1,5 +1,7 @@
 import type { Library } from '@openuidev/react-lang';
-import { openuiLibrary } from '@openuidev/react-ui/genui-lib';
+// Use the same bundle as ThemeProvider: the genui-lib subpath has its own theme
+// context, so its body portals otherwise lose the host theme and font tokens.
+import { openuiLibrary } from '@openuidev/react-ui';
 import { withOpenUiComponentBoundary } from './OpenUiComponentBoundary.js';
 import { withWorkspaceImages } from './OpenUiImages.js';
 import { withScopedOpenUiControls } from './OpenUiControls.js';

@@ -29,6 +29,33 @@ function outerDetails(container: HTMLElement): HTMLDetailsElement {
 }
 
 describe('RuntimeToolRuns streaming history', () => {
+  it('keeps a new approval actionable when consecutive generic calls are compacted inside mixed history', () => {
+    const history = [
+      toolRun('read_first', 'read_file', { file_path: 'README.md' }),
+      toolRun('search_first', 'search_tools', { query: 'agent' }),
+      toolRun('search_second', 'search_tools', { query: 'subagent' }),
+    ];
+    const onAnswerApproval = vi.fn();
+    const view = render(panel(history, onAnswerApproval));
+    const root = outerDetails(view.container);
+    setOpen(root, true);
+    const file = view.getByText('README.md');
+    const pending = {
+      ...toolRun('search_pending', 'search_tools', { query: 'delegate' }, 'pending_approval'),
+      approvalId: 'approval_search',
+    };
+
+    view.rerender(panel([...history, pending], onAnswerApproval));
+    fireEvent.click(view.getByRole('button', { name: '允许' }));
+    expect(onAnswerApproval).toHaveBeenCalledWith('approval_search', { decision: 'approve' });
+
+    view.rerender(panel([...history, { ...pending, status: 'success', approvalId: undefined }], onAnswerApproval));
+    expect(view.queryByRole('button', { name: '允许' })).toBeNull();
+    expect(outerDetails(view.container)).toBe(root);
+    expect(root.open).toBe(true);
+    expect(view.getByText('README.md')).toBe(file);
+  });
+
   it.each(['shell', 'mixed'])('shows aggregate history when a %s group is expanded and live activity only when collapsed', (kind) => {
     const completed = [toolRun('shell_first', 'exec_command', { cmd: 'git status --short' })];
     if (kind === 'mixed') completed.push(toolRun('read_first', 'read_file', { file_path: 'src/first.ts' }));

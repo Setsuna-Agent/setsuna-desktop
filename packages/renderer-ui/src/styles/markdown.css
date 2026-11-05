@@ -176,7 +176,7 @@
   text-underline-offset: 3px;
 }
 
-.chat-markdown a:hover {
+.chat-markdown a:is(:hover, [data-overlay-open]) {
   color: color-mix(in srgb, var(--app-primary-hover) 82%, var(--app-text));
   text-decoration-color: currentColor;
 }

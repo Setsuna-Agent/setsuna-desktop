@@ -1,5 +1,6 @@
 import { notificationsMainFeature, notificationsMainHostCapability } from '@setsuna-desktop/feature-notifications/main';
 import { runtimeActivityMainFeature, runtimeActivityMainHostCapability } from '@setsuna-desktop/feature-runtime-activity/main';
+import { diagnosticsMainFeature, diagnosticsMainHostCapability } from '@setsuna-desktop/feature-diagnostics/main';
 import { notificationChannels } from '@setsuna-desktop/feature-notifications/contracts';
 import type {
   RuntimeInterfaceLanguage,
@@ -90,7 +91,7 @@ const mainFeatures = defineMainFeatureHost({
     windowsSandboxMainFeature,
     workspaceAppsMainFeature,
   ],
-  optional: [notificationsMainFeature, runtimeActivityMainFeature],
+  optional: [diagnosticsMainFeature, notificationsMainFeature, runtimeActivityMainFeature],
 });
 
 /** Protocol privileges must be declared before Electron creates any renderer or worker. */
@@ -109,6 +110,7 @@ export type ActivatedBuiltinMainFeatures = Readonly<{
 }>;
 
 export async function activateBuiltinMainFeatures(input: Readonly<{
+  diagnosticLogDirectory: string;
   credentialVault: CredentialVault;
   activeKeyboardShortcutBindings(senderId: number): ReadonlySet<string>;
   interfaceLanguage(): RuntimeInterfaceLanguage;
@@ -123,6 +125,10 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
 }>): Promise<ActivatedBuiltinMainFeatures> {
   const composition = await mainFeatures.activate({
     hostCapabilities: [
+      provideHostCapability(diagnosticsMainHostCapability, {
+        directory: input.diagnosticLogDirectory,
+        isAllowedSender: (id: number) => Boolean(desktopWindows.get(id)),
+      }),
       provideHostCapability(runtimeActivityMainHostCapability, {
         isRendererSender: (senderId: number) => Boolean(desktopWindows.get(senderId)),
       }),

@@ -1,5 +1,7 @@
 import type { BrowserControlConnection } from '@setsuna-desktop/feature-browser/contracts';
 import type { ComputerConnection } from '@setsuna-desktop/feature-computer-use/contracts';
+import type { DiagnosticReporter } from '@setsuna-desktop/contracts';
+import { diagnosticErrorFields, reportDiagnostic } from '../diagnostics/report.js';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { abortableDelay, findAvailablePort, stopRuntimeChild, type RuntimeChildProcess } from './runtime-process-control.js';
@@ -17,6 +19,7 @@ export type RuntimeProcessOptions = RuntimeProcessEnvironmentOptions & {
   nativeBridge?: { token: string; url: string };
   onActivity?: (activeTurns: number) => void;
   onExit?: () => void | Promise<void>;
+  onDiagnostic?: DiagnosticReporter;
   runtimeEntry?: string;
   shutdownTimeoutMs?: number;
 };
@@ -98,32 +101,52 @@ export class RuntimeProcess {
   }
 
   private async launch(abort: AbortController): Promise<void> {
-    // Native input/resources from the old process must be revoked before spawning.
-    await this.exitCleanup;
-    abort.signal.throwIfAborted();
-    const port = await findAvailablePort();
-    abort.signal.throwIfAborted();
-    this.port = port;
-    const child = this.spawnChild();
-    this.child = child;
-    child.stderr.on('data', (chunk) => console.error(`[runtime] ${String(chunk).trimEnd()}`));
-    child.on('error', (error) => {
-      console.error('[runtime] process error', error);
-      // spawn errors do not emit exit and have no live child to reap.
-      if (child.pid === undefined && this.child === child) this.child = null;
-    });
-    child.once('exit', (code, signal) => this.exited(child, code, signal));
-    const timeout = setTimeout(() => abort.abort(new Error('Runtime did not become ready in time')), READY_TIMEOUT_MS);
+    const startedAt = performance.now();
+    let phase = 'native-cleanup';
+    let healthStatus: number | null = null;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    reportDiagnostic(this.options.onDiagnostic, 'runtime-starting', { attempt: this.attempts });
     try {
+      // Native input/resources from the old process must be revoked before spawning.
+      await this.exitCleanup;
+      abort.signal.throwIfAborted();
+      phase = 'port-allocation';
+      const port = await findAvailablePort();
+      abort.signal.throwIfAborted();
+      this.port = port;
+      phase = 'spawn';
+      const child = this.spawnChild();
+      this.child = child;
+      child.stderr.on('data', (chunk) => console.error(`[runtime] ${String(chunk).trimEnd()}`));
+      child.on('error', (error) => {
+        console.error('[runtime] process error', error);
+        reportDiagnostic(this.options.onDiagnostic, 'runtime-process-error', {
+          runtimePid: child.pid ?? null, ...diagnosticErrorFields(error),
+        });
+        // spawn errors do not emit exit and have no live child to reap.
+        if (child.pid === undefined && this.child === child) this.child = null;
+      });
+      child.once('exit', (code, signal) => this.exited(child, code, signal));
+      phase = 'ready-handshake';
+      timeout = setTimeout(() => abort.abort(new Error('Runtime did not become ready in time')), READY_TIMEOUT_MS);
       await waitForReady(child, abort.signal, (count) => {
         if (this.child === child) this.options.onActivity?.(count);
       });
+      phase = 'health-check';
       const response = await fetch(`http://127.0.0.1:${port}/health`, { signal: abort.signal });
+      healthStatus = response.status;
       if (!response.ok) throw new Error(`Runtime health check failed: ${response.status}`);
       abort.signal.throwIfAborted();
       if (this.child !== child) throw new Error('Runtime exited before ready');
       this.readyAt = performance.now();
+      reportDiagnostic(this.options.onDiagnostic, 'runtime-ready', {
+        runtimePid: child.pid ?? null, attempt: this.attempts, elapsedMs: Math.round(this.readyAt - startedAt),
+      });
     } catch (error) {
+      reportDiagnostic(this.options.onDiagnostic, this.wanted ? 'runtime-startup-failed' : 'runtime-startup-cancelled', {
+        phase, healthStatus, cancelled: !this.wanted, timedOut: abort.signal.aborted && this.wanted,
+        attempt: this.attempts, elapsedMs: Math.round(performance.now() - startedAt), ...diagnosticErrorFields(error),
+      });
       // A ready/health timeout may leave a live process. Reap it before any retry.
       await this.terminateChild().catch((stopError) => console.error('[runtime] startup cleanup failed', stopError));
       await this.exitCleanup;
@@ -168,9 +191,16 @@ export class RuntimeProcess {
     this.child = null;
     this.readyAt = null;
     this.exitCleanup = this.cleanupAfterExit();
-    void this.exitCleanup.catch((error) => console.error('[runtime] exit cleanup failed', error));
+    void this.exitCleanup.catch((error) => {
+      console.error('[runtime] exit cleanup failed', error);
+      reportDiagnostic(this.options.onDiagnostic, 'runtime-exit-cleanup-failed', diagnosticErrorFields(error));
+    });
     const message = `[runtime] exited code=${code ?? 'null'} signal=${signal ?? 'null'}`;
     const intentional = !this.wanted || Boolean(this.stopping || this.terminating);
+    reportDiagnostic(this.options.onDiagnostic, 'runtime-process-exited', {
+      runtimePid: child.pid ?? null, exitCode: code, signal, intentional, wasReady: readyAt !== null,
+      uptimeMs: readyAt === null ? null : Math.round(performance.now() - readyAt),
+    });
     if (intentional) console.info(message);
     else console.error(message);
     // Initial startup errors still belong to the caller (including restore rollback).
@@ -187,7 +217,10 @@ export class RuntimeProcess {
   private terminateChild(): Promise<void> {
     if (this.terminating) return this.terminating;
     if (!this.child) return Promise.resolve();
-    const terminating = stopRuntimeChild(this.child, this.options.shutdownTimeoutMs).finally(() => {
+    const terminating = stopRuntimeChild(this.child, this.options.shutdownTimeoutMs).catch((error: unknown) => {
+      reportDiagnostic(this.options.onDiagnostic, 'runtime-shutdown-failed', diagnosticErrorFields(error));
+      throw error;
+    }).finally(() => {
       if (this.terminating === terminating) this.terminating = null;
     });
     this.terminating = terminating;
@@ -204,7 +237,10 @@ export class RuntimeProcess {
     const abort = new AbortController();
     this.recovery = abort;
     void this.recover(abort.signal).catch((error) => {
-      if (!abort.signal.aborted) console.error('[runtime] recovery failed', error);
+      if (!abort.signal.aborted) {
+        console.error('[runtime] recovery failed', error);
+        reportDiagnostic(this.options.onDiagnostic, 'runtime-recovery-failed', diagnosticErrorFields(error));
+      }
     }).finally(() => {
       if (this.recovery === abort) this.recovery = null;
     });
@@ -215,6 +251,7 @@ export class RuntimeProcess {
     await this.exitCleanup;
     while (this.wanted && !signal.aborted && this.attempts < RECOVERY_DELAYS_MS.length) {
       const retryDelay = RECOVERY_DELAYS_MS[this.attempts++]!;
+      reportDiagnostic(this.options.onDiagnostic, 'runtime-recovery-scheduled', { attempt: this.attempts, delayMs: retryDelay });
       await abortableDelay(retryDelay, signal);
       signal.throwIfAborted();
       try {
@@ -223,10 +260,14 @@ export class RuntimeProcess {
       } catch (error) {
         if (signal.aborted) return;
         console.error(`[runtime] restart attempt ${this.attempts} failed`, error);
+        reportDiagnostic(this.options.onDiagnostic, 'runtime-recovery-attempt-failed', { attempt: this.attempts, ...diagnosticErrorFields(error) });
         await this.exitCleanup;
       }
     }
-    if (!signal.aborted && this.wanted) console.error('[runtime] automatic restart limit reached');
+    if (!signal.aborted && this.wanted) {
+      console.error('[runtime] automatic restart limit reached');
+      reportDiagnostic(this.options.onDiagnostic, 'runtime-recovery-limit-reached', { attempts: this.attempts });
+    }
   }
 }
 

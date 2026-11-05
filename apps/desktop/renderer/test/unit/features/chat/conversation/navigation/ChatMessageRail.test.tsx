@@ -130,14 +130,19 @@ function Harness({ navigationItems = items }: { navigationItems?: ChatMessageNav
 
 function mockGeometry(scale = 1) {
   const viewport = screen.getByTestId('viewport');
+  const content = viewport.firstElementChild!;
   const metrics = { height: 400 };
   document.documentElement.style.setProperty('--app-page-scale-inverse', String(1 / scale));
+  viewport.style.setProperty('--chat-message-rail-inset', '4px');
+  viewport.style.setProperty('--chat-message-rail-width', '36px');
+  viewport.style.setProperty('--chat-message-rail-gap', '4px');
   Object.defineProperties(viewport, {
     clientHeight: { configurable: true, get: () => metrics.height },
     clientWidth: { configurable: true, value: 800 },
     scrollHeight: { configurable: true, value: 1600 },
   });
-  vi.spyOn(viewport, 'getBoundingClientRect').mockImplementation(() => ({ top: 100 * scale, height: metrics.height * scale }) as DOMRect);
+  vi.spyOn(viewport, 'getBoundingClientRect').mockImplementation(() => ({ left: 0, width: 800 * scale, top: 100 * scale, height: metrics.height * scale }) as DOMRect);
+  vi.spyOn(content, 'getBoundingClientRect').mockImplementation(() => ({ left: 64 * scale, width: 672 * scale, top: (100 - viewport.scrollTop) * scale, height: 1600 * scale }) as DOMRect);
   viewport.querySelectorAll<HTMLElement>('article').forEach((node, index) => {
     vi.spyOn(node, 'getBoundingClientRect').mockImplementation(() => ({ top: (100 + index * 400 - viewport.scrollTop) * scale, height: 200 * scale }) as DOMRect);
   });

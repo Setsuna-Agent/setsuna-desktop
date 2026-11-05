@@ -4,14 +4,14 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { RuntimeArtifact } from '../contracts/index.js';
 
-export async function openArtifactWithDefaultApp(
+export async function runArtifactNativeFileAction(
   artifact: RuntimeArtifact,
-  openWorkspaceFile: (
+  action: (
     workspaceRoot: string,
     filePath: string,
   ) => Promise<DesktopOpenPathResult>,
 ): Promise<string | null> {
-  const result = await openWorkspaceFile(artifact.workspaceRoot, artifact.path);
+  const result = await action(artifact.workspaceRoot, artifact.path);
   return result.ok ? null : result.error ?? null;
 }
 

@@ -1,15 +1,10 @@
 import type { RuntimePluginReference, RuntimeToolRun } from '@setsuna-desktop/contracts';
 import {
-  AlertCircle,
-  CheckCircle2,
-  Clock3,
   FileText,
   MessageCircleQuestion,
   Search,
-  ShieldAlert,
   SquareTerminal,
   Wrench,
-  XCircle,
 } from 'lucide-react';
 import {
   translate,
@@ -57,37 +52,25 @@ export function statusTextFromStatus(
     const rejectedLabel = t('toolRun.status.rejected');
     return summaryTitle.includes(rejectedLabel) ? '' : rejectedLabel;
   }
-  if (status === 'error') {
-    const failedLabel = t('toolRun.status.failed');
-    return summaryTitle.includes(failedLabel) ? '' : failedLabel;
-  }
   return '';
 }
 
 export function toolRunGroupIcon(
   kind: ToolRunGroupKind,
-  status: RuntimeToolRun['status'],
   plugin?: RuntimePluginReference,
 ) {
-  if (status === 'pending_approval') return <ShieldAlert size={14} />;
-  if (status === 'running') return <Clock3 size={14} />;
-  if (status === 'error' || status === 'cancelled') return <XCircle size={14} />;
-  if (status === 'rejected') return <AlertCircle size={14} />;
   if (plugin) return <ToolRunPluginIcon plugin={plugin} />;
   return toolRunKindIcon(kind);
 }
 
 export function toolRunIcon(run: RuntimeToolRun) {
-  if (run.status === 'pending_approval') return run.userInput ? <MessageCircleQuestion size={14} /> : <ShieldAlert size={14} />;
-  if (run.status === 'running') return <Clock3 size={14} />;
-  if (run.status === 'error' || run.status === 'cancelled') return <XCircle size={14} />;
-  if (run.status === 'rejected') return <AlertCircle size={14} />;
+  // The leading icon identifies the activity, independently of its outcome.
+  if (run.userInput) return <MessageCircleQuestion size={14} />;
   if (run.plugin) return <ToolRunPluginIcon plugin={run.plugin} />;
   const kind = toolRunGroupKind(run);
   if (kind !== 'generic') return toolRunKindIcon(kind);
   if (run.name.includes('search')) return <Search size={14} />;
   if (run.name.includes('file') || run.name.includes('workspace')) return <FileText size={14} />;
-  if (run.status === 'success') return <CheckCircle2 size={14} />;
   return <Wrench size={14} />;
 }
 
@@ -95,6 +78,7 @@ function ToolRunPluginIcon({ plugin }: { plugin: RuntimePluginReference }) {
   const installed = usePluginReferenceCatalog().find((item) => item.id === plugin.id);
   return (
     <PluginIcon
+      className="chat-work-history__plugin-icon"
       name={installed?.icon ?? plugin.icon}
       iconImage={installed?.iconImage}
       pluginId={plugin.id}
@@ -108,5 +92,5 @@ export function toolRunKindIcon(kind: ToolRunGroupKind) {
   if (kind === 'search') return <Search size={14} />;
   if (kind === 'shell') return <SquareTerminal size={14} />;
   if (kind === 'fileMutation') return <EditIcon size={14} />;
-  return <CheckCircle2 size={14} />;
+  return <Wrench size={14} />;
 }

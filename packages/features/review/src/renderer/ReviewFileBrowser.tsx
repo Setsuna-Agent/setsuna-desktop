@@ -1,30 +1,19 @@
 import { Virtualizer } from '@pierre/diffs/react';
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useCallback,
-  type ComponentProps,
-} from 'react';
-import type { DesktopDiffSummary } from '../contracts/index.js';
+import { useMemo, type ComponentProps } from 'react';
+import type { DesktopDiffFile, DesktopDiffSummary } from '../contracts/index.js';
 import { ReviewSummarySection } from './ReviewDiffView.js';
 import { ReviewFileNavigator } from './ReviewFileNavigator.js';
-import { resolveReviewFile } from './review-findings.js';
 
-const reviewFilePathCollator = new Intl.Collator('en', {
-  numeric: true,
-  sensitivity: 'base',
-});
 const SINGLE_FILE_EXPANSION_REQUEST = { expanded: true, version: 0 } as const;
 
 type ReviewFileBrowserProps = Omit<
   ComponentProps<typeof ReviewSummarySection>,
   'fileExpansionRequest' | 'summary'
 > & {
-  selectionKey: string;
-  summary: DesktopDiffSummary;
+  files: DesktopDiffFile[];
+  selectedFile: DesktopDiffFile | null;
   navigatorVisible: boolean;
+  onSelectFile(filePath: string): void;
 };
 
 /**
@@ -32,52 +21,12 @@ type ReviewFileBrowserProps = Omit<
  * owns filter, layout and width state so directory interactions cannot rerender the heavy diff.
  */
 export function ReviewFileBrowser({
-  focusRequest,
+  files,
   navigatorVisible,
-  selectionKey,
-  summary,
+  selectedFile,
+  onSelectFile,
   ...summarySectionProps
 }: ReviewFileBrowserProps) {
-  const [selectedPathByKey, setSelectedPathByKey] = useState<Record<string, string>>({});
-  const handledFocusKeyRef = useRef<string | null>(null);
-  const files = useMemo(
-    () => [...summary.files].sort((left, right) => (
-      reviewFilePathCollator.compare(left.path, right.path)
-    )),
-    [summary.files],
-  );
-  const focusedFile = useMemo(() => (
-    focusRequest?.path ? resolveReviewFile(summary, focusRequest.path) : null
-  ), [focusRequest?.path, summary]);
-  const focusKey = focusedFile && focusRequest
-    ? JSON.stringify([selectionKey, focusedFile.path, focusRequest.version])
-    : null;
-  const pendingFocusedFile = focusKey && handledFocusKeyRef.current !== focusKey
-    ? focusedFile
-    : null;
-  const savedFile = files.find((file) => file.path === selectedPathByKey[selectionKey]);
-  const selectedFile = pendingFocusedFile ?? savedFile ?? files[0] ?? null;
-
-  useEffect(() => {
-    if (!focusKey || !focusedFile || handledFocusKeyRef.current === focusKey) return;
-    handledFocusKeyRef.current = focusKey;
-    setSelectedPathByKey((current) => (
-      current[selectionKey] === focusedFile.path
-        ? current
-        : { ...current, [selectionKey]: focusedFile.path }
-    ));
-  }, [focusKey, focusedFile, selectionKey]);
-
-  const selectFile = useCallback((filePath: string) => {
-    // Once the user chooses a file, a still-mounted historical focus request
-    // must not pull the selection back on the next unrelated parent render.
-    handledFocusKeyRef.current = focusKey;
-    setSelectedPathByKey((current) => (
-      current[selectionKey] === filePath
-        ? current
-        : { ...current, [selectionKey]: filePath }
-    ));
-  }, [focusKey, selectionKey]);
   const selectedSummary = useMemo<DesktopDiffSummary | null>(() => (
     selectedFile
       ? {
@@ -87,7 +36,6 @@ export function ReviewFileBrowser({
         }
       : null
   ), [selectedFile]);
-  const selectedFocusRequest = focusedFile === selectedFile ? focusRequest : null;
 
   return (
     <div className="desktop-review-file-browser">
@@ -98,7 +46,6 @@ export function ReviewFileBrowser({
         <ReviewSummarySection
           {...summarySectionProps}
           fileExpansionRequest={SINGLE_FILE_EXPANSION_REQUEST}
-          focusRequest={selectedFocusRequest}
           summary={selectedSummary}
         />
       </Virtualizer>
@@ -106,7 +53,7 @@ export function ReviewFileBrowser({
         visible={navigatorVisible}
         files={files}
         selectedPath={selectedFile?.path ?? null}
-        onSelect={selectFile}
+        onSelect={onSelectFile}
       />
     </div>
   );

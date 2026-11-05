@@ -13,12 +13,18 @@ export function canPreviewReviewTextFile(file: DesktopDiffFile, context: ReviewP
     && !(file.action === 'Deleted' && context.source === 'latest'));
 }
 
-export function ReviewFileViewControls({ mode, onChange }: { mode: ReviewFileViewMode; onChange(mode: ReviewFileViewMode): void }) {
+export function ReviewFileViewControls({ mode, onChange }: {
+  mode: ReviewFileViewMode;
+  onChange(mode: ReviewFileViewMode): void;
+}) {
   const { translate: t } = useReviewRendererHost();
-  return <div className="sd-markdown-view-toggle" role="group" aria-label={t('feature.review.workspace.file.view')}>
-    {(['source', 'preview'] as const).map((value) => <Button key={value} variant="ghost" type="button" className="sd-markdown-view-option"
-      aria-pressed={mode === value} onClick={() => onChange(value)}>{t(`feature.review.workspace.file.view.${value}`)}</Button>)}
-  </div>;
+  const nextMode = mode === 'source' ? 'preview' : 'source';
+  return (
+    <div className="sd-panel-toolbar__group">
+      <Button className="sd-panel-toolbar__text-button" variant="ghost" size="small" type="button"
+        onClick={() => onChange(nextMode)}>{t(`feature.review.workspace.file.view.${nextMode}`)}</Button>
+    </div>
+  );
 }
 
 export function ReviewFileDocument({ file, filePath, pathContext, onOpenFile }: {

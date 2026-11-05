@@ -63,6 +63,7 @@ export type BrowserWindowOpenMode = 'tab' | 'current-tab';
 export type BrowserContextMenuRequest = Readonly<{
   id: string;
   webContentsId: number;
+  source: 'page' | 'reload';
   x: number;
   y: number;
   items: readonly Readonly<{ key: string; type?: 'divider'; label?: string; disabled?: boolean; shortcut?: string }>[];

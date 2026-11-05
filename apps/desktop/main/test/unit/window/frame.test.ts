@@ -1,8 +1,38 @@
+import { EventEmitter } from 'node:events';
 import type { BrowserWindow } from 'electron';
 import { describe, expect, it, vi } from 'vitest';
-import { registerWindowsTitlebarDoubleClick, toggleWindowMaximized } from '../../../src/window/frame.js';
+import { observeWindowControlsState, registerWindowsTitlebarDoubleClick, toggleWindowMaximized } from '../../../src/window/frame.js';
 
 describe('window frame interactions', () => {
+  it('publishes zoom and fullscreen independently and releases each window subscription', () => {
+    let maximized = false;
+    let fullScreen = false;
+    let destroyed = false;
+    const send = vi.fn();
+    const window = Object.assign(new EventEmitter(), {
+      isMaximized: () => maximized, isFullScreen: () => fullScreen, isDestroyed: () => destroyed,
+      webContents: { send, isDestroyed: () => false },
+    }) as unknown as BrowserWindow;
+    const stop = observeWindowControlsState(window);
+    maximized = true;
+    window.emit('maximize');
+    expect(send).toHaveBeenLastCalledWith('window-control:state-change', { maximized: true, fullScreen: false });
+    maximized = false;
+    fullScreen = true;
+    window.emit('enter-full-screen');
+    expect(send).toHaveBeenLastCalledWith('window-control:state-change', { maximized: false, fullScreen: true });
+    fullScreen = false;
+    window.emit('leave-full-screen');
+    expect(send).toHaveBeenLastCalledWith('window-control:state-change', { maximized: false, fullScreen: false });
+    destroyed = true;
+    window.emit('maximize');
+    expect(send).toHaveBeenCalledTimes(3);
+    stop();
+    for (const event of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
+      expect(window.listenerCount(event)).toBe(0);
+    }
+  });
+
   it('toggles between maximized and restored states', () => {
     let maximized = false;
     const window = {

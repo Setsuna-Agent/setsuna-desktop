@@ -16,7 +16,7 @@
 }
 
 /* Keep the popup's origin visible while focus moves into its search or menu. */
-.sd-picker-trigger.sd-button:is([data-state='open'], [aria-expanded='true']) {
+.sd-picker-trigger.sd-button:is([data-overlay-open], [aria-expanded='true']) {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
 }

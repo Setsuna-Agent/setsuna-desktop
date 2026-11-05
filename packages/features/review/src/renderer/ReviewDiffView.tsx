@@ -58,23 +58,18 @@ const reviewFilePathCollator = new Intl.Collator('en', {
 });
 const REVIEW_FOCUS_HIGHLIGHT_MS = 1_400;
 
-type ReviewFileHeaderControls = {
-  leading?: ReactNode;
-  actions?: ReactNode;
-};
-
 export function ReviewSummarySection({
   diffLayout,
   fileView = 'source',
   emptyText,
   fileExpansionRequest,
-  fileHeaderControls,
   findings,
   focusRequest,
   lineWrap,
   pathContext,
   singleFileViewport = false,
   showFileActions = true,
+  showFileHeaders = true,
   summary: sourceSummary,
   workspaceApp,
   workspaceApps,
@@ -89,13 +84,13 @@ export function ReviewSummarySection({
   fileView?: ReviewFileViewMode;
   emptyText: { title: string; description: string };
   fileExpansionRequest: ReviewFileExpansionRequest;
-  fileHeaderControls?: ReviewFileHeaderControls;
   findings: RuntimeReviewFinding[];
   focusRequest?: DesktopReviewFocusRequest | null;
   lineWrap: boolean;
   pathContext: ReviewPathContext;
   singleFileViewport?: boolean;
   showFileActions?: boolean;
+  showFileHeaders?: boolean;
   summary: DesktopDiffSummary | null;
   workspaceApp?: DesktopWorkspaceApp | null;
   workspaceApps: DesktopWorkspaceApp[];
@@ -186,7 +181,6 @@ export function ReviewSummarySection({
               diffLayout={diffLayout}
               fileView={fileView}
               fileExpansionRequest={fileExpansionRequest}
-              fileHeaderControls={fileHeaderControls}
               file={file}
               findingTargets={findingTargets}
               fileTargetRef={getTargetRef(
@@ -201,6 +195,7 @@ export function ReviewSummarySection({
               requestPreview={requestPreview}
               scrollBody={scrollFileBody}
               showFileActions={showFileActions}
+              showHeader={showFileHeaders}
               workspaceApp={workspaceApp}
               workspaceApps={workspaceApps}
               onAddFileToConversation={onAddFileToConversation}
@@ -230,7 +225,6 @@ const ReviewFileCard = memo(function ReviewFileCard({
   diffLayout,
   fileView,
   fileExpansionRequest,
-  fileHeaderControls,
   file,
   findingTargets,
   fileTargetRef,
@@ -242,6 +236,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
   requestPreview,
   scrollBody,
   showFileActions,
+  showHeader,
   workspaceApp,
   workspaceApps,
   onAddFileToConversation,
@@ -255,7 +250,6 @@ const ReviewFileCard = memo(function ReviewFileCard({
   diffLayout: DesktopReviewDiffLayout;
   fileView: ReviewFileViewMode;
   fileExpansionRequest: ReviewFileExpansionRequest;
-  fileHeaderControls?: ReviewFileHeaderControls;
   file: DesktopDiffFile;
   findingTargets: ReviewFindingTarget[];
   fileTargetRef: RefCallback<HTMLElement>;
@@ -269,6 +263,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
   requestPreview: RequestReviewFilePreview;
   scrollBody: boolean;
   showFileActions: boolean;
+  showHeader: boolean;
   workspaceApp?: DesktopWorkspaceApp | null;
   workspaceApps: DesktopWorkspaceApp[];
   onAddFileToConversation: (filePath: string) => void;
@@ -407,19 +402,20 @@ const ReviewFileCard = memo(function ReviewFileCard({
         data-review-file-path={normalizeReviewFocusPath(file.path) ?? file.path}
         ref={fileTargetRef}
       >
-        <header
-          className={'desktop-review-file-card__summary' + (fileHeaderControls ? ' desktop-review-file-card__summary--toolbar' : '')}
+        {showHeader ? <header
+          className="desktop-review-file-card__summary"
+          data-context-menu-open={lineContextMenu?.triggerId === 'file-header' ? '' : undefined}
           onContextMenu={(event) => {
             if (!workspaceFilePath) return;
             event.preventDefault();
             setLineContextMenu({
               filePath: workspaceFilePath,
+              triggerId: 'file-header',
               x: event.clientX,
               y: event.clientY,
             });
           }}
         >
-          {fileHeaderControls?.leading}
           <Button variant="ghost"
             className="desktop-review-file-card__path-main"
             type="button"
@@ -475,8 +471,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
               </IconButton>
             </ActionTooltip>
           </div> : null}
-          {fileHeaderControls?.actions ? <div className="desktop-review-file-card__view-controls">{fileHeaderControls.actions}</div> : null}
-        </header>
+        </header> : null}
         <ReviewFileContent scrollable={scrollBody}>
           {preview.loading || preview.error ? (
             <div className="desktop-review-document-status" role={preview.error ? 'alert' : 'status'}>

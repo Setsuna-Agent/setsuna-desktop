@@ -1,4 +1,5 @@
 import { ipcMain, type BrowserWindow, type Rectangle } from 'electron';
+import type { DiagnosticReporter } from '@setsuna-desktop/contracts';
 import { desktopWindows } from './registry.js';
 import { loadDesktopRenderer } from './renderer-loading.js';
 
@@ -6,6 +7,7 @@ export function registerThreadWindowIpc(options: {
   appRoot: string;
   devServerUrl?: string;
   canRecover?: () => boolean;
+  onDiagnostic?: DiagnosticReporter;
   createWindow(bounds: Rectangle): BrowserWindow;
   validateThread(threadId: string): Promise<unknown>;
 }): void {

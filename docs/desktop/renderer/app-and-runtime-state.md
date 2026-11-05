@@ -103,6 +103,8 @@ Updater 不进入 App controller。Renderer composition 注入宿主 capability�
 
 Layout 只组合已经定义清楚的状态和 callback，不在 render 中发起 runtime 请求。
 
+`useDesktopWindowState` 异步读取并订阅当前窗口的原生最大化、全屏状态。`ShellFrame` 投影全屏标记，macOS 标题栏随真实全屏状态收拢原生窗口按钮的占位；退出全屏时恢复，导航按钮与折叠标题栏的整体宽度一起更新。相关几何 token 在根元素上计算，图片预览等 portal 也沿用同一占位。
+
 独立应用首次打开才挂载。`AppRouteSurface` 此后保留插件路由 owner，`PluginRouteAdapter` 和 `usePluginPageSessions` 只保存访问过的页面及各自最后可见的上下文；切到聊天或另一应用时隐藏原 DOM，保留草稿、路由和浏览器实例。后台页面不继承新聊天的上下文，网页应用通过 `visible` 停用前台浏览器控制；全局数据的身份只绑定全局 scope，重新进入时更新动作上下文不会清空草稿。右键「刷新」只重载所选应用：React/HTML 与声明式页面重新初始化，网站型应用调用 Browser 的普通刷新并保留当前 URL。未访问应用不预加载；页面贡献移除或失去信任时立即卸载，取消未完成的页面加载与桥接请求，并释放文档、权限及本机 tab 注册。页面保留仅在当前窗口有效，不进入启动等待或持久化恢复。
 
 `AppReadyLayout` 通过 `sidebar/usePinnedThreads.ts` 向顶部菜单和 `AppSidebarSurface` 提供共享置顶状态，并保存本机置顶偏好（`setsuna-pinned-threads-v1`）。会话行的图钉将会话移入项目分组上方的 `PinnedThreadSection`，默认按最近置顶排序；取消置顶后按原排序回到项目或全局列表。置顶只改变侧栏投影，保留原始 `projectId`、项目会话总数和导航/归档使用的完整分组。已归档、删除或不在当前快照中的会话不会出现在置顶列表；加载期间不清除保存的 ID。

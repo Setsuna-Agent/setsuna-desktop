@@ -48,7 +48,7 @@
   text-align: left;
 }
 
-.chat-review-summary-card__finding.sd-button:is(:hover, :focus-visible):not(:disabled) {
+.chat-review-summary-card__finding:is(:hover, :focus-visible, [data-overlay-open]):not(:disabled) {
   background: var(--desktop-agent-control-hover-bg);
 }
 

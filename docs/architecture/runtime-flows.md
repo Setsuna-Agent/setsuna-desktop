@@ -36,6 +36,8 @@
 
 外围任务异常或超时只影响所属功能，多个任务不能把等待时间串行累加到 Logo loading；后台任务必须有明确的生命周期和取消/迟到清理。修改启动链路时，用可控的慢任务、永不返回和失败场景验证核心 provider 仍可用，并对比相关就绪阶段耗时。必要的安全隔离和核心数据一致性继续在关键路径完成，外围功能不得借性能优化扩大权限或跳过数据校验。
 
+Main 在窗口创建前建立 Diagnostics Feature 的进程级 writer 并注册退出/无响应监听，构造不访问磁盘。事件发生后的写入排队异步执行，optional Main Feature 只注册日志目录 IPC，renderer/runtime 就绪与自动恢复不等待磁盘；`desktop-diagnostics.test.ts` 对比未启用与启用诊断的 `loadDesktopRenderer` / `desktop.whenReady()` 完成耗时，并覆盖写入挂起和失败。正常退出时仅在已有服务关闭流程中限时排空日志，不增加启动门槛。各进程生命周期只依赖共享 `DiagnosticReporter`，文件与设置 owner 见 [Diagnostics](../features/diagnostics.md)。
+
 Browser Feature 只把 controller、控制 server、权限边界和 IPC 接入核心激活，扩展恢复独立在后台进行。`packages/features/browser/test/integration/extension-startup.electron.test.ts` 使用真实 Electron、隔离 profile 和无窗口场景：人为挂起原生扩展加载时，Browser provider 的健康检查和认证命令已经可用；两个启动脚本失败及一个卡住的 worker 均不阻止健康 worker 启动，释放 composition 会取消等待并清理迟到加载。这个案例落实全局约束，后续功能同样必须验证自己的启动边界。
 
 Notifications Feature 激活只注册认证 route、工具、实时完成事件订阅和点击回调，不读取磁盘或调用系统通知 API。Windows 开发通知的名称和图标登记延迟到首次实际发送，慢准备、失败与重试不进入核心就绪条件，关闭 Feature 会取消注册并拒绝迟到发送。开发任务栏的开始菜单入口在首帧揭示后后台准备，通知发送共享准备结果，应用退出取消未完成写入；慢目录访问或失败不参与 renderer/runtime 就绪等待。原生通知只在后台任务完成或显式工具执行时创建，失败不影响主界面；生命周期测试对比空 host 与启用通知的激活阶段，并验证启动时没有原生通知或准备调用。macOS 开发 supervisor 在启动 Electron 后才后台准备通知应用，慢准备与失败不阻止启动和计划重启，退出时取消外部命令并清理迟到结果；有效缓存直接复用，详见 [开发启动链路](../development/build-and-release.md#scriptsstart-electron-devts)。

@@ -31,6 +31,7 @@ import {
   pendingApprovalRun,
   toolRunGroupKind,
   toolRunGroupingKey,
+  toolRunIdentity,
   toolRunGroupStatus,
 } from './runtimeToolRunGrouping.js';
 import { shellCommand } from './RuntimeShellToolRun.js';
@@ -74,9 +75,7 @@ export {
   shellMetadataLine,
   shellOutputSegments,
   shellResultPreviewForDisplay,
-  shellStatusLabel,
   ShellTerminalResult,
-  shellTerminalStatus,
 } from './RuntimeShellToolRun.js';
 export {
   statusTextFromStatus,
@@ -220,7 +219,7 @@ export function mixedToolRunGroupAggregateTitle(groups: ToolRunGroup[], t: Trans
     const runs = toolRunGroupRuns(group);
     const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
     const webContent = kind === 'generic' && webContentGroupSummary(runs, t);
-    const key = webContent ? 'webContent' : kind === 'generic' ? `generic:${runs[0]?.name ?? 'tool'}` : kind;
+    const key = webContent ? 'webContent' : kind === 'generic' && runs[0] ? `generic:${toolRunIdentity(runs[0])}` : kind;
     const bucketKind = webContent ? 'webContent' : kind;
     let bucket = bucketByKey.get(key);
     if (!bucket) {
@@ -326,7 +325,6 @@ export function toolRunGroupSummary(
     ? toolRunDisplayName(group.runs[0], t)
     : t('toolRun.tool');
   if (status === 'running' || status === 'pending_approval') return { title: t('toolRun.generic.running', { name }) };
-  if (status === 'error') return { title: t('toolRun.generic.failed', { name }) };
   if (status === 'cancelled') return { title: t('toolRun.generic.cancelled', { name }) };
   if (status === 'rejected') return { title: t('toolRun.generic.rejected', { name }) };
   return { title: t('toolRun.generic.used', { count: group.runs.length, name }) };
@@ -345,7 +343,6 @@ export function inspectionGroupSummary(runs: RuntimeToolRun[], t: Translate = de
       target: activeTarget,
     };
   }
-  if (status === 'error') return { title: t('toolRun.inspection.failed'), target: activeTarget };
   if (status === 'cancelled') return { title: t('toolRun.inspection.cancelled'), target: activeTarget };
   if (status === 'rejected') return { title: t('toolRun.inspection.rejected'), target: activeTarget };
   const parts = inspectionSummaryParts(inspectionEntries(runs), t);
@@ -358,7 +355,6 @@ export function searchGroupSummary(runs: RuntimeToolRun[], t: Translate = defaul
   const active = activeToolRunOrLast(runs);
   const query = active ? shellSearchForRun(active)?.target ?? toolRunTarget(active) : '';
   if (status === 'running' || status === 'pending_approval') return { title: t(active && isPreparingToolRun(active) ? 'toolRun.search.preparing' : 'toolRun.search.running'), target: query };
-  if (status === 'error') return { title: t('toolRun.search.failed'), target: query };
   if (status === 'cancelled') return { title: t('toolRun.search.cancelled'), target: query };
   if (status === 'rejected') return { title: t('toolRun.search.rejected'), target: query };
   if (runs.length > 1) return { title: t('toolRun.search.completedCount', { count: runs.length }) };
@@ -371,7 +367,6 @@ export function webContentGroupSummary(runs: RuntimeToolRun[], t: Translate = de
   const active = activeToolRunOrLast(runs);
   const target = active ? toolRunTarget(active) : '';
   if (status === 'running' || status === 'pending_approval') return { title: t(active && isPreparingToolRun(active) ? 'toolRun.web.preparing' : 'toolRun.web.running'), target };
-  if (status === 'error') return { title: t('toolRun.web.failed'), target };
   if (status === 'cancelled') return { title: t('toolRun.web.cancelled'), target };
   if (status === 'rejected') return { title: t('toolRun.web.rejected'), target };
   if (runs.length > 1) return { title: t('toolRun.web.completedCount', { count: runs.length }) };
@@ -484,7 +479,7 @@ export function fileOperationVerb(run: RuntimeToolRun, t: Translate = defaultTra
       ?? t('toolRun.file.awaitingWrite');
   }
   if (run.status === 'running') return t(isPreparingToolRun(run) ? 'toolRun.file.generatingChanges' : 'toolRun.file.writing');
-  if (run.status === 'error') return t(created ? 'toolRun.file.createFailed' : deleted ? 'toolRun.file.deleteFailed' : 'toolRun.file.editFailed');
+  if (run.status === 'error') return fileOperationActionLabel(action, t);
   if (run.status === 'cancelled') return t('toolRun.file.cancelled');
   if (run.status === 'rejected') return t('toolRun.file.rejectedWrite');
   if (created) return t('toolRun.file.generated');
@@ -511,7 +506,7 @@ export function fileOperationGroupSummary(runs: RuntimeToolRun[], t: Translate =
   if (status === 'running' || status === 'pending_approval') {
     return { title: active ? fileOperationVerb(active, t) : t('toolRun.file.processing'), target: fallbackTarget, changeCounts };
   }
-  if (status === 'error') return { title: t('toolRun.file.failed'), target: fallbackTarget, changeCounts };
+  if (status === 'error') return { title: t('toolRun.action.writeFiles'), target: fallbackTarget, changeCounts };
   if (status === 'cancelled') return { title: t('toolRun.file.cancelled'), target: fallbackTarget, changeCounts };
   if (status === 'rejected') return { title: t('toolRun.file.rejected'), target: fallbackTarget, changeCounts };
 
@@ -799,7 +794,6 @@ export function searchRunSummary(
       target,
     };
   }
-  if (run.status === 'error') return { title: t('toolRun.search.scope.failed', { scope }), target };
   if (run.status === 'cancelled') return { title: t('toolRun.search.scope.cancelled', { scope }), target };
   if (run.status === 'rejected') return { title: t('toolRun.search.scope.rejected', { scope }), target };
   return { title: t('toolRun.search.scope.completed', { scope }), target };
@@ -812,7 +806,6 @@ export function runningAware(run: RuntimeToolRun, running: string, complete: str
       ?? t('toolRun.aware.awaiting', { action });
   }
   if (run.status === 'running') return t(isPreparingToolRun(run) ? 'toolRun.aware.preparing' : 'toolRun.aware.running', { action });
-  if (run.status === 'error') return t('toolRun.aware.failed', { action });
   if (run.status === 'cancelled') return t('toolRun.aware.cancelled', { action });
   if (run.status === 'rejected') return t('toolRun.aware.rejected', { action });
   return complete;

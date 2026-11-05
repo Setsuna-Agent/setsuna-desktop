@@ -1,4 +1,5 @@
 import type { BrowserWindow } from 'electron';
+import type { DesktopWindowControlsState } from '@setsuna-desktop/contracts';
 
 const windowsSystemCommand = 0x0112;
 const windowsSystemCommandMask = 0xfff0;
@@ -60,6 +61,29 @@ export function toggleWindowMaximized(window: MaximizableWindow): boolean {
     window.maximize();
   }
   return window.isMaximized();
+}
+
+export function readWindowControlsState(window: Pick<BrowserWindow, 'isMaximized' | 'isFullScreen'>): DesktopWindowControlsState {
+  return { maximized: window.isMaximized(), fullScreen: window.isFullScreen() };
+}
+
+/** Native fullscreen and zoom have different titlebar geometry, especially on macOS. */
+export function observeWindowControlsState(window: BrowserWindow): () => void {
+  const publish = () => {
+    if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+      window.webContents.send('window-control:state-change', readWindowControlsState(window));
+    }
+  };
+  window.on('maximize', publish);
+  window.on('unmaximize', publish);
+  window.on('enter-full-screen', publish);
+  window.on('leave-full-screen', publish);
+  return () => {
+    window.off('maximize', publish);
+    window.off('unmaximize', publish);
+    window.off('enter-full-screen', publish);
+    window.off('leave-full-screen', publish);
+  };
 }
 
 function readWindowsMessageParameter(parameter: Buffer): number | null {

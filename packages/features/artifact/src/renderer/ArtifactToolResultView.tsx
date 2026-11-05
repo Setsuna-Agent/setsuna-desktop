@@ -3,7 +3,7 @@ import { Button, Dropdown, ToastNotice, type MenuProps } from '@setsuna-desktop/
 import { ChevronDown, ExternalLink, FolderOpen, Globe2 } from 'lucide-react';
 import { useState, type DragEvent } from 'react';
 import type { ArtifactRendererHost, RuntimeArtifact } from '../contracts/index.js';
-import { openArtifactInBrowser, openArtifactWithDefaultApp } from './artifact-actions.js';
+import { openArtifactInBrowser, runArtifactNativeFileAction } from './artifact-actions.js';
 import { artifactTypeLabel, isMarkdownArtifact } from './artifact-model.js';
 import { ArtifactFileIcon } from './ArtifactFileIcon.js';
 import { useArtifactNavigation } from './context.js';
@@ -35,6 +35,11 @@ export function ArtifactToolResultView({
       icon: <FolderOpen size={14} />,
       label: translate('feature.artifact.showInFiles'),
     }] : []),
+    ...(host.revealWorkspaceFile ? [{
+      key: 'system-folder',
+      icon: <FolderOpen size={14} />,
+      label: translate(host.platform === 'darwin' ? 'feature.artifact.openInFinder' : 'feature.artifact.openInFolder'),
+    }] : []),
     ...(canOpenInBrowser ? [{
       key: 'built-in-browser',
       icon: <Globe2 size={14} />,
@@ -60,16 +65,16 @@ export function ArtifactToolResultView({
     }
   };
 
-  const handleOpenWithDefaultApp = async () => {
+  const handleNativeFileAction = async (action: ArtifactRendererHost['openWorkspaceFile']) => {
     if (opening) return;
-    if (!host.openWorkspaceFile) {
+    if (!action) {
       setError(translate('feature.artifact.localUnsupported'));
       return;
     }
     setOpening(true);
     setError(null);
     try {
-      const openError = await openArtifactWithDefaultApp(payload, host.openWorkspaceFile);
+      const openError = await runArtifactNativeFileAction(payload, action);
       setError(openError);
     } catch (openError) {
       setError(openError instanceof Error ? openError.message : translate('feature.artifact.openFailed'));
@@ -102,7 +107,7 @@ export function ArtifactToolResultView({
         onDoubleClick={(event) => {
           // The open-mode button and its portalled menu keep their own actions.
           if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('button, [role="menuitem"]'))) return;
-          void handleOpenWithDefaultApp();
+          void handleNativeFileAction(host.openWorkspaceFile);
         }}>
         <div className="artifact-card__body">
           <span className="artifact-card__icon"><ArtifactFileIcon path={payload.path} /></span>
@@ -118,8 +123,9 @@ export function ArtifactToolResultView({
               items: openMenuItems,
               onClick: ({ key }) => {
                 if (key === 'show-in-files') void handleShowInFiles();
+                if (key === 'system-folder') void handleNativeFileAction(host.revealWorkspaceFile);
                 if (key === 'built-in-browser') void handleOpenInBrowser();
-                if (key === 'system-default') void handleOpenWithDefaultApp();
+                if (key === 'system-default') void handleNativeFileAction(host.openWorkspaceFile);
               },
             }}
           >

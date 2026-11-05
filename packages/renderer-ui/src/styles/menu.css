@@ -38,7 +38,7 @@
 /* The row itself highlights immediately, including when focus enters a submenu.
    Only the fill changes; text and icons keep their semantic colors (e.g. danger). */
 .sd-menu-surface :is([role='menuitem'], [role='option'], .sd-picker__item):not(:disabled, [data-disabled]):is(
-  :hover:not(.sd-menu__item, .sd-select-menu__option, [aria-selected]), :focus-visible, [data-highlighted], [data-state='open'], [aria-selected='true']
+  :hover:not(.sd-menu__item, .sd-select-menu__option, [aria-selected]), :focus-visible, [data-highlighted], [data-state='open'], [data-overlay-open], [aria-selected='true']
 ) {
   background: var(--app-menu-highlight-bg);
   outline: none;

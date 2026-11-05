@@ -57,6 +57,7 @@ describe('workspace file link opening', () => {
     expect(onOpenWorkspaceFileContextMenu).toHaveBeenCalledWith({
       filePath: 'src/main.ts',
       line: 18,
+      triggerId: expect.any(String),
       x: 120,
       y: 240,
     });

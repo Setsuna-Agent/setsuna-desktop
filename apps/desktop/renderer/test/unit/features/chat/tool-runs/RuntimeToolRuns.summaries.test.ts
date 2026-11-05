@@ -6,7 +6,7 @@ import { shellCountSummary, shellGroupSummary } from '../../../../../src/feature
 import { toolRun, fileRun, preparingFileRun, renderedText, renderedTextFromHtml, firstToolRunSummaryHtml, renderedHtml } from './RuntimeToolRuns.support.js';
 
 describe('RuntimeToolRuns compact summaries', () => {
-  it('counts command outcomes separately after a rejected command is retried successfully', () => {
+  it('counts finished commands together while keeping approval, active and cancelled work separate', () => {
     const runs = [
       toolRun('denied', 'exec_command', { cmd: 'echo denied' }, 'rejected'),
       toolRun('retry', 'exec_command', { cmd: 'echo retry' }),
@@ -24,7 +24,7 @@ describe('RuntimeToolRuns compact summaries', () => {
       toolRun('active', 'exec_command', { cmd: 'echo active' }, 'running'),
       toolRun('pending', 'exec_command', { cmd: 'echo pending' }, 'pending_approval'),
     );
-    expect(shellCountSummary(runs)).toBe(`${expected}，已取消 1 条命令，运行失败 1 条命令，正在运行 1 条命令，等待授权 1 条命令`);
+    expect(shellCountSummary(runs)).toBe('已拒绝 1 条命令，已运行 2 条命令，已取消 1 条命令，正在运行 1 条命令，等待授权 1 条命令');
     expect(shellGroupSummary(runs).title).toContain('echo pending');
   });
 
@@ -75,7 +75,7 @@ describe('RuntimeToolRuns compact summaries', () => {
     const html = renderedHtml([run]);
     expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('已在 src 中搜索“absent”');
     expect(renderedTextFromHtml(html)).toContain('未找到匹配结果。');
-    expect(renderedTextFromHtml(html)).toContain('成功 · 退出码 1');
+    expect(renderedTextFromHtml(html)).toContain('退出码 1');
   });
 
   it('summarizes command searches while retaining the command and terminal output', () => {

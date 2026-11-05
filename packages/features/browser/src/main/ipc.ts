@@ -163,7 +163,7 @@ export function registerBrowserIpc(
       guest,
       interfaceLanguage(),
       normalizeReloadShortcutBindings(input?.shortcutBindings),
-    ), position);
+    ), position, 'reload');
   }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.runContextMenuAction, (event, input) => scope.runOperation(() => {
     if (!isDesktopRendererSender(event.sender, windows)) return false;

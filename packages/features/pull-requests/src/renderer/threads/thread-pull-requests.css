@@ -26,7 +26,7 @@
 .pr-thread-icon--closed { --pr-thread-status: var(--app-danger); }
 .pr-thread-icon__dot { position: absolute; right: -2px; bottom: -1px; width: 5px; height: 5px; border-radius: 50%; background: var(--pr-thread-status); box-shadow: 0 0 0 1.5px var(--app-surface); }
 .pr-thread-badge.sd-button { flex-shrink: 0; width: 24px; min-width: 24px; height: 24px; padding: 4px; border-radius: var(--app-radius-sm); }
-.pr-thread-badge.sd-button[data-state='open'] { background: var(--desktop-agent-control-hover-bg); }
+.pr-thread-badge.sd-button[data-overlay-open] { background: var(--desktop-agent-control-hover-bg); }
 .pr-workspace-detail { display: flex; flex: 1; min-width: 0; min-height: 0; height: 100%; overflow: hidden; container-type: inline-size; }
 .pr-workspace-detail > .pr-detail-pane { flex: 1; }
 .pr-workspace-detail .pr-detail__topline { -webkit-app-region: no-drag; }

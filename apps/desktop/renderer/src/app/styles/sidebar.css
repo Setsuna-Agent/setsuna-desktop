@@ -351,18 +351,14 @@
 }
 
 /* 菜单接管鼠标后，用打开状态保留来源行的高亮和操作区。 */
-.desktop-agent-session:hover,
-.desktop-agent-session.is-menu-open,
-.desktop-agent-session:has(:focus-visible) {
+.desktop-agent-session:is(:hover, .is-menu-open, :has([data-overlay-open]), :has(:focus-visible)) {
   color: var(--desktop-agent-sidebar-active-text);
   border-color: transparent;
   background: var(--desktop-agent-sidebar-hover-bg);
 }
 
 /* 经过位移的操作槽会创建层叠上下文；提升整行层级，避免其提示框被后续会话行遮盖。 */
-.desktop-agent-session:hover,
-.desktop-agent-session.is-menu-open,
-.desktop-agent-session:has(:focus-visible) {
+.desktop-agent-session:is(:hover, .is-menu-open, :has([data-overlay-open]), :has(:focus-visible)) {
   z-index: 1;
 }
 
@@ -405,8 +401,7 @@
 .desktop-agent-session:has(.desktop-agent-session__pr) .desktop-agent-session__navigation-hint { right: calc(var(--desktop-agent-row-action-inset) + 24px); }
 .desktop-agent-session:has(.desktop-agent-session__pr) .desktop-agent-session__select { padding-right: 28px; }
 .desktop-agent-session.is-running:has(.desktop-agent-session__pr) .desktop-agent-session__select { padding-right: calc(var(--desktop-agent-row-action-size) + 32px); }
-.desktop-agent-session:has(.desktop-agent-session__pr):is(:hover, .is-menu-open, :has(:focus-visible), :has([data-state='open'])) .desktop-agent-session__select { padding-right: calc(var(--desktop-agent-row-action-size) * 2 + 32px); }
-.desktop-agent-session:has(.desktop-agent-session__pr[data-state='open']) { background: var(--desktop-agent-sidebar-hover-bg); }
+.desktop-agent-session:has(.desktop-agent-session__pr):is(:hover, .is-menu-open, :has(:focus-visible), :has([data-overlay-open])) .desktop-agent-session__select { padding-right: calc(var(--desktop-agent-row-action-size) * 2 + 32px); }
 
 .desktop-agent-session[data-dragging]:not([data-reordering]) {
   opacity: 0.45;
@@ -487,22 +482,16 @@
   padding-right: calc(var(--desktop-agent-row-action-size) + 8px);
 }
 
-.desktop-agent-session:hover .desktop-agent-session__select,
-.desktop-agent-session.is-menu-open .desktop-agent-session__select,
-.desktop-agent-session:has(:focus-visible) .desktop-agent-session__select {
+.desktop-agent-session:is(:hover, .is-menu-open, :has([data-overlay-open]), :has(:focus-visible)) .desktop-agent-session__select {
   padding-right: calc(var(--desktop-agent-row-action-size) * 2 + 8px);
 }
 
-.desktop-agent-session:hover .desktop-agent-session__pin-button,
-.desktop-agent-session.is-menu-open .desktop-agent-session__pin-button,
-.desktop-agent-session:has(:focus-visible) .desktop-agent-session__pin-button {
+.desktop-agent-session:is(:hover, .is-menu-open, :has([data-overlay-open]), :has(:focus-visible)) .desktop-agent-session__pin-button {
   opacity: 1;
   pointer-events: auto;
 }
 
-.desktop-agent-session:hover .desktop-agent-session__archive-button,
-.desktop-agent-session.is-menu-open .desktop-agent-session__archive-button,
-.desktop-agent-session:has(:focus-visible) .desktop-agent-session__archive-button,
+.desktop-agent-session:is(:hover, .is-menu-open, :has([data-overlay-open]), :has(:focus-visible)) .desktop-agent-session__archive-button,
 .desktop-agent-session__archive-button:focus-visible {
   opacity: 1;
   pointer-events: auto;
@@ -564,8 +553,7 @@
     border-color 140ms ease;
 }
 
-.desktop-agent-project:hover,
-.desktop-agent-project.is-menu-open {
+.desktop-agent-project:is(:hover, .is-menu-open, [data-overlay-open]) {
   border-color: transparent;
   color: var(--desktop-agent-sidebar-active-text);
   background: var(--desktop-agent-sidebar-hover-bg);
@@ -596,7 +584,7 @@
 }
 
 /* 整行容器统一承载状态背景，内部点击区不再叠加按钮的 hover 底色。 */
-.desktop-agent-session__select:is(:hover, :active):not(:disabled),
+.desktop-agent-session__select:is(:hover, :active, [data-overlay-open]):not(:disabled),
 .desktop-agent-project__select:is(:hover, :active):not(:disabled) {
   color: inherit;
   background: transparent;
@@ -814,9 +802,7 @@
   transition: opacity 160ms ease;
 }
 
-.desktop-agent-project:hover .desktop-agent-project__actions,
-.desktop-agent-project:focus-within .desktop-agent-project__actions,
-.desktop-agent-project.is-menu-open .desktop-agent-project__actions,
+.desktop-agent-project:is(:hover, :focus-within, .is-menu-open, [data-overlay-open]) .desktop-agent-project__actions,
 .desktop-agent-project__actions:focus-visible {
   opacity: 1;
   pointer-events: auto;

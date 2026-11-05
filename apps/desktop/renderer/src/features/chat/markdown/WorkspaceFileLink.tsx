@@ -3,6 +3,7 @@ import type { AnchorHTMLAttributes, HTMLAttributes, MouseEvent, ReactNode } from
 import { AppTooltip } from '../../../shared/ui/primitives.js';
 import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
 import { useMarkdownNavigation } from './MarkdownNavigationProvider.js';
+import { useWorkspaceFileContextMenu } from './useWorkspaceFileContextMenu.js';
 import { formatMarkdownWorkspacePath, resolveMarkdownLinkTarget } from './markdownLinks.js';
 import { useAvailableMarkdownFile } from './useMarkdownWorkspaceFiles.js';
 
@@ -38,10 +39,10 @@ export function WorkspaceFileLink({
 }: WorkspaceFileLinkProps) {
   const {
     onOpenWorkspaceFile,
-    onOpenWorkspaceFileContextMenu,
     workspaceRoot,
     workspaceFiles,
   } = useMarkdownNavigation();
+  const { contextMenuOpen, openContextMenu } = useWorkspaceFileContextMenu();
   const target = resolveMarkdownLinkTarget(filePath, workspaceRoot);
   const candidate = target.kind === 'workspace' ? target.path : null;
   // Structured tool paths already come from tool results; Markdown references
@@ -68,13 +69,9 @@ export function WorkspaceFileLink({
   };
   const handleWorkspaceContextMenu = (event: MouseEvent<HTMLAnchorElement>) => {
     onContextMenu?.(event);
-    if (event.defaultPrevented || !onOpenWorkspaceFileContextMenu) return;
-    event.preventDefault();
-    onOpenWorkspaceFileContextMenu({
+    openContextMenu(event, {
       filePath: availablePath,
       line: line ?? target.line,
-      x: event.clientX,
-      y: event.clientY,
     });
   };
 
@@ -84,6 +81,7 @@ export function WorkspaceFileLink({
         {...props}
         className={['chat-markdown__file-link', className].filter(Boolean).join(' ')}
         data-markdown-link={linkKind}
+        data-context-menu-open={contextMenuOpen ? '' : undefined}
         href={href ?? filePath}
         title={undefined}
         onClick={handleWorkspaceClick}

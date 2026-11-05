@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { RUNTIME_PROCESS_SHUTDOWN_MESSAGE } from '@setsuna-desktop/contracts';
+import type { DiagnosticReporter } from '@setsuna-desktop/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RuntimeProcess } from '../../../src/runtime/runtime-process.js';
 
@@ -47,9 +48,10 @@ afterEach(async () => {
 });
 
 function fixture(onExit = vi.fn<() => Promise<void>>(async () => undefined)) {
-  const runtime = new RuntimeProcess({ appRoot: process.cwd(), appVersion: 'test', dataDir: 'unused', onExit });
+  const onDiagnostic = vi.fn<DiagnosticReporter>();
+  const runtime = new RuntimeProcess({ appRoot: process.cwd(), appVersion: 'test', dataDir: 'unused', onExit, onDiagnostic });
   processes.push(runtime);
-  return { runtime, onExit };
+  return { runtime, onExit, onDiagnostic };
 }
 
 async function settle(predicate: () => boolean) {
@@ -97,7 +99,7 @@ describe('runtime crash recovery', () => {
   });
 
   it('backs off and stops after three restarts even when each child briefly reaches ready', async () => {
-    const { runtime } = fixture(); await runtime.start();
+    const { runtime, onDiagnostic } = fixture(); await runtime.start();
     for (const [index, delay] of [1_000, 2_000, 4_000].entries()) {
       children[index]!.exit(1);
       await vi.advanceTimersByTimeAsync(delay - 1);
@@ -111,6 +113,12 @@ describe('runtime crash recovery', () => {
     expect(children).toHaveLength(4);
     expect(runtime.state).toBe('stopped');
     expect(console.error).toHaveBeenCalledWith('[runtime] automatic restart limit reached');
+    expect(onDiagnostic).toHaveBeenCalledWith('runtime-process-exited', expect.objectContaining({
+      runtimePid: children[0]!.pid, exitCode: 1, signal: null, intentional: false, wasReady: true,
+    }));
+    expect(onDiagnostic.mock.calls.filter(([event]) => event === 'runtime-recovery-scheduled').map(([, fields]) => fields.delayMs))
+      .toEqual([1_000, 2_000, 4_000]);
+    expect(onDiagnostic).toHaveBeenCalledWith('runtime-recovery-limit-reached', { attempts: 3 });
   });
 
   it('restores the restart budget only after a stable minute of uptime', async () => {
@@ -182,7 +190,7 @@ describe('runtime crash recovery', () => {
   });
 
   it('reaps a replacement with a stuck health check before the next attempt', async () => {
-    const { runtime } = fixture(); await runtime.start();
+    const { runtime, onDiagnostic } = fixture(); await runtime.start();
     vi.mocked(fetch).mockImplementationOnce((_url, init) => new Promise<Response>((_resolve, reject) => {
       init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason), { once: true });
     }));
@@ -191,6 +199,9 @@ describe('runtime crash recovery', () => {
     await settle(() => vi.mocked(fetch).mock.calls.length === 2);
     await vi.advanceTimersByTimeAsync(30_000);
     expect(children[1]!.exitCode).toBe(0);
+    expect(onDiagnostic).toHaveBeenCalledWith('runtime-startup-failed', expect.objectContaining({
+      phase: 'health-check', timedOut: true, cancelled: false, attempt: 1,
+    }));
     expect(children).toHaveLength(2);
     await vi.advanceTimersByTimeAsync(2_000);
     await settle(() => runtime.state === 'running');
@@ -204,5 +215,16 @@ describe('runtime crash recovery', () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(children).toHaveLength(1);
     await expect(runtime.stop()).rejects.toThrow('native input still owned');
+  });
+
+  it('keeps startup and recovery working when a diagnostic sink throws', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { runtime, onDiagnostic } = fixture();
+    onDiagnostic.mockImplementation(() => { throw new Error('Log storage unavailable'); });
+    await runtime.start();
+    children[0]!.exit(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await settle(() => runtime.state === 'running');
+    expect(children).toHaveLength(2);
   });
 });

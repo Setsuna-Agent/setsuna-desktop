@@ -22,6 +22,7 @@ Artifact 拥有 `publish_artifact` 工具语义和持久结果展示。Runtime �
 - Runtime required：向 CompositeToolHost 提供 `artifactRuntimeToolServiceCapability`。
 - Renderer required：注册 `artifact.file` v1 tool-result view，并兼容旧结果格式。
 - Result identity 使用 workspace root + path，避免同一文件的旧发布结果重复占据 transcript。
+- 产物卡片的“打开方式”提供应用内文件定位、系统文件管理器定位、内置浏览器预览和默认应用打开。系统定位通过 `revealWorkspaceFile` 使用产物自身的 workspace root + 相对路径，独立于当前活动项目；macOS 使用访达，Windows 使用文件夹。
 - 打开、预览和原生拖出通过宿主注入的受限文件能力，不把本地绝对路径变成 renderer 权限。拖动产物卡片时以 workspace root + 相对路径调用 `startFileDrag`，由 Main 验证真实文件并发起系统拖拽；文件不存在或越界时沿用卡片错误展示。
 
 Runtime Core 的 `ArtifactToolHost` 只是绑定 Feature service 的薄 adapter，不应复制 schema、审批或结果格式化。

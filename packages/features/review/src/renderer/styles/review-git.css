@@ -173,9 +173,8 @@
   height: 30px;
 }
 
-.git-commit-message-editor { display: grid; flex: 1; grid-template-rows: 34px minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; background: var(--desktop-agent-main-bg); color: var(--app-text); }
-.git-commit-message-editor__toolbar { box-sizing: border-box; display: flex; flex-shrink: 0; align-items: center; gap: 4px; height: 34px; padding: 3px var(--app-topbar-item-gap) 3px var(--git-gutter); font-size: 12px; }
-.git-commit-message-editor__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text-muted); }
+.git-commit-message-editor { display: grid; flex: 1; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; background: var(--desktop-agent-main-bg); color: var(--app-text); }
+.git-commit-message-editor__title { flex: 0 1 auto; padding-inline: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .chat-git-commit-popover {
   --git-commit-control-inset: 6px;
@@ -216,13 +215,8 @@
   font-size: 13px;
 }
 
-.chat-git-commit-popover__branch:not(:disabled):hover {
+.chat-git-commit-popover__branch:not(:disabled):is(:hover, [data-overlay-open]) {
   color: var(--app-text);
-}
-
-.chat-git-commit-popover__branch.is-open {
-  color: var(--app-text);
-  background: transparent;
 }
 
 .chat-git-commit-popover__message {

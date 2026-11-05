@@ -34,6 +34,7 @@ packages/features/<feature>/
 | `collaboration` | `collaboration` | O | — | — | O | 子任务/协作线程状态、投影与 spawn result |
 | `computer-use` | `computer-use` | R | R | B | R | 独立会话授权、受监督主桌面截图/基础输入与急停 |
 | `conversation-debug` | `conversation-debug` | O | — | — | O | 调试设置、事件/trace 查询与时间线面板 |
+| `diagnostics` | `diagnostics` | — | O | B | O | 本机诊断日志、限量轮转、固定目录访问与设置入口 |
 | `goal` | `goal` | O | — | — | O | 持久 Goal、自动续轮、用量/状态与 UI |
 | `image-generation` | `image-generation` | O | — | — | O | 图片生成配置、服务、资产结果与 Plugin 详情贡献 |
 | `mcp` | `mcp` | R | — | — | R | MCP transport、OAuth 与宿主端点策略、tools/resources 与管理面 |
@@ -91,6 +92,7 @@ Feature 拥有原生业务闭环，Electron main 只提供窗口、credential va
 ### 运行状态与环境
 
 - [Runtime Activity、Usage 与 Workspace Dependencies](operations-and-environment.md)
+- [Diagnostics：本机故障日志与采集边界](diagnostics.md)
 
 它们提供诊断、可观测性或本地工具链管理，不应把状态重新塞回全局 `RuntimeConfig` 或 App controller。
 

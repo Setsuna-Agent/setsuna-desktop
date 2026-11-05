@@ -143,6 +143,7 @@ function CapabilitiesCreateMenu({
       <Button
         aria-busy={busy || undefined}
         aria-expanded={open}
+        data-overlay-open={open ? '' : undefined}
         aria-haspopup="menu"
         disabled={busy}
         icon={<Plus size={14} />}

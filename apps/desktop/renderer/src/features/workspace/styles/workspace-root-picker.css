@@ -35,7 +35,7 @@
   color: var(--app-text-muted);
 }
 
-.workspace-root-picker.sd-button:is(:hover, :active, [data-state='open']):not(:disabled) {
+.workspace-root-picker.sd-button:is(:hover, :active, [data-overlay-open]):not(:disabled) {
   border-color: transparent;
   background: var(--desktop-agent-control-hover-bg);
 }
@@ -56,7 +56,7 @@
   font-size: 12px;
 }
 
-.workspace-root-picker--field.sd-button:is(:hover, :active, [data-state='open']):not(:disabled) {
+.workspace-root-picker--field.sd-button:is(:hover, :active, [data-overlay-open]):not(:disabled) {
   border-color: transparent;
   background: color-mix(in srgb, var(--app-text) 7%, transparent);
 }

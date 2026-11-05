@@ -88,6 +88,7 @@
     "@setsuna-desktop/feature-collaboration": "workspace:*",
     "@setsuna-desktop/feature-computer-use": "workspace:*",
     "@setsuna-desktop/feature-conversation-debug": "workspace:*",
+    "@setsuna-desktop/feature-diagnostics": "workspace:*",
     "@setsuna-desktop/feature-core": "workspace:*",
     "@setsuna-desktop/feature-goal": "workspace:*",
     "@setsuna-desktop/feature-image-generation": "workspace:*",

@@ -34,31 +34,34 @@
   flex: 0 0 28px;
   width: 28px;
   height: 28px;
+  min-height: 28px;
   padding: 0;
   place-items: center;
   border: 0;
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-full);
   color: var(--app-text-muted);
   background: transparent;
 }
 
-.desktop-browser-navigation__button:not(:disabled):hover,
+.desktop-browser-navigation__button:not(:disabled):is(:hover, [data-overlay-open]),
 .desktop-browser-navigation__button.is-active {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
 }
 
 .desktop-browser-navigation {
-  display: flex;
-  flex: 0 0 38px;
   position: relative;
   z-index: 3;
-  align-items: center;
-  gap: 3px;
-  min-width: 0;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
-  background: var(--desktop-agent-main-bg);
+  flex-wrap: wrap;
+}
+
+.desktop-browser-navigation__controls {
+  flex: 0 0 auto;
+}
+
+.desktop-browser-navigation__actions {
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .desktop-browser-navigation__button:disabled {
@@ -66,12 +69,13 @@
 }
 
 .desktop-browser-navigation form {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 1 1 160px;
+  min-width: 120px;
 }
 
 .desktop-browser-address-bar {
   display: flex;
+  flex: 1;
   position: relative;
   min-width: 0;
 }
@@ -81,12 +85,12 @@
   height: 28px;
   box-sizing: border-box;
   padding: 0 36px 0 12px;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: var(--app-radius-full);
   outline: 0;
   color: var(--app-text);
-  background: var(--app-surface-muted);
-  font-size: 11px;
+  background: transparent;
+  font: inherit;
   text-align: center;
 }
 
@@ -97,6 +101,7 @@
   display: inline-grid;
   width: 24px;
   height: 24px;
+  min-height: 24px;
   padding: 0;
   place-items: center;
   border: 0;
@@ -122,9 +127,14 @@
 }
 
 .desktop-browser-navigation input:focus {
-  border-color: color-mix(in srgb, var(--app-text) 18%, var(--app-border));
-  background: var(--app-surface);
+  background: transparent;
+  box-shadow: none;
   text-align: left;
+}
+
+.desktop-browser-address-form:focus-within {
+  border-color: color-mix(in srgb, var(--app-text) 18%, var(--app-border));
+  box-shadow: var(--app-focus-ring);
 }
 
 .desktop-browser-window-menu {

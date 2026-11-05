@@ -31,6 +31,7 @@ describe('renderer feature composition', () => {
           revealImageInFolder: vi.fn(),
         },
         links: { openExternal: vi.fn().mockResolvedValue(true) },
+        diagnostics: { getLogDirectory: vi.fn(), openLogDirectory: vi.fn() },
         runtime: {
           cancelRequest: vi.fn(),
           linkAttachment: vi.fn(),
@@ -43,6 +44,7 @@ describe('renderer feature composition', () => {
     });
 
     const features = await activateBuiltinRendererFeatures();
+    expect(window.setsunaDesktop!.diagnostics.getLogDirectory).not.toHaveBeenCalled();
     expect(request).toHaveBeenCalledWith(expect.objectContaining({
       path: '/v1/features/plugin-management/installed',
     }));
@@ -77,6 +79,7 @@ describe('renderer feature composition', () => {
         'mcp.capabilities-page',
         'plugin-management.capabilities-page',
         'settings.general',
+        'diagnostics.settings-page',
         'computer-use.settings-page',
         'skills.capabilities-page',
       ]),

@@ -103,6 +103,7 @@ export function ChatConversationSurface({
   model,
   onImageAttachmentRequestConsumed,
   onOpenWorkspaceFileContextMenu,
+  activeFileMenuTriggerId,
   onWorkspaceMentionRequestConsumed,
   workspaceMentionRequest,
   reviewControls,
@@ -112,6 +113,7 @@ export function ChatConversationSurface({
   model: ChatConversationSurfaceModel;
   onImageAttachmentRequestConsumed(requestId: number, outcome: ChatImageAttachmentOutcome): void;
   onOpenWorkspaceFileContextMenu(target: WorkspaceFileContextTarget): void;
+  activeFileMenuTriggerId?: string;
   onWorkspaceMentionRequestConsumed(requestId: number): void;
   reviewControls?: ReactNode;
   starterControls?: ReactNode;
@@ -125,6 +127,7 @@ export function ChatConversationSurface({
       onOpenWorkspaceDirectory={model.onOpenWorkspaceDirectory}
       onOpenWorkspaceFile={model.onOpenProjectFile}
       onOpenWorkspaceFileContextMenu={onOpenWorkspaceFileContextMenu}
+      activeFileMenuTriggerId={activeFileMenuTriggerId}
       onSearchWorkspaceEntries={model.onSearchProjectEntries}
     >
       <ChatWorkspace

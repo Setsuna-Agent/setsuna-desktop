@@ -2,7 +2,7 @@ import { PointMenu } from '@setsuna-desktop/renderer-ui';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { BrowserContextMenuRequest, BrowserDesktopBridge } from '../contracts/index.js';
 
-export function BrowserContextMenu({ bridge, active, webviewRef }: {
+export function useBrowserContextMenu({ bridge, active, webviewRef }: {
   bridge: BrowserDesktopBridge | null;
   active: boolean;
   webviewRef: RefObject<{ getWebContentsId(): number } | null>;
@@ -30,8 +30,9 @@ export function BrowserContextMenu({ bridge, active, webviewRef }: {
     return () => { unsubscribe(); close(); };
   }, [active, bridge, close, webviewRef]);
 
-  if (!active || !request || !bridge) return null;
-  return <PointMenu key={request.id} x={request.x} y={request.y} modal onClose={close} menu={{
+  // The published session owns activation, including dismissal from navigation or main.
+  const reloadMenuOpen = active && request?.source === 'reload';
+  const menu = active && request && bridge ? <PointMenu key={request.id} x={request.x} y={request.y} modal onClose={close} menu={{
     items: request.items.map(({ shortcut, ...item }) => ({ ...item, extra: shortcut ? <span className="sd-menu__extra">{shortcut}</span> : undefined })),
     onClick: ({ key }) => {
       // Selection consumes the session; the subsequent Radix dismissal must not cancel it.
@@ -41,5 +42,6 @@ export function BrowserContextMenu({ bridge, active, webviewRef }: {
         console.warn('[browser] context menu action failed', error);
       });
     },
-  }} />;
+  }} /> : null;
+  return { menu, reloadMenuOpen };
 }

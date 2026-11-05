@@ -24,6 +24,7 @@ export function GitChangesFileActions({ file, pathContext, actions, onOpenMenu }
     <DockItem>
       <ReviewIconButton tooltip tooltipPlacement="top" label={t('feature.review.history.openFile')} disabled={!filePath}
         aria-haspopup="menu" aria-expanded={Boolean(activeMenuTarget)}
+        data-overlay-open={activeMenuTarget ? '' : undefined}
         onClick={(event) => {
           if (!filePath) return;
           onOpenMenu();

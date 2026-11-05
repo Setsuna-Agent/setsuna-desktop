@@ -7,7 +7,7 @@
 /* Let short task lists size to their content while keeping activity visible for long lists. */
 .automation-sidebar__tasks { flex: 0 1 auto; min-height: 0; max-height: 50%; overflow-y: auto; }
 .automation-sidebar-row { display: flex; flex-direction: column; gap: 4px; padding: 10px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.automation-sidebar-row:hover, .automation-sidebar-row.is-active { background: var(--desktop-agent-sidebar-hover-bg); }
+.automation-sidebar-row:is(:hover, [data-overlay-open], .is-active) { background: var(--desktop-agent-sidebar-hover-bg); }
 .automation-sidebar-row__title { font-size: 13px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .automation-sidebar-row__detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text-muted); font-size: 11px; line-height: 16px; }
 .automation-sidebar__activity { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; margin-top: 16px; }

@@ -133,7 +133,7 @@
   background: var(--app-toolbar-control-hover-bg);
 }
 
-.app-shell-icon-control.sd-button:is(.is-active, [aria-pressed='true'], [aria-expanded='true'], [data-state='open']):not(:disabled) {
+.app-shell-icon-control.sd-button:is(.is-active, [aria-pressed='true'], [aria-expanded='true'], [data-overlay-open]):not(:disabled) {
   color: var(--app-text);
   background: var(--app-toolbar-control-active-bg);
 }
@@ -290,6 +290,11 @@
   padding-right: var(--app-topbar-navigation-divider-inset);
   border-right: 0;
   background: transparent;
+}
+
+/* Resolve the dependent collapsed-header width at the root too, including portal titles. */
+:root[data-desktop-platform='darwin']:has(.app-shell--window-fullscreen) {
+  --app-topbar-native-controls-inset: 12px;
 }
 
 :root[data-desktop-platform='win32'] {

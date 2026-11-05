@@ -37,6 +37,10 @@ Skill 列表、详情、命令菜单和聊天引用统一通过 `shared/ui/Skill
 
 独立 React 应用通过 `@setsuna/app` 使用同一份公共组件与样式，详见 [React 自定义应用](../../extensions/plugins/react-apps.md)。`DocumentMarkdown` 也由共享 UI 包持有，供宿主文档阅读和应用的 `Markdown` 入口复用；通用排版在 `renderer-ui/src/styles/markdown.css`，聊天流式块、文件导航和代码操作仍归 Chat。SDK 只打包纯 UI，不包含宿主本机 API 或业务服务。
 
+OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`。基础字号、字体和字重映射到宿主 token，正文与默认控件沿用 `--app-font-size` 的 14px 基线；复合 `font` token 同步映射，避免上游内置的 16px 字号和字体覆盖宿主偏好。密度继续由现有页面缩放统一应用，主题 token 不重复乘以 `--app-page-scale`。
+
+审查、变更、文件和浏览器的主头部复用 `renderer-ui/src/styles/panel-toolbar.css`：统一上下留白、最小高度、胶囊边框、主题阴影和操作分组。Feature 只维护路径、来源、地址输入和按钮的内容及伸缩规则；源码与预览使用单个文字按钮切换。
+
 `MermaidDiagram` 为聊天、工作区文件预览和 `DocumentMarkdown` 的 `mermaid` 代码块提供图表。Mermaid 按需加载，流式更新合并后串行布局，卸载或源码变化会取消尚未开始的任务并丢弃迟到结果；加载或语法失败保留各入口的源码视图。渲染使用 strict 安全模式，生成的 SVG 作为图片展示，不绑定图表中的链接或脚本。`mermaid-theme.ts` 将宿主字体与颜色 token 转成图片内可用的主题，使用无渐变、无阴影的扁平节点；主题和字体改变时重新渲染。图表在正文中按可用宽度完整展示，点击复用 `ImagePreview` 放大查看。
 
 - Motion 负责复选框、开关和通知动画；`motion.ts` 提供复选框与通知使用的 spring 参数，开关的参数随组件维护。
@@ -50,6 +54,7 @@ Skill 列表、详情、命令菜单和聊天引用统一通过 `shared/ui/Skill
 - `Table` / `TableColumn` 参考 [beUI Table](https://beui.dev/components/motion/table)，统一列定义、表头、行悬停、空状态和横向滚动，沿用宿主主题与减少动态效果偏好。用量记录的列内容由 `UsageRecordsTable` 持有，`UsageRecentCalls` 负责每页 10 条的数据加载与分页；共享表格直接渲染当前页。
 - Dialog 的入场动画由 `overlays.css` 持有：弹窗上移 12px 并淡入（180ms ease-out），遮罩淡入（160ms ease）。弹窗已去掉 scale 动画，居中与入场位移统一使用 `translate`；12px 按应用密度缩放，减少动态效果偏好下禁用入场动画。
 - Radix 提供浮层定位、焦点约束、嵌套子菜单、键盘操作和关闭行为。控件遵循本项目的窄 API，不提供 Ant Design 兼容层。
+- `Dropdown` / `Popover` 将实际打开态投影为触发元素上的 `data-overlay-open`；嵌套浮层共用同一入口时合并打开态，避免 Tooltip 等控件的 `data-state` 覆盖菜单状态。共享按钮、文件树行和业务自定义行据此保留原有 hover / 激活外观；坐标菜单由所属 owner 将实际 target 关联到具体入口，关闭时随 target 清除。交互规则见 [浮窗触发入口约束](../../design.md)。
 - 应用内菜单由 `MenuSurface` 与 `menu.css` 统一为紧凑圆角面板、细边框、柔和阴影和即时中性填充高亮；右键、按钮下拉、坐标菜单、子菜单、侧栏、添加面板、浏览器窗口与能力创建菜单共用视觉层。Select、项目/分支选择器也使用相同菜单样式。底色采用接近不透明的 `--app-menu-bg`，浅色与深色分别配置，背景模糊由 `--app-menu-backdrop-filter` 统一控制。输入框上方的命令、插件、Skill 与 @ 候选列表由聊天样式持有，使用不透明面板和中性选中背景，避免下方页面文字透出。菜单直接显示/关闭，不使用展开、裁切、缩放或滑动高亮动画；键盘导航、禁用项与危险项仍由原组件管理。系统托盘菜单由操作系统绘制。
 - 菜单、Select 与项目/分支选择器的行文字统一使用 `--app-text`（危险项等语义色优先）；菜单高亮只改变行底色（`--app-menu-highlight-bg`，即 `--desktop-agent-control-hover-bg`），文字、图标、快捷键和危险项保持原有颜色；选择类菜单通过 `sd-menu-surface--neutral` 额外为当前选中项保留同一底色。
 - `AppTextContextMenu` 使用 `PointMenu` 为输入框提供剪切、复制、粘贴，为正文选区提供复制；已处理的专用右键菜单优先。菜单关闭后恢复原焦点与选区，通过 preload 的 `windowControls.executeTextEdit` 调用当前宿主窗口的原生编辑命令，复用编辑器已有的结构化剪贴板、附件粘贴和撤销链路。

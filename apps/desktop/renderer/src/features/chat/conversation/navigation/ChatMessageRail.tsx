@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react';
 import { useI18n } from '../../../../shared/i18n/I18nProvider.js';
 import type { ChatMessageNavigationItem } from './chatMessageNavigation.js';
 import { useChatMessageRail } from './useChatMessageRail.js';
@@ -17,6 +17,11 @@ export function ChatMessageRail({ items, scrollRef, contentRef, onScrollToOffset
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const buttonsRef = useRef(new Map<string, HTMLButtonElement>());
   const previewId = useId();
+  useEffect(() => {
+    if (layout.visible) return;
+    setHoveredId(null);
+    setFocusedId(null);
+  }, [layout.visible]);
   if (!layout.visible) return null;
   const hoveredIndex = items.findIndex((item) => item.id === hoveredId);
   const previewIndex = items.findIndex((item) => item.id === (hoveredId ?? focusedId));

@@ -9,6 +9,8 @@ import type { WorkspaceImageSource } from './media/workspaceImageClipboard.js';
 
 export type WorkspaceFileContextTarget = {
   filePath: string;
+  /** Identifies the exact originating control, including repeated references to one file. */
+  triggerId?: string;
   image?: WorkspaceImageSource;
   line?: number;
   type?: WorkspaceEntry['type'];

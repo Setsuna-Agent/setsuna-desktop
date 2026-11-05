@@ -1,16 +1,19 @@
 import { Button, DiffViewControls } from '@setsuna-desktop/renderer-ui';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { DesktopDiffFile, DesktopGitChangedFile, DesktopGitCommit, DesktopGitRef, DesktopReviewState } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
 import { useWorkspaceGitCommitDialog } from '../git/WorkspaceGitCommitDialog.js';
 import { GitCommitMessageEditor } from '../git/GitCommitMessageEditor.js';
 import { ReviewIconButton } from '../primitives.js';
+import { ReviewChangeCounts } from '../ReviewChangeCounts.js';
+import { canPreviewReviewTextFile, ReviewFileViewControls, type ReviewFileViewMode } from '../ReviewFileDocument.js';
 import type { DesktopReviewDiffLayout, ReviewPathContext } from '../review-types.js';
 import { GitChangesFiles, type GitChangesFileGroup } from './GitChangesFiles.js';
 import { GitChangesFileNavigation } from './GitChangesFileNavigation.js';
 import { GitChangesCommitComposer } from './GitChangesCommitComposer.js';
 import { GitChangesMenu } from './GitChangesMenu.js';
+import { GitChangesBreadcrumb } from './GitChangesBreadcrumb.js';
 import { GitChangesSplit } from './GitChangesSplit.js';
 import { GitHistoryDiff, type GitHistoryFileActions } from './GitHistoryDiff.js';
 import { GitHistoryGraph } from './GitHistoryGraph.js';
@@ -53,6 +56,7 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
   const [navigationCollapsed, setNavigationCollapsed] = useState(false);
   const [diffLayout, setDiffLayout] = useState<DesktopReviewDiffLayout>('unified');
   const [lineWrap, setLineWrap] = useState(true);
+  const [fileView, setFileView] = useState<ReviewFileViewMode>('source');
   const [compact, setCompact] = useState(false);
   // Opening a panel must not replay a progress request from before it mounted.
   const lastOpenedConflictId = useRef(conflictOpenRequest);
@@ -121,6 +125,10 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
   const emptyRepository = page && !page.gitRoot;
   const compactNavigation = !showMessageEditor && !conflictTask && (navigationCollapsed || (compact && detailOpen));
   const selectedFileKey = selectedOid ? 'commit:' + commitFile?.path : worktreePath ? source + ':' + worktreePath : null;
+  const showingDiff = !showMessageEditor && !conflictTask;
+  const selectedFile = selectedOid ? commitFile : worktreePath ? worktreeFile : null;
+  const headerFile = showingDiff ? selectedFile : null;
+  const hasTextPreview = showingDiff && files.some((file) => canPreviewReviewTextFile(file, pathContext));
   const toggleNavigation = () => {
     // Closing a group preview's sidebar selects its first file for previous/next navigation.
     if (!compactNavigation && worktreePath === null && !selectedOid && worktreeFile) selectFile(source, worktreeFile);
@@ -131,26 +139,45 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
   if (!bridge) return <div className="git-history-status">{t('feature.review.git.unsupported')}</div>;
   if (emptyRepository) return (
     <section className="desktop-review-panel git-changes-panel" aria-label={t('feature.review.history.title')}>
-      {sourceRootPicker ? <header className="desktop-review-panel__toolbar">{sourceRootPicker}</header> : null}
+      {sourceRootPicker ? <header className="desktop-review-panel__toolbar sd-panel-toolbar">
+        <div className="sd-panel-toolbar__surface">{sourceRootPicker}</div>
+      </header> : null}
       <div className="git-history-status">{t('feature.review.history.noGit')}</div>
     </section>
   );
 
   return (
     <section className="desktop-review-panel git-changes-panel" aria-label={t('feature.review.history.title')}>
+      <header className="git-changes-toolbar sd-panel-toolbar">
+        {showingDiff && detailOpen ? <ReviewIconButton className="git-changes-toolbar__back app-shell-icon-control"
+          label={t('feature.review.history.back')} onClick={closeDetail}><ArrowLeft size={15} /></ReviewIconButton> : null}
+        {sourceRootPicker || headerFile ? <div className="git-changes-toolbar__path sd-panel-toolbar__surface">
+          {sourceRootPicker}
+          {sourceRootPicker && headerFile ? <ChevronRight className="git-changes-toolbar__path-separator" aria-hidden="true" size={12} /> : null}
+          {headerFile ? <>
+            <GitChangesBreadcrumb key={`${selectedOid ?? source}:${headerFile.path}`} file={headerFile}
+              files={selectedOid ? details.data?.files ?? EMPTY_FILES : worktreeFiles ?? EMPTY_FILES}
+              onSelect={(file) => selectFile(selectedOid ? 'commit' : source, file)} />
+            {!files[0]?.contentKind ? <ReviewChangeCounts additions={headerFile.additions} deletions={headerFile.deletions} /> : null}
+          </> : null}
+        </div> : null}
+        <div className="sd-panel-toolbar__surface sd-panel-toolbar__actions">
+          {hasTextPreview ? <ReviewFileViewControls mode={fileView} onChange={setFileView} /> : null}
+          <div className="sd-panel-toolbar__group">
+            <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.workspace.refresh')}
+              onClick={refresh} disabled={history.loading || reviewLoading}><RefreshCw size={13} /></ReviewIconButton>
+            <GitChangesMenu refs={refs} selectedRef={history.selectedRef} busy={fileActions.busy}
+              currentBranch={page?.currentBranch ?? reviewState?.currentBranch ?? null}
+              onSelectRef={selectRef} onSelectHead={() => {
+                history.selectRef('');
+                if (page?.head) selectCommit(page.head);
+              }} />
+          </div>
+        </div>
+      </header>
       <GitChangesSplit detailOpen={detailOpen} editingMessage={showMessageEditor} navigationCollapsed={compactNavigation}
         onCompactChange={setCompact} navigation={
         <nav className="git-changes-nav" aria-label={t('feature.review.history.title')}>
-          <div className="git-changes-nav__header">
-            <div className="git-changes-nav__project">
-              {sourceRootPicker ?? <h2 className="git-changes-nav__title">{t('feature.review.history.title')}</h2>}
-            </div>
-            <ReviewIconButton tooltip className="app-shell-icon-control" label={t('feature.review.workspace.refresh')} onClick={refresh} disabled={history.loading || reviewLoading}><RefreshCw size={13} /></ReviewIconButton>
-            <GitChangesMenu refs={refs} selectedRef={history.selectedRef} busy={fileActions.busy} currentBranch={page?.currentBranch ?? reviewState?.currentBranch ?? null} onSelectRef={selectRef} onSelectHead={() => {
-              history.selectRef('');
-              if (page?.head) selectCommit(page.head);
-            }} />
-          </div>
           <GitChangesCommitComposer blocked={fileActions.busy} />
           {selectedOid ? <div className="git-changes-nav__workspace">
             <Button variant="ghost" type="button" aria-pressed={!selectedOid} onClick={() => { setSelectedOid(null); setDetailOpen(false); }}>
@@ -226,6 +253,7 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
           onOpenWorkspaceFile={actions.onOpenProjectFile}
         /> : <GitHistoryDiff
           files={files}
+          fileView={fileView}
           diffLayout={diffLayout}
           lineWrap={lineWrap}
           details={details.data}
@@ -235,7 +263,6 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
           error={selectedOid ? details.error ?? diff.error : reviewError}
           actions={actions}
           onRetry={retryDiff}
-          onBack={closeDetail}
         />}
       </GitChangesSplit>
     </section>

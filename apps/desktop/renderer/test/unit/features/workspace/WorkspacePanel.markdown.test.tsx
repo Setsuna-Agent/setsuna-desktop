@@ -39,18 +39,17 @@ function Document({ currentFile = file, initialContent = currentFile.content, fo
 
 it('opens Markdown in preview by default and switches to source for a line navigation', async () => {
   const view = render(<Document />);
-  const source = screen.getByRole('button', { name: '查看源码' });
-  expect(source.getAttribute('aria-pressed')).toBe('false');
-  expect(source.closest('.desktop-editor__crumb-actions')?.contains(screen.getByRole('button', { name: '收起文件目录' }))).toBe(true);
+  await screen.findByRole('heading', { name: 'Original' });
+  fireEvent.click(screen.getByRole('button', { name: '查看源码' }));
+  expect(screen.queryByRole('heading')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '查看预览' }));
   await screen.findByRole('heading', { name: 'Original' });
   view.rerender(<Document focus={{ path: file.path, line: 1, version: 1 }} />);
   expect(screen.queryByRole('heading')).toBeNull();
-  expect(source.getAttribute('aria-pressed')).toBe('true');
   view.rerender(<Document currentFile={{ ...file, path: 'other.MD' }} />);
-  expect(screen.getByRole('button', { name: '查看预览' }).getAttribute('aria-pressed')).toBe('true');
   await screen.findByRole('heading', { name: 'Original' });
   view.rerender(<Document currentFile={{ ...file, path: 'main.ts' }} />);
-  expect(screen.queryByRole('group', { name: '文件显示模式' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /^(查看源码|查看预览)$/u })).toBeNull();
 });
 
 it('previews unsaved input and keeps the live editor, selection and undo history when switching back', async () => {
@@ -92,6 +91,5 @@ it('previews unsaved input and keeps the live editor, selection and undo history
   expect(editor.getText()).toBe(file.content);
   // An empty unsaved draft must not fall back to the saved Markdown text.
   view.rerender(<Document editing initialContent="" key="empty" />);
-  fireEvent.click(screen.getByRole('button', { name: '查看预览' }));
   expect((await screen.findByRole('article')).textContent).toBe('');
 });

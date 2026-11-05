@@ -54,7 +54,7 @@ export function BrowserAddressBar({
   }
   return (
     <form
-      className="desktop-browser-address-form"
+      className="desktop-browser-address-form sd-panel-toolbar__surface"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) { suggestions.close(); setFocused(false); }
       }}

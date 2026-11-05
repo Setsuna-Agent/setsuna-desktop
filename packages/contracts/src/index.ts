@@ -46,6 +46,7 @@ export * from './threads.js';
 export * from './threads/deletion.js';
 export * from './threads/file-preview-projection.js';
 export * from './usage.js';
+export * from './desktop/diagnostics.js';
 export * from './workspace.js';
 export * from './workspace/roots.js';
 export * from './workspace/project-icon.js';

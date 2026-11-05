@@ -46,6 +46,7 @@ import { ReviewChangeCounts } from './ReviewChangeCounts.js';
 import { canCompareReviewBranch } from './reviewChanges.js';
 import { ReviewSummarySection } from './ReviewDiffView.js';
 import { ReviewFileBrowser } from './ReviewFileBrowser.js';
+import { useReviewFileSelection } from './hooks/useReviewFileSelection.js';
 import { canPreviewReviewTextFile, ReviewFileViewControls, type ReviewFileViewMode } from './ReviewFileDocument.js';
 import { reviewFindingKey, reviewPathsMatch } from './review-findings.js';
 
@@ -230,6 +231,14 @@ export function DesktopReviewPanel({
         focusRequest.line,
       ])
     : null;
+  const fileSelection = useReviewFileSelection({
+    summary: fileBrowserVisible ? activeSummary : null,
+    selectionKey: `${reviewSourceStorageKey ?? 'review'}:${activeSource}`,
+    focusRequest: focusTargetSource === activeSource ? focusRequest : null,
+  });
+  const hasTextPreview = fileBrowserVisible
+    ? Boolean(fileSelection.selectedFile && canPreviewReviewTextFile(fileSelection.selectedFile, pathContext))
+    : Boolean(activeSummary?.files.some((file) => canPreviewReviewTextFile(file, pathContext)));
 
   useEffect(() => () => {
     if (refreshFeedbackTimerRef.current) clearTimeout(refreshFeedbackTimerRef.current);
@@ -342,37 +351,47 @@ export function DesktopReviewPanel({
 
   return (
     <section className="desktop-review-panel">
-      <header className={`desktop-review-panel__toolbar${branchCompareVisible ? ' desktop-review-panel__toolbar--branch' : ''}`}>
-        <div className="chat-file-review-panel__toolbar">
-          <div className={`chat-file-review-panel__scope${sourceRootPicker ? ' chat-file-review-panel__scope--multi-root' : ''}`}>
-            {sourceRootPicker}
-            {hasGit ? (
-              <Dropdown
-                rootClassName="chat-file-review-panel__source-menu"
-                trigger={['click']}
-                placement="bottomLeft"
-                menu={{
-                  items: sourceMenuItems,
-                  selectedKeys: [activeSource],
-                  onClick: handleSourceMenuClick,
-                }}
-              >
-                <Button className="chat-file-review-panel__source-button" variant="ghost" size="small">
-                  <span>{reviewSourceLabel(activeSource, t)}</span>
-                  <ChevronDown className="chat-file-review-panel__source-caret" size={12} />
-                </Button>
-              </Dropdown>
-            ) : (
-              <span className="chat-file-review-panel__source-title">{t('feature.review.workspace.source.latestChanges')}</span>
-            )}
+      <header className="desktop-review-panel__toolbar sd-panel-toolbar">
+        <div className="desktop-review-panel__context">
+          <div className="chat-file-review-panel__toolbar sd-panel-toolbar__surface">
+            <div className={`chat-file-review-panel__scope${sourceRootPicker ? ' chat-file-review-panel__scope--multi-root' : ''}`}>
+              {sourceRootPicker}
+              {hasGit ? (
+                <Dropdown
+                  rootClassName="chat-file-review-panel__source-menu"
+                  trigger={['click']}
+                  placement="bottomLeft"
+                  menu={{
+                    items: sourceMenuItems,
+                    selectedKeys: [activeSource],
+                    onClick: handleSourceMenuClick,
+                  }}
+                >
+                  <Button className="chat-file-review-panel__source-button" variant="ghost" size="small">
+                    <span>{reviewSourceLabel(activeSource, t)}</span>
+                    <ChevronDown className="chat-file-review-panel__source-caret" size={12} />
+                  </Button>
+                </Dropdown>
+              ) : (
+                <span className="chat-file-review-panel__source-title">{t('feature.review.workspace.source.latestChanges')}</span>
+              )}
+            </div>
+            <ReviewChangeCounts additions={activeSummary?.additions ?? 0} deletions={activeSummary?.deletions ?? 0} />
           </div>
-          <ReviewChangeCounts additions={activeSummary?.additions ?? 0} deletions={activeSummary?.deletions ?? 0} />
+          {branchCompareVisible ? (
+            <BranchCompareBar
+              baseRef={activeBranchBaseRef || reviewState?.baseRef}
+              baseRefs={availableBaseRefs}
+              currentBranch={reviewState?.currentBranch}
+              onBaseRefChange={handleBranchBaseRefChange}
+            />
+          ) : null}
         </div>
-        <div className="desktop-review-panel__actions">
-          {activeSummary?.files.some((file) => canPreviewReviewTextFile(file, pathContext)) ? (
+        <div className="desktop-review-panel__actions sd-panel-toolbar__surface sd-panel-toolbar__actions">
+          {hasTextPreview ? (
             <ReviewFileViewControls mode={fileView} onChange={setFileView} />
           ) : null}
-          <div className="desktop-review-panel__action-group" role="group" aria-label={t('feature.review.workspace.diffDisplay')}>
+          <div className="sd-panel-toolbar__group" role="group" aria-label={t('feature.review.workspace.diffDisplay')}>
             {!fileBrowserVisible ? (
               <ActionTooltip title={reviewFileExpansionTip}>
                 <IconButton
@@ -413,7 +432,7 @@ export function DesktopReviewPanel({
               </IconButton>
             </ActionTooltip>
           </div>
-          <div className="desktop-review-panel__action-group" role="group" aria-label={t('feature.review.workspace.actions')}>
+          <div className="sd-panel-toolbar__group" role="group" aria-label={t('feature.review.workspace.actions')}>
             <ActionTooltip title={reviewRefreshTip}>
               <IconButton
                 aria-disabled={reviewRefreshing}
@@ -442,17 +461,12 @@ export function DesktopReviewPanel({
           </div>
         </div>
       </header>
-      {branchCompareVisible ? (
-        <BranchCompareBar
-          baseRef={activeBranchBaseRef || reviewState?.baseRef}
-          baseRefs={availableBaseRefs}
-          currentBranch={reviewState?.currentBranch}
-          onBaseRefChange={handleBranchBaseRefChange}
-        />
-      ) : null}
       {fileBrowserVisible && activeSummary ? (
         <ReviewFileBrowser
+          files={fileSelection.files}
+          selectedFile={fileSelection.selectedFile}
           navigatorVisible={fileTreeVisible}
+          onSelectFile={fileSelection.selectFile}
           emptyText={{
             title: t(reviewEmptyTextKeys[activeSource].title),
             description: t(reviewEmptyTextKeys[activeSource].description),
@@ -460,11 +474,9 @@ export function DesktopReviewPanel({
           diffLayout={reviewDiffLayout}
           fileView={fileView}
           findings={visibleFindings}
-          focusRequest={focusTargetSource === activeSource ? focusRequest : null}
+          focusRequest={fileSelection.selectedFocusRequest}
           lineWrap={reviewLineWrap}
           pathContext={pathContext}
-          selectionKey={`${reviewSourceStorageKey ?? 'review'}:${activeSource}`}
-          summary={activeSummary}
           workspaceApp={workspaceApp}
           workspaceApps={workspaceApps}
           onAddFileToConversation={onAddFileToConversation}
@@ -694,7 +706,7 @@ function BranchCompareBar({
   };
 
   return (
-    <div className="desktop-review-branch-compare">
+    <div className="desktop-review-branch-compare sd-panel-toolbar__surface">
       <Dropdown
         rootClassName="desktop-review-branch-dropdown"
         trigger={['click']}
@@ -726,7 +738,7 @@ function BranchCompareBar({
         }}
       >
         <Button className="desktop-review-branch-compare__button" variant="ghost" size="small" disabled={!selectableBaseRefs.length}>
-          <span className="desktop-review-branch-compare__current">{currentBranch || 'HEAD'}</span>
+          <span className="desktop-review-branch-compare__current" title={currentBranch || 'HEAD'}>{currentBranch || 'HEAD'}</span>
           <span className="desktop-review-branch-compare__arrow">→</span>
           <span className="desktop-review-branch-compare__base" title={selectedBaseValue || undefined}>{selectedBaseLabel}</span>
           <ChevronDown className="desktop-review-branch-compare__caret" size={12} />

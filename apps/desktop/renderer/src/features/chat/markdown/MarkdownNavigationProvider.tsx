@@ -8,6 +8,7 @@ export type MarkdownNavigationContextValue = {
   onOpenWorkspaceDirectory?: (directoryPath: string) => void;
   onOpenWorkspaceFile?: (filePath: string, line?: number) => void;
   onOpenWorkspaceFileContextMenu?: (target: WorkspaceFileContextTarget) => void;
+  activeFileMenuTriggerId?: string;
   workspaceRoot?: string;
   workspaceFiles?: MarkdownWorkspaceFiles;
 };
@@ -21,6 +22,7 @@ export function MarkdownNavigationProvider({
   onOpenWorkspaceDirectory,
   onOpenWorkspaceFile,
   onOpenWorkspaceFileContextMenu,
+  activeFileMenuTriggerId,
   workspaceRoot,
   onSearchWorkspaceEntries,
 }: Omit<MarkdownNavigationContextValue, 'workspaceFiles'> & {
@@ -35,6 +37,7 @@ export function MarkdownNavigationProvider({
       onOpenWorkspaceDirectory,
       onOpenWorkspaceFile,
       onOpenWorkspaceFileContextMenu,
+      activeFileMenuTriggerId,
       workspaceRoot,
       workspaceFiles,
     }),
@@ -44,6 +47,7 @@ export function MarkdownNavigationProvider({
       onOpenWorkspaceDirectory,
       onOpenWorkspaceFile,
       onOpenWorkspaceFileContextMenu,
+      activeFileMenuTriggerId,
       workspaceRoot,
       workspaceFiles,
     ],
