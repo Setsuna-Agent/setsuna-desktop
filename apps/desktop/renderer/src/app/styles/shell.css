@@ -292,6 +292,11 @@
   background: transparent;
 }
 
+/* Resolve the dependent collapsed-header width at the root too, including portal titles. */
+:root[data-desktop-platform='darwin']:has(.app-shell--window-fullscreen) {
+  --app-topbar-native-controls-inset: 12px;
+}
+
 :root[data-desktop-platform='win32'] {
   --app-topbar-native-controls-inset: 12px;
   /* 三个按钮、两个按钮间距与右侧留白共同决定标题栏预留宽度。 */

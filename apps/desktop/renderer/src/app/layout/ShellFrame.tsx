@@ -1,16 +1,11 @@
 import { Copy, Minus, PanelLeft, Plus, Square, X } from 'lucide-react';
-import {
-  useEffect,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-  type Ref,
-} from 'react';
+import type { CSSProperties, ReactNode, Ref } from 'react';
 import { getDesktopPlatform } from '../../shared/lib/desktopPlatform.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { appRouteTopbarSlotId } from '../../shared/ui/AppRouteTopbarPortal.js';
+import { useDesktopWindowState } from './useDesktopWindowState.js';
 
 export function ShellFrame({
   children,
@@ -51,12 +46,14 @@ export function ShellFrame({
 }) {
   const showWindowControls = getDesktopPlatform() === 'win32';
   const insetHeaders = showWindowControls && Boolean(applicationMenu);
-  const windowMaximized = useWindowMaximizedState();
+  const windowState = useDesktopWindowState();
+  const windowMaximized = windowState.maximized || windowState.fullScreen;
   const sidebarToggleAction = showSidebarToggle ? onToggleSidebar : undefined;
   const rootClassName = [
     'app-shell',
     'desktop-agent-page',
     windowMaximized ? 'app-shell--window-maximized' : '',
+    windowState.fullScreen ? 'app-shell--window-fullscreen' : '',
     inspectorOpen ? 'app-shell--inspector-open' : '',
     navigationRail ? 'app-shell--with-navigation' : '',
     insetHeaders ? 'app-shell--inset-headers' : '',
@@ -101,32 +98,6 @@ export function ShellFrame({
       </div>
     </div>
   );
-}
-
-function useWindowMaximizedState(): boolean {
-  const [maximized, setMaximized] = useState(false);
-
-  useEffect(() => {
-    const controls = window.setsunaDesktop?.windowControls;
-    if (!controls) return undefined;
-
-    let active = true;
-    let receivedChange = false;
-    const unsubscribe = controls.onMaximizedChange((nextMaximized) => {
-      receivedChange = true;
-      setMaximized(nextMaximized);
-    });
-    void controls.isMaximized().then((initialMaximized) => {
-      if (active && !receivedChange) setMaximized(initialMaximized);
-    });
-
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, []);
-
-  return maximized;
 }
 
 function TitlebarNavigation({

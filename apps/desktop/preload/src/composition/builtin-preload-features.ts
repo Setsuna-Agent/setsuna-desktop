@@ -1,5 +1,7 @@
 import { notificationsPreloadFeature } from '@setsuna-desktop/feature-notifications/preload';
 import { runtimeActivityPreloadFeature } from '@setsuna-desktop/feature-runtime-activity/preload';
+import { diagnosticsPreloadFeature } from '@setsuna-desktop/feature-diagnostics/preload';
+import type { DiagnosticsPreloadContribution } from '@setsuna-desktop/feature-diagnostics/contracts';
 import type { RuntimeActivityPreloadContribution } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import type { NotificationsPreloadContribution } from '@setsuna-desktop/feature-notifications/contracts';
 import type { SetsunaDesktopBridge } from '@setsuna-desktop/contracts';
@@ -26,6 +28,7 @@ import type { WindowsSandboxPreloadBridgeContribution } from '@setsuna-desktop/f
 import { windowsSandboxPreloadFeature } from '@setsuna-desktop/feature-windows-sandbox/preload';
 
 export type DesktopPreloadBridge = SetsunaDesktopBridge
+  & DiagnosticsPreloadContribution
   & NotificationsPreloadContribution
   & RuntimeActivityPreloadContribution
   & BrowserPreloadBridgeContribution
@@ -44,6 +47,7 @@ const desktopPreloadBridgeKeys = [
   'dataRoot',
   'desktop',
   'desktopReview',
+  'diagnostics',
   'links',
   'networkProxy',
   'notifications',
@@ -60,6 +64,7 @@ const desktopPreloadBridgeKeys = [
 const preloadFeatures = definePreloadFeatureHost<DesktopPreloadBridge>({
   bridgeKeys: desktopPreloadBridgeKeys,
   features: [
+    diagnosticsPreloadFeature,
     notificationsPreloadFeature,
     runtimeActivityPreloadFeature,
     browserPreloadFeature,

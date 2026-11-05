@@ -3,8 +3,9 @@ import type { BrowserWindow } from 'electron';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const handlers = vi.hoisted(() => new Map<string, (...args: unknown[]) => unknown>());
+const fromWebContents = vi.hoisted(() => vi.fn());
 vi.mock('electron', () => ({
-  BrowserWindow: {},
+  BrowserWindow: { fromWebContents },
   Menu: {},
   ipcMain: {
     handle: (channel: string, handler: (...args: unknown[]) => unknown) => { handlers.set(channel, handler); },
@@ -14,17 +15,36 @@ vi.mock('electron', () => ({
 import { registerWindowIpc } from '../../../src/ipc/window-ipc.js';
 import { desktopWindows } from '../../../src/window/registry.js';
 
-beforeEach(() => registerWindowIpc({ macTrafficLightPosition: () => ({ x: 0, y: 0 }) }));
+beforeEach(() => {
+  fromWebContents.mockReset();
+  registerWindowIpc({ macTrafficLightPosition: () => ({ x: 0, y: 0 }) });
+});
 afterEach(() => { for (const window of desktopWindows.all()) window.emit('closed'); });
 
 function createSender(id: number) {
   return { id, mainFrame: {}, isDestroyed: vi.fn(() => false), cut: vi.fn(), copy: vi.fn(), paste: vi.fn() };
 }
 function register(sender: ReturnType<typeof createSender>) {
-  desktopWindows.add(Object.assign(new EventEmitter(), {
+  const window = Object.assign(new EventEmitter(), {
     webContents: sender, isDestroyed: () => false,
-  }) as unknown as BrowserWindow);
+  }) as unknown as BrowserWindow;
+  desktopWindows.add(window);
+  return window;
 }
+
+it('returns separate window states only for a registered desktop main frame', () => {
+  const sender = createSender(1);
+  const guest = createSender(2);
+  const window = Object.assign(register(sender), { isMaximized: () => true, isFullScreen: () => false });
+  fromWebContents.mockReturnValue(window);
+  const read = handlers.get('window-control:get-state')!;
+  expect(read({ sender, senderFrame: sender.mainFrame })).toEqual({ maximized: true, fullScreen: false });
+  expect(fromWebContents).toHaveBeenCalledWith(sender);
+  fromWebContents.mockClear();
+  expect(read({ sender: guest, senderFrame: guest.mainFrame })).toEqual({ maximized: false, fullScreen: false });
+  expect(read({ sender, senderFrame: {} })).toEqual({ maximized: false, fullScreen: false });
+  expect(fromWebContents).not.toHaveBeenCalled();
+});
 
 it('executes native clipboard commands only in the requesting desktop window', () => {
   const sender = createSender(1);

@@ -1,4 +1,4 @@
-import type { DesktopRuntimeEventPayload, RuntimeThread } from '@setsuna-desktop/contracts';
+import type { DesktopRuntimeEventPayload, DiagnosticFields, RuntimeThread } from '@setsuna-desktop/contracts';
 import { sampleRuntimeResources, type ProcessResourceSnapshot } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import type { WebContents } from 'electron';
 import { EventEmitter, once } from 'node:events';
@@ -30,7 +30,10 @@ it('recovers a killed runtime, resumes existing subscriptions and settles the tu
     // Keep the turn active until the runtime is killed; a replay would contact us again.
   });
   const onExit = vi.fn(async () => undefined);
-  const host = new RuntimeHost({ appRoot: process.cwd(), appVersion: 'test', dataDir: path.join(root, 'data'), runtimeEntry: entry, onExit });
+  const diagnostics: { event: string; fields: DiagnosticFields }[] = [];
+  const host = new RuntimeHost({ appRoot: process.cwd(), appVersion: 'test', dataDir: path.join(root, 'data'), runtimeEntry: entry, onExit,
+    onDiagnostic: (event, fields) => diagnostics.push({ event, fields }),
+  });
   const events: DesktopRuntimeEventPayload[] = [];
   const renderer = Object.assign(new EventEmitter(), {
     isDestroyed: () => false,
@@ -92,6 +95,10 @@ it('recovers a killed runtime, resumes existing subscriptions and settles the tu
     const sequences = events.flatMap((payload) => payload.batch?.events.map((event) => event.seq) ?? []);
     expect(new Set(sequences).size).toBe(sequences.length);
     expect(onExit).toHaveBeenCalledOnce();
+    expect(diagnostics).toContainEqual({ event: 'runtime-process-exited', fields: expect.objectContaining({
+      runtimePid: pid, signal: 'SIGKILL', intentional: false, wasReady: true,
+    }) });
+    expect(diagnostics).toContainEqual({ event: 'runtime-ready', fields: expect.objectContaining({ attempt: 1 }) });
     // New requests continue through the same host; the Electron renderer need not reload.
     await host.request({ path: threadPath, method: 'PATCH', body: { title: 'Recovered successfully' } });
     expect((await host.request<RuntimeThread>({ path: threadPath })).title).toBe('Recovered successfully');

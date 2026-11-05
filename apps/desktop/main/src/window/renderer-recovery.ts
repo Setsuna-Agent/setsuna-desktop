@@ -1,4 +1,6 @@
 import type { BrowserWindow, RenderProcessGoneDetails } from 'electron';
+import type { DiagnosticReporter } from '@setsuna-desktop/contracts';
+import { diagnosticErrorFields, reportDiagnostic } from '../diagnostics/report.js';
 
 const RETRY_DELAY_MS = 1_000;
 const STABLE_UPTIME_MS = 60_000;
@@ -7,6 +9,7 @@ const MAX_RECOVERY_ATTEMPTS = 2;
 type RecoveryOptions = {
   load(): Promise<void>;
   canRecover(): boolean;
+  onDiagnostic?: DiagnosticReporter;
 };
 
 /** Recover a lost desktop renderer, never a merely slow or background-throttled page. */
@@ -32,19 +35,28 @@ export function registerDesktopRendererRecovery(window: BrowserWindow, options: 
       pending = false;
       loading = true;
       attempts += 1;
+      const startedAt = performance.now();
+      reportDiagnostic(options.onDiagnostic, 'renderer-recovery-started', { senderId: contents.id, attempt: attempts });
       void Promise.resolve().then(() => {
         if (available()) return options.load();
       }).then(() => {
         if (!available() || pending) return;
+        reportDiagnostic(options.onDiagnostic, 'renderer-recovery-loaded', {
+          senderId: contents.id, attempt: attempts, elapsedMs: Math.round(performance.now() - startedAt),
+        });
         // A successful file load alone must not reset a repeated renderer crash loop.
         stable = setTimeout(() => { attempts = 0; }, STABLE_UPTIME_MS);
       }).catch((error: unknown) => {
         pending = true;
         console.error('[desktop-renderer] recovery load failed', { senderId: contents.id, attempt: attempts }, error);
+        reportDiagnostic(options.onDiagnostic, 'renderer-recovery-failed', {
+          senderId: contents.id, attempt: attempts, ...diagnosticErrorFields(error),
+        });
       }).finally(() => {
         loading = false;
         if (pending && attempts >= MAX_RECOVERY_ATTEMPTS) {
           console.error('[desktop-renderer] automatic recovery limit reached', { senderId: contents.id });
+          reportDiagnostic(options.onDiagnostic, 'renderer-recovery-limit-reached', { senderId: contents.id, attempts });
         }
         schedule();
       });
@@ -60,6 +72,7 @@ export function registerDesktopRendererRecovery(window: BrowserWindow, options: 
     pending = true;
     if (attempts >= MAX_RECOVERY_ATTEMPTS) {
       console.error('[desktop-renderer] automatic recovery limit reached', { senderId: contents.id });
+      reportDiagnostic(options.onDiagnostic, 'renderer-recovery-limit-reached', { senderId: contents.id, attempts });
     }
     // Hidden windows stay idle until shown; recovery never steals focus or restarts runtime.
     schedule();

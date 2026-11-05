@@ -16,6 +16,8 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 | `packages/features/browser/src/main/` | `<webview>` 注册、CDP 自动化、控制 server 与浏览器扩展 | [浏览器](../../features/browser.md) |
 | `src/security/` | `safeStorage` 加解密和 credential vault | [Runtime 与 IPC](runtime-and-ipc.md) |
 | `src/window/` | frame、窗口状态、surface、splash | [本机能力](native-capabilities.md) |
+| `src/diagnostics/` | 诊断上报隔离、受限异常快照 | [Diagnostics](../../features/diagnostics.md) |
+| `packages/features/diagnostics/src/main` | 诊断文件写入、轮转、日志目录 IPC | [Diagnostics](../../features/diagnostics.md) |
 | `src/app-identity.ts` | Windows 应用、任务栏和开始菜单身份、按需注册开发通知品牌 | [系统通知](../../features/notifications.md) |
 | `packages/features/review/src/main` | Git review 状态、watcher、IPC 与 stage/unstage/discard | [本机能力](native-capabilities.md) |
 | `packages/features/workspace-apps/src/main` | 外部应用检测、平台启动参数与 IPC | [本机能力](native-capabilities.md) |
@@ -47,6 +49,10 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 - 等待 renderer 首帧后揭示工作台。
 
 窗口首轮 renderer 资源和本机服务就绪后，`window/renderer-recovery.ts` 监听桌面文档的 `render-process-gone`，记录 reason/exitCode；非正常退出仅在窗口可见且未最小化时延迟重载同一受信入口，不重新准备服务、不创建另一套 runtime、不抢焦点。隐藏窗口等到 show/restore/focus 后再恢复；正常退出、应用退出和更新安装期间不启动恢复。自动恢复最多连续尝试两次，成功加载后须稳定运行一分钟才重置预算，避免崩溃循环；`unresponsive` 只记录诊断，不因暂时卡顿强制丢弃编辑。恢复沿用窗口 session slot 和已持久化会话，无法挽回进程退出前尚未保存的内存状态。Runtime SSE 订阅随文档的崩溃、销毁或非同文档主框架导航释放，防止旧连接在重载后继续存活。
+
+`composition/diagnostics-main-binding.ts` 在单实例锁确认后、任何窗口创建前建立进程级诊断 writer，注册 app 级 renderer/原生子进程退出和窗口无响应监听。记录不依赖标准输出、renderer 或其他 Feature 就绪；bootstrap 日志位置不随数据根迁移改变。
+
+文件写入、轮转和目录访问归 Diagnostics Feature，启动、runtime 子进程、renderer 自动恢复和 GPU 等进程异常通过共享 reporter 上报；这些采集点留在原生命周期 owner 中。日志异步限量写入，设置通过 Feature preload 的 `diagnostics.getLogDirectory` / `openLogDirectory` 访问固定目录。完整边界与保留规则见 [Diagnostics](../../features/diagnostics.md)。
 
 Windows 任务栏和系统托盘使用无透明外边距的 `assets/build/icon-windows.png`，安装包/可执行文件使用由同一画面生成的多尺寸 `assets/build/icon.ico`；macOS 继续使用保留平台留白的 `icon.icns` / `icon.png`。
 

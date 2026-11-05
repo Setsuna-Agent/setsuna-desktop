@@ -13,6 +13,7 @@
     { "path": "./packages/features/computer-use/tsconfig.build.json" },
     { "path": "./packages/features/collaboration/tsconfig.build.json" },
     { "path": "./packages/features/conversation-debug/tsconfig.build.json" },
+    { "path": "./packages/features/diagnostics/tsconfig.build.json" },
     { "path": "./packages/features/image-generation/tsconfig.build.json" },
     { "path": "./packages/features/goal/tsconfig.build.json" },
     { "path": "./packages/features/mcp/tsconfig.build.json" },

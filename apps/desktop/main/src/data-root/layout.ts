@@ -36,6 +36,7 @@ export function dataRootBootstrapLayout(appDataRoot: string) {
   const root = path.join(path.resolve(appDataRoot), 'Setsuna Desktop Bootstrap');
   return {
     root,
+    diagnosticLogsRoot: path.join(root, 'logs'),
     instanceLockRoot: path.join(root, 'instance.lock'),
     pointerPath: path.join(root, 'data-root.json'),
     pendingMigrationPath: path.join(root, 'pending-migration.json'),

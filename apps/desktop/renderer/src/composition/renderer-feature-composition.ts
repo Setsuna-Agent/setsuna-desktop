@@ -89,6 +89,7 @@ import {
 import { visionRecognitionRendererFeature } from '@setsuna-desktop/feature-vision-recognition/renderer';
 import { workspaceDependenciesRendererFeature } from '@setsuna-desktop/feature-workspace-dependencies/renderer';
 import { workspaceAppsRendererFeature } from '@setsuna-desktop/feature-workspace-apps/renderer';
+import { diagnosticsRendererFeature, diagnosticsRendererHostCapability } from '@setsuna-desktop/feature-diagnostics/renderer';
 import { appReadySlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { chatToolResultResolverSlot } from '@setsuna-desktop/renderer-contracts/chat';
 import { capabilitiesRefreshCoordinatorCapability } from '@setsuna-desktop/renderer-contracts/capabilities';
@@ -133,6 +134,7 @@ const rendererFeatures = defineRendererFeatureHost({
     workspaceAppsRendererFeature,
   ],
   optional: [
+    diagnosticsRendererFeature,
     automationRendererFeature,
     pullRequestsRendererFeature,
     approvalReviewRendererFeature,
@@ -176,6 +178,9 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       createUiRegistrar: (owner, track) => rendererPlugins.createRegistrar(owner, track),
       hostMessages,
       hostCapabilities: [
+      ...(window.setsunaDesktop?.diagnostics ? [
+        provideHostCapability(diagnosticsRendererHostCapability, window.setsunaDesktop.diagnostics),
+      ] : []),
       provideHostCapability(computerBridgeCapability, window.setsunaDesktop?.computerUse ?? {
         status: async () => ({ active: false }), stop: async () => undefined,
         preview: async () => ({ active: false, frame: null }),

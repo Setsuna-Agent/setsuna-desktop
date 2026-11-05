@@ -79,6 +79,8 @@ describe('desktop renderer recovery', () => {
     await vi.advanceTimersByTimeAsync(120_000);
     expect(fixture.load).toHaveBeenCalledTimes(2);
     expect(console.error).toHaveBeenCalledWith('[desktop-renderer] automatic recovery limit reached', { senderId: 7 });
+    expect(fixture.onDiagnostic.mock.calls.filter(([event]) => event === 'renderer-recovery-started')).toHaveLength(2);
+    expect(fixture.onDiagnostic).toHaveBeenCalledWith('renderer-recovery-limit-reached', { senderId: 7, attempts: 2 });
     fixture.close();
   });
 
@@ -180,9 +182,10 @@ function createFixture(initiallyVisible = true) {
     return contents;
   } });
   const load = vi.fn(async (): Promise<void> => undefined);
-  registerDesktopRendererRecovery(native as unknown as BrowserWindow, { load, canRecover: () => allowed });
+  const onDiagnostic = vi.fn();
+  registerDesktopRendererRecovery(native as unknown as BrowserWindow, { load, canRecover: () => allowed, onDiagnostic });
   return {
-    native, contents, load,
+    native, contents, load, onDiagnostic,
     setVisible: (value: boolean) => { visible = value; native.emit(value ? 'show' : 'hide'); },
     setMinimized: (value: boolean) => { minimized = value; },
     setAllowed: (value: boolean) => { allowed = value; },

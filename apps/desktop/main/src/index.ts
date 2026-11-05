@@ -1,5 +1,6 @@
 import type {
   DesktopNetworkProxyState,
+  DiagnosticReporter,
   RuntimeInterfaceLanguage,
   RuntimeRequestInput,
 } from '@setsuna-desktop/contracts';
@@ -41,7 +42,9 @@ import { DesktopDataRootCoordinator } from './data-root/coordinator.js';
 import { writeJsonAtomically } from './data-root/atomic-json.js';
 import { acquireBootstrapInstanceLock } from './data-root/instance-lock.js';
 import { COMPUTER_USE_LAB_APP_NAME, resolveDesktopInstanceProfile } from './data-root/instance-profile.js';
-import { desktopDataLayout, legacyDesktopPolicyPaths } from './data-root/layout.js';
+import { dataRootBootstrapLayout, desktopDataLayout, legacyDesktopPolicyPaths } from './data-root/layout.js';
+import { registerDesktopDiagnostics } from './composition/diagnostics-main-binding.js';
+import { diagnosticErrorFields, reportDiagnostic } from './diagnostics/report.js';
 import {
   DESKTOP_DEV_RELAUNCH_EXIT_CODE_ENV,
   parseDesktopDevRelaunchExitCode,
@@ -64,7 +67,7 @@ import {
   createWindowsSandboxMainHost,
   prepareDesktopWindowsSandbox,
 } from './composition/windows-sandbox-feature-host.js';
-import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
+import { observeWindowControlsState, registerWindowsTitlebarDoubleClick } from './window/frame.js';
 import { loadDesktopIcon } from './window/icon.js';
 import {
   configureDesktopAppIdentity,
@@ -111,6 +114,8 @@ const macTrafficLightSize = 14;
 const appTopbarHeight = 42;
 let mainWindow: BrowserWindow | null = null;
 let runtimeHost: RuntimeHost | null = null;
+let diagnostics: ReturnType<typeof registerDesktopDiagnostics> | null = null;
+const recordDiagnostic: DiagnosticReporter = (event, fields) => diagnostics?.record(event, fields);
 let activityPreferences: DesktopActivityPreferencesController | null = null;
 let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
 let mainFeatureComposition: MainFeatureComposition | null = null;
@@ -316,6 +321,7 @@ async function createWindow(): Promise<void> {
   let nativeBridge: Awaited<ReturnType<typeof currentDesktopNativeBridgeServer.start>>;
   try {
     activatedMainFeatures = await activateBuiltinMainFeatures({
+      diagnosticLogDirectory: dataRootBootstrapLayout(desktopAppDataRoot).diagnosticLogsRoot,
       credentialVault,
       activeKeyboardShortcutBindings: (senderId) => activeKeyboardShortcutBindings.get(senderId) ?? new Set<string>(),
       interfaceLanguage: () => interfaceLanguage,
@@ -390,6 +396,7 @@ async function createWindow(): Promise<void> {
   desktopUpdaterLifecycle = currentDesktopUpdaterLifecycle;
 
   const currentRuntimeHost = new RuntimeHost({
+    onDiagnostic: recordDiagnostic,
     appRoot: app.getAppPath(),
     appVersion: app.getVersion(),
     browserControl: activatedMainFeatures.browserControl,
@@ -405,6 +412,7 @@ async function createWindow(): Promise<void> {
   requestRuntime = (input) => currentRuntimeHost.request(input);
   runtimeHost = currentRuntimeHost;
   await loadDesktopRenderer(currentMainWindow, {
+    onDiagnostic: recordDiagnostic,
     appRoot: app.getAppPath(),
     devServerUrl: process.env.SETSUNA_DESKTOP_DEV_SERVER_URL,
     canRecover: () => !isAppQuitting && !desktopRelaunchRequested && !updateInstallCoordinator.active,
@@ -445,15 +453,7 @@ async function createWindow(): Promise<void> {
           : Promise.resolve('quit'),
       });
       const stopObservingWindows = desktopWindows.onWindowAdded((window) => {
-        const publishMaximized = () => {
-          if (!window.isDestroyed()) window.webContents.send(
-            'window-control:maximized-change', window.isMaximized() || window.isFullScreen(),
-          );
-        };
-        window.on('maximize', publishMaximized);
-        window.on('unmaximize', publishMaximized);
-        window.on('enter-full-screen', publishMaximized);
-        window.on('leave-full-screen', publishMaximized);
+        const stopPublishingState = observeWindowControlsState(window);
         const senderId = window.webContents.id;
         window.once('closed', () => {
           activeKeyboardShortcutBindings.delete(senderId);
@@ -465,8 +465,10 @@ async function createWindow(): Promise<void> {
           // Only the last desktop window owns service shutdown.
           if (!updateInstallCoordinator.active) void shutdownDesktopServices();
         });
+        return stopPublishingState;
       });
       registerThreadWindowIpc({
+        onDiagnostic: recordDiagnostic,
         appRoot: app.getAppPath(),
         devServerUrl: process.env.SETSUNA_DESKTOP_DEV_SERVER_URL,
         canRecover: () => !isAppQuitting && !desktopRelaunchRequested && !updateInstallCoordinator.active,
@@ -528,6 +530,7 @@ async function createDataRootMaintenanceWindow(): Promise<void> {
     app.quit();
   });
   await loadDesktopRenderer(currentMainWindow, {
+    onDiagnostic: recordDiagnostic,
     appRoot: app.getAppPath(),
     devServerUrl: process.env.SETSUNA_DESKTOP_DEV_SERVER_URL,
     canRecover: () => !isAppQuitting && !desktopRelaunchRequested && !updateInstallCoordinator.active,
@@ -691,19 +694,24 @@ if (!ownsDesktopInstance) {
   // Exit before createWindow() can spawn a second runtime against the same user-data directory.
   app.quit();
 } else {
+  diagnostics = registerDesktopDiagnostics(dataRootBootstrapLayout(desktopAppDataRoot).diagnosticLogsRoot);
   app.on('second-instance', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     revealDesktopWindow(mainWindow);
   });
 
   app.whenReady().then(async () => {
+    const startedAt = performance.now();
+    reportDiagnostic(recordDiagnostic, 'desktop-startup-started', {});
     await createWindow();
+    reportDiagnostic(recordDiagnostic, 'desktop-startup-ready', { elapsedMs: Math.round(performance.now() - startedAt) });
     // Diagnose the same normally running main process and its direct helper,
     // without starting a control session or requesting system permissions.
     if (process.argv.includes('--computer-use-normal-diagnostics')) {
       console.log(JSON.stringify({ context: 'normal-main', ...await diagnoseBuiltinComputerUse() as object }));
     }
   }).catch((error) => {
+    reportDiagnostic(recordDiagnostic, 'desktop-startup-failed', diagnosticErrorFields(error));
     console.error(error);
     app.quit();
   });
@@ -726,7 +734,9 @@ if (!ownsDesktopInstance) {
     event.preventDefault();
     if (appQuitShutdownPending) return;
     appQuitShutdownPending = true;
-    void shutdownDesktopServices().finally(() => {
+    // Include service exit records, but never let a stalled disk hold application shutdown indefinitely.
+    void shutdownDesktopServices().finally(async () => {
+      await diagnostics?.flush(1_000);
       appQuitAfterShutdown = true;
       app.quit();
     });

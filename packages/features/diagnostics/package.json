@@ -1,0 +1,23 @@
+{
+  "name": "@setsuna-desktop/feature-diagnostics",
+  "version": "0.1.0",
+  "description": "Local desktop diagnostic logs and settings.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./contracts": { "types": "./dist/contracts/index.d.ts", "default": "./dist/contracts/index.js" },
+    "./main": { "types": "./dist/main/index.d.ts", "default": "./dist/main/index.js" },
+    "./preload": { "types": "./dist/preload/index.d.ts", "default": "./dist/preload/index.js" },
+    "./renderer": { "types": "./dist/renderer/index.d.ts", "default": "./dist/renderer/index.js" }
+  },
+  "dependencies": {
+    "@setsuna-desktop/contracts": "workspace:*",
+    "@setsuna-desktop/feature-core": "workspace:*",
+    "@setsuna-desktop/renderer-contracts": "workspace:*",
+    "@setsuna-desktop/renderer-ui": "workspace:*",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1"
+  },
+  "peerDependencies": { "electron": ">=30" },
+  "scripts": { "build": "tsc -b tsconfig.build.json", "typecheck": "tsc -b --pretty false" }
+}
