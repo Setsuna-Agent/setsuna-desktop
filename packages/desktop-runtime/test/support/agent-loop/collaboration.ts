@@ -193,9 +193,6 @@ export class MultiAgentConfigStore implements ConfigStore {
       approvalPolicy: 'on-request' as const,
       permissionProfile: 'workspace-write' as const,
       sandboxWorkspaceWrite: {},
-      features: {
-        multi_agent: true,
-      },
     };
   }
 

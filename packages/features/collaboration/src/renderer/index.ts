@@ -13,6 +13,7 @@ export { CollaborationTaskList } from './CollaborationTaskList.js';
 export { CollaborationTaskDirectory } from './CollaborationTaskDirectory.js';
 export { CollaborationTaskControls } from './CollaborationTaskControls.js';
 export { CollaborationAgentInfo } from './CollaborationAgentInfo.js';
+export { CollaborationToggleSettings } from './CollaborationToggleSettings.js';
 export {
   collaborationTaskStatusLabel,
   SubagentTaskStatus,

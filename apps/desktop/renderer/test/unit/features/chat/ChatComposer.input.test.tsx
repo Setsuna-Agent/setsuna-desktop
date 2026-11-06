@@ -638,7 +638,7 @@ function Harness({ preferenceKey, project, newThread = false, initialDraft = '',
     draft={session?.draft ?? draft} skills={skills} plugins={plugins} onDraftChange={session?.setDraft ?? setDraft} onSend={send}
     queuedTurnActions={queuedTurnActions ?? { deleteQueuedTurnInput: vi.fn(), retrieveQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn() }}
     onAccessModeChange={vi.fn()} onCancelActiveTurn={vi.fn()} onClearContext={vi.fn()} onCompactContext={vi.fn()}
-    onSelectModel={vi.fn()} onSetMultiAgentEnabled={vi.fn()} onStartThreadReview={vi.fn()} onSearchProjectEntries={vi.fn()}
+    onSelectModel={vi.fn()} onStartThreadReview={vi.fn()} onSearchProjectEntries={vi.fn()}
   /></BrowserTabMentionsProvider></RendererPluginTestHost>;
 }
 

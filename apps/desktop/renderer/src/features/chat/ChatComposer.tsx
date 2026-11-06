@@ -146,7 +146,6 @@ export function ChatComposer({
   onSelectModel,
   onSearchProjectEntries,
   onOpenSideChat,
-  onSetMultiAgentEnabled,
   onSend,
   queuedTurnActions,
   onStartThreadReview,
@@ -189,7 +188,6 @@ export function ChatComposer({
   onSelectModel: ChatModelSelectionHandler;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenSideChat?: () => void;
-  onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onSend: (value?: string, options?: ChatComposerSendOptions) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
   onStartThreadReview: (
@@ -270,8 +268,6 @@ export function ChatComposer({
     && (draft.trim() || (attachmentOnlyAllowed && sendableAttachments.length)),
   );
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
-  const multiAgentEnabled = !sideConversation
-    && (config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true);
   const replaceQueuedTurnComposer = useCallback((input: RuntimeQueuedTurnInput) => {
     replaceAttachmentsWithExisting(input.attachments ?? []);
     const slots = createReferenceDraftSlots(
@@ -350,7 +346,6 @@ export function ChatComposer({
     contextCompacting,
     goalModeEnabled: modeController.goalModeEnabled,
     hasReviewIncompatibleContent: Boolean(attachmentItems.length || selectedSkills.length || selectedPluginIds.length),
-    multiAgentEnabled,
     query: commandController.slashQuery,
     plugins,
     selectedPluginIds,
@@ -371,7 +366,6 @@ export function ChatComposer({
     attachmentItems.length,
     modeController.activeModelName,
     modeController.goalModeEnabled,
-    multiAgentEnabled,
     onOpenSideChat,
     sideConversation,
     selectedSkills,
@@ -623,11 +617,6 @@ export function ChatComposer({
       fileInputRef.current?.click();
       return;
     }
-    if (item.kind === 'action' && item.type === 'collaboration') {
-      if (!multiAgentEnabled) void onSetMultiAgentEnabled(true);
-      commandController.focusComposer();
-      return;
-    }
     if (item.kind === 'action' && item.type === 'goal') {
       modeController.enableGoalMode();
       commandController.focusComposer();
@@ -820,11 +809,9 @@ export function ChatComposer({
             contextUsage={contextUsage}
             hasActiveTurn={Boolean(activeTurnId)}
             modeBadges={{
-              collaborationEnabled: multiAgentEnabled,
               goalModeEnabled: modeController.goalModeEnabled,
               onClearGoal: modeController.clearGoalMode,
               onClearReview: modeController.clearReviewMode,
-              onDisableCollaboration: () => void onSetMultiAgentEnabled(false),
               reviewModeEnabled: modeController.reviewModeEnabled,
             }}
             modelOpenSignal={modeController.modelOpenSignal}

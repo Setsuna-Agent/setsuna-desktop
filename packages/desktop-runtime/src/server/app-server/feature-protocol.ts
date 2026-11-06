@@ -1,4 +1,5 @@
 import type { RuntimeConfigInput, RuntimeConfigState } from '@setsuna-desktop/contracts';
+import { collaborationEnabledForConfig } from '@setsuna-desktop/feature-collaboration/contracts';
 import { numericInput, stringInput } from './input.js';
 import { sweOffsetPage } from './pagination.js';
 
@@ -183,6 +184,7 @@ export function sweExperimentalFeatureListResponse(config: RuntimeConfigState, i
 }
 
 function sweFeatureEnabledByName(name: string, config: RuntimeConfigState, fallback = false): boolean {
+  if (name === 'multi_agent') return collaborationEnabledForConfig(config);
   const configured = config.features?.[name];
   if (typeof configured === 'boolean') return configured;
   switch (name) {

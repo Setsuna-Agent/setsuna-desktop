@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
+import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
@@ -12,12 +13,13 @@ import {
 } from '../../support/agent-loop/collaboration.js';
 import {
   mkDataDir,
+  SingleToolCallModelClient,
   waitForTestState,
   waitForTurnCompleted
 } from '../../support/agent-loop/shared.js';
 
 describe('agent loop collaboration tools', () => {
-  it('runs built-in collaboration tools across spawned child threads', async () => {
+  it('delegates across child threads by default without an explicit collaboration flag', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const parent = await threadStore.createThread({ title: 'Parent collaboration loop', projectId: 'project_1' });
@@ -39,20 +41,6 @@ describe('agent loop collaboration tools', () => {
       const parentEvents = await threadStore.listEvents(parent.id, 0);
       const childEvents = child ? await threadStore.listEvents(child.id, 0) : [];
   
-      expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual([
-        'list_agent_profiles',
-        'spawn_agent',
-        'send_input',
-        'resume_agent',
-        'wait',
-        'read_agent_result',
-        'interrupt_agent',
-        'close_agent',
-      ]);
-      expect(modelClient.requests[0].messages.find((message) => message.id === 'desktop_collaboration_mode')).toMatchObject({
-        role: 'developer',
-        content: expect.stringContaining('Proactive collaboration is active'),
-      });
       expect(child).toMatchObject({ parentThreadId: parent.id, projectId: 'project_1' });
       expect(parentEvents.filter((event) => event.type === 'item.completed').map((event) => event.payload.item.kind)).toEqual(expect.arrayContaining([
         'collab_tool_call',
@@ -85,6 +73,37 @@ describe('agent loop collaboration tools', () => {
       expect((await threadStore.getThread(parent.id))?.messages.at(-1)?.content).toBe('Parent completed collaboration.');
     });
   
+  const disabledConfigurations: Record<string, boolean>[] = [
+    { multi_agent: false },
+    { multi_agent_v2: false },
+    { multi_agent: false, multi_agent_v2: true },
+  ];
+  it.each(disabledConfigurations)('honors a persisted disable and rejects attempted delegation (%j)', async (features) => {
+    const dataDir = await mkDataDir();
+    await new FileConfigStore(dataDir).saveConfig({ features });
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(dataDir, systemClock, ids);
+    const parent = await threadStore.createThread({ title: 'Collaboration disabled' });
+    const modelClient = new SingleToolCallModelClient({
+      id: 'attempt_spawn', name: 'spawn_agent', arguments: JSON.stringify({ prompt: 'Inspect independently' }),
+    });
+    const loop = new AgentLoop({
+      threadStore, modelClient, ids, clock: systemClock, eventBus: new InMemoryEventBus(),
+      configStore: new FileConfigStore(dataDir),
+    });
+    bindTestCollaborationFeature(loop, threadStore);
+    try {
+      await loop.sendTurn(parent.id, { input: 'Inspect this task' });
+      expect((modelClient.requests[0].tools ?? []).some((tool) => tool.name === 'spawn_agent')).toBe(false);
+      expect(await threadStore.listThreads({ parentThreadId: parent.id })).toEqual([]);
+      const result = (await threadStore.getThread(parent.id))?.messages.find((message) => message.toolName === 'spawn_agent');
+      expect(result?.status).toBe('error');
+    } finally {
+      await loop.shutdown();
+      await threadStore.close();
+    }
+  });
+
   it('keeps the parent turn active until spawned child research is collected', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);

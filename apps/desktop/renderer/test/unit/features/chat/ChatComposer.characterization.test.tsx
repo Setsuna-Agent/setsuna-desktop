@@ -294,7 +294,6 @@ function composerElement(
       }))}
       onSelectModel={vi.fn()}
       onSend={vi.fn(async () => true)}
-      onSetMultiAgentEnabled={vi.fn()}
       onStartThreadReview={vi.fn()}
       {...overrides}
     />

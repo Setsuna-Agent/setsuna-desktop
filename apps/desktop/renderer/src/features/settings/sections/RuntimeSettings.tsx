@@ -23,6 +23,7 @@ import { SettingsPathValue } from '../components/SettingsPathValue.js';
 import { DataLocationSettings } from '../data-root/DataLocationSettings.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
 import { errorMessage } from '../settings-utils.js';
+import { CollaborationFeatureSettings } from '../../../composition/CollaborationFeatureBoundary.js';
 
 export function RuntimePolicySettings({
   config,
@@ -84,6 +85,7 @@ export function RuntimePolicySettings({
         </div>
       </div>
 
+      <CollaborationFeatureSettings config={config} onSave={onSave} />
       <RuntimeImageCompressionSettings config={config} onSave={onSave} />
 
       <div className="chat-user-settings__section-block">

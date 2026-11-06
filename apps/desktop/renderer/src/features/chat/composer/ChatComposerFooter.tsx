@@ -30,11 +30,9 @@ type ChatComposerFooterCommandControl = {
 };
 
 type ChatComposerFooterModeBadges = {
-  collaborationEnabled: boolean;
   goalModeEnabled: boolean;
   onClearGoal: () => void;
   onClearReview: () => void;
-  onDisableCollaboration: () => void;
   reviewModeEnabled: boolean;
 };
 
@@ -102,12 +100,6 @@ export function ChatComposerFooter({
           permissionProfile={config?.permissionProfile ?? 'workspace-write'}
           onChange={onAccessModeChange}
         />
-        {modeBadges.collaborationEnabled ? (
-          <ChatModeBadge
-            label={t('chat.composer.badge.collaboration')}
-            onClose={modeBadges.onDisableCollaboration}
-          />
-        ) : null}
         {modeBadges.goalModeEnabled ? (
           <ChatModeBadge
             label={hasActiveTurn

@@ -180,13 +180,6 @@ export function ChatRouteAdapter({
     void projectWorkspace.refreshFilePreview(() => true);
     return result;
   };
-  const setMultiAgentEnabled = (enabled: boolean) => runtime.saveRuntimePreferences({
-    features: {
-      ...(runtime.config?.features ?? {}),
-      multi_agent: enabled,
-      multi_agent_v2: enabled,
-    },
-  });
   const conversation: ChatConversationSurfaceModel = {
     starterPresentation,
     turnNavigationRequest,
@@ -237,7 +230,6 @@ export function ChatRouteAdapter({
     onSearchProjectEntries: searchMentions,
     onSelectModel: runtime.selectConversationModel,
     onSend: sendInput,
-    onSetMultiAgentEnabled: setMultiAgentEnabled,
     onCapabilitySelectionRequestConsumed,
     onStartThreadReview: (target, modelSelection) => startCurrentThreadReview(
       target, modelSelection, runtime.currentThread ? undefined : starterLocation.selection.value,
@@ -341,7 +333,6 @@ export function ChatRouteAdapter({
       onRevealFile: workspacePanels.revealWorkspaceFile,
       onSearchProjectEntries: projectWorkspace.searchProjectEntries,
       onSelectModel: runtime.selectConversationModel,
-      onSetMultiAgentEnabled: setMultiAgentEnabled,
       onSideChatError: runtime.setError,
       onStartThreadReview: startCurrentThreadReview,
       onUpdateBrowserPanel: workspacePanels.updateBrowserPanel,

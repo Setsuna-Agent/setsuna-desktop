@@ -115,7 +115,6 @@ function Harness({ send, sideConversation = false, visible = true, placeholder }
       onClearContext={vi.fn()}
       onCompactContext={vi.fn()}
       onSelectModel={vi.fn()}
-      onSetMultiAgentEnabled={vi.fn()}
       onStartThreadReview={vi.fn()}
       onSearchProjectEntries={vi.fn()}
     />

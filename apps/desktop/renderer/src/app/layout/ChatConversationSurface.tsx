@@ -90,7 +90,6 @@ export type ChatConversationSurfaceModel = Readonly<{
   onSearchProjectEntries(query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
   onSelectModel: ChatModelSelectionHandler;
   onSend(value?: string, options?: ChatComposerSendOptions): Promise<boolean>;
-  onSetMultiAgentEnabled(enabled: boolean): void | Promise<unknown>;
   onCapabilitySelectionRequestConsumed(requestId: number): void;
   onStartThreadReview(
     target: ReviewTarget,
@@ -180,7 +179,6 @@ export function ChatConversationSurface({
         onSearchProjectEntries={model.onSearchProjectEntries}
         onSelectModel={model.onSelectModel}
         onSend={model.onSend}
-        onSetMultiAgentEnabled={model.onSetMultiAgentEnabled}
         onCapabilitySelectionRequestConsumed={model.onCapabilitySelectionRequestConsumed}
         onStartThreadReview={model.onStartThreadReview}
         onWorkspaceMentionRequestConsumed={onWorkspaceMentionRequestConsumed}
