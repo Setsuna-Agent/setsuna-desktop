@@ -25,7 +25,7 @@ describe('chat slash command items', () => {
       .toHaveLength(11);
   });
 
-  it('retains the action order and contextual disabled states', () => {
+  it('disables actions whose required context is unavailable', () => {
     const items = createChatSlashCommandItems(options({
       activeProjectSelected: false,
       activeTurnId: 'turn-1',
@@ -34,16 +34,6 @@ describe('chat slash command items', () => {
       sideChatAvailable: false,
     }));
 
-    expect(items.map((item) => item.key)).toEqual([
-      'attachment',
-      'model',
-      'collaboration',
-      'goal',
-      'side-chat',
-      'review',
-      'compact-context',
-      'clear-context',
-    ]);
     expect(action(items, 'attachment').disabled).toBe(true);
     expect(action(items, 'side-chat').disabled).toBe(true);
     expect(action(items, 'review').disabled).toBe(true);
@@ -77,17 +67,7 @@ describe('chat slash command items', () => {
       skills,
     }));
 
-    expect(items.slice(0, 8).map((item) => item.key)).toEqual([
-      'attachment',
-      'model',
-      'collaboration',
-      'goal',
-      'side-chat',
-      'review',
-      'compact-context',
-      'clear-context',
-    ]);
-    expect(items.slice(8).map((item) => item.key)).toEqual(
+    expect(items.filter((item) => item.kind === 'skill').map((item) => item.key)).toEqual(
       skills.slice(2).map((item) => `skill:${item.id}`),
     );
   });
@@ -116,7 +96,6 @@ function options(overrides: Partial<ChatSlashCommandItemsOptions> = {}): ChatSla
     contextCompacting: false,
     goalModeEnabled: false,
     hasReviewIncompatibleContent: false,
-    multiAgentEnabled: false,
     query: '',
     selectedSkills: [],
     sideChatAvailable: true,

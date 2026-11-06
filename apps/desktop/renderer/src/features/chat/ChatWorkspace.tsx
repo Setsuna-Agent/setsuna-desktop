@@ -98,7 +98,6 @@ export function ChatWorkspace({
   onSearchProjectEntries,
   onSend,
   queuedTurnActions,
-  onSetMultiAgentEnabled,
   onStartThreadReview,
   onImageAttachmentRequestConsumed,
   onCapabilitySelectionRequestConsumed,
@@ -153,7 +152,6 @@ export function ChatWorkspace({
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onSend: (value?: string, options?: ChatComposerSendOptions) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
-  onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: (
     target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
@@ -289,7 +287,6 @@ export function ChatWorkspace({
             onSelectModel={onSelectModel}
             onSearchProjectEntries={onSearchProjectEntries}
             onOpenSideChat={onOpenSideChat}
-            onSetMultiAgentEnabled={onSetMultiAgentEnabled}
             onSend={handleSend}
             queuedTurnActions={queuedTurnActions}
             onStartThreadReview={onStartThreadReview}

@@ -15,6 +15,7 @@ export type { CollaborationExecution } from './execution.js';
 export { readCollaborationState } from './operations.js';
 export type { CollaborationThreadInput } from './operations.js';
 export * from './agents.js';
+export { collaborationEnabledForConfig } from './configuration.js';
 export * from './avatar.js';
 export * from './agent-role-text.js';
 export * from './actions.js';

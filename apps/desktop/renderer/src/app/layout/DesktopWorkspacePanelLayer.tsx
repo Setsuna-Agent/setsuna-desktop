@@ -186,7 +186,6 @@ export type DesktopWorkspacePanelModel = Readonly<{
     onRevealFile(filePath: string): void;
     onSearchProjectEntries(query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
     onSelectModel: ChatModelSelectionHandler;
-    onSetMultiAgentEnabled(enabled: boolean): void | Promise<unknown>;
     onSideChatError: Dispatch<SetStateAction<string | null>>;
     onStartThreadReview(target: ReviewTarget, modelSelection?: RuntimeConfiguredModelReference): Promise<unknown>;
     onUpdateBrowserPanel: BrowserPanelMetadataHandler;
@@ -460,7 +459,6 @@ export function DesktopWorkspacePanelLayer({
                   onOpenWorkspaceFile={actions.onOpenProjectFile}
                   onReloadThreads={actions.onReloadThreads}
                   onSelectModel={actions.onSelectModel}
-                  onSetMultiAgentEnabled={actions.onSetMultiAgentEnabled}
                   onWorkspaceResizeStart={layout.onWorkspaceResizeStart}
                   onWorkspaceResizeStep={layout.onWorkspaceResizeStep}
                 />

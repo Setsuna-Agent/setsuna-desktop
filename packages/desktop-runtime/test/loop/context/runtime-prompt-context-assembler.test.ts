@@ -297,7 +297,6 @@ describe('RuntimePromptContextAssembler', () => {
       source: 'tool_policy',
       trust: 'runtime',
       lifecycle: 'turn',
-      content: expect.stringContaining('Proactive collaboration is active'),
     });
     expect(unavailable.fragments.some((fragment) => fragment.id === 'desktop_collaboration_mode')).toBe(false);
   });

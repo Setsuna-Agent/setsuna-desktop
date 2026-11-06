@@ -141,7 +141,7 @@ Electron 原生 MV2 后台页面使用共享 preload world，直接调用 `conte
 
 `main/extensions/ui.ts` 与 `side-panels.ts` 承载 `chrome.sidePanel` 的配置、启停、打开/关闭事件以及 `setPanelBehavior` 的图标切换行为。扩展侧栏在当前浏览器页面右侧使用同一 partition 的受限 webview，沿用扩展 preload，不能访问桌面 preload；只接受调用扩展自己的页面和已登记来宾/宿主窗口。renderer 的 `BrowserExtensionPanelHost` 由工作区窗口持有，标签页通过 slot 预留空间；固定窗口层跟随可见 slot，不移动或重建 guest DOM。全局侧栏跨标签复用同一个 guest，切换或隐藏浏览器时保留草稿、滚动和连接。全局配置与按 WebContents ID 指定的配置分开维护，窗口查询返回当前面板，带标签 ID 的查询仍过滤归属；停用、卸载、所属窗口关闭或指定标签页销毁时清理对应面板。Worker 启动后订阅打开事件时，通过 RPC 回复同步已打开面板，避免初始化期间丢失异步事件。普通网站不能获取此 API。补齐的 `windows.get/getCurrent/getLastFocused/getAll/onFocusChanged` 仅描述已登记桌面浏览器窗口；扩展页面的当前窗口由真实所属窗口决定，不随其他窗口中的点击变化。
 
-全局侧栏的图标切换按窗口与扩展判断，不绑定最初打开的标签；只有标签专属面板比较标签 ID。`windows.getLastFocused` 使用窗口聚焦记录，不受上次工具栏点击归属影响。
+全局侧栏的图标切换按窗口与扩展判断，不绑定最初打开的标签；只有标签专属面板比较标签 ID。已配置图标切换行为且面板已打开时，关闭直接使用当前宿主状态，不等待 Worker 唤醒，避免初始化期间的配置回写改变这次关闭操作。打开尚未配置的面板仍通过原有 Worker 唤醒和事件链路。`windows.getLastFocused` 使用窗口聚焦记录，不受上次工具栏点击归属影响。
 
 `main/extensions/system-apis.ts` 与 `preload/extension-system.ts` 按清单权限承载缺失的扩展 API，复用来自真实 frame/worker 的身份校验。Debugger 只允许已登记 HTTP(S)/空白网页的单独 CDP 会话，拒绝桌面和扩展页面、Browser/Target 全局命令与本地文件导航；释放扩展时断开会话。Commands 读取平台快捷键并路由真实来宾输入；ContextMenus 支持平铺菜单及点击事件；Downloads 提供当前运行期间真实下载的查询、变更与显示位置；WebNavigation 提供 `getFrame/getAllFrames`、实际新标签创建和网页 frame 提交事件，使用统一的 extension frame ID。导航监听器分别保存注册时的 URL 过滤条件，条件内取交集、条件间取并集；支持 host/path/query/url 字符串、scheme/port 和可由 JavaScript 处理的 RE2 正则子集，未支持的 CIDR 或正则条件在注册时明确报错。Electron 的 [did-frame-navigate](https://www.electronjs.org/docs/latest/api/web-contents#event-did-frame-navigate) 未提供 Chrome 的 `transitionType` 和 `transitionQualifiers`；此兼容事件不填入猜测值，依赖这些字段的扩展仍不兼容。未实现的方法不返回伪造成功，其他 Chrome API 仍受 Electron 的兼容范围限制。
 
@@ -183,7 +183,7 @@ API 桥按必需与可选权限声明在文档和 worker 首次加载时安装�
 
 `patches/electron-chrome-web-store@0.13.0.patch` 修正上游的 origin 前缀校验、ID/版本路径校验、下载代理和超时；下载 manifest 必须与确认的版本一致且不能新增权限或网站匹配范围，失败清理临时解包目录。自动更新暂未启用，后续需要先实现新增权限的重新确认。当前不提供 Chrome 账号同步或完整的 tabs/action API 兼容层。
 
-隐藏窗口集成测试走真实 Electron webview 和商店 bridge，覆盖取消安装、权限不一致拒绝、CRX 安装、content script/storage、MV3 worker 的动态 action 更新及导航清理、按标签页选择弹窗、扩展页面隔离、停用及跨进程恢复、并发启停、重新启用和停用后卸载；网络使用固定测试协议响应，不访问真实商店。`side-panels.electron.test.ts` 另行覆盖无弹窗 action 点击、后台打开侧栏、配置切换、Promise/回调错误、窗口/标签页归属和停用清理；可通过 `SETSUNA_SIDEPANEL_EXTENSION_DIRECTORY` 指向本地原版扩展安装目录，验证复制到独立临时 profile 后的点击和页面脚本加载，不读取用户的扩展存储。单元测试聚焦桌面及扩展 IPC 身份边界、manifest URL/图标路径、安装目录校验、状态持久化失败、权限展示的数据来源、标签页 action 覆盖优先级、设置管理入口和新标签页启停/卸载状态流转。
+隐藏窗口集成测试走真实 Electron webview 和商店 bridge，覆盖取消安装、权限不一致拒绝、CRX 安装、content script/storage、MV3 worker 的动态 action 更新及导航清理、按标签页选择弹窗、扩展页面隔离、停用及跨进程恢复、并发启停、重新启用和停用后卸载；网络使用固定测试协议响应，不访问真实商店。`side-panels.electron.test.ts` 另行覆盖无弹窗 action 点击、配置切换、Promise/回调错误、窗口/标签页归属和停用清理。它使用独立扩展页面注册处理器，等待侧栏配置的 IPC 回包后再开始操作，不依赖原生 Worker 冷注册速度；Worker 启动由独立的启动测试覆盖，关闭时配置被初始化回写的场景由受控单元测试覆盖。可通过 `SETSUNA_SIDEPANEL_EXTENSION_DIRECTORY` 指向本地原版扩展安装目录，验证复制到独立临时 profile 后的点击和页面脚本加载，不读取用户的扩展存储。单元测试聚焦桌面及扩展 IPC 身份边界、manifest URL/图标路径、安装目录校验、状态持久化失败、权限展示的数据来源、标签页 action 覆盖优先级、设置管理入口和新标签页启停/卸载状态流转。
 
 ### 用户脚本和扩展详情
 

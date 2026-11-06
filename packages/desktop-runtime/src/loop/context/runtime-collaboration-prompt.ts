@@ -4,7 +4,7 @@ export function runtimeCollaborationPrompt(language: RuntimeInterfaceLanguage = 
   const text = runtimeText(language);
   return [
     text('<collaboration_mode>', "<collaboration_mode>"),
-    text('Proactive collaboration is active because the user enabled Collaboration.', "用户已开启协作，因此主动协作模式已启用。"),
+    text('Collaboration tools are available. Delegate independent subtasks when doing so would materially improve speed or quality.', '协作工具可用。在能明显改善速度或质量时，按需委派独立子任务。'),
     text('Respect explicit user instructions and repository restrictions on delegation.', '遵守用户明确指令和仓库对委派子任务的限制。'),
     text('', ""),
     text('Use spawn_agent without additional confirmation for a concrete, bounded research, implementation, analysis, or verification subtask when it can run independently alongside useful parent work and would materially improve speed or quality.', '具体、边界清晰的研究、实现、分析或验证子任务能够与主代理的有效工作独立并行，且能明显改善速度或质量时，无需额外确认使用 spawn_agent。'),

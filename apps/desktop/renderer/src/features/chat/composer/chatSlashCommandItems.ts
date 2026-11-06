@@ -19,7 +19,6 @@ export type ChatSlashCommandItemsOptions = {
   contextCompacting: boolean;
   goalModeEnabled: boolean;
   hasReviewIncompatibleContent: boolean;
-  multiAgentEnabled: boolean;
   query: string;
   plugins?: readonly RuntimePluginSummary[];
   selectedPluginIds?: readonly string[];
@@ -40,7 +39,6 @@ export function createChatSlashCommandItems({
   contextCompacting,
   goalModeEnabled,
   hasReviewIncompatibleContent,
-  multiAgentEnabled,
   query,
   plugins = [],
   selectedPluginIds = [],
@@ -64,15 +62,6 @@ export function createChatSlashCommandItems({
       kind: 'model',
       title: t('chat.composer.model'),
       description: activeModelName ?? t('chat.composer.selectConfiguredModel'),
-    },
-    {
-      key: 'collaboration',
-      kind: 'action',
-      type: 'collaboration',
-      title: t('chat.composer.collaborationMode'),
-      description: multiAgentEnabled
-        ? t('chat.composer.collaborationEnabled')
-        : t('chat.composer.collaborationDescription'),
     },
     {
       key: 'goal',
@@ -187,7 +176,6 @@ export function createChatSkillCommandItems({ query, selectedSkills, skills }: P
 }
 
 const SIDE_CONVERSATION_HIDDEN_ACTIONS = new Set([
-  'collaboration',
   'goal',
   'side-chat',
   'review',

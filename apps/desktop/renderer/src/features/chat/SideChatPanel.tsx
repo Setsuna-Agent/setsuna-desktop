@@ -49,7 +49,6 @@ export function SideChatPanel({
   onOpenSideChat,
   onReloadThreads,
   onSelectModel,
-  onSetMultiAgentEnabled,
   onWorkspaceResizeStep,
   onWorkspaceResizeStart,
   workspaceMaxWidth,
@@ -76,7 +75,6 @@ export function SideChatPanel({
   onOpenSideChat: () => void;
   onReloadThreads: () => Promise<unknown>;
   onSelectModel: ChatModelSelectionHandler;
-  onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onWorkspaceResizeStep: (delta: number) => void;
   onWorkspaceResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   workspaceMaxWidth: number;
@@ -213,7 +211,6 @@ export function SideChatPanel({
           onSelectModel={onSelectModel}
           onSend={(value, options) => sideChat.actions.sendInput(value, options)}
           queuedTurnActions={sideChat.actions}
-          onSetMultiAgentEnabled={onSetMultiAgentEnabled}
           onStartThreadReview={sideChat.startReview}
           onCapabilitySelectionRequestConsumed={() => undefined}
         />

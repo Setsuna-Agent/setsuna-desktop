@@ -1,4 +1,5 @@
 import { runtimeText, type RuntimeInterfaceLanguage, type RuntimeToolDefinition, type RuntimeConfigState } from '@setsuna-desktop/contracts';
+import { collaborationEnabledForConfig } from '../contracts/configuration.js';
 
 const COLLABORATION_TOOL_NAMES = new Set(['spawn_agent', 'send_input', 'resume_agent', 'interrupt_agent', 'wait', 'close_agent', 'read_agent_result', 'list_agent_profiles']);
 
@@ -94,7 +95,7 @@ export function collaborationToolDefinitions(language?: RuntimeInterfaceLanguage
 export const COLLABORATION_TOOL_DEFINITIONS = Object.freeze(collaborationToolDefinitions());
 
 export function collaborationToolsEnabled(config: RuntimeConfigState | null | undefined): boolean {
-  return config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true;
+  return collaborationEnabledForConfig(config);
 }
 
 export function isCollaborationToolName(name: string): boolean {

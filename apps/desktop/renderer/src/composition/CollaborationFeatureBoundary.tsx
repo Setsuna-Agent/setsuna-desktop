@@ -1,9 +1,11 @@
 import type { CollaborationRendererStateService } from '@setsuna-desktop/feature-collaboration/contracts';
+import type { RuntimeConfigInput, RuntimeConfigState } from '@setsuna-desktop/contracts';
 import {
   CollaborationRendererProvider,
   CollaborationTaskDirectory,
   CollaborationTaskControls,
   CollaborationAgentInfo,
+  CollaborationToggleSettings,
   CollaborationTaskList,
   CollaborationTaskNavigationProvider,
   SubagentTaskStatus,
@@ -12,6 +14,17 @@ import {
   type CollaborationTaskOpenHandler,
 } from '@setsuna-desktop/feature-collaboration/renderer';
 import type { ComponentProps, ReactNode } from 'react';
+import { useI18n } from '../shared/i18n/I18nProvider.js';
+import { settingsViewUi } from '../shared/ui/SettingsViewUi.js';
+
+export function CollaborationFeatureSettings({ config, onSave }: Readonly<{
+  config: RuntimeConfigState;
+  onSave(input: Pick<RuntimeConfigInput, 'features'>): Promise<void>;
+}>) {
+  const { t } = useI18n();
+  return <CollaborationToggleSettings features={config.features} onSave={(features) => onSave({ features })}
+    translate={t} ui={settingsViewUi} />;
+}
 
 /** Keeps the cross-cutting Collaboration providers at the renderer composition boundary. */
 export function CollaborationFeatureServiceBoundary({

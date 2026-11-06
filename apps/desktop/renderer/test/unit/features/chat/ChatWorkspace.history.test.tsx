@@ -199,7 +199,7 @@ function Harness({ loadOlder, find = false, thread = snapshot }: {
       onDeleteMessages={noop} onEditUserMessage={noop}
       queuedTurnActions={{ deleteQueuedTurnInput: vi.fn(), retrieveQueuedTurnInput: vi.fn(), reorderQueuedTurnInputs: vi.fn(), sendQueuedTurnInputNow: vi.fn() }}
       onAccessModeChange={noop} onCancelActiveTurn={noop} onClearContext={noop} onCompactContext={noop}
-      onSelectModel={noop} onSetMultiAgentEnabled={noop} onStartThreadReview={vi.fn()} onSearchProjectEntries={vi.fn()}
+      onSelectModel={noop} onStartThreadReview={vi.fn()} onSearchProjectEntries={vi.fn()}
     />
   </RendererPluginTestHost>;
 }

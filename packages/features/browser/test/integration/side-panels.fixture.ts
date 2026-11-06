@@ -26,26 +26,10 @@ async function until<T>(read: () => Promise<T> | T, label: string): Promise<NonN
 async function main() {
   await app.whenReady();
   const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
-  // Native startup errors omit the registration/worker phase. Keep that evidence on
-  // failure so an intermittent CI failure can be diagnosed without retrying it blind.
-  const workers = browserSession.serviceWorkers;
-  const startedAt = Date.now();
-  const workerEvents: unknown[] = [];
-  const recordWorkerEvent = (name: string, details: unknown) => {
-    workerEvents.push({ elapsedMs: Date.now() - startedAt, name, details });
-    if (workerEvents.length > 32) workerEvents.shift();
-  };
-  const registered = (_event: Electron.Event, details: Electron.RegistrationCompletedDetails) => recordWorkerEvent('registered', details);
-  const statusChanged = (event: Electron.Event<Electron.ServiceWorkersRunningStatusChangedEventParams>) => {
-    recordWorkerEvent('status', { versionId: event.versionId, runningStatus: event.runningStatus });
-  };
-  const message = (_event: Electron.Event, details: Electron.MessageDetails) => recordWorkerEvent('console', details);
-  workers.on('registration-completed', registered);
-  workers.on('running-status-changed', statusChanged);
-  workers.on('console-message', message);
   browserSession.protocol.handle('https', () => new Response('<!doctype html><title>Browser tab</title>', { headers: { 'Content-Type': 'text/html' } }));
   const owner = new BrowserWindow({ show: false, webPreferences: { preload: path.join(directory, 'navigation.cjs'), webviewTag: true, contextIsolation: true, sandbox: true } });
   const other = new BrowserWindow({ show: false, webPreferences: { preload: path.join(directory, 'navigation.cjs'), webviewTag: true, contextIsolation: true, sandbox: true } });
+  const controller = new BrowserWindow({ show: false, webPreferences: { session: browserSession, contextIsolation: true, sandbox: true } });
   const service = new BrowserExtensionService({ session: browserSession, preloadPath: path.join(directory, 'actions.cjs'),
     owner: (contents) => contents.hostWebContents?.id === owner.webContents.id ? owner
       : contents.hostWebContents?.id === other.webContents.id ? other : null,
@@ -59,12 +43,14 @@ async function main() {
     onNewTabRequested: (contents, url) => service.requestNavigationTarget(contents, url) }));
   try {
     await service.start();
+    await controller.loadURL(`chrome-extension://${id}/controller.html`);
+    await until(() => controller.webContents.executeJavaScript('document.body.dataset.ready'), 'extension action handlers registered');
     const primary = await createGuest(owner, 'https://example.test/');
     const foreign = await createGuest(other, 'https://foreign.test/');
     assert.equal(service.list().find((extension) => extension.id === id)?.hasPopup, false);
     assert.equal(service.list().find((extension) => extension.id === id)?.hasSidePanel, true);
     assert.equal(await service.open(id, 'action', owner, undefined, primary.id), true);
-    const panel = await until(() => service.ui.panels.snapshot(owner, primary.id), 'worker opens panel from onClicked');
+    const panel = await until(() => service.ui.panels.snapshot(owner, primary.id), 'extension opens panel from onClicked');
     assert.equal(panel.id, id);
     assert.equal(service.ui.panels.snapshot(other, foreign.id), null);
     const contents = await createGuest(owner, panel.url);
@@ -127,17 +113,9 @@ async function main() {
       await verifyInstalledExtension(service, owner, primary);
     }
     console.log('EXTENSION_SIDEPANEL_OK');
-  } catch (error) {
-    console.error('EXTENSION_SIDEPANEL_WORKER_STATE', JSON.stringify({
-      id, events: workerEvents, running: workers.getAllRunning(),
-    }));
-    throw error;
   } finally {
-    workers.off('registration-completed', registered);
-    workers.off('running-status-changed', statusChanged);
-    workers.off('console-message', message);
     for (const dispose of cleanup) dispose();
-    service.dispose(); owner.destroy(); other.destroy();
+    service.dispose(); controller.destroy(); owner.destroy(); other.destroy();
   }
 }
 
@@ -193,20 +171,21 @@ async function writeExtension(storagePath: string): Promise<string> {
   const root = path.join(storagePath, 'Extensions', id, '1.0.0_0'); await mkdir(root, { recursive: true });
   await writeFile(path.join(root, 'manifest.json'), JSON.stringify({ key: key.toString('base64'), manifest_version: 3,
     name: 'Side panel fixture', version: '1.0.0', permissions: ['storage', 'tabs', 'sidePanel', 'debugger', 'contextMenus', 'webNavigation', 'nativeMessaging'], action: {},
-    side_panel: { default_path: 'panel.html' }, background: { service_worker: 'worker.js' } }));
-  // Keep registration in flight while the worker evaluates its startup code.
-  // Opening a default panel must not stand in for delivering the first action click.
-  await writeFile(path.join(root, 'worker.js'), `const started = Date.now(); while (Date.now() - started < 1000) {}
+    side_panel: { default_path: 'panel.html' } }));
+  // Exercise real extension IPC without coupling panel behavior to native worker cold registration.
+  await writeFile(path.join(root, 'controller.html'), '<!doctype html><body><script src="controller.js"></script>');
+  await writeFile(path.join(root, 'controller.js'), `
   chrome.action.onClicked.addListener(async (tab) => {
     await chrome.storage.local.set({clickedTab:tab}); await chrome.sidePanel.open({tabId:tab.id});
-  }); chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false});
+  });
   chrome.contextMenus.onClicked.addListener((info, tab) => chrome.storage.local.set({menuClick:{info,tab}}));
   chrome.tabs.onUpdated.addListener((id, changeInfo, tab) => chrome.storage.local.set({updatedTab:{id,changeInfo,tab}}));
   const navigationTargets = [];
   chrome.webNavigation.onCreatedNavigationTarget.addListener(details => {
     navigationTargets.push(details); chrome.storage.local.set({navigationTargets});
   });
-  chrome.runtime.onConnect.addListener(port => port.onMessage.addListener(message => port.postMessage(message)));`);
+  chrome.runtime.onConnect.addListener(port => port.onMessage.addListener(message => port.postMessage(message)));
+  chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).then(() => { document.body.dataset.ready = 'yes'; });`);
   for (const name of ['panel.html', 'specific.html']) await writeFile(path.join(root, name), '<!doctype html><body><textarea></textarea><div style="height:1600px"></div><script src="panel.js"></script>');
   await writeFile(path.join(root, 'panel.js'), `document.body.dataset.ready = "yes";
     window.fixturePort = chrome.runtime.connect({name:'retained'});
