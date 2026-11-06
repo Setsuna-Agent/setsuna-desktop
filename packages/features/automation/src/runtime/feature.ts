@@ -2,7 +2,7 @@ import { declareCapabilityProvider, requiredCapability } from '@setsuna-desktop/
 import { defineRuntimeDependencies, defineRuntimeFeature, runtimeRouteRegistrarCapability } from '@setsuna-desktop/feature-core/runtime';
 import {
   automationFeature, automationRuntimeHostCapability, automationToolServiceCapability,
-  createAutomation, createAutomationConversation, deleteAutomation, listAutomations,
+  createAutomation, createAutomationConversation, deleteAutomation, deleteAutomationRun, listAutomations,
   runAutomation, setAutomationStatus, updateAutomation,
 } from '../contracts/index.js';
 import { AutomationService } from './service.js';
@@ -28,6 +28,7 @@ export const automationRuntimeFeature = defineRuntimeFeature({
     routes.register(context.scope, setAutomationStatus, ({ taskId, status }) => service.setStatus(taskId, status));
     routes.register(context.scope, runAutomation, ({ taskId }) => service.run(taskId));
     routes.register(context.scope, deleteAutomation, ({ taskId }) => service.delete(taskId));
+    routes.register(context.scope, deleteAutomationRun, ({ taskId, runId }) => service.deleteRun(taskId, runId));
     context.provide(declareCapabilityProvider(automationToolServiceCapability), new AutomationTools(service, () => context.dependencies.host.now()));
   },
 });

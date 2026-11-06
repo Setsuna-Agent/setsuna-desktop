@@ -9,6 +9,10 @@ const empty = defineRuntimeCodec<undefined>((value) => {
   if (value === undefined || value === null || (typeof value === 'object' && !Array.isArray(value) && !Object.keys(value).length)) return undefined;
   throw new Error('No input expected.');
 });
+const deletionResult = defineRuntimeCodec<{ deleted: boolean }>((value) => {
+  const input = record(value); if (typeof input.deleted !== 'boolean') throw new Error('Invalid deletion result.');
+  return { deleted: input.deleted };
+});
 
 export const listAutomations = defineFeatureOperation({
   id: 'automation.list', method: 'GET', path: '/v1/features/automation/tasks', input: empty, output: automationSnapshotCodec, errors, idempotency: 'safe',
@@ -42,8 +46,10 @@ export const runAutomation = defineFeatureOperation({
 });
 export const deleteAutomation = defineFeatureOperation({
   id: 'automation.task.delete', method: 'DELETE', path: '/v1/features/automation/tasks/:taskId', input: target,
-  output: defineRuntimeCodec<{ deleted: boolean }>((value) => {
-    const input = record(value); if (typeof input.deleted !== 'boolean') throw new Error('Invalid deletion result.');
-    return { deleted: input.deleted };
-  }), errors, idempotency: 'idempotent',
+  output: deletionResult, errors, idempotency: 'idempotent',
+});
+export const deleteAutomationRun = defineFeatureOperation({
+  id: 'automation.run.delete', method: 'DELETE', path: '/v1/features/automation/tasks/:taskId/runs/:runId',
+  input: defineRuntimeCodec<{ taskId: string; runId: string }>((value) => ({ ...target.parse(value), runId: identity(record(value).runId) })),
+  output: deletionResult, errors, idempotency: 'idempotent',
 });

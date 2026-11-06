@@ -13,6 +13,7 @@ export function useAutomationPage(client: AutomationClient, currentThreadId: str
   const conversationId = selection?.threadId ?? null;
   const selectedRunId = selection?.runId ?? null;
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
   const requests = useRef(0);
@@ -69,9 +70,9 @@ export function useAutomationPage(client: AutomationClient, currentThreadId: str
   }, [client, refresh, select]);
 
   const perform = async (action: () => Promise<unknown>) => {
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setActionError(null);
     try { await action(); await refresh(); }
-    catch (error) { setError(errorMessage(error)); }
+    catch (error) { setActionError(errorMessage(error)); }
     finally { setBusy(false); }
   };
   const retry = () => {
@@ -88,7 +89,7 @@ export function useAutomationPage(client: AutomationClient, currentThreadId: str
     ? { requestId: selection.requestId, threadId: selection.threadId, turnId: selectedRun.turnId }
     : undefined;
 
-  return { snapshot, selectedTask, selectedRunId, turnNavigationRequest, activity, conversationId, error, busy, select, newConversation, refresh, perform, retry };
+  return { snapshot, selectedTask, selectedRunId, turnNavigationRequest, activity, conversationId, error, actionError, busy, select, newConversation, refresh, perform, retry };
 }
 
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }

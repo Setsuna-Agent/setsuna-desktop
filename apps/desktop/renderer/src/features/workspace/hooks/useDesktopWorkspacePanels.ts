@@ -155,10 +155,11 @@ export function useDesktopWorkspacePanels({
   const selectedWorkspaceApp = workspaceApps.find((app) => app.id === selectedWorkspaceAppId) ?? workspaceApps[0] ?? null;
   const sideActivePanel = activePanelInSlot(sidePanelSlot);
   const bottomActivePanel = activePanelInSlot(bottomPanelSlot);
-  const sidePanelVisible = activeView === 'chat' && sidePanelExpanded && Boolean(sideActivePanel);
+  const workspaceViewVisible = activeView === 'chat' || activeView === 'automation';
+  const sidePanelVisible = workspaceViewVisible && sidePanelExpanded && Boolean(sideActivePanel);
   const sidePanelTransition = useSidePanelTransition(sidePanelVisible);
   const sidePanelPresent = sidePanelTransition.present;
-  const bottomPanelVisible = activeView === 'chat' && bottomPanelExpanded && Boolean(bottomActivePanel);
+  const bottomPanelVisible = workspaceViewVisible && bottomPanelExpanded && Boolean(bottomActivePanel);
   const browserPanelInstances = useMemo(
     () => desktopWorkspaceBrowserPanelInstances(layouts, targetIdentity, {
       bottomVisible: bottomPanelVisible,

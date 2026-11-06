@@ -160,6 +160,24 @@ export class AutomationService {
     });
   }
 
+  deleteRun(taskId: string, runId: string): Promise<{ deleted: boolean }> {
+    return this.mutate(async () => {
+      const task = this.state.tasks.find((item) => item.id === taskId);
+      const run = task?.runs.find((item) => item.id === runId)
+        ?? this.state.archivedRuns.find((entry) => entry.taskId === taskId && entry.run.id === runId)?.run;
+      if (!run) return { deleted: false };
+      if (run.status === 'running') throw failure('TASK_BUSY', '请先停止正在运行的对话。');
+      // Runs can share a transcript. Remove only the ledger entry and retain the
+      // execution thread binding used by future runs of the schedule.
+      await this.commit({
+        ...this.state,
+        tasks: this.state.tasks.map((item) => item.id === taskId ? { ...item, runs: item.runs.filter((entry) => entry.id !== runId) } : item),
+        archivedRuns: this.state.archivedRuns.filter((entry) => entry.taskId !== taskId || entry.run.id !== runId),
+      });
+      return { deleted: true };
+    });
+  }
+
   run(taskId: string): Promise<AutomationTask> {
     return this.mutate(() => this.dispatch(this.require(taskId), this.host.now().toISOString(), false));
   }

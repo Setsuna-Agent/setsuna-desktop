@@ -17,6 +17,8 @@ import { useDesktopWorkspacePanels, useSidePanelTransition } from '../../../../.
 import type { ProjectWorkspaceState } from '../../../../../src/features/workspace/hooks/useProjectWorkspace.js';
 import type { ThreadWorkspaceStatus } from '../../../../../src/features/workspace/hooks/useThreadWorkspace.js';
 import type { ChatComposerTargetIdentity } from '../../../../../src/features/chat/hooks/useChatComposerSession.js';
+import { MarkdownContentBlock } from '../../../../../src/features/chat/markdown/MarkdownContentBlock.js';
+import { MarkdownNavigationProvider } from '../../../../../src/features/chat/markdown/MarkdownNavigationProvider.js';
 import type { DesktopTerminalEvent } from '../../../../../src/features/workspace/model.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 import { hostMessages } from '../../../../../src/shared/i18n/messages.js';
@@ -29,6 +31,50 @@ afterEach(() => {
   vi.useRealTimers();
   localStorage.clear();
   Object.defineProperty(window, 'setsunaDesktop', { configurable: true, value: undefined });
+});
+
+it('opens links in automation conversations and retains browser ownership when moving or switching runs', () => {
+  const url = 'https://arxiv.org/abs/2611.02624';
+  let panels!: ReturnType<typeof useDesktopWorkspacePanels>;
+  function Conversation({ targetIdentity }: { targetIdentity: ChatComposerTargetIdentity }) {
+    panels = useDesktopWorkspacePanels({
+      activeProject: null, activeView: 'automation', conversationDebugEnabled: false,
+      targetIdentity, workspaceStatus: 'idle', setError: vi.fn(),
+    });
+    return <MarkdownNavigationProvider onOpenWebLink={panels.openBrowserPanel}>
+      <MarkdownContentBlock content={`[论文](${url})`} />
+    </MarkdownNavigationProvider>;
+  }
+  const view = render(<Conversation targetIdentity="thread:automation_A" />, {
+    wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>
+      <ToastProvider><ReviewFeatureHostBoundary>{children}</ReviewFeatureHostBoundary></ToastProvider>
+    </I18nProvider>,
+  });
+  fireEvent.click(screen.getByRole('link', { name: '论文' }));
+  const firstTab = panels.sideActivePanel!;
+  expect(panels.browserPanelInstances.find((instance) => instance.active)).toMatchObject({
+    targetIdentity: 'thread:automation_A', panel: { id: firstTab.id, browser: { url } },
+  });
+
+  act(() => panels.moveDesktopPanel('side', firstTab.id, 'bottom', null, 'after'));
+  expect(panels.browserPanelInstances.find((instance) => instance.active)).toMatchObject({
+    placement: 'bottom', panel: { id: firstTab.id },
+  });
+  view.rerender(<Conversation targetIdentity="thread:automation_B" />);
+  expect(panels.browserPanelInstances.some((instance) => instance.active)).toBe(false);
+  fireEvent.click(screen.getByRole('link', { name: '论文' }));
+  const secondTab = panels.sideActivePanel!;
+  expect(secondTab.id).not.toBe(firstTab.id);
+  expect(panels.browserPanelInstances.find((instance) => instance.active)).toMatchObject({
+    targetIdentity: 'thread:automation_B', panel: { id: secondTab.id },
+  });
+
+  view.rerender(<Conversation targetIdentity="thread:automation_A" />);
+  expect(panels.browserPanelInstances.find((instance) => instance.active)?.panel.id).toBe(firstTab.id);
+  act(() => panels.closeDesktopPanelItem('bottom', firstTab.id));
+  expect(panels.browserPanelInstances.some((instance) => instance.panel.id === firstTab.id)).toBe(false);
+  view.rerender(<Conversation targetIdentity="thread:automation_B" />);
+  expect(panels.browserPanelInstances.find((instance) => instance.active)?.panel.id).toBe(secondTab.id);
 });
 
 it.each(['side', 'bottom'] as const)('cancels amend in the %s slot when resetting the same new-conversation layout', async (slot) => {

@@ -542,7 +542,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         <RendererOwnedSingleSlot
           slot={shellWorkspaceToolbarSlot}
           props={{
-            renderDefault: () => activeView === 'chat'
+            renderDefault: () => (activeView === 'chat' || activeView === 'automation')
               ? <AppWorkspaceToolbar projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} workspaceMaximized={workspaceMaximized} onToggleMaximized={toggleWorkspaceMaximized} />
               : undefined,
           }}

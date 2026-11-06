@@ -20,7 +20,7 @@ it('keeps run selection distinct from its reused conversation and commits it onl
   };
   const client: AutomationClient = {
     snapshot: vi.fn(async () => ({ tasks: [structuredClone(task)], archivedRuns: [], models: [], projects: [] })),
-    createConversation: vi.fn(), create: vi.fn(), update: vi.fn(), setStatus: vi.fn(), run: vi.fn(), delete: vi.fn(),
+    createConversation: vi.fn(), create: vi.fn(), update: vi.fn(), setStatus: vi.fn(), run: vi.fn(), delete: vi.fn(), deleteRun: vi.fn(),
   };
   const openConversation = vi.fn(async () => true);
   const { result } = renderHook(() => useAutomationPage(client, 'setup', openConversation));
@@ -80,7 +80,7 @@ it('opens archived runs without creating a setup chat and retains their turn nav
   };
   const client: AutomationClient = {
     snapshot: vi.fn(async () => structuredClone(snapshot)),
-    createConversation: vi.fn(), create: vi.fn(), update: vi.fn(), setStatus: vi.fn(), run: vi.fn(), delete: vi.fn(),
+    createConversation: vi.fn(), create: vi.fn(), update: vi.fn(), setStatus: vi.fn(), run: vi.fn(), delete: vi.fn(), deleteRun: vi.fn(),
   };
   const openConversation = vi.fn(async () => true);
   const { result } = renderHook(() => useAutomationPage(client, 'execution', openConversation));

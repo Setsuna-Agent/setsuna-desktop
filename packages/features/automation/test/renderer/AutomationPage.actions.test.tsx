@@ -90,7 +90,7 @@ it.each(['edit', 'status', 'run', 'delete'] as const)('applies the context-menu 
   const client: AutomationClient = {
     snapshot: vi.fn(async () => ({ tasks, archivedRuns: [], models: [], projects: [{ id: 'iriya', name: 'iriya' }] })), createConversation: vi.fn(), create: vi.fn(),
     update: vi.fn(async () => targetTask), setStatus: vi.fn(async () => targetTask),
-    run: vi.fn(async () => targetTask), delete: vi.fn(async () => ({ deleted: true })),
+    run: vi.fn(async () => targetTask), delete: vi.fn(async () => ({ deleted: true })), deleteRun: vi.fn(),
   };
   const openConversation = vi.fn(async () => true);
   render(<ConfirmationProvider><AutomationPage client={client} threadId="thread_A" openConversation={openConversation}
@@ -141,7 +141,7 @@ it.each([
     })),
     createConversation: vi.fn(async () => ({ threadId: 'setup_draft' })),
     create: vi.fn(async () => ({ ...existing, id: 'new', conversationThreadId: 'setup_draft' })),
-    update: vi.fn(), setStatus: vi.fn(), run: vi.fn(), delete: vi.fn(),
+    update: vi.fn(), setStatus: vi.fn(), run: vi.fn(), delete: vi.fn(), deleteRun: vi.fn(),
   };
   const openConversation = vi.fn(async () => true);
   render(<ConfirmationProvider><AutomationPage client={client} threadId={currentThreadId} openConversation={openConversation}

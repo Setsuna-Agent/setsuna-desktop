@@ -219,6 +219,39 @@ describe('local scheduled conversations', () => {
     await expect(f.service.delete(task.id)).rejects.toMatchObject({ code: 'TASK_BUSY' });
   });
 
+  it('deletes only settled run records, commits atomically, and retains the shared execution binding', async () => {
+    const f = await fixture();
+    const task = await f.service.create('conversation_1', f.draft);
+    const first = await f.service.run(task.id);
+    const firstRun = first.runs[0]!;
+    await expect(f.service.deleteRun(task.id, firstRun.id)).rejects.toMatchObject({ code: 'TASK_BUSY' });
+    f.finish(); await f.service.tick();
+    const second = await f.service.run(task.id);
+    const secondRun = second.runs[1]!;
+    const before = await f.service.snapshot();
+
+    vi.spyOn(AutomationStore.prototype, 'write').mockRejectedValueOnce(new Error('Disk full'));
+    await expect(f.service.deleteRun(task.id, firstRun.id)).rejects.toThrow('Disk full');
+    expect(await f.service.snapshot()).toEqual(before);
+    expect(await f.service.deleteRun('another_task', firstRun.id)).toEqual({ deleted: false });
+    expect(await f.service.deleteRun(task.id, firstRun.id)).toEqual({ deleted: true });
+    expect(await f.service.deleteRun(task.id, firstRun.id)).toEqual({ deleted: false });
+    expect(await new AutomationStore(f.host.dataDir).read()).toMatchObject({
+      tasks: [{ id: task.id, status: task.status, nextRunAt: task.nextRunAt,
+        executionThreadId: first.executionThreadId, runs: [secondRun] }],
+      archivedRuns: [],
+    });
+    expect((await f.service.snapshot()).tasks[0]!.runs).toHaveLength(1);
+    await expect(f.service.deleteRun(task.id, secondRun.id)).rejects.toMatchObject({ code: 'TASK_BUSY' });
+
+    await f.service.tick();
+    await f.service.deleteRun(task.id, secondRun.id);
+    const next = await f.service.run(task.id);
+    expect(next.runs).toHaveLength(1);
+    expect(next.runs[0]!.threadId).toBe(firstRun.threadId);
+    expect(f.host.createExecutionThread).toHaveBeenCalledOnce();
+  });
+
   it('preserves completed manual runs after task deletion and restart without scheduling them again', async () => {
     const f = await fixture();
     const task = await f.service.create('conversation_1', { ...f.draft, newChat: true });
