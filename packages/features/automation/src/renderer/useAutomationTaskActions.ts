@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { useConfirm } from '@setsuna-desktop/renderer-ui';
-import type { AutomationTask } from '../contracts/index.js';
+import type { AutomationActivityEntry, AutomationTask } from '../contracts/index.js';
 import type { AutomationClient } from './client.js';
 
 type EditorTarget = { threadId: string; task?: AutomationTask };
@@ -27,6 +27,11 @@ export function useAutomationTaskActions(client: AutomationClient, perform: (act
     async remove(task: AutomationTask) {
       if (await confirm({ title: t('feature.automation.deleteTitle'), confirmLabel: t('feature.automation.delete'), danger: true })) {
         await perform(() => client.delete(task.id));
+      }
+    },
+    async removeRun(entry: AutomationActivityEntry) {
+      if (await confirm({ title: t('feature.automation.deleteRunTitle'), confirmLabel: t('feature.automation.delete'), danger: true })) {
+        await perform(() => client.deleteRun(entry.taskId, entry.run.id));
       }
     },
   };

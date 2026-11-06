@@ -60,6 +60,7 @@ const primaryBinding = (code: string, shift = false): KeyboardShortcutCommand['d
 
 export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
   {
+    // Retain saved custom bindings; the focused content now determines the target.
     id: 'chat.find',
     group: 'chat',
     labelKey: 'shortcuts.command.findInChat',

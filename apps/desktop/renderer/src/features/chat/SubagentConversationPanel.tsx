@@ -92,10 +92,10 @@ export function SubagentConversationPanel({
       <SubagentHeader
         task={task}
         title={child.currentThread?.title}
-        agentInfo={<CollaborationFeatureAgentInfo configuration={task.configuration} identity={task.identity}
+        agentInfo={task.configuration || modelLabel ? <CollaborationFeatureAgentInfo configuration={task.configuration} identity={task.identity}
           modelLabel={modelLabel}
           modelIcon={modelLabel ? <BrandIconMark brand={modelBrand} fallbackName={modelLabel} size="compact" /> : undefined}
-          translate={t} />}
+          translate={t} /> : null}
         onBack={onBack}
         onClose={onClose}
         taskControls={<CollaborationFeatureTaskControls parentThreadId={parentThreadId} childThreadId={childThreadId}
@@ -135,30 +135,30 @@ function SubagentHeader({
   title?: string;
 }) {
   const { t } = useI18n();
+  const taskTitle = title || task.title || task.identity.displayName;
   return (
-    <header className="subagent-panel-header">
-      <IconButton className="subagent-panel-header__back" label={t('feature.collaboration.panel.backToList')} onClick={onBack}>
-        <ArrowLeft size={16} aria-hidden="true" />
-      </IconButton>
-      <div className="subagent-panel-header__text">
-        <div className="subagent-panel-header__name-row">
-          <strong className="subagent-panel-header__name">{task.identity.displayName}</strong>
+    <header className="subagent-panel-header sd-panel-toolbar">
+      <div className="subagent-panel-header__context">
+        <div className="subagent-panel-header__task sd-panel-toolbar__surface">
+          <IconButton className="app-shell-icon-control" label={t('feature.collaboration.panel.backToList')} onClick={onBack}>
+            <ArrowLeft size={14} aria-hidden="true" />
+          </IconButton>
+          <span className="subagent-panel-header__title" title={taskTitle}>{taskTitle}</span>
           <CollaborationFeatureTaskStatus status={task.status} translate={t} />
-          {agentInfo}
         </div>
-        <div className="subagent-panel-header__title" title={title ?? task.title}>
-          {title ?? task.title}
-        </div>
+        {agentInfo ? <div className="subagent-panel-header__agent sd-panel-toolbar__surface">{agentInfo}</div> : null}
       </div>
-      <div className="subagent-panel-header__actions">
-        {taskControls}
-        <IconButton
-          className="subagent-panel-header__close"
-          label={t('feature.collaboration.panel.close')}
-          onClick={onClose}
-        >
-          <X size={16} aria-hidden="true" />
-        </IconButton>
+      <div className="sd-panel-toolbar__surface sd-panel-toolbar__actions">
+        <div className="sd-panel-toolbar__group">{taskControls}</div>
+        <div className="sd-panel-toolbar__group">
+          <IconButton
+            className="app-shell-icon-control"
+            label={t('feature.collaboration.panel.close')}
+            onClick={onClose}
+          >
+            <X size={14} aria-hidden="true" />
+          </IconButton>
+        </div>
       </div>
     </header>
   );

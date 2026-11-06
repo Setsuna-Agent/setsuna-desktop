@@ -7,7 +7,7 @@ export function SideWorkspacePanelSlot({
   ...resizeHandleProps
 }: ComponentProps<typeof WorkspaceResizeHandle> & { children: ReactNode }) {
   return (
-    <div className="desktop-workspace-panel-slot">
+    <div className="desktop-workspace-panel-slot" data-workspace-panel-slot="side">
       <WorkspaceResizeHandle {...resizeHandleProps} />
       {children}
     </div>

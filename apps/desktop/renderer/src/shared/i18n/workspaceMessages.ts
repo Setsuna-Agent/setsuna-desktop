@@ -1,4 +1,5 @@
 export const workspaceZhCN = {
+  'workspace.find.placeholder': '搜索当前面板内容',
   'workspace.files.dragFailed': '无法拖出文件。',
   'workspace.worktree.missing': '找不到工作树',
   'workspace.worktree.switchDescription': '切换到项目「{project}」继续此对话。',
@@ -151,6 +152,7 @@ export const workspaceZhCN = {
 } as const;
 
 export const workspaceEnUS = {
+  'workspace.find.placeholder': 'Find in current panel',
   'workspace.files.dragFailed': 'Could not drag the file.',
   'workspace.worktree.missing': 'Worktree not found',
   'workspace.worktree.switchDescription': 'Switch to “{project}” to continue this conversation.',

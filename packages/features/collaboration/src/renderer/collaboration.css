@@ -127,55 +127,43 @@
 }
 
 .subagent-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex: 0 0 auto;
-  padding: 10px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border, var(--app-muted)) 50%, transparent);
-}
-
-.subagent-panel-header__text {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.subagent-panel-header__name-row {
-  display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  row-gap: 2px;
-  min-width: 0;
-  line-height: 20px;
 }
 
-.subagent-panel-header__name {
+.subagent-panel-header__context {
+  display: flex;
+  flex: 1 1 280px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.subagent-panel-header__name-row .subagent-task-status {
-  flex-shrink: 0;
-  font-size: 12px;
-  line-height: 20px;
+.subagent-panel-header__task {
+  flex: 0 1 auto;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding-right: 10px;
 }
 
 .subagent-panel-header__title {
   min-width: 0;
   overflow: hidden;
-  color: var(--app-text-muted);
-  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.subagent-panel-header__task .subagent-task-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.subagent-panel-header__agent {
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding-inline: 8px;
 }
 
 .collaboration-agent-info {
@@ -279,39 +267,6 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-}
-
-.subagent-panel-header__actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
-}
-
-.subagent-panel-header__back,
-.subagent-panel-header__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--app-radius-xs);
-  background: transparent;
-  color: var(--app-text-muted);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.subagent-panel-header__back,
-.subagent-panel-header__close {
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-}
-
-.subagent-panel-header__back:hover,
-.subagent-panel-header__close:hover {
-  background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
-  color: var(--app-text);
 }
 
 .collaboration-overview__divider {

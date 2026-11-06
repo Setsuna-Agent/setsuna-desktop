@@ -36,7 +36,7 @@ export function PullRequestMetaMenu({ detail, onChecks, onDiff }: MetaProps) {
     }}
     content={<PullRequestMetaPanel detail={detail}
       onChecks={() => select(onChecks)} onDiff={() => select(onDiff)} />}>
-    <IconButton ref={triggerRef} size="small" label={t('statusPanel')}><Info size={14} /></IconButton>
+    <IconButton ref={triggerRef} className="app-shell-icon-control" size="small" label={t('statusPanel')}><Info size={14} /></IconButton>
   </Popover>;
 }
 

@@ -54,6 +54,7 @@ it('mounts Changes through the built-in shell and chat slots', async () => {
     renderWorkspace(features, <ChangesWorkspace />);
 
     expect(await screen.findByRole('navigation', { name: '变更' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: /^图形/ }));
     expect(await screen.findByRole('button', { name: /Initial project/ })).toBeTruthy();
     expect(getHistory).toHaveBeenCalledWith('/repo', { ref: undefined });
   } finally {

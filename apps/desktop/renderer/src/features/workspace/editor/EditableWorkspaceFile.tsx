@@ -12,6 +12,7 @@ import {
   usePierreFileOptions,
 } from '../../../shared/code/PierreCode.js';
 import type { WorkspaceFileFocusRequest } from '../model.js';
+import { useCodeViewFind } from '../../../shared/code/useCodeViewFind.js';
 import {
   useWorkspaceCodeViewSurface,
   workspaceCodeViewLayout,
@@ -49,6 +50,11 @@ export function EditableWorkspaceFile({
     wrap: true,
   });
   const itemId = workspaceFileKey(file);
+  const findContainerRef = useCodeViewFind(codeViewRef, itemId, content);
+  const setContainerRef = useCallback((container: HTMLDivElement | null) => {
+    findContainerRef(container);
+    codeViewSurface.codeViewContainerRef(container);
+  }, [codeViewSurface.codeViewContainerRef, findContainerRef]);
   const { items, onEditorChange } = useWorkspaceEditorDocument({ content, file, language, onChange });
   const editorOptions = useMemo<Omit<EditorOptions<undefined>, 'onChange'>>(() => ({
     onAttach: (editor) => {
@@ -79,7 +85,7 @@ export function EditableWorkspaceFile({
         <EditProvider createEditor={createEditor}>
           <CodeView
             className="setsuna-pierre-surface desktop-code-editor__pierre"
-            containerRef={codeViewSurface.codeViewContainerRef}
+            containerRef={setContainerRef}
             disableWorkerPool
             editorOptions={editorOptions}
             items={items}

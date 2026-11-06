@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type { AutomationClient } from './client.js';
 import { TaskEditor } from './TaskEditor.js';
 import { AutomationStarter, AutomationStarterSuggestions } from './AutomationStarter.js';
@@ -35,7 +35,8 @@ export function AutomationPage({ client, threadId, openConversation, onSelectSta
       <div className="automation-sidebar__tasks">
         {page.snapshot.tasks.map((item) => <AutomationTaskRow key={item.id} task={item} active={page.selectedRunId === null && item.id === task?.id} busy={page.busy} actions={actions} onSelect={page.select} translate={t} locale={locale} />)}
       </div>
-      <AutomationActivity entries={page.activity} selectedRunId={page.selectedRunId} translate={t} locale={locale} onSelect={page.select} />
+      <AutomationActivity entries={page.activity} selectedRunId={page.selectedRunId} busy={page.busy}
+        translate={t} locale={locale} onSelect={page.select} onDelete={actions.removeRun} />
     </aside>
     <section className="automation-main">
       {page.error ? <div className="automation-error" role="alert">{page.error}<Button variant="ghost" disabled={page.busy} onClick={page.retry}>{t('feature.automation.retry')}</Button></div> : null}
@@ -47,6 +48,7 @@ export function AutomationPage({ client, threadId, openConversation, onSelectSta
         ) : <div className="automation-loading" role="status">{t('feature.automation.loading')}</div>}
       </div>
     </section>
+    <ToastNotice message={page.actionError} />
     {actions.editor ? <TaskEditor task={actions.editor.task} threadId={actions.editor.threadId} client={client} models={page.snapshot.models} projects={page.snapshot.projects} ModelPicker={ModelPicker} translate={t} onClose={actions.closeEditor} onSaved={() => { void page.perform(async () => undefined); }} /> : null}
   </main>;
 }

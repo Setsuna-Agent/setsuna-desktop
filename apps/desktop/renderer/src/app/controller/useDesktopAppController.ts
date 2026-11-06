@@ -211,7 +211,8 @@ export function useDesktopAppController() {
     manuallyExpanded: sidebarManuallyExpanded,
   });
   // 插件导航有独立的折叠状态，切换页面不会改写聊天侧栏的偏好。
-  const sidebarCollapsed = activeView === 'capabilities' ? capabilitiesSidebarCollapsed
+  const sidebarCollapsed = activeView === 'automation' ? workspaceSinglePane
+    : activeView === 'capabilities' ? capabilitiesSidebarCollapsed
     : (activeView === 'chat' && workspaceSinglePane) || chatSidebarCollapsed;
   const setSidebarCollapsed = useCallback((value: SetStateAction<boolean>) => {
     if (activeView === 'capabilities') {
@@ -387,13 +388,14 @@ export function useDesktopAppController() {
     '--app-bottom-panel-height': bottomPanelReservesLayout ? `${terminalHeight}px` : '0px',
   } as CSSProperties;
 
+  const workspaceViewVisible = activeView === 'chat' || activeView === 'automation';
   const shellClassName = [
     activeView === 'settings' ? 'desktop-agent-page--settings-open' : '',
     activeView === 'capabilities' ? 'desktop-agent-page--capabilities-open' : '',
-    activeView === 'chat' && workspaceSinglePane ? 'desktop-agent-page--workspace-focused' : '',
+    workspaceViewVisible && workspaceSinglePane ? 'desktop-agent-page--workspace-focused' : '',
     shellSidebarState.collapsed ? 'desktop-agent-page--sidebar-collapsed' : '',
     bottomPanelVisible ? 'desktop-agent-page--bottom-panel-open' : '',
-    activeView === 'chat' && sidePanelTransitionPhase
+    workspaceViewVisible && sidePanelTransitionPhase
       ? `desktop-agent-page--workspace-${sidePanelTransitionPhase}`
       : '',
   ].filter(Boolean).join(' ');
@@ -464,8 +466,8 @@ export function useDesktopAppController() {
 }
 
 export function resolveShellSidebarState(activeView: MainView, sidebarCollapsed: boolean) {
-  if (activeView === 'settings' || activeView === 'automation') return { collapsed: false, reservesLayout: true };
-  const hasSidebar = activeView === 'chat' || activeView === 'capabilities';
+  if (activeView === 'settings') return { collapsed: false, reservesLayout: true };
+  const hasSidebar = activeView === 'chat' || activeView === 'capabilities' || activeView === 'automation';
   return {
     collapsed: !hasSidebar || sidebarCollapsed,
     reservesLayout: hasSidebar && !sidebarCollapsed,

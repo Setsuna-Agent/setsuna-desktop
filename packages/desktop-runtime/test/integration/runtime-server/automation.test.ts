@@ -209,6 +209,15 @@ describe('scheduled conversations through the runtime API', () => {
     const history = await harness.runtimeFetch('/v1/features/automation/tasks') as AutomationSnapshot;
     expect(history.tasks).toEqual([]);
     expect(history.archivedRuns).toEqual(afterDeletion.archivedRuns);
+    const runPath = `/v1/features/automation/tasks/${task.id}/runs/${run.id}`;
+    expect(await harness.runtimeFetch(runPath, { method: 'DELETE' })).toEqual({ deleted: true });
+    expect(await harness.runtimeFetch(runPath, { method: 'DELETE' })).toEqual({ deleted: false });
+    await harness.server.close();
+    await harness.startRuntimeServer(harness.runtimeDataDir);
+    expect((await harness.runtimeFetch('/v1/features/automation/tasks')).archivedRuns).toEqual([]);
+    const retained = await harness.runtimeFetch(`/v1/threads/${run.threadId}`) as RuntimeThread;
+    expect(retained.turns).toMatchObject([{ id: run.turnId, status: 'completed' }]);
+    expect(retained.messages).toEqual(transcript.messages);
   });
 });
 

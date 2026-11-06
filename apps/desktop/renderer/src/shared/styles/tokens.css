@@ -31,7 +31,6 @@
   --app-muted: #a3a3a3;
   --app-focus: rgba(0, 0, 0, 0.12);
   --app-focus-ring: 0 0 0 3px var(--app-focus);
-  --app-field-focus-bg: color-mix(in srgb, var(--app-text) 7%, var(--app-surface));
   --app-field-focus-border: color-mix(in srgb, var(--app-text) 50%, var(--app-surface));
   /* 非文本控件的 outline 焦点色；共享控件用实色 primary，内嵌文字与行操作用较轻的这一档。 */
   --app-focus-outline: color-mix(in srgb, var(--app-primary) 50%, transparent);
@@ -172,8 +171,8 @@
   --desktop-panel-gutter: 12px;
   /* 列表行 hover/选中底色距容器左右边缘的内缩；审查、变更、文件三个面板的行都不贴边。 */
   --desktop-panel-row-inset: 6px;
-  /* 面板内的导航栏（文件树、变更导航）：比内容画布略深一点的同色调，而不是另一种表面色。 */
-  --desktop-panel-nav-bg: color-mix(in srgb, var(--app-text) 2%, var(--app-bg));
+  /* 导航栏与内容画布保持同色，吸顶内容保留不透明底色，避免正文穿透。 */
+  --desktop-panel-nav-bg: var(--app-bg);
   --app-titlebar-text: var(--app-sidebar-text-secondary);
   --app-titlebar-control-width: 0px;
   --app-sidebar-width: 240px;

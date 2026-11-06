@@ -107,6 +107,10 @@ Main 按 `subscriptionId` 独立管理文件树和编辑器的监听。替换或
 
 ## Workspace hooks
 
+Ctrl+F（macOS 为 ⌘F）按最近点击或聚焦的区域搜索内容。文件、变更和审查通过 `WorkspaceContentFind` 复用 `shared/find/` 的搜索栏，右侧与底部面板各自维护查询、结果和高亮；关闭一处搜索不会清除另一处。切换文件标签会释放原搜索状态，目录树的文件名筛选仍沿用自己的入口。
+
+代码搜索读取当前已加载的文件或展开的差异数据，包含虚拟滚动尚未渲染的行；通过 Pierre 的行定位进入视口后再解析 Shadow DOM 高亮。分栏差异中的上下文按一项结果计数，同时高亮两侧。Markdown 等预览搜索当前渲染的正文；截断文件和差异仅搜索已加载的内容。索引与观察器按搜索交互启用，不新增启动扫描或文件读取。
+
 | Hook/helper | 职责 |
 | --- | --- |
 | `useDesktopWorkspacePanels.ts` | Side/bottom panel 选择与跨 feature 动作 |
