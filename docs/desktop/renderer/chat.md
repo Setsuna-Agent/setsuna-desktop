@@ -225,6 +225,8 @@ Enter / Shift+Enter 循环跳转，Esc 或关闭按钮清理观察器和高亮�
 - File mutation preview 和统计。
 - Background process / result summary。
 
+待回答的 `request_user_input` 表单按真实工具位置独立放在对话时间线上，不进入工作记录或工具的折叠详情，也不受工具输出滚动区裁切；收起工作记录、其他工具更新时保留已填答案。审批解决后恢复为普通工具历史，不再保留可提交的表单。
+
 职责分层：
 
 - `runtimeToolRunState.ts`：运行状态收敛。
