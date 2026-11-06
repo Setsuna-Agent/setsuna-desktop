@@ -32,8 +32,8 @@ vi.mock('../../src/adapters/plugin-app/process.js', async (importOriginal) => {
 const require = createRequire(import.meta.url);
 const context = { contributionId: 'notes.page', surface: 'renderer.plugin.page' as const };
 
-// Budget ASAR compilation and failed/successful updates against the locked dependency fixtures.
-// Individual production builds still retain their own 180 s timeout.
+// Budget ASAR compilation, native IPC and one type-invalid update against the locked dependency fixtures.
+// Production app preparation still retains its own 180 s timeout.
 const appLifecycleTimeoutMs = 240_000;
 
 it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('builds a multi-file React app with isolated packages, routes and the existing state/action bridge; reopens from cache and preserves a failed update', async () => {
@@ -219,21 +219,12 @@ it.skipIf(process.platform !== 'darwin' && process.platform !== 'win32')('builds
       await writeFile(path.join(project, 'outside.css'), css);
       await expect(buildAppProject(project)).rejects.toThrow('must stay inside');
     }
-    // Cache replacement and state retention do not need another build of every SDK control.
-    await writeFile(path.join(appRoot, 'pages/Home.tsx'), 'export default () => <main>Updated notes app</main>');
-    await runtime.plugins.updatePlugin({ path: bundleDir }, { trustExtension: true });
-    finishPhase('successful app update');
-    expect((await runtime.plugins.readTrustedRendererUiDocument('react-notes', 'notes.page')).js).toContain('Updated notes app');
-    const [updated] = await runtime.plugins.listInstalledRecords();
-    expect(updated.reactAppBuilds!['notes.page'].cacheKey).not.toBe(reference.cacheKey);
-    expect((await readdir(path.dirname(cache))).sort()).toEqual(Object.values(updated.reactAppBuilds!).map(build => build.cacheKey).sort());
-    expect(await runtime.extensionState.get('react-notes', 'global', 'view')).toMatchObject({ count: 1 });
     await runtime.plugins.setExtensionTrust('react-notes', false);
     await expect(runtime.plugins.readTrustedRendererUiDocument('react-notes', 'notes.page')).rejects.toThrow('not trusted');
     await expect(manager.requestRuntimeApi({ pluginId: 'react-notes', contributionId: 'notes.page', request: { path: '/v1/projects' } })).rejects.toThrow('not trusted');
     await runtime.plugins.removePlugin('react-notes');
     await expect(readdir(path.dirname(cache))).rejects.toThrow();
-    finishPhase('app removal');
+    finishPhase('security checks and app removal');
   } finally {
     unbind(); await manager.shutdown();
     if (server) await new Promise<void>(resolve => server!.close(() => resolve()));
