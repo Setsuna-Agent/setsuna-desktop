@@ -128,13 +128,13 @@
 
 - 主工作区和并排面板用连续画布与细分隔，不为每个区域添加圆角、边框和阴影。
 - 内容分组优先采用空白或一种弱表面；仅在分隔有必要时加边界，避免“底色 + 边框 + 阴影”重复强调。
-- 所有文本输入框、搜索框、多行输入和组合控件的内部输入，聚焦时均不添加 outline、额外描边或光晕；外层容器也不通过 `:focus-within` 补加外框。普通字段使用 `--app-field-focus-bg` 与 `--app-field-focus-border` 改变填充和原有边框颜色，让焦点可辨，不改变边框厚度；搜索框沿用自身填充变化。保留常驻阴影；Composer 使用 `--chat-prompt-shadow` 常驻阴影，聚焦不跳变。
+- 所有文本输入框、搜索框、多行输入和组合控件的内部输入，聚焦时均不添加 outline、额外描边或光晕；外层容器也不通过 `:focus-within` 补加外框。普通字段聚焦时保持原有底色，仅使用 `--app-field-focus-border` 改变原有边框颜色，不改变边框厚度；搜索框沿用自身填充变化。保留常驻阴影；Composer 使用 `--chat-prompt-shadow` 常驻阴影，聚焦不跳变。
 - 浮层使用已有 `--app-shadow-popover`、`--app-shadow-modal` 等语义阴影，不自写只适配亮色的黑色阴影；暗色主题的阴影强度由 token 提供。普通卡片不借用 modal 阴影。
 - 交互状态只改变必要属性；按钮按下不缩放、不位移，避免菜单锚点和命中位置移动。
 
 **右侧工作区面板（审查、变更、文件）** 共用一套内部几何，由 `--desktop-panel-*` 管理：
 
-- 一种分隔线 `--desktop-panel-divider`；不在面板内另配边框透明度。导航栏（文件树、变更导航、审查文件树）用 `--desktop-panel-nav-bg`，内容画布用 `--app-bg`，不再混入侧栏色或 surface 色。
+- 一种分隔线 `--desktop-panel-divider`；不在面板内另配边框透明度。导航栏（文件树、变更导航、审查文件树）与内容画布共用 `--app-bg` 底色，`--desktop-panel-nav-bg` 为同色别名，不再叠加独立的侧栏底色。
 - 工具栏高 `--desktop-panel-toolbar-height`，图标按钮统一用 `.app-shell-icon-control`，切换态由 `aria-pressed` 表达；不同用途的按钮组之间用细分隔线，不靠加大间距。
 - 搜索/筛选统一用 `TextField appearance="search"`：无边框浅填充，高 `--desktop-panel-search-height`，面板不自搭搜索外壳。
 - 源码/预览等分段切换统一用 `.sd-markdown-view-toggle`。

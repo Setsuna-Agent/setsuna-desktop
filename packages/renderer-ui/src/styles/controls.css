@@ -191,7 +191,6 @@
 
 :is(.sd-field:focus, .sd-textarea:focus) {
   outline: none;
-  background: var(--app-field-focus-bg);
   border-color: var(--app-field-focus-border);
 }
 

@@ -39,7 +39,7 @@ Skill 列表、详情、命令菜单和聊天引用统一通过 `shared/ui/Skill
 
 OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`。基础字号、字体和字重映射到宿主 token，正文与默认控件沿用 `--app-font-size` 的 14px 基线；复合 `font` token 同步映射，避免上游内置的 16px 字号和字体覆盖宿主偏好。密度继续由现有页面缩放统一应用，主题 token 不重复乘以 `--app-page-scale`。
 
-审查、变更、文件和浏览器的主头部复用 `renderer-ui/src/styles/panel-toolbar.css`：统一上下留白、最小高度、胶囊边框、主题阴影和操作分组。Feature 只维护路径、来源、地址输入和按钮的内容及伸缩规则；源码与预览使用单个文字按钮切换。
+审查、变更、文件、浏览器、PR 和协作任务详情的主头部复用 `renderer-ui/src/styles/panel-toolbar.css`：统一上下留白、最小高度、胶囊边框、主题阴影和操作分组。Feature 只维护路径、来源、地址输入、任务信息和按钮的内容及伸缩规则；源码与预览使用单个文字按钮切换。
 
 `MermaidDiagram` 为聊天、工作区文件预览和 `DocumentMarkdown` 的 `mermaid` 代码块提供图表。Mermaid 按需加载，流式更新合并后串行布局，卸载或源码变化会取消尚未开始的任务并丢弃迟到结果；加载或语法失败保留各入口的源码视图。渲染使用 strict 安全模式，生成的 SVG 作为图片展示，不绑定图表中的链接或脚本。`mermaid-theme.ts` 将宿主字体与颜色 token 转成图片内可用的主题，使用无渐变、无阴影的扁平节点；主题和字体改变时重新渲染。图表在正文中按可用宽度完整展示，点击复用 `ImagePreview` 放大查看。
 

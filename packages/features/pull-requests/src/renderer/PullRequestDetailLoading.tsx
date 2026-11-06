@@ -8,10 +8,8 @@ import { PullRequestSkeleton } from './loading/PullRequestSkeleton.js';
 export function PullRequestDetailLoading({ summary }: { summary?: PullRequestSummary }) {
   const t = usePrText();
   const { PageHeader } = usePullRequestsHost();
-  const actions = <PullRequestHeaderActions />;
   return <article className="sd-detail pr-detail pr-detail-loading" role="status" aria-label={t('loading')}>
-    {summary ? <PullRequestToolbar pr={summary} actions={actions} />
-      : <div className="pr-detail__topline"><Skeleton className="pr-detail-loading__eyebrow" /><div className="sd-page-header__actions pr-detail__toolbar">{actions}</div></div>}
+    <PullRequestToolbar pr={summary} actions={<PullRequestHeaderActions />} />
     <PullRequestScrollArea className="pr-detail__body" contentClassName="pr-detail__main">
       {summary ? <PullRequestTitle pr={summary} />
         : <PageHeader className="sd-detail__header" title={<Skeleton className="pr-detail-loading__title" />} subtitle={<Skeleton className="pr-detail-loading__author" />} />}

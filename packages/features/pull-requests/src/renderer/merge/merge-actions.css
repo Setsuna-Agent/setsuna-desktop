@@ -1,11 +1,18 @@
 .pr-merge-actions { display: inline-flex; flex-shrink: 0; align-items: stretch; }
-.pr-merge-actions > .sd-button:first-child { border-start-end-radius: 0; border-end-end-radius: 0; }
+.pr-merge-actions > .sd-button:first-child {
+  border-start-start-radius: var(--app-radius-full);
+  border-end-start-radius: var(--app-radius-full);
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
 .pr-merge-actions > .sd-button.sd-button--primary:last-child {
   min-width: 28px;
   padding-inline: 7px;
   border-inline-start-color: color-mix(in srgb, var(--app-primary-text) 24%, transparent);
   border-start-start-radius: 0;
   border-end-start-radius: 0;
+  border-start-end-radius: var(--app-radius-full);
+  border-end-end-radius: var(--app-radius-full);
 }
 .pr-merge-actions > .sd-button:last-child[data-overlay-open] { background: var(--app-primary-hover); }
 .pr-merge-dialog > .sd-dialog__body { padding-bottom: 6px; }

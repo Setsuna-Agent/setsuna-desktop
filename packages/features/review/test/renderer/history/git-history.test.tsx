@@ -175,6 +175,7 @@ describe('Git change navigation', () => {
       if (source === 'unstaged') {
         fireEvent.click(within(screen.getByRole('navigation', { name: '文件导航' })).getByRole('button', { name: '下一文件' }));
       } else if (source === 'commit') {
+        fireEvent.click(screen.getByRole('button', { name: /^图形/ }));
         fireEvent.click(await screen.findByRole('button', { name: /Commit aaaaaaaa/u }));
       }
       await screen.findByText(`${source}:src/README.md`);
@@ -227,6 +228,7 @@ describe('Git change navigation', () => {
     const dock = () => within(screen.getByRole('navigation', { name: '文件导航' }));
     for (const source of ['worktree', 'commit']) {
       if (source === 'commit') {
+        fireEvent.click(nav.getByRole('button', { name: /^图形/ }));
         fireEvent.click(await nav.findByRole('button', { name: /Commit aaaaaaaa/ }));
         await waitFor(() => expect(getCommitFileDiff).toHaveBeenCalledOnce());
       }
@@ -278,6 +280,7 @@ describe('Git change navigation', () => {
     fireEvent.click(nav.getByRole('button', { name: /working.txt/ }));
     expect(nav.getByRole('button', { name: /working.txt/ }).getAttribute('aria-pressed')).toBe('true');
     expect(getCommitDetails).not.toHaveBeenCalled();
+    fireEvent.click(nav.getByRole('button', { name: /^图形/ }));
     fireEvent.click(await nav.findByRole('button', { name: /Commit aaaaaaaa/ }));
     await waitFor(() => expect(getCommitFileDiff).toHaveBeenCalledWith('/repo', { oid: one, filePath: 'a.ts', previousPath: undefined }));
     expect(getCommitFileDiff).toHaveBeenCalledTimes(1);
@@ -312,6 +315,7 @@ describe('Git change navigation', () => {
     render(<GitChangesPanel workspaceRoot="/repo" reviewState={state} reviewError={null} reviewLoading={false} onRefresh={noop} actions={actions} />, {
       wrapper: host({ getHistory, getCommitDetails, getCommitFileDiff }, { copyText, notifyError }),
     });
+    fireEvent.click(screen.getByRole('button', { name: /^图形/ }));
     const first = await screen.findByRole('button', { name: /Commit aaaaaaaa/ });
     fireEvent.click(first);
     await waitFor(() => expect(getCommitFileDiff).toHaveBeenCalledOnce());
@@ -356,6 +360,7 @@ describe('Git change navigation', () => {
       loading={false} hasMore={false} error={null} onSelect={onSelect} onSelectRef={onSelectRef} onLoadMore={noop} onRetry={noop}
     />, { wrapper: host({}) });
 
+    fireEvent.click(screen.getByRole('button', { name: /^图形/ }));
     fireEvent.click(screen.getByRole('button', { name: 'main', exact: true }));
     expect(onSelectRef).toHaveBeenLastCalledWith(refs[0]);
     for (const ref of refs.slice(1)) {
@@ -379,6 +384,7 @@ describe('Git change navigation', () => {
     render(<GitHistoryGraph workspaceRoot="/repo" commits={[commit(one)]} refs={[]} head={one} selectedOid={null}
       loading={false} hasMore={false} error={null} onSelect={onSelect} onSelectRef={noop} onLoadMore={noop} onRetry={noop}
     />, { wrapper: host({ getCommitDetails }, { copyText, openExternal }) });
+    fireEvent.click(screen.getByRole('button', { name: /^图形/ }));
     const row = screen.getByRole('listitem');
     // happy-dom has no layout; supply a visible anchor for detached-hover detection.
     vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1200);
@@ -430,6 +436,7 @@ describe('Git change navigation', () => {
     render(<GitHistoryGraph workspaceRoot="/repo" commits={[commit(one), commit(two)]} refs={[]} head={one} selectedOid={null}
       loading={false} hasMore={false} error={null} onSelect={onSelect} onSelectRef={noop} onLoadMore={noop} onRetry={noop}
     />, { wrapper: host({ getCommitDetails }) });
+    fireEvent.click(screen.getByRole('button', { name: /^图形/ }));
     const target = screen.getByRole('button', { name: /Commit aaaaaaaa/ });
     const row = target.closest<HTMLElement>('[role="listitem"]')!;
     const preview = () => document.querySelector('.git-commit-card');
