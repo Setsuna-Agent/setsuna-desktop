@@ -23,6 +23,8 @@ Skill 列表、详情、命令菜单和聊天引用统一通过 `shared/ui/Skill
 | 目录 | 职责 |
 | --- | --- |
 | `ui/` | 通用 primitive 与字段控件 |
+| `find/` | 对话与工作区共用的搜索栏、内容匹配、分面板高亮与快捷键目标 |
+| `code/` | Pierre 代码与差异渲染、虚拟行搜索和定位适配 |
 | `hooks/` | 与业务无关的请求 guard |
 | `i18n/` | Renderer 文案、provider 和领域 message catalog |
 | `preferences/` | Local-only 外观偏好 |

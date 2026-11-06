@@ -1,9 +1,5 @@
 export const chatSupplementZhCN = {
   'chat.find.placeholder': '搜索对话内容',
-  'chat.find.previous': '上一个结果',
-  'chat.find.next': '下一个结果',
-  'chat.find.results': '第 {current} 项，共 {total} 项',
-  'chat.find.noResults': '无结果',
   'chat.copy.tool.awaiting': '等待授权',
   'chat.copy.tool.running': '正在使用',
   'chat.copy.tool.success': '已使用',
@@ -55,10 +51,6 @@ export const chatSupplementZhCN = {
 
 export const chatSupplementEnUS = {
   'chat.find.placeholder': 'Find in conversation',
-  'chat.find.previous': 'Previous result',
-  'chat.find.next': 'Next result',
-  'chat.find.results': '{current} of {total}',
-  'chat.find.noResults': 'No results',
   'chat.copy.tool.awaiting': 'Awaiting approval',
   'chat.copy.tool.running': 'Using',
   'chat.copy.tool.success': 'Used',

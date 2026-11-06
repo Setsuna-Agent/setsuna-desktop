@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserSettingsNavigationProvider } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { TerminalActionsHostProvider, type TerminalActionsHost } from '../../composition/TerminalWorkspaceFeatureBoundary.js';
 import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
+import { useContentFindTarget } from '../../shared/find/useContentFindTarget.js';
 import {
   shellOverlaySlot,
   shellSidebarSlot,
@@ -257,6 +258,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const startNewChat = useCallback(() => {
     navigation.startCurrentThread();
   }, [navigation]);
+  const requestContentFind = useContentFindTarget();
   useEffect(() => window.setsunaDesktop?.windowControls.onNewChat?.(() => { void navigation.startGlobalThread(); }), [navigation]);
   const shortcutHandlers = useMemo<AppKeyboardShortcutHandlers>(() => ({
     'app.newChat': {
@@ -331,12 +333,17 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       },
     },
     'chat.find': {
-      enabled: activeView === 'chat' && (Boolean(runtime.currentThread?.messages.length) || hasActiveBrowserPanel),
+      enabled: (activeView === 'chat' || activeView === 'automation') && (
+        (activeView === 'chat' && Boolean(runtime.currentThread?.messages.length))
+        || hasActiveBrowserPanel || workspacePanels.sidePanelVisible || workspacePanels.bottomPanelVisible
+      ),
       execute: (event) => {
         const tabId = browserShortcutTabId(event, null);
         if (tabId) {
           void window.setsunaDesktop?.browser.requestFindInPage(tabId).catch(() => undefined);
-        } else if (!(event && 'source' in event && event.source?.kind === 'embedded-browser') && runtime.currentThread?.messages.length) {
+        } else if (requestContentFind(event && 'target' in event ? event : undefined)) {
+          return;
+        } else if (activeView === 'chat' && !(event && 'source' in event && event.source?.kind === 'embedded-browser') && runtime.currentThread?.messages.length) {
           setFindInChatRequest((request) => request + 1);
         }
       },
@@ -427,6 +434,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     appHistory.goBack,
     appHistory.goForward,
     startNewChat,
+    requestContentFind,
+    workspacePanels.sidePanelVisible,
     workspacePanels.toggleBottomPanel,
     workspacePanels.bottomActivePanel,
     workspacePanels.bottomPanelSlot.panels,

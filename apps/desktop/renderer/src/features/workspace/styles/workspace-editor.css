@@ -29,7 +29,7 @@ body.desktop-file-tree-resizing .desktop-workspace-body--file-explorer {
   grid-row: 1;
 }
 
-.desktop-workspace-body--file-explorer > .desktop-editor {
+.desktop-workspace-body--file-explorer > .content-find-scope {
   grid-column: 1;
   grid-row: 2;
 }
