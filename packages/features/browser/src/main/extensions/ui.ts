@@ -74,6 +74,10 @@ export class BrowserExtensionUi {
     if (tabId !== undefined && (!target || this.options.owner(target) !== owner)) return false;
     this.grantActiveTab(extension, owner, tabId);
     this.clicks.set(extension.id, owner);
+    // Closing a configured panel must not wait for worker initialization to rewrite its behavior.
+    if (this.panels.options.togglesOnAction(extension.id) && this.panels.snapshot(owner, tabId)?.id === extension.id) {
+      return this.panels.show(extension, owner, tabId, true);
+    }
     const endpoints = await this.contexts.endpoints(extension.id);
     // A dormant worker must restore its setOptions/setPanelBehavior calls before activation.
     const current = this.options.resolve(`chrome-extension://${extension.id}/`);
