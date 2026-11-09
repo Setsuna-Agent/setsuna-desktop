@@ -9,7 +9,7 @@ import { withResponsiveOpenUiStack } from './OpenUiStack.js';
 
 // Preserve upstream schemas and local bindings; submission-oriented components
 // are deliberately absent from both the renderer and the Agent's catalog.
-export const presentationLibrary: Library = openuiLibrary.extend({
+export const presentationLibrary: Required<Library> = openuiLibrary.extend({
   components: {
     remove: ['Form', 'EditableTable'],
     override: Object.values(openuiLibrary.components)

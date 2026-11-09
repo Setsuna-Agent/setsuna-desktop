@@ -65,6 +65,8 @@
 
 会话管理菜单提供「彻底删除」，与归档一样在运行中禁用。共享 `useThreadMenu` 在菜单关闭后继续持有二次确认，只有确认后才调用删除，并防止重复提交。删除复用 runtime 的永久删除链路；当前会话删除后优先切换到同项目的其他会话，没有剩余会话时回到空白对话。异步删除完成不会覆盖用户期间发起的新导航。
 
+两个菜单的「导出」子菜单支持 Markdown 和 HTML。点击时按需加载 `features/chat/export/`，通过 `getThread(id, { fullHistory: true })` 一次读取完整持久快照，普通 UI 读取仍默认限制为最近 160 条消息。导出只保留可见提问和最终答复，排除执行过程、工具日志、生命周期摘要和供应商元数据。HTML 内置阅读样式，保留导出时的明暗主题，过滤原始 HTML 与危险链接；Mermaid 代码通过共享 `renderMermaidDiagram` 按需渲染成内嵌 SVG 图片，语法错误保留源码。OpenUI 保留带样式的静态组件与 SVG 图表，展开分页和面板内容，具体边界见 [Chat 的 OpenUI 展示块](chat.md#openui-展示块)。这些内容离线打开不依赖脚本或组件运行库；Markdown 保留 Mermaid 和 OpenUI 源码。附件保留已有链接或文件名，不打包受管资产。保存经 `desktop.saveConversationExport` 调起系统对话框；菜单关闭或切换后继续使用已捕获的目标，并对同一会话防止重复导出。运行中可导出当前快照，无需等待 turn 完成，生成与写入不进入启动链路。
+
 侧栏菜单打开时，`SidebarMenuOpenContext` 暂停整个侧栏的走马灯与悬浮预览，侧栏背景不再接受鼠标命中。会话菜单使用 `PointMenu` 的 modal 模式隔离背景交互；点击菜单外或按 Esc 关闭后恢复，二级菜单继续由共享菜单管理。
 
 新对话的 `ChatStarterWorkspace` 在输入框上方显示项目入口，可搜索项目、创建项目或转为全局会话。`selectNewThreadProject` 沿用未保存文件确认，只更换这条草稿的工作区，不打开已有会话；`useChatComposerSession.claimForProject` 保留输入内容与 composer 身份，避免丢失附件。分支入口由 Review Feature 的 `ConversationGitControls` 紧凑变体提供，复用 Git 查询、切换和创建分支；项目切换或控件卸载后，迟到的 Git 操作不会刷新旧工作区状态。

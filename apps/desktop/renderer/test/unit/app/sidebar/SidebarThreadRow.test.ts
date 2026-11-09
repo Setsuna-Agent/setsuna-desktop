@@ -143,7 +143,8 @@ const thread: RuntimeThreadSummary = {
 
 function menuActions(): ThreadMenuState {
   return { canFork: true, canCreateWorktree: true, apps: [{ id: 'vscode', label: 'VS Code', icon: 'code' }],
-    fork: vi.fn(async () => undefined), openWith: vi.fn(async () => undefined), deleteThread: vi.fn(async () => undefined), close: vi.fn() };
+    fork: vi.fn(async () => undefined), openWith: vi.fn(async () => undefined), deleteThread: vi.fn(async () => undefined),
+    exportThread: vi.fn(async () => undefined), close: vi.fn() };
 }
 
 async function renderContextRow(props: ComponentProps<typeof SidebarThreadRow>) {

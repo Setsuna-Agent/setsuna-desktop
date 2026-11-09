@@ -146,3 +146,29 @@ it('prevents duplicate deletion while pending and reports failures before allowi
   });
   expect(options.onDelete).toHaveBeenCalledTimes(2);
 });
+
+it('keeps the export target after its menu closes or switches and prevents duplicate saves', async () => {
+  const { options, getThread, list, open } = setup();
+  const save = vi.fn(async () => ({ ok: true, cancelled: true }));
+  vi.stubGlobal('setsunaDesktop', { workspaceApps: { list, open }, desktop: { saveConversationExport: save } });
+  const { result, rerender } = renderHook(({ id }: { id: string | null }) => useThreadMenu({ ...options, threadId: id }), {
+    initialProps: { id: source.id as string | null },
+  });
+  await waitFor(() => expect(result.current.apps).toEqual(apps));
+  let finish!: (thread: RuntimeThread) => void;
+  getThread.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  let exporting!: Promise<void>;
+  act(() => { exporting = result.current.exportThread(source.id, 'markdown'); });
+  await waitFor(() => expect(getThread).toHaveBeenLastCalledWith(source.id, { fullHistory: true }));
+  rerender({ id: null });
+  getThread.mockResolvedValue({ ...source, id: 'other', messages: [{ id: 'other-prompt', role: 'user', content: 'other-content', createdAt: '' }] });
+  rerender({ id: 'other' });
+  await waitFor(() => expect(getThread).toHaveBeenLastCalledWith('other'));
+  await act(() => result.current.exportThread(source.id, 'html'));
+  expect(save).not.toHaveBeenCalled();
+  await act(async () => { finish(source); await exporting; });
+  expect(save).toHaveBeenCalledOnce();
+  expect(save.mock.calls[0]).toEqual([expect.objectContaining({ format: 'markdown', content: expect.stringContaining('Prompt') })]);
+  expect(save.mock.calls[0]).not.toEqual([expect.objectContaining({ content: expect.stringContaining('other-content') })]);
+  expect(options.onError).not.toHaveBeenCalled();
+});

@@ -1,6 +1,6 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import type { MenuItem } from '@setsuna-desktop/renderer-ui';
-import { AppWindow, Archive, FolderGit2, GitFork, Pin, PinOff, Split, Trash2 } from 'lucide-react';
+import { AppWindow, Archive, Download, FolderGit2, GitFork, Pin, PinOff, Split, Trash2 } from 'lucide-react';
 import { workspaceOpenWithMenu } from '../../composition/workspace-apps-feature-adapter.js';
 import type { Translate } from '../../shared/i18n/I18nProvider.js';
 import { EditIcon } from '../../shared/ui/EditIcon.js';
@@ -25,6 +25,10 @@ export function threadMenuItems({ thread, pinned, running, actions, onRename, on
     { key: 'pin', label: t(pinned ? 'sidebar.unpinChat' : 'sidebar.pinChat'), disabled: !thread,
       icon: pinned ? <PinOff size={14} /> : <Pin size={14} />,
       onClick: () => { if (thread) onTogglePin(thread); } },
+    { key: 'export', label: t('sidebar.exportChat'), icon: <Download size={14} />, disabled: !thread, children: [
+      { key: 'export-markdown', label: 'Markdown', onClick: () => { if (thread) void actions.exportThread(thread.id, 'markdown'); } },
+      { key: 'export-html', label: 'HTML', onClick: () => { if (thread) void actions.exportThread(thread.id, 'html'); } },
+    ] },
     { key: 'archive', label: t('sidebar.archiveChat'), icon: <Archive size={14} />, disabled: !thread || running,
       onClick: () => { if (thread) onArchive(thread); } },
     { key: 'delete', label: t('sidebar.deleteChat'), icon: <Trash2 size={14} />, danger: true, disabled: !thread || running,

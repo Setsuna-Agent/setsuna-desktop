@@ -36,6 +36,7 @@ export { Tabs, TabsList, TabsTrigger } from './tabs/tabs.js';
 export { Table, type TableColumn, type TableProps } from './table.js';
 export { DocumentMarkdown, documentUrl, type DocumentMarkdownProps } from './document-markdown.js';
 export { MermaidDiagram } from './mermaid-diagram.js';
+export { renderMermaidDiagram } from './mermaid-renderer.js';
 export { PageSessionProvider, usePageSessionState, usePageScrollRestoration } from './navigation/page-session.js';
 export { SettingsPageNavigationProvider, useSettingsPageNavigation, type SettingsPageNavigation } from './navigation/settings-navigation.js';
 

@@ -1,4 +1,4 @@
-import type { DesktopRuntimeClient, ForkThreadInput, RuntimeThreadSummary, WorkspaceStatus } from '@setsuna-desktop/contracts';
+import type { DesktopConversationExportFormat, DesktopRuntimeClient, ForkThreadInput, RuntimeThreadSummary, WorkspaceStatus } from '@setsuna-desktop/contracts';
 import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { useEffect, useRef, useState } from 'react';
@@ -20,11 +20,12 @@ export function useThreadMenu({ client, threadId, onClose, onFork, onDelete, onE
   onDelete: (thread: RuntimeThreadSummary) => Promise<void>;
   onError: (message: string) => unknown;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const confirm = useConfirm();
   const [loaded, setLoaded] = useState<MenuContext | null>(null);
   const pending = useRef(new Set<string>());
   const pendingDeletions = useRef(new Set<string>());
+  const pendingExports = useRef(new Set<string>());
   const [forkingIds, setForkingIds] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
@@ -106,7 +107,20 @@ export function useThreadMenu({ client, threadId, onClose, onFork, onDelete, onE
     }
   };
 
-  return { canFork, canCreateWorktree, apps: context?.apps ?? [], fork, openWith, deleteThread, close: onClose };
+  const exportThread = async (id: string, format: DesktopConversationExportFormat) => {
+    if (pendingExports.current.has(id)) return;
+    pendingExports.current.add(id);
+    try {
+      const { exportConversation } = await import('../../features/chat/export/exportConversation.js');
+      await exportConversation(client, id, format, t, locale);
+    } catch (error) {
+      onError(error instanceof Error ? error.message : String(error));
+    } finally {
+      pendingExports.current.delete(id);
+    }
+  };
+
+  return { canFork, canCreateWorktree, apps: context?.apps ?? [], fork, openWith, deleteThread, exportThread, close: onClose };
 }
 
 export type ThreadMenuState = ReturnType<typeof useThreadMenu>;
