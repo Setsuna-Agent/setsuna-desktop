@@ -92,7 +92,8 @@ export type DesktopRuntimeClient = {
   uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
   deleteAttachment(assetId: string): Promise<RuntimeAttachmentDeleteResponse>;
   listThreads(query?: ThreadQuery): Promise<ThreadList>;
-  getThread(threadId: string): Promise<RuntimeThread>;
+  /** Full history is opt-in; normal UI reads keep their bounded message window. */
+  getThread(threadId: string, options?: { fullHistory?: boolean }): Promise<RuntimeThread>;
   /** Null means both the event watermark and active turn are unchanged. */
   getThreadIfChanged?(threadId: string, lastSeq: number, activeTurnId: string | null): Promise<RuntimeThread | null>;
   listThreadMessages(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeMessagePage>;

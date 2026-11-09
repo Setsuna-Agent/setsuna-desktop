@@ -1,0 +1,94 @@
+:root {
+  color-scheme: light;
+  --page: #f5f5f6;
+  --paper: #fff;
+  --text: #242424;
+  --muted: #818187;
+  --line: #e9e9ec;
+  --question: #f7f7f8;
+  --code: #f5f5f6;
+  --link: #3d5bb8;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: 15px;
+  line-height: 1.85;
+  color: var(--text);
+  background: var(--page);
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #191919;
+  --paper: #202020;
+  --text: #e4e4e4;
+  --muted: #929298;
+  --line: #343434;
+  --question: #282828;
+  --code: #171717;
+  --link: #9bb4f5;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+main {
+  max-width: 920px;
+  margin: 40px auto;
+  padding: 48px 56px 56px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--paper);
+  box-shadow: 0 8px 40px rgb(0 0 0 / 3%);
+  overflow-wrap: anywhere;
+}
+
+.document-header { padding-bottom: 28px; margin-bottom: 36px; border-bottom: 1px solid var(--line); }
+.document-header h1 { margin: 0; font-size: 28px; font-weight: 650; line-height: 1.4; letter-spacing: -0.03em; }
+.message + .message { margin-top: 32px; }
+.message--user { padding: 18px 22px; border-radius: 12px; background: var(--question); }
+.message--assistant { padding: 0 2px; }
+.message__role { margin: 0 0 12px; font-size: 11px; font-weight: 600; line-height: 1.5; letter-spacing: 0.06em; color: var(--muted); }
+.chat-markdown > :first-child { margin-top: 0; }
+.chat-markdown > :last-child { margin-bottom: 0; }
+.chat-markdown p { margin: 0 0 16px; }
+.chat-markdown h1, .chat-markdown h2, .chat-markdown h3, .chat-markdown h4 { margin: 28px 0 12px; font-weight: 600; line-height: 1.5; }
+.chat-markdown h1 { font-size: 23px; }
+.chat-markdown h2 { font-size: 20px; }
+.chat-markdown h3 { font-size: 17px; }
+.chat-markdown h4 { font-size: 15px; }
+.chat-markdown a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.chat-markdown :is(ul, ol) { margin: 12px 0 20px; padding-left: 24px; }
+.chat-markdown li { margin: 6px 0; }
+.chat-markdown li > p { margin: 6px 0; }
+.chat-markdown :is(pre, code) { font-family: "SFMono-Regular", Consolas, Menlo, monospace; font-size: 13px; }
+.chat-markdown code { padding: 3px 6px; border-radius: 6px; background: var(--code); }
+.chat-markdown pre { margin: 20px 0; padding: 18px 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--code); line-height: 1.7; overflow-x: auto; }
+.chat-markdown pre code { padding: 0; border-radius: 0; background: none; }
+.chat-markdown blockquote { margin: 20px 0; padding: 4px 18px; border-left: 3px solid var(--line); }
+.chat-markdown blockquote > :last-child { margin-bottom: 0; }
+.chat-markdown hr { margin: 28px 0; border: 0; border-top: 1px solid var(--line); }
+img { max-width: 100%; height: auto; border-radius: 8px; }
+.chat-markdown table { display: block; width: max-content; max-width: 100%; margin: 20px 0; border-collapse: collapse; overflow-x: auto; font-size: 14px; line-height: 1.65; }
+.chat-markdown :is(th, td) { padding: 10px 14px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+.chat-markdown th { background: var(--question); font-weight: 600; }
+.diagram { margin: 24px 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); overflow-x: auto; }
+.diagram img { display: block; margin: 0 auto; border-radius: 0; }
+.conversation-openui { margin: 20px 0; max-width: 100%; }
+.conversation-openui svg { max-width: 100%; }
+.conversation-openui-sections { display: flex; flex-direction: column; gap: 24px; }
+.conversation-openui-sections > section > h3 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+
+@media (max-width: 720px) {
+  main { margin: 0; padding: 28px 20px; border: 0; border-radius: 0; box-shadow: none; }
+  .document-header h1 { font-size: 24px; }
+  .message--user { padding: 16px; }
+  .chat-markdown pre { padding: 16px; }
+  .diagram { padding: 12px; }
+}
+
+@media print {
+  :root { color-scheme: light; --paper: #fff; --text: #000; --muted: #777; --line: #ddd; --question: #f7f7f7; --code: #f5f5f5; }
+  main { max-width: none; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
+  .chat-markdown pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .chat-markdown a { color: inherit; }
+  .diagram { break-inside: avoid; }
+}

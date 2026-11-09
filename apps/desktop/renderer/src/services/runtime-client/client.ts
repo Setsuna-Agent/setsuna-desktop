@@ -104,10 +104,10 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       const suffix = params.size ? `?${params}` : '';
       return request<ThreadList>({ path: `/v1/threads${suffix}` });
     },
-    async getThread(threadId: string) {
+    async getThread(threadId: string, options: { fullHistory?: boolean } = {}) {
       // Preserve the HTTP missing-thread distinction across Electron's error serialization.
       const response = await request<RuntimeFeatureOperationResponse<RuntimeThread>>({
-        path: `/v1/threads/${encodeURIComponent(threadId)}?messageLimit=160`,
+        path: `/v1/threads/${encodeURIComponent(threadId)}${options.fullHistory ? '' : '?messageLimit=160'}`,
         responseMode: 'feature-operation',
       });
       if (!response.ok) throw new RuntimeClientError(

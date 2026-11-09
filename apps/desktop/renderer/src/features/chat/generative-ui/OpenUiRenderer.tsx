@@ -8,10 +8,9 @@ import type { OpenUiBlockProps } from './OpenUiBlock.js';
 import { presentationLibrary } from './openUiLibrary.js';
 import { OpenUiFailureContext } from './OpenUiComponentBoundary.js';
 import { OpenUiControlScope } from './OpenUiControls.js';
+import { isCompleteOpenUiPresentation, maxOpenUiCharacters } from './openUiValidation.js';
 import '@openuidev/react-ui/components.css';
 import './openui.css';
-
-const maxOpenUiCharacters = 100_000;
 
 export default function OpenUiRenderer({ code, streaming }: OpenUiBlockProps) {
   const mode = useResolvedThemeMode();
@@ -20,13 +19,9 @@ export default function OpenUiRenderer({ code, streaming }: OpenUiBlockProps) {
   const failureContext = useMemo(() => ({ source: code, onRenderError: setInvalidSource }), [code]);
   const onParseResult = useCallback((result: ParseResult | null) => {
     if (!result) return;
-    const invalid = (!result.root && !result.rootExpression)
-      || result.meta.incomplete || result.meta.unresolved.length > 0
-      || result.meta.errors.some((error) => error.severity !== 'warning')
-      || result.queryStatements.length > 0 || result.mutationStatements.length > 0;
     // Parsing and rendering report independently. A successful parse must not
     // erase a render failure for the same source; a source change retries it.
-    if (invalid) setInvalidSource(code);
+    if (!isCompleteOpenUiPresentation(result)) setInvalidSource(code);
   }, [code]);
   const onError = useCallback((errors: OpenUIError[]) => {
     if (errors.some((error) => error.severity !== 'warning')) setInvalidSource(code);

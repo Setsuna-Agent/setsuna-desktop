@@ -301,6 +301,8 @@ Assistant 正文、工作记录中的可见回复和计划正文可使用顶层 
 
 OpenUI 的下拉菜单、日期面板及 tooltip 会 portal 到 `body`，不在 `.chat-openui` 内。`openui.css` 沿用共享控件的缩放约定：定位层抵消 `body` 的页面缩放，内容层恢复应用密度；下拉宽度和可用高度从 Radix 的视口像素换回 CSS 像素。规则仅匹配 OpenUI 的顶层 portal，日历内部已有定位容器的菜单保留自身坐标系。
 
+HTML 对话导出只激活最终答复中完整的顶层 OpenUI 围栏，复用 `openUiMarkdownScopes` 保持跨块引用与脚注，每条消息使用独立的脚注与回链命名空间，沿用 `openUiValidation` 的完整性和无远端操作边界。`export/openUiExport` 按需加载组件，在屏幕外以程序初始状态完成真实渲染与图表布局，再保留静态 DOM、SVG、组件样式和作用域主题 token；结束后卸载根节点并清理订阅。导出目录复用展示组件，仅将分页表格改为全部行，标签页、折叠区和轮播改为完整展开，打开的 Modal 改为原地静态内容，控件冻结为初始值，不保留应用中的临时交互状态。无效程序保留源码，用户消息中的示例不激活组件；Markdown 导出保留原始 OpenUI 围栏。
+
 验证入口：`test/unit/features/chat/generative-ui/`，覆盖消息边界、真实解析器与 Skill 示例兼容、本地交互、流式完成、错误回退和无外部动作；Markdown 现有行为继续由 `test/unit/features/chat/markdown/` 覆盖。
 
 ## Mentions 与附件

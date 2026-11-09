@@ -20,6 +20,7 @@ import { registerWorkspaceEntryWatchIpc } from './workspace-entry-watch-ipc.js';
 import { registerPluginUiDocumentIpc } from './plugin-ui-document-ipc.js';
 import { registerFileDragIpc } from './file-drag-ipc.js';
 import { readWorkspaceDocument } from '../workspace/document-preview.js';
+import { registerConversationExportIpc } from './conversation-export-ipc.js';
 
 type DesktopIpcOptions = {
   nativeBridge: DesktopNativeBridgeServer;
@@ -70,6 +71,7 @@ export function registerDesktopIpc({
     return () => keyboards.delete(senderId);
   });
   registerWorkspaceEntryWatchIpc();
+  registerConversationExportIpc();
   registerFileDragIpc(userDataPath, readAttachmentImage);
   registerPluginUiDocumentIpc(interfaceLanguage);
 

@@ -45,6 +45,8 @@ OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`
 
 `MermaidDiagram` 为聊天、工作区文件预览和 `DocumentMarkdown` 的 `mermaid` 代码块提供图表。Mermaid 按需加载，流式更新合并后串行布局，卸载或源码变化会取消尚未开始的任务并丢弃迟到结果；加载或语法失败保留各入口的源码视图。渲染使用 strict 安全模式，生成的 SVG 作为图片展示，不绑定图表中的链接或脚本。`mermaid-theme.ts` 将宿主字体与颜色 token 转成图片内可用的主题，使用无渐变、无阴影的扁平节点；主题和字体改变时重新渲染。图表在正文中按可用宽度完整展示，点击复用 `ImagePreview` 放大查看。
 
+`renderMermaidDiagram(code, theme, signal)` 也作为共享 API 供 HTML 对话导出调用，复用同一安全配置和串行队列，返回可直接内嵌的 SVG 图片 data URL；导出文件不需要加载 Mermaid 脚本。
+
 - Motion 负责复选框、开关和通知动画；`motion.ts` 提供复选框与通知使用的 spring 参数，开关的参数随组件维护。
 - `Dock` / `DockItem` / `DockSeparator` 直接采用 [beUI Dock](https://beui.dev/components/motion/dock) 的组件源码，复用已有 `motion.ts` 和 `utils.ts`；变更面板组合它们承载常驻的文件导航与侧栏开关，业务选择与悬停列表仍由 Review Feature 持有。
 - `toast/provider.tsx` 持有共享通知队列、去重、同时展示数量限制和 `useToast`。宿主 `app/providers/ToastProvider.tsx` 只注入本地化标签；Feature 的 `SettingsViewUi.Toast` 和页面中的 `ToastNotice` 复用同一队列。状态驱动的通知在错误清除、重试或组件卸载时撤下。最多同时展示四条，其余等待展示后才开始计时；hover 或内部键盘焦点暂停剩余计时。`durationMs: null` 保留至主动关闭或 owner 撤下，`action` 提供重试等操作。跨页面保存的错误由常驻 owner 持有，不随编辑页卸载撤下。独立 SDK 控件没有外层 provider 时，`ToastNotice` 使用局部队列；需要跨控件共享通知的应用应挂载 `ToastProvider`。

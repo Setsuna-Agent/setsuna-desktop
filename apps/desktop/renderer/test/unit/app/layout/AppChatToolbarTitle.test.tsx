@@ -22,7 +22,8 @@ function menuOptions(overrides: Partial<ThreadMenuOptions> = {}): ThreadMenuOpti
   return {
     thread, pinned: false, running: false,
     actions: { canFork: true, canCreateWorktree: true, apps,
-      fork: vi.fn(async () => undefined), openWith: vi.fn(async () => undefined), deleteThread: vi.fn(async () => undefined), close: vi.fn() },
+      fork: vi.fn(async () => undefined), openWith: vi.fn(async () => undefined), deleteThread: vi.fn(async () => undefined),
+      exportThread: vi.fn(async () => undefined), close: vi.fn() },
     onRename: vi.fn(), onTogglePin: vi.fn(), onArchive: vi.fn(), onOpenInNewWindow: vi.fn(),
     ...overrides,
   };

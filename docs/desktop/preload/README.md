@@ -32,6 +32,8 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 
 `desktop.revealPath` 用于在系统文件管理器中定位 Skill 等工作区外的应用文档。Main 限制调用来自登记的宿主窗口主 frame，校验绝对路径和目标存在后调用 `shell.showItemInFolder`；它不读取文件内容，也不执行文件。工作区引用仍通过 `revealWorkspaceFile` 的 root + 相对路径边界校验。
 
+`desktop.saveConversationExport` 只接收对话标题、`markdown | html` 格式和生成的文本，不接收目标路径。`ipc/conversation-export-ipc.ts` 校验登记的宿主主 frame，再由系统保存对话框授权写入位置；文件写入按需加载，取消正常返回，失败由调用方显示 Toast。
+
 `diagnostics.getLogDirectory` 和 `diagnostics.openLogDirectory` 不接受路径参数，仅向登记的宿主主 frame 返回或打开 main 选定的 bootstrap 日志目录。读取位置不触发磁盘访问，打开时才按需创建目录；调用不依赖 runtime，也不向 renderer 暴露日志写入或任意文件读取能力。
 
 `desktop.startFileDrag` 接收 workspace root + 相对文件路径，或现有 `DesktopImageInput` 图片引用。Main 校验宿主主 frame，复用工作区 canonical path 或受管图片资产边界，按需读取系统图标后调用来源窗口的 `webContents.startDrag`，支持拖到桌面、系统文件管理器和接收文件的其他应用。启动只注册 handler，不扫描或预读文件。`desktop.resolveWorkspaceFileDrop` 在 preload 用 `webUtils.getPathForFile` 读取真实 `File` 路径，再由 Main 校验并返回工作区内的相对文件路径；外部文件、目录和越界路径返回 null。文件树用它接回原生拖拽后执行已有移动操作，目录仍走内部拖拽。

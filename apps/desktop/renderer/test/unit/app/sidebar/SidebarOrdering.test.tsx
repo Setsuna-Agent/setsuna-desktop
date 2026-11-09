@@ -37,7 +37,7 @@ function fixture() {
     onToggleSessionsCollapsed: noop, onToggleThreadActions: noop, onToggleThreadPin: noop,
     onOpenThreadInNewWindow: noop, onRenameThread: noop,
     threadMenu: { canFork: false, canCreateWorktree: false, apps: [], fork: async () => undefined,
-      openWith: async () => undefined, deleteThread: async () => undefined, close: noop },
+      openWith: async () => undefined, deleteThread: async () => undefined, exportThread: async () => undefined, close: noop },
   };
   return { ...render(<ToastProvider><AgentSidebar {...props} /></ToastProvider>), props, noop };
 }
