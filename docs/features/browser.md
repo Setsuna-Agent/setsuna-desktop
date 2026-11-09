@@ -193,7 +193,7 @@ API 桥按必需与可选权限声明在文档和 worker 首次加载时安装�
 
 `main/extensions/tabs.ts` 将实际 webview 和扩展窗口的加载、关闭事件送到 `tabs.onUpdated/onRemoved`，补齐 Electron 原生事件遗漏的来宾导航，事件按导航顺序发送并唤醒后台。顶层 `did-navigate-in-page` 转发 hash 和 History API 的 URL 变化，不伪造加载状态变化，不转发子 frame 的 URL。跟踪时保存真实所属桌面窗口 ID，扩展文档从父窗口解析归属，销毁后仍能发送正确的 `windowId`。无 `tabs` 或对应网站权限时不发送 URL、标题。缺失的 `tabs.create/remove` 仅承载调用扩展自己的文档，使用现有扩展窗口宿主和真实 WebContents ID；不允许打开其他扩展或关闭桌面窗口。其他 tabs 方法保留原生实现。篡改猴自行处理 DNR 中转 URL、下载脚本并打开原版安装确认页，宿主不解析脚本安装 URL、不直接保存脚本、不自动确认安装。
 
-`main/extensions/active-tabs.ts` 在 action 点击派发或打开弹窗前，按扩展、所属标签和顶层 origin 记录 `activeTab` 临时授权；同源导航保留，跨 origin 提交、关闭、停用和卸载时清理，导航取消及下载不撤销。不持久化授权，不修改 manifest 的网站权限，特权页面及扩展商店不可授权。点击事件和标签更新的敏感字段也使用实际授权判断。Electron 没有公开的原生授权接口，因此 `scripting.executeScript` 保留原生实现优先，仅在原生失败且存在临时授权时走 `main/extensions/scripting.ts`：验证调用扩展、目标及 frame origin，以受限文件读取或序列化函数执行代码。共享文档生命周期通道绑定执行与回应，分别使用 MAIN 或独立扩展世界；待执行请求在卸载时取消。此通道只补齐脚本执行，不模拟其他内容脚本 API。`active-tabs.electron.test.ts` 用仅声明 `activeTab` 和 `scripting` 的真实扩展覆盖点击后的后台执行、函数/文件、Promise/回调、跨扩展和标签隔离、子 frame origin、同源保留、跨站撤销、停用重载及关闭。
+`main/extensions/active-tabs.ts` 在 action 点击派发或打开弹窗前，按扩展、所属标签和顶层 origin 记录 `activeTab` 临时授权；同源导航保留，跨 origin 提交、关闭、停用和卸载时清理，导航取消及下载不撤销。不持久化授权，不修改 manifest 的网站权限，特权页面及扩展商店不可授权。点击事件和标签更新的敏感字段也使用实际授权判断。Electron 没有公开的原生授权接口，因此 `scripting.executeScript` 保留原生实现优先，仅在原生失败且存在临时授权时走 `main/extensions/scripting.ts`：验证调用扩展、目标及 frame origin，以受限文件读取或序列化函数执行代码。共享文档生命周期通道绑定执行与回应，分别使用 MAIN 或独立扩展世界；待执行请求在卸载时取消。此通道只补齐脚本执行，不模拟其他内容脚本 API。授权保留、跨域撤销、扩展和标签隔离、关闭及特权页面拒绝由 `test/main/extensions/active-tabs.test.ts` 确定性验证。
 
 `extensions-state.json` 向后兼容新增 `userScriptsAllowed` ID 列表，默认拒绝。注册及世界配置原子保存在 browser partition 的 `UserScripts/<id>.json`；停用保留、卸载删除。切换许可后等待原生卸载事件再重载扩展，使脚本管理器重新检测权限，并避免旧卸载事件清掉新实例的注册。注册写入按队列提交，重载等待正在提交的注册完成。
 
