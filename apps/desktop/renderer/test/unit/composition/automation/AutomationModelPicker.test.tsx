@@ -118,7 +118,7 @@ async function fixture() {
       task = { ...task, ...draft, modelSelection: draft.modelSelection, thinkingEffort: draft.thinkingEffort };
       return task;
     }),
-    createConversation: vi.fn(), create: vi.fn(), setStatus: vi.fn(), run: vi.fn(), delete: vi.fn(),
+    createConversation: vi.fn(), create: vi.fn(), setStatus: vi.fn(), run: vi.fn(), delete: vi.fn(), deleteRun: vi.fn(),
   };
   const openConversation = vi.fn(async () => true);
   render(<ConfirmationProvider><AutomationPage client={client} threadId="setup" openConversation={openConversation}

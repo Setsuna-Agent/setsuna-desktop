@@ -23,7 +23,7 @@ export function CollaborationTaskControls({ parentThreadId, childThreadId, activ
     finally { inFlight.current = false; setBusy(false); }
   }
   return <>
-    <IconButton type="button" disabled={busy || !service.available} label={t('feature.collaboration.panel.stopTracking')} onClick={() => { void act('close'); }}><CircleX size={16} /></IconButton>
-    {activeTurnId ? <IconButton type="button" disabled={busy || !service.available} label={t('feature.collaboration.panel.interrupt')} onClick={() => { void act('interrupt'); }}><Pause size={16} /></IconButton> : null}
+    <IconButton className="app-shell-icon-control" type="button" disabled={busy || !service.available} label={t('feature.collaboration.panel.stopTracking')} onClick={() => { void act('close'); }}><CircleX size={14} /></IconButton>
+    {activeTurnId ? <IconButton className="app-shell-icon-control" type="button" disabled={busy || !service.available} label={t('feature.collaboration.panel.interrupt')} onClick={() => { void act('interrupt'); }}><Pause size={14} /></IconButton> : null}
   </>;
 }

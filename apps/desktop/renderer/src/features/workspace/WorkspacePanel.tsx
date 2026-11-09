@@ -30,6 +30,7 @@ import {
 } from 'react';
 import { GitChangesFeaturePanel, ReviewFeaturePanel } from '../../composition/review-feature-panel-adapter.js';
 import { CodeFileView } from '../../shared/code/PierreCode.js';
+import { WorkspaceContentFind } from './WorkspaceContentFind.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { captureTextContextMenuTarget } from '../../shared/lib/textContextMenu.js';
 import { EmptyState } from '../../shared/ui/primitives.js';
@@ -395,7 +396,7 @@ export function WorkspacePanel({
           } as CSSProperties) : undefined}
         >
           {fileEditorHeader}
-          {mainPanel}
+          <WorkspaceContentFind key={activePanel.id} placement={placement}>{mainPanel}</WorkspaceContentFind>
           {showsFileExplorer ? (
             <section className={`desktop-file-explorer ${treeVisible ? '' : 'desktop-file-explorer--tree-collapsed'}`}>
               <div className="desktop-file-tree" aria-hidden={!treeVisible} aria-busy={entryOperationPending}>

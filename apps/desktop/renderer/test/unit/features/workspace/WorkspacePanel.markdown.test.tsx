@@ -10,8 +10,9 @@ import { WorkspacePanel } from '../../../../src/features/workspace/WorkspacePane
 import { useWorkspaceFileTree } from '../../../../src/features/workspace/hooks/useWorkspaceFileTree.js';
 import { createFilePanel, type WorkspaceFileFocusRequest } from '../../../../src/features/workspace/model.js';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
+import { CONTENT_FIND_REQUEST } from '../../../../src/shared/find/useContentFindTarget.js';
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const file: WorkspaceFileRead = { projectId: 'project', path: 'README.md', content: '# Original',
   size: 10, truncated: false, revision: 'r1', preview: { kind: 'text' } };
 const noop = () => undefined;
@@ -92,4 +93,28 @@ it('previews unsaved input and keeps the live editor, selection and undo history
   // An empty unsaved draft must not fall back to the saved Markdown text.
   view.rerender(<Document editing initialContent="" key="empty" />);
   expect((await screen.findByRole('article')).textContent).toBe('');
+});
+
+it('searches the open file and releases its search state when switching to another document', async () => {
+  const highlights = new Map<string, Set<Range>>();
+  vi.stubGlobal('Highlight', class extends Set<Range> {
+    priority = 0;
+    constructor(...ranges: Range[]) { super(ranges); }
+  });
+  vi.stubGlobal('CSS', { highlights });
+  vi.spyOn(Range.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 10, 50, 20));
+  const firstFile = { ...file, path: 'first.ts', content: 'needle\nother needle' };
+  const view = render(<Document currentFile={firstFile} />);
+  const openFind = () => act(() => {
+    view.container.querySelector('[data-content-find-scope]')!.dispatchEvent(new Event(CONTENT_FIND_REQUEST));
+  });
+  openFind();
+  fireEvent.change(screen.getByRole('textbox', { name: '搜索当前面板内容' }), { target: { value: 'needle' } });
+  await waitFor(() => expect(highlights.get('content-find-match')?.size).toBe(2));
+  view.rerender(<Document currentFile={{ ...file, path: 'second.ts', content: 'other content' }} />);
+  expect(screen.queryByRole('search')).toBeNull();
+  expect(highlights.size).toBe(0);
+  openFind();
+  fireEvent.change(screen.getByRole('textbox', { name: '搜索当前面板内容' }), { target: { value: 'needle' } });
+  await waitFor(() => expect(highlights.get('content-find-match')?.size).toBe(0));
 });

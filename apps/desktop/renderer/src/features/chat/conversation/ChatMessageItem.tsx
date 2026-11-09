@@ -28,7 +28,7 @@ import {
 import { RuntimeHookRuns } from '../tool-runs/RuntimeHookRunDetails.js';
 import type { RuntimeHookUse } from './activity/runtimeHookUsage.js';
 import { isDisplayableRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
-import { isActiveRuntimeToolRun } from '../tool-runs/runtimeToolRunState.js';
+import { isActiveRuntimeToolRun, isPendingRuntimeUserInput } from '../tool-runs/runtimeToolRunState.js';
 import { formatGoalExitSummary } from '../goalFormatting.js';
 import type { AnswerApprovalHandler, WorkHistoryExpandedChangeHandler } from './chat-workspace-types.js';
 import {
@@ -292,10 +292,11 @@ function AssistantRunContent({
       contextCompactionActive,
       contextCompactions: item.contextCompactions ?? [],
       hookUses,
-      isTimelineToolResult: (run) => run.status === 'success' && (
+      // Awaiting an answer must remain accessible when work history is collapsed.
+      isTimelineToolResult: (run) => isPendingRuntimeUserInput(run) || (run.status === 'success' && (
         resolveRuntimeFeatureToolResult(resolveFeatureToolResult, run)
           ?.contribution.placement === 'assistant-timeline'
-      ),
+      )),
       messageOrderIds: item.messageIds,
       showThinkingInTranscript,
     }),

@@ -1,7 +1,7 @@
 import { defineCapability } from '@setsuna-desktop/feature-core/capability';
 import type { FeatureOperationTransport } from '@setsuna-desktop/feature-core/operation';
 import {
-  createAutomation, createAutomationConversation, deleteAutomation, listAutomations,
+  createAutomation, createAutomationConversation, deleteAutomation, deleteAutomationRun, listAutomations,
   runAutomation, setAutomationStatus, updateAutomation, type AutomationDraft,
 } from '../contracts/index.js';
 
@@ -14,6 +14,7 @@ export function createAutomationClient(transport: FeatureOperationTransport) {
     setStatus: (taskId: string, status: 'active' | 'paused') => transport.call(setAutomationStatus, { taskId, status }),
     run: (taskId: string) => transport.call(runAutomation, { taskId }),
     delete: (taskId: string) => transport.call(deleteAutomation, { taskId }),
+    deleteRun: (taskId: string, runId: string) => transport.call(deleteAutomationRun, { taskId, runId }),
   };
 }
 export type AutomationClient = ReturnType<typeof createAutomationClient>;

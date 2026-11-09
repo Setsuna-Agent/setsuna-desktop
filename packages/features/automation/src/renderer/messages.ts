@@ -40,6 +40,7 @@ export const automationMessages = defineRendererMessageBundle({
       'feature.automation.run.interrupted': '已中断', 'feature.automation.everyMinutes': '每 {minutes} 分钟',
       'feature.automation.retry': '重试', 'feature.automation.loading': '加载中…',
       'feature.automation.unavailable': '自动化暂不可用', 'feature.automation.deleteTitle': '删除定时任务？',
+      'feature.automation.deleteRun': '删除运行记录', 'feature.automation.deleteRunTitle': '删除这条运行记录？',
     },
     'en-US': {
       'feature.automation.title': 'Automations',
@@ -78,6 +79,7 @@ export const automationMessages = defineRendererMessageBundle({
       'feature.automation.run.interrupted': 'Interrupted', 'feature.automation.everyMinutes': 'Every {minutes} minutes',
       'feature.automation.retry': 'Retry', 'feature.automation.loading': 'Loading…',
       'feature.automation.unavailable': 'Automations are unavailable', 'feature.automation.deleteTitle': 'Delete scheduled task?',
+      'feature.automation.deleteRun': 'Delete run record', 'feature.automation.deleteRunTitle': 'Delete this run record?',
     },
   },
 });

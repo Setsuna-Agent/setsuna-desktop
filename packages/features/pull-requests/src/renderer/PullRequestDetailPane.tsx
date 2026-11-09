@@ -43,12 +43,11 @@ function DetailBody({ client, detail, account, session, revision, refreshing, on
     checksRef.current?.scrollIntoView({ block: 'start' });
   };
   return <article className="sd-detail pr-detail">
-    <PullRequestToolbar pr={detail} actions={<>
-      <PullRequestMetaMenu detail={detail} onChecks={showChecks} onDiff={openDiff} />
-      <PullRequestHeaderActions
+    <PullRequestToolbar pr={detail} actions={
+      <PullRequestHeaderActions metaAction={<PullRequestMetaMenu detail={detail} onChecks={showChecks} onDiff={openDiff} />}
         changes={detail} onDiff={openDiff} onRefresh={onRefresh} refreshing={refreshing} onOpen={() => void openExternal(detail.url)}
         mergeAction={<MergeActions client={client} detail={detail} account={account} onUpdated={onUpdated} />}
-      /></>} />
+      />} />
     <PullRequestScrollArea className="pr-detail__body" contentClassName="pr-detail__main" scrollRef={scroll.scrollRef} onScroll={scroll.onScroll}>
       <PullRequestTitle pr={detail} branches={<PullRequestBranches detail={detail} />} />
       <DiscussionTimeline client={client} detail={detail} account={account} discussions={discussions} revision={revision} data={session.data} onPublished={onUpdated}

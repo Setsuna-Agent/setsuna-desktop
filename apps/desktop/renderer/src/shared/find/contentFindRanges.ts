@@ -1,11 +1,19 @@
-const excludedElements = 'script, style, noscript, svg, button, input, textarea, select, [contenteditable="true"], [hidden], [aria-hidden="true"]';
+import { literalFindExpression } from './contentFindSources.js';
+
+const excludedElements = 'script, style, noscript, svg, button, input, textarea, select, [contenteditable="true"], [hidden], [aria-hidden="true"], [data-content-find-bar]';
 
 type TextPart = { node: Text; start: number; end: number };
 
 /** Search rendered text without inserting marks into React-owned message nodes. */
-export function findChatTextRanges(root: HTMLElement, query: string, onShadowRoot?: (root: ShadowRoot) => void): Range[] {
+export function findContentTextRanges(root: HTMLElement, query: string, {
+  onShadowRoot,
+  skipShadowRoot,
+}: {
+  onShadowRoot?: (root: ShadowRoot) => void;
+  skipShadowRoot?: (host: HTMLElement) => boolean;
+} = {}): Range[] {
   if (!query) return [];
-  const expression = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu');
+  const expression = literalFindExpression(query);
   const ranges: Range[] = [];
   let text = '';
   let parts: TextPart[] = [];
@@ -54,7 +62,9 @@ export function findChatTextRanges(root: HTMLElement, query: string, onShadowRoo
     if (node.shadowRoot) {
       flush();
       onShadowRoot?.(node.shadowRoot);
-      for (const child of node.shadowRoot.childNodes) visit(child);
+      // Source-backed code is indexed from data, including unmounted lines.
+      // Its light DOM still holds searchable React annotations.
+      for (const child of skipShadowRoot?.(node) ? node.childNodes : node.shadowRoot.childNodes) visit(child);
       flush();
       return;
     }

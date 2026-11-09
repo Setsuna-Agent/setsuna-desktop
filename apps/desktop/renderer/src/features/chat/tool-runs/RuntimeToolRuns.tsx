@@ -25,7 +25,7 @@ import type {
   ToolRunSummaryMode,
 } from './runtime-tool-run-types.js';
 import { isDisplayableRuntimeToolRun } from './runtimeToolRunVisibility.js';
-import { isActiveRuntimeToolRun } from './runtimeToolRunState.js';
+import { isActiveRuntimeToolRun, isPendingRuntimeUserInput } from './runtimeToolRunState.js';
 import { displayedGenericToolRunDiagnostic, genericToolRunDetailRuns, toolRunHasDetails } from './runtimeToolRunDetails.js';
 import {
   ChangeCounts,
@@ -127,6 +127,14 @@ export const RuntimeToolRuns = memo(function RuntimeToolRuns({
   const visibleRuns = runs.filter(isDisplayableRuntimeToolRun);
   if (!visibleRuns.length) return null;
   const singleRun = visibleRuns.length === 1 ? visibleRuns[0] : undefined;
+  if (singleRun && isPendingRuntimeUserInput(singleRun)) {
+    return (
+      <div className="chat-tool-runs">
+        <RuntimeUserInputActions approvalId={singleRun.approvalId} run={singleRun} onAnswerApproval={onAnswerApproval} />
+        {children}
+      </div>
+    );
+  }
   const replacement = singleRun
     ? resolveRuntimeFeatureToolResult(resolveFeatureToolResult, singleRun)
     : null;

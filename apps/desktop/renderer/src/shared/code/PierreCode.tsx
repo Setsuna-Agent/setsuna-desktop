@@ -18,16 +18,19 @@ import {
   type FileDiffProps,
 } from '@pierre/diffs/react';
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   type CSSProperties,
   type ReactNode,
-  type Ref,
+  type RefCallback,
   type RefObject,
 } from 'react';
 import { useCodeAppearance } from './CodeAppearanceProvider.js';
 import { inferPatchLanguageOverride } from './patchLanguage.js';
+import { useCodeViewFind } from './useCodeViewFind.js';
+import { useDiffFind } from './useDiffFind.js';
 import scrollbarCSS from '../styles/scrollbars.css?raw';
 import contentFindCSS from '../styles/content-find-highlights.css?raw';
 
@@ -35,7 +38,7 @@ type CodeFileViewProps = {
   cacheKey?: string;
   className?: string;
   codeViewLayout?: CodeViewReactOptions<undefined>['layout'];
-  containerRef?: Ref<HTMLDivElement>;
+  containerRef?: RefCallback<HTMLDivElement>;
   contents: string;
   disableBackground?: boolean;
   language?: string;
@@ -109,6 +112,11 @@ export function CodeFileView({
     [cacheKey, contents],
   );
   const itemId = cacheKey ?? name;
+  const findContainerRef = useCodeViewFind(codeViewRef, itemId, contents);
+  const setContainerRef = useCallback((container: HTMLDivElement | null) => {
+    findContainerRef(container);
+    containerRef?.(container);
+  }, [containerRef, findContainerRef]);
   const codeViewItems = useMemo<readonly CodeViewItem<undefined>[]>(() => [{
     id: itemId,
     type: 'file',
@@ -132,7 +140,7 @@ export function CodeFileView({
   return virtualized ? (
     <CodeView
       className={['setsuna-pierre-surface', className].filter(Boolean).join(' ')}
-      containerRef={containerRef}
+      containerRef={setContainerRef}
       disableWorkerPool
       items={codeViewItems}
       options={options}
@@ -171,12 +179,6 @@ export function CodePatchView({
   virtualized = false,
   wrap = false,
 }: CodePatchViewProps) {
-  const options = usePierreDiffOptions<ReactNode>({
-    layout,
-    onPostRender,
-    showHeader,
-    wrap,
-  });
   const fileDiff = useMemo(() => {
     const parsed = getSingularPatch(patch);
     // Pierre otherwise keys highlights by path, even without workers. The same
@@ -186,14 +188,14 @@ export function CodePatchView({
     return language ? setLanguageOverride(parsed, language) : parsed;
   }, [patch]);
   const surface = (
-    <FileDiff
-      className={['setsuna-pierre-surface', className].filter(Boolean).join(' ')}
-      disableWorkerPool
+    <CodePatchSurface
+      className={className}
       fileDiff={fileDiff}
+      layout={layout}
       lineAnnotations={lineAnnotations}
-      options={options}
-      renderAnnotation={(annotation) => annotation.metadata}
-      style={pierreSurfaceStyle}
+      onPostRender={onPostRender}
+      showHeader={showHeader}
+      wrap={wrap}
     />
   );
 
@@ -211,6 +213,21 @@ export function CodePatchView({
       {children}
     </>
   );
+}
+
+function CodePatchSurface({ className, fileDiff, layout, lineAnnotations, onPostRender, showHeader, wrap }:
+  Pick<CodePatchViewProps, 'className' | 'layout' | 'lineAnnotations' | 'onPostRender' | 'showHeader' | 'wrap'>
+  & Pick<FileDiffProps<ReactNode>, 'fileDiff'>) {
+  // Read the nearest virtualizer here, including CodePatchView's optional wrapper.
+  const findPostRender = useDiffFind(fileDiff);
+  const postRender = useCallback<NonNullable<CodePatchViewProps['onPostRender']>>((node, instance, phase) => {
+    findPostRender(node, instance, phase);
+    onPostRender?.(node, instance, phase);
+  }, [findPostRender, onPostRender]);
+  const options = usePierreDiffOptions<ReactNode>({ layout, onPostRender: postRender, showHeader, wrap });
+  return <FileDiff className={['setsuna-pierre-surface', className].filter(Boolean).join(' ')}
+    disableWorkerPool fileDiff={fileDiff} lineAnnotations={lineAnnotations} options={options}
+    renderAnnotation={(annotation) => annotation.metadata} style={pierreSurfaceStyle} />;
 }
 
 export function usePierreFileOptions({

@@ -24,7 +24,7 @@ export const GitHistoryGraph = memo(function GitHistoryGraph({
   onRetry: () => void;
 }) {
   const { translate: t } = useReviewRendererHost();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [viewport, setViewport] = useState({ top: 0, height: 300 });
   const scrollRef = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => layoutGitHistory(commits), [commits]);

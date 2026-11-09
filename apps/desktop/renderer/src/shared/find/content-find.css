@@ -1,6 +1,6 @@
-@import '../../../shared/styles/content-find-highlights.css';
+@import '../styles/content-find-highlights.css';
 
-.chat-find {
+.content-find {
   position: absolute;
   z-index: 30;
   top: 8px;
@@ -15,21 +15,21 @@
   -webkit-app-region: no-drag;
 }
 
-.chat-find__input-row,
-.chat-find__results-row {
+.content-find__input-row,
+.content-find__results-row {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 5px 10px;
 }
 
-.chat-find__input-row {
+.content-find__input-row {
   min-height: 42px;
   gap: 10px;
   border-bottom: 1px solid var(--app-border);
 }
 
-.chat-find__input-row input {
+.content-find__input-row input {
   flex: 1;
   min-width: 0;
   padding: 0;
@@ -43,7 +43,7 @@
   box-shadow: none;
 }
 
-.chat-find .sd-icon-button {
+.content-find .sd-icon-button {
   width: 26px;
   height: 26px;
   min-height: 26px;
@@ -51,7 +51,7 @@
   color: var(--app-text-secondary);
 }
 
-.chat-find__count {
+.content-find__count {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -59,4 +59,14 @@
   color: var(--app-text-secondary);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+.content-find-scope {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  outline: none;
 }
