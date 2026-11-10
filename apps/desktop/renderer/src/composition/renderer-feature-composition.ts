@@ -2,6 +2,7 @@ import { pullRequestsRendererFeature, pullRequestsRendererHostCapability } from 
 import { threadPullRequestsStateCapability } from '@setsuna-desktop/feature-pull-requests/contracts';
 import { automationClientCapability, automationRendererFeature, automationRendererHostCapability } from '@setsuna-desktop/feature-automation/renderer';
 import { AutomationModelPicker } from './automation/AutomationModelPicker.js';
+import { assistantsRendererFeature, assistantsRendererServiceCapability } from '@setsuna-desktop/feature-assistants/renderer';
 import { PullRequestsFeatureBoundary } from './PullRequestsFeatureBoundary.js';
 import {
   completeFeatureHostActivation,
@@ -136,6 +137,7 @@ const rendererFeatures = defineRendererFeatureHost({
   optional: [
     diagnosticsRendererFeature,
     automationRendererFeature,
+    assistantsRendererFeature,
     pullRequestsRendererFeature,
     approvalReviewRendererFeature,
     collaborationRendererFeature,
@@ -327,6 +329,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
     rendererPlugins.commitInitial();
     const dependencies = host.composition.resolveHostDependencies({
       automation: optionalCapability(automationClientCapability, () => null),
+      assistants: optionalCapability(assistantsRendererServiceCapability, () => null),
       pullRequests: optionalCapability(threadPullRequestsStateCapability, () => null),
       collaboration: optionalCapability(
         collaborationRendererStateCapability,

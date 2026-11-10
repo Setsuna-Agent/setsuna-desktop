@@ -1,5 +1,8 @@
 import type { ProviderConfigState, ProviderModelConfig } from '@setsuna-desktop/contracts';
+import type { ChatThinkingSelection } from '@setsuna-desktop/renderer-contracts/chat';
 import { modelOptionKey } from '../../../shared/ui/model-picker/modelOptions.js';
+
+export type { ChatThinkingSelection } from '@setsuna-desktop/renderer-contracts/chat';
 
 export type ChatComposerSendIntent = 'message' | 'goal' | 'review';
 
@@ -11,11 +14,6 @@ export type ChatThinkingConfig = {
   defaultEffort: string;
   efforts: string[];
   supported: boolean;
-};
-
-export type ChatThinkingSelection = {
-  effort: string;
-  enabled: boolean;
 };
 
 export type ChatComposerModelCapabilities = {

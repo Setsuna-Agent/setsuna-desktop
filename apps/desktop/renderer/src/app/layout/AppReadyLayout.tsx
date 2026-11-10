@@ -17,6 +17,7 @@ import {
 import type { SettingsPageLocation } from '../../features/settings/settings-types.js';
 import type { DesktopAppController } from '../controller/useDesktopAppController.js';
 import type { ConversationOverviewVisibility } from '../types.js';
+import { isConversationView } from '../mainViews.js';
 import {
   browserShortcutTabId,
   useAppKeyboardShortcuts,
@@ -123,6 +124,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const runtimeActivityTriggerRef = useRef<HTMLButtonElement | null>(null);
   const themeToggleTriggerRef = useRef<HTMLButtonElement | null>(null);
   const currentThread = runtime.currentThread;
+  const assistantChat = activeView === 'chat' && currentThread?.featureId === 'assistants';
   const toast = useToast();
   const pins = usePinnedThreads(runtime.projects, threadsByProjectId, globalThreads);
   const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
@@ -333,7 +335,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       },
     },
     'chat.find': {
-      enabled: (activeView === 'chat' || activeView === 'automation') && (
+      enabled: isConversationView(activeView) && (
         (activeView === 'chat' && Boolean(runtime.currentThread?.messages.length))
         || hasActiveBrowserPanel || workspacePanels.sidePanelVisible || workspacePanels.bottomPanelVisible
       ),
@@ -518,7 +520,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         <RendererOwnedSingleSlot
           slot={shellTopbarTitleSlot}
           props={{
-            renderDefault: () => activeView === 'chat' && (activeProject || currentThread) ? (
+            renderDefault: () => assistantChat ? undefined : activeView === 'chat' && (activeProject || currentThread) ? (
               <AppChatToolbarTitle
                 key={currentThread?.id ?? activeProject?.id}
                 project={activeProject}
@@ -551,7 +553,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         <RendererOwnedSingleSlot
           slot={shellWorkspaceToolbarSlot}
           props={{
-            renderDefault: () => (activeView === 'chat' || activeView === 'automation')
+            renderDefault: () => isConversationView(activeView)
               ? <AppWorkspaceToolbar projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} workspaceMaximized={workspaceMaximized} onToggleMaximized={toggleWorkspaceMaximized} />
               : undefined,
           }}

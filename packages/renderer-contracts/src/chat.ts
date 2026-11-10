@@ -13,6 +13,9 @@ import type { Disposer } from '@setsuna-desktop/feature-core/scope';
 import type { ComponentType } from 'react';
 import type { ReactNode } from 'react';
 
+/** Thinking defaults supplied by the conversation's owning feature. */
+export type ChatThinkingSelection = { effort: string; enabled: boolean };
+
 /** A committed navigation request can revisit a turn even when its thread is already open. */
 export type ChatTurnNavigationRequest = Readonly<{
   requestId: number;

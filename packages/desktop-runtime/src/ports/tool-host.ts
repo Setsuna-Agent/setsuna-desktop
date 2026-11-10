@@ -15,6 +15,8 @@ export type ToolExecutionEnvironment = RuntimeEnvironment;
 
 export type ToolExecutionContext = {
   threadId: string;
+  /** Persisted conversation ownership, including while its optional Feature is unavailable. */
+  featureId?: string;
   /** 当前设置中的语言，仅用于内置提示词和工具说明，不改写外部工具内容。 */
   interfaceLanguage?: RuntimeInterfaceLanguage;
   projectId?: string;
@@ -142,6 +144,11 @@ export type ToolApprovalRequirement = {
 
 export type ToolHost = {
   listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]>;
+  /**
+   * A Feature-owned conversation can confine its turns to this host's tools. When a scope is returned,
+   * every other host tool and the runtime's own feature tools (collaboration, goals, dynamic tools) are withheld.
+   */
+  exclusiveToolScope?(context: ToolExecutionContext): Promise<ReadonlySet<string> | null> | ReadonlySet<string> | null;
   environmentForToolContext?(context: ToolExecutionContext): Promise<ToolExecutionEnvironment | null> | ToolExecutionEnvironment | null;
   systemPrompt?(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> | string | null;
   externalContext?(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<ToolExternalContext[]> | ToolExternalContext[];

@@ -10,8 +10,9 @@ import type {
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
 import type { MainView } from '../types.js';
+import { isFeatureConversationView } from '../mainViews.js';
 import { isThreadDeletionCancelled, runtimeClientErrorMessage, RuntimeClientError } from '../../services/runtime-client/runtimeClientErrors.js';
-import { isPrimaryConversationThread } from '../../services/runtime-client/runtimeThreadRelations.js';
+import { isHomeConversationThread } from '../../services/runtime-client/runtimeThreadRelations.js';
 
 type DesktopNavigationOptions = {
   activeProjectId: string | null;
@@ -74,7 +75,7 @@ export function useDesktopNavigation({
   const currentWorkspaceId = currentThread?.workspaceId ?? currentThread?.projectId ?? currentThread?.id ?? activeProjectId;
   const activeViewRef = useRef(activeView);
   activeViewRef.current = activeView;
-  const chatBeforeAutomation = useRef<{ threadId: string | null; projectId: string | null } | null>(null);
+  const chatBeforeFeatureView = useRef<{ threadId: string | null; projectId: string | null } | null>(null);
   const reportFailure = useCallback((error: unknown) => {
     if (!isThreadDeletionCancelled(error)) onError(runtimeClientErrorMessage(error));
   }, [onError]);
@@ -83,8 +84,8 @@ export function useDesktopNavigation({
     const nextView = typeof action === 'function' ? action(activeViewRef.current) : action;
     if (nextView === activeViewRef.current) return;
     const isLatest = navigationRequests.begin();
-    if (activeViewRef.current === 'automation' && nextView !== 'automation') {
-      const previous = chatBeforeAutomation.current ?? { threadId: null, projectId: null };
+    if (isFeatureConversationView(activeViewRef.current) && !isFeatureConversationView(nextView)) {
+      const previous = chatBeforeFeatureView.current ?? { threadId: null, projectId: null };
       if ((currentThread?.id ?? null) !== previous.threadId || currentProjectId !== previous.projectId) {
         if (!await confirmDiscardProjectFile() || !isLatest()) return;
         let thread: RuntimeThread | null = null;
@@ -105,11 +106,11 @@ export function useDesktopNavigation({
         setCurrentThread(thread);
       }
     }
-    if (nextView === 'automation' && activeViewRef.current !== 'automation') {
-      // Automation borrows the conversation surface, not the chat destination.
+    if (isFeatureConversationView(nextView) && !isFeatureConversationView(activeViewRef.current)) {
+      // Feature views borrow the conversation surface, not the chat destination.
       // Preserve null as well: a new-chat draft must return to its own slot.
-      const isChat = !currentThread || isPrimaryConversationThread(currentThread);
-      chatBeforeAutomation.current = {
+      const isChat = !currentThread || isHomeConversationThread(currentThread);
+      chatBeforeFeatureView.current = {
         threadId: isChat ? currentThread?.id ?? null : null,
         projectId: isChat ? currentProjectId : null,
       };
@@ -194,12 +195,16 @@ export function useDesktopNavigation({
   );
 
   const selectThreadInView = useCallback(
-    async (threadId: string, view: MainView): Promise<boolean> => {
+    async (destination: string | (() => Promise<string>), view: MainView): Promise<boolean> => {
       // Feature callbacks may finish after their route has already unmounted.
       if (view !== 'chat' && view !== activeViewRef.current) return false;
       const isLatest = navigationRequests.begin();
       if (!await confirmDiscardProjectFile() || !isLatest()) return false;
       setThreadActionMenuId(null);
+      // Resolve lazy destinations inside the navigation guard: creating/opening an
+      // assistant chat must not steal focus after the user selects another thread.
+      const threadId = typeof destination === 'string' ? destination : await destination();
+      if (!isLatest()) return false;
       const thread = await client.getThread(threadId);
       if (!isLatest()) return false;
       // Commit the route with its thread, so history never sees the old chat on

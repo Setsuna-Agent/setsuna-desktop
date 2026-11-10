@@ -5,7 +5,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { RuntimeConfigState, RuntimeThread, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { useComposerModelSelection } from '../../../../../src/features/chat/composer/preferences/useComposerModelSelection.js';
 import { useChatComposerModeController } from '../../../../../src/features/chat/composer/useChatComposerModeController.js';
-import { CHAT_THINKING_PREFERENCES_STORAGE_KEY } from '../../../../../src/features/chat/composer/chatThinkingPreferences.js';
+import { CHAT_THINKING_PREFERENCES_STORAGE_KEY, readChatThinkingPreference, writeChatThinkingPreference } from '../../../../../src/features/chat/composer/chatThinkingPreferences.js';
+import { modelOptionKey } from '../../../../../src/shared/ui/model-picker/modelOptions.js';
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 const model = (id: string) => ({ id, name: id, code: id, enabled: id === 'global', maxOutputTokens: 4096, thinkingEnabled: true, thinkingEfforts: ['low', 'high'], defaultThinkingEffort: 'low' });
@@ -76,4 +77,23 @@ it('keeps an explicit thinking choice when project defaults change on the same m
   view.rerender({ effort: 'high' });
   expect(view.result.current.thinkingEffort).toBe('low');
   expect(localStorage.getItem(CHAT_THINKING_PREFERENCES_STORAGE_KEY)).toContain('low');
+});
+
+it('applies saved feature settings to an existing composer without adopting or rewriting its general model preference', () => {
+  const selectedModel = { ...provider.models[0], thinkingEfforts: ['medium', 'high'], defaultThinkingEffort: 'medium' };
+  const key = modelOptionKey(provider.id, selectedModel.id);
+  writeChatThinkingPreference(key, { enabled: true, effort: 'medium' });
+  type Props = Pick<Parameters<typeof useChatComposerModeController>[0], 'defaultThinking'>;
+  const view = renderHook((props: Props) => useChatComposerModeController({
+    ...props, currentThreadId: 'assistant-thread', model: selectedModel, provider,
+  }), { initialProps: {} as Props });
+  const options = () => view.result.current.createSendOptions({ attachments: [], selectedSkillIds: [], selectedSkillReferences: [] });
+  expect(options()).toMatchObject({ thinking: true, thinkingEffort: 'medium' });
+  view.rerender({ defaultThinking: { enabled: true, effort: 'high' } });
+  expect(options()).toMatchObject({ thinking: true, thinkingEffort: 'high' });
+  expect(readChatThinkingPreference(key)).toEqual({ enabled: true, effort: 'medium' });
+  act(() => view.result.current.setThinkingEffort('medium'));
+  view.rerender({ defaultThinking: { enabled: false, effort: '' } });
+  expect(options()).toMatchObject({ thinking: false });
+  expect(options()).not.toHaveProperty('thinkingEffort');
 });

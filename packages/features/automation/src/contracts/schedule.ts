@@ -1,4 +1,17 @@
-import type { AutomationSchedule } from '../contracts/index.js';
+import type { AutomationSchedule } from './types.js';
+
+/** Shared tool input for local calendar rules; the codec remains authoritative. */
+export const automationScheduleInputSchema = {
+  type: 'object', additionalProperties: false, required: ['kind'],
+  properties: {
+    kind: { type: 'string', enum: ['once', 'interval', 'daily', 'weekdays', 'weekly', 'custom'] },
+    at: { type: 'string', description: 'once：执行时间所对应的 ISO 日期时间。' },
+    minutes: { type: 'integer', minimum: 1, description: 'interval：间隔分钟。' },
+    time: { type: 'string', description: '日历重复规则的 HH:mm 时间。' },
+    timeZone: { type: 'string', description: 'IANA 时区；省略时采用此电脑的本地时区。' },
+    weekdays: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 6 }, description: 'weekly 选一天，custom 选多天；0 为周日。' },
+  },
+};
 
 /** Always returns a future occurrence. Missed recurring runs collapse to one dispatch. */
 export function nextAutomationRun(schedule: AutomationSchedule, after: Date, previous?: string): string | null {

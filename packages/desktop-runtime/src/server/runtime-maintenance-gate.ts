@@ -36,7 +36,9 @@ export class RuntimeMaintenanceGate {
     // The current prepare request is already tracked. Both admitted handlers and scheduler
     // mutations can still write, so neither may be overtaken by the readiness decision.
     const readiness = this.runtime.agentLoop.prepareDataMigration(
-      Math.max(0, this.requests.count - 1) + this.runtime.automationToolHost.pendingMutationCount(),
+      Math.max(0, this.requests.count - 1)
+        + this.runtime.automationToolHost.pendingMutationCount()
+        + this.runtime.assistantToolHost.pendingMutationCount(),
     );
     if (!readiness.ready) {
       sendJson(response, 200, readiness);
@@ -47,6 +49,7 @@ export class RuntimeMaintenanceGate {
     // new REST requests from slipping into the migration window on the JavaScript event loop.
     this.preparing = true;
     this.runtime.automationToolHost.setMaintenancePaused(true);
+    this.runtime.assistantToolHost.setMaintenancePaused(true);
     sendJson(response, 200, readiness);
     return true;
   }
@@ -64,5 +67,6 @@ export class RuntimeMaintenanceGate {
     this.runtime.agentLoop.cancelDataMigrationPreparation();
     this.preparing = false;
     this.runtime.automationToolHost.setMaintenancePaused(false);
+    this.runtime.assistantToolHost.setMaintenancePaused(false);
   }
 }

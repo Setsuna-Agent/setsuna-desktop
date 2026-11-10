@@ -222,6 +222,29 @@
   padding-left: 32px;
 }
 
+/* Project and assistant name fields share the same embedded icon control. */
+.sd-field-shell__control {
+  position: absolute;
+  z-index: 1;
+  left: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--app-text-muted);
+}
+
+.sd-field-shell__control > .sd-icon-button {
+  width: 100%;
+  height: 100%;
+}
+
+.sd-field-shell:has(.sd-field-shell__control) > .sd-field {
+  height: 40px;
+  padding-left: 36px;
+}
+
 /* Compact filter field for panel toolbars and lists: borderless fill, no focus
    outline (fields never draw one), only a stronger fill while typing. */
 .sd-field-shell--search {

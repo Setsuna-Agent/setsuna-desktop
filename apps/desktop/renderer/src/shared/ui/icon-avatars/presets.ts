@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { ICON_PALETTE, type IconColor } from '../icon-colors.js';
 
-type IconAvatarPreset = Readonly<{ key: string; Icon: LucideIcon; color: IconColor }>;
+export type IconAvatarPreset = Readonly<{ key: string; Icon: LucideIcon; color: IconColor }>;
 
 /** App and plugin glyphs: keep this catalog independent from agent identity avatars. */
 export const ICON_AVATAR_PRESETS = [

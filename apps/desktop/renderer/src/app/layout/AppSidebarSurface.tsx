@@ -2,6 +2,7 @@ import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/co
 import type { PointerEvent as ReactPointerEvent, Ref } from 'react';
 import type { DesktopNavigationState } from '../controller/useDesktopNavigation.js';
 import { AgentSidebar } from '../sidebar/AgentSidebar.js';
+import { AssistantSidebarEntry } from '../../composition/assistants/AssistantSidebarEntry.js';
 import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
 import type { PinnedThreadsState } from '../sidebar/usePinnedThreads.js';
 import type { MainView } from '../types.js';
@@ -56,6 +57,7 @@ export function AppSidebarSurface({
       collapsed={sidebarCollapsed}
       runningThreadId={runningThreadId}
       activeView="chat"
+      assistantEntries={<AssistantSidebarEntry activeThreadId={activeThreadId} onOpenConversation={(destination) => navigation.selectThreadInView(destination, 'chat')} />}
       collapsedProjectIds={navigation.collapsedProjectIds}
       forceExpandedProjectIds={navigation.forceExpandedProjectIds}
       globalThreads={globalThreads}

@@ -124,19 +124,17 @@ export function ProjectEditorDialog({
         <div className="desktop-project-editor__body">
           <div className="desktop-project-editor__field">
             <label htmlFor={nameId}>{t('sidebar.projectName')}</label>
-            <span className="desktop-project-editor__name-input">
-              <ProjectIconPicker value={icon} disabled={busy} onChange={setIcon} />
-              <TextField
-                id={nameId}
-                autoFocus
-                disabled={busy}
-                maxLength={WORKSPACE_PROJECT_NAME_MAX_CHARS}
-                required
-                value={name}
-                placeholder={t('sidebar.projectNamePlaceholder')}
-                onChange={(event) => setName(event.currentTarget.value)}
-              />
-            </span>
+            <TextField
+              leadingControl={<ProjectIconPicker value={icon} disabled={busy} onChange={setIcon} />}
+              id={nameId}
+              autoFocus
+              disabled={busy}
+              maxLength={WORKSPACE_PROJECT_NAME_MAX_CHARS}
+              required
+              value={name}
+              placeholder={t('sidebar.projectNamePlaceholder')}
+              onChange={(event) => setName(event.currentTarget.value)}
+            />
           </div>
 
           <div className="desktop-project-editor__field">

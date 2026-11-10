@@ -68,7 +68,7 @@ import { RuntimeModelStreamEventPublisher } from './runtime-model-stream-event-p
 import { RuntimeSamplingContextBuilder } from './runtime-sampling-context-builder.js';
 import { createRuntimeThreadTitleGenerationHost } from './runtime-thread-title-generation-host.js';
 import { ThreadBusyError, TurnCancelledError } from './runtime-turn-errors.js';
-import { RuntimeTurnRunFactory } from './runtime-turn-run-factory.js';
+import { RuntimeTurnRunFactory, type RuntimeMailboxExecutionOptions } from './runtime-turn-run-factory.js';
 import { ThreadMutationAdmissions } from './thread-mutation-admissions.js';
 
 export type { AgentLoopOptions } from './agent-loop-options.js';
@@ -92,6 +92,7 @@ export class AgentLoop {
   private readonly modelSampler: RuntimeModelSampler;
   private readonly userShellRunner: RuntimeUserShellRunner;
   private readonly deletingThreads = new Set<string>();
+  private readonly idleMutatingThreads = new Set<string>();
   private readonly threadMutationAdmissions = new ThreadMutationAdmissions();
   private shuttingDown = false;
   private dataMigrationPreparing = false;
@@ -211,8 +212,8 @@ export class AgentLoop {
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
-      createMailboxTriggeredRun: async (threadId, thread, turnId, content, execution) => {
-        const run = await this.turnRuns.createMailboxTriggered(threadId, thread, turnId, content, execution);
+      createMailboxTriggeredRun: async (threadId, thread, turnId, content, execution, beforeRun) => {
+        const run = await this.turnRuns.createMailboxTriggered(threadId, thread, turnId, content, execution, beforeRun);
         this.observeRun(threadId, run.turnId, 'regular', run.done);
         return run;
       },
@@ -498,6 +499,7 @@ export class AgentLoop {
   async withThreadDeletionBarrier<T>(
     threadId: string, operation: () => Promise<T>, options: ThreadDeletionOptions = {},
   ): Promise<T> {
+    if (this.idleMutatingThreads.has(threadId)) throw new ThreadBusyError(threadId);
     if (this.deletingThreads.has(threadId)) throw new Error(`thread ${threadId} is already being deleted`);
     // Check and block in one synchronous admission step, before cancelling or pausing any work.
     if (options.onlyIfIdle && (
@@ -724,6 +726,17 @@ export class AgentLoop {
     return this.withThreadMutation(threadId, () => this.turnInputs.deliverMailbox(threadId, input, execution));
   }
 
+  /** Reports get their own turn, never the active turn's unrelated recipient. Receipts survive retries. */
+  async deliverIdleMailboxInput(threadId: string, input: DeliverMailboxInput, execution: RuntimeMailboxExecutionOptions = {}): Promise<DeliverMailboxResponse | null> {
+    return this.withThreadMutation(threadId, async () => {
+      const receipt = (await this.options.threadStore.listEvents(threadId)).find((event) =>
+        event.type === 'mailbox.delivered' && event.payload.id === input.id);
+      if (receipt) return { accepted: true, turnId: receipt.turnId ?? null };
+      if (this.turnTasks.activeForThread(threadId)) return null;
+      return this.turnInputs.deliverMailbox(threadId, input, execution);
+    });
+  }
+
   async runUserShellCommand(threadId: string, command: string, activeTurnId: string | null = null): Promise<void> {
     return this.withThreadMutation(
       threadId,
@@ -830,6 +843,7 @@ export class AgentLoop {
 
   private assertThreadAcceptingWork(threadId: string): void {
     this.assertAcceptingWork();
+    if (this.idleMutatingThreads.has(threadId)) throw new ThreadBusyError(threadId);
     if (this.deletingThreads.has(threadId)) {
       throw new Error(`thread ${threadId} is being deleted and cannot accept new work`);
     }
@@ -843,6 +857,17 @@ export class AgentLoop {
       () => this.turnRuns.persistInferredThreadModelBinding(threadId),
       operation,
     );
+  }
+
+  /** Claims idle transcripts together without cancelling a user's turn or allowing a new one to race a history import. */
+  async withIdleThreadMutation(threadIds: readonly string[], operation: () => Promise<void>): Promise<boolean> {
+    this.assertAcceptingWork();
+    return this.threadMutationAdmissions.runIdle(threadIds, {
+      available: (id) => !this.deletingThreads.has(id) && !this.idleMutatingThreads.has(id) && !this.turnTasks.registeredForThread(id),
+      enter: (id) => { this.turnTasks.blockThread(id); this.idleMutatingThreads.add(id); },
+      leave: (id) => { this.idleMutatingThreads.delete(id); this.turnTasks.unblockThread(id); },
+      prepare: async (id) => { await this.samplingContexts.cancelBackgroundCompaction(id); await this.eventWriter.flushThread(id); },
+    }, operation);
   }
 
   /** History rewrites must wait for terminal writes, including tasks already hidden by cancellation. */

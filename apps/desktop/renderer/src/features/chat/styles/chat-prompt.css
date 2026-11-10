@@ -81,6 +81,44 @@
   opacity: 1;
 }
 
+/* The compact sender shares the same editor and send/stop actions as the workspace. */
+.chat-prompt--inline {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  padding: 6px;
+  border-radius: 24px;
+}
+
+.chat-prompt--inline > .chat-attachment-tray {
+  grid-column: 1 / -1;
+}
+
+.chat-prompt--inline .chat-prompt__input {
+  grid-column: 2;
+  min-height: calc(var(--prompt-min-rows, 1) * 24px + 6px);
+  max-height: calc(var(--prompt-max-rows, 6) * 24px + 6px);
+  margin: 0;
+  padding: 3px 6px;
+}
+
+.chat-prompt__leading-action,
+.chat-prompt--inline .chat-prompt__footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--chat-composer-control-size);
+  padding: 0;
+}
+
+.chat-prompt__leading-action {
+  grid-column: 1;
+}
+
+.chat-prompt--inline .chat-prompt__footer {
+  grid-column: 3;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chat-prompt {
     transition: none;

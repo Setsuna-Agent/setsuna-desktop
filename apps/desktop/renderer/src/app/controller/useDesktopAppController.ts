@@ -34,6 +34,7 @@ import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGu
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { useThreadGroups } from '../sidebar/useThreadGroups.js';
 import type { ChatCapabilitySelectionRequest, MainView } from '../types.js';
+import { isConversationView, isFeatureConversationView } from '../mainViews.js';
 import { useNetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
 import { useModelProviderFeatureService } from '../../composition/ModelProviderFeatureBoundary.js';
 import { useConversationDebugFeatureEnabled } from '../../composition/ConversationDebugFeatureBoundary.js';
@@ -116,7 +117,7 @@ export function useDesktopAppController() {
   const recoveryWindowKey = recoveredWindowKeyRef.current;
   const workspaceRecoveryKey = useWorkspaceRecoveryKey(recoveryWindowKey);
   const composerSession = useChatComposerSession(chatTargetIdentity, client, recoveryWindowKey);
-  const canSaveChatSelection = activeView !== 'automation' && (!currentThread || isPrimaryConversationThread(currentThread));
+  const canSaveChatSelection = !isFeatureConversationView(activeView) && (!currentThread || isPrimaryConversationThread(currentThread));
   useEffect(() => {
     if (!recoveryWindowKey || !canSaveChatSelection) return;
     saveChatSelection(recoveryWindowKey, chatTargetIdentity);
@@ -211,7 +212,7 @@ export function useDesktopAppController() {
     manuallyExpanded: sidebarManuallyExpanded,
   });
   // 插件导航有独立的折叠状态，切换页面不会改写聊天侧栏的偏好。
-  const sidebarCollapsed = activeView === 'automation' ? workspaceSinglePane
+  const sidebarCollapsed = isFeatureConversationView(activeView) ? workspaceSinglePane
     : activeView === 'capabilities' ? capabilitiesSidebarCollapsed
     : (activeView === 'chat' && workspaceSinglePane) || chatSidebarCollapsed;
   const setSidebarCollapsed = useCallback((value: SetStateAction<boolean>) => {
@@ -388,7 +389,7 @@ export function useDesktopAppController() {
     '--app-bottom-panel-height': bottomPanelReservesLayout ? `${terminalHeight}px` : '0px',
   } as CSSProperties;
 
-  const workspaceViewVisible = activeView === 'chat' || activeView === 'automation';
+  const workspaceViewVisible = isConversationView(activeView);
   const shellClassName = [
     activeView === 'settings' ? 'desktop-agent-page--settings-open' : '',
     activeView === 'capabilities' ? 'desktop-agent-page--capabilities-open' : '',
@@ -467,7 +468,7 @@ export function useDesktopAppController() {
 
 export function resolveShellSidebarState(activeView: MainView, sidebarCollapsed: boolean) {
   if (activeView === 'settings') return { collapsed: false, reservesLayout: true };
-  const hasSidebar = activeView === 'chat' || activeView === 'capabilities' || activeView === 'automation';
+  const hasSidebar = activeView === 'capabilities' || isConversationView(activeView);
   return {
     collapsed: !hasSidebar || sidebarCollapsed,
     reservesLayout: hasSidebar && !sidebarCollapsed,

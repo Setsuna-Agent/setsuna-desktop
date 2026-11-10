@@ -1,6 +1,9 @@
 import type { AnswerRuntimeApprovalInput } from '@setsuna-desktop/contracts';
 import type { ReactNode } from 'react';
 
+/** Messenger surfaces show replies without the workspace's execution timeline and controls. */
+export type ChatPresentation = 'workspace' | 'messenger';
+
 /** A host can show its starter before the first turn even with setup messages present. */
 export type ChatStarterPresentation = Readonly<{
   content: ReactNode;

@@ -83,17 +83,7 @@ export function ChatComposerFooter({
   return (
     <div className="chat-sender__footer">
       <div className="chat-sender__left-actions">
-        <UiButton variant="ghost"
-          className={`chat-sender-icon-button chat-sender-command-button ${commandControl.active ? 'is-active' : ''}`}
-          type="button"
-          disabled={commandControl.disabled}
-          aria-label={t('chat.composer.openCommands')}
-          title={t('chat.composer.openCommands')}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={commandControl.onOpen}
-        >
-          <Plus size={14} />
-        </UiButton>
+        <ChatComposerCommandButton {...commandControl} />
         <ChatApprovalPolicyMenu
           approvalPolicy={config?.approvalPolicy ?? 'on-request'}
           approvalReviewer={config?.approvalReviewer}
@@ -138,6 +128,16 @@ export function ChatComposerFooter({
   );
 }
 
+export function ChatComposerCommandButton({ active, disabled, onOpen, iconSize = 14 }: ChatComposerFooterCommandControl & { iconSize?: number }) {
+  const { t } = useI18n();
+  return <UiButton variant="ghost"
+    className={`chat-sender-icon-button chat-sender-command-button ${active ? 'is-active' : ''}`}
+    type="button" disabled={disabled}
+    aria-label={t('chat.composer.openCommands')} title={t('chat.composer.openCommands')}
+    onMouseDown={(event) => event.preventDefault()} onClick={onOpen}
+  ><Plus size={iconSize} /></UiButton>;
+}
+
 function ChatContextUsageIndicator({ compacting, usage }: {
   compacting: boolean;
   usage: ChatContextTokenUsage;
@@ -174,7 +174,7 @@ function ChatContextUsageIndicator({ compacting, usage }: {
   );
 }
 
-function ChatComposerPrimaryAction({
+export function ChatComposerPrimaryAction({
   hasActiveTurn,
   primaryAction,
   senderActions,

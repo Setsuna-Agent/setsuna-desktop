@@ -2,8 +2,8 @@ import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation
 import {
   automationDraftCodec, type AutomationDraft, type AutomationRun, type AutomationRuntimeHost,
   type AutomationSnapshot, type AutomationState, type AutomationTask,
+  nextAutomationRun,
 } from '../contracts/index.js';
-import { nextAutomationRun } from './schedule.js';
 import { AutomationStore } from './store.js';
 
 const RUN_HISTORY_LIMIT = 50;

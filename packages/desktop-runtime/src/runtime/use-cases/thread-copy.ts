@@ -8,10 +8,20 @@ import {
   type RuntimeMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { managedGeneratedImageAssetIds } from '../../utils/generated-image-assets.js';
-import type { RuntimeContainer } from '../runtime-factory.js';
+import type { ThreadStore } from '../../ports/thread-store.js';
+import type { ToolResultStore } from '../../ports/tool-result-store.js';
+import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
+import type { RuntimeEventWriter } from '../../loop/lifecycle/runtime-event-writer.js';
 import { randomRuntimeId } from '../runtime-id.js';
 import { runtimeMessageCopyEvents } from './thread-fork-history.js';
 import { relocateForkFileChanges, type ForkFileChangeRelocation } from './thread-fork-file-changes.js';
+
+export type RuntimeMessageCopyHost = {
+  threadStore: ThreadStore;
+  eventWriter: Pick<RuntimeEventWriter, 'flushThread'>;
+  toolResultStore: Pick<ToolResultStore, 'retainForThread'>;
+  generatedImageStore: Pick<GeneratedImageStore, 'clone' | 'delete'>;
+};
 
 /**
  * Copies an immutable message snapshot into a new thread while giving generated
@@ -21,7 +31,7 @@ import { relocateForkFileChanges, type ForkFileChangeRelocation } from './thread
  * their supplied visibility and must not compact away destination messages.
  */
 export async function copyRuntimeMessagesToThread(
-  runtime: RuntimeContainer,
+  runtime: RuntimeMessageCopyHost,
   sourceThreadId: string,
   destinationThreadId: string,
   messages: RuntimeMessage[],
@@ -93,7 +103,7 @@ export async function copyRuntimeMessagesToThread(
 }
 
 async function cloneForkMessages(
-  runtime: RuntimeContainer,
+  runtime: RuntimeMessageCopyHost,
   messages: RuntimeMessage[],
   fileChangeRelocation?: ForkFileChangeRelocation,
 ): Promise<{ assetIds: string[]; messages: RuntimeMessage[] }> {

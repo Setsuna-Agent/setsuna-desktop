@@ -12,10 +12,10 @@ export const AutomationSidebarRow = forwardRef<HTMLButtonElement, AutomationSide
   title, detail, active, tooltip, className, ...buttonProps
 }, ref) {
   return (
-    <button {...buttonProps} ref={ref} type="button" title={tooltip}
+    <button {...buttonProps} ref={ref} type="button" title={[title, detail, tooltip === title ? undefined : tooltip].filter(Boolean).join('\n')}
+      aria-current={active || undefined}
       className={['automation-sidebar-row', active ? 'is-active' : '', className].filter(Boolean).join(' ')}>
       <span className="automation-sidebar-row__title">{title}</span>
-      <span className="automation-sidebar-row__detail">{detail}</span>
     </button>
   );
 });

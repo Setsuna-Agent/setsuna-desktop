@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { AutomationTask } from '../../src/contracts/index.js';
 import { automationForm, draftFromForm } from '../../src/renderer/form.js';
-import { nextAutomationRun } from '../../src/runtime/schedule.js';
+import { nextAutomationRun } from '../../src/contracts/schedule.js';
 
 afterEach(() => vi.restoreAllMocks());
 

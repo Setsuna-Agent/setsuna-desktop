@@ -4,6 +4,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
+import type { ChatPresentation } from '../conversation/chat-workspace-types.js';
 
 type SlashQuickAction = Extract<SlashCommandMenuItem, { kind: 'action' | 'model' }>;
 
@@ -21,6 +22,7 @@ export type ChatSlashCommandItemsOptions = {
   hasReviewIncompatibleContent: boolean;
   query: string;
   plugins?: readonly RuntimePluginSummary[];
+  presentation?: ChatPresentation;
   selectedPluginIds?: readonly string[];
   selectedSkills: RuntimeSkillSummary[];
   sideChatAvailable: boolean;
@@ -41,6 +43,7 @@ export function createChatSlashCommandItems({
   hasReviewIncompatibleContent,
   query,
   plugins = [],
+  presentation = 'workspace',
   selectedPluginIds = [],
   selectedSkills,
   sideChatAvailable,
@@ -131,6 +134,7 @@ export function createChatSlashCommandItems({
   ];
   const normalizedQuery = query.trim().toLowerCase();
   const visibleActions = actions
+    .filter((action) => presentation !== 'messenger' || action.key === 'attachment')
     .filter((action) => !sideConversation || !SIDE_CONVERSATION_HIDDEN_ACTIONS.has(action.key))
     .filter((action) => (
       !normalizedQuery

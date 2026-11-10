@@ -29,12 +29,12 @@ export function ChatStarter({
       <div className="chat-starter__stage">
         {children}
 
-        <div className="chat-starter__composer chat-starter__reveal chat-starter__reveal--composer">
+        {composer ? <div className="chat-starter__composer chat-starter__reveal chat-starter__reveal--composer">
           {contextBar ? <div className="chat-starter__context">{contextBar}</div> : null}
           <div className="chat-starter__composer-motion" data-chat-starter-composer-motion>
             {composer}
           </div>
-        </div>
+        </div> : null}
         {footer ? (
           <div className="chat-starter__footer chat-starter__reveal chat-starter__reveal--composer">
             {footer}

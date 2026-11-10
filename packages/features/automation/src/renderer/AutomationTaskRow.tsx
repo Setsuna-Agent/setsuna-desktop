@@ -1,4 +1,4 @@
-import { Pause, Play, RotateCw, Settings2, Trash2 } from 'lucide-react';
+import { Pause, Play, RotateCw, Settings, Trash2 } from 'lucide-react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Dropdown } from '@setsuna-desktop/renderer-ui';
 import type { AutomationTask } from '../contracts/index.js';
@@ -12,7 +12,7 @@ export function AutomationTaskRow({ task, active, busy, actions, onSelect, trans
 }) {
   const running = task.runs.some((run) => run.status === 'running');
   return <Dropdown trigger={['contextMenu']} disabled={busy} menu={{ items: [
-    { key: 'edit', label: t('feature.automation.edit'), icon: <Settings2 size={15} /> },
+    { key: 'edit', label: t('feature.automation.edit'), icon: <Settings size={14} /> },
     { key: 'status', label: t(task.status === 'active' ? 'feature.automation.pause' : 'feature.automation.resume'), icon: task.status === 'active' ? <Pause size={15} /> : <Play size={15} /> },
     { key: 'run', label: t('feature.automation.run'), icon: <RotateCw size={15} />, disabled: running },
     { type: 'divider' },

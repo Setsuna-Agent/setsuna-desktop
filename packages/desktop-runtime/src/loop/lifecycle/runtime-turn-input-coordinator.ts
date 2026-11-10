@@ -12,6 +12,7 @@ import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { escapeSkillAttribute, neutralizeMailboxTags } from '../context/prompt-utils.js';
 import type { RuntimeModelInputGuard } from '../core/runtime-model-input-guard.js';
+import type { RuntimeMailboxExecutionOptions } from '../core/runtime-turn-run-factory.js';
 import type { RuntimeQueuedSteer } from './turn-input-queue.js';
 import { RuntimeTurnTaskRegistry, runtimeTaskSupportsSteering, type RuntimeTurnTask } from './turn-task-registry.js';
 
@@ -41,7 +42,7 @@ type RuntimeTurnInputCoordinatorOptions = {
   threadStore: ThreadStore;
   turnTasks: RuntimeTurnTaskRegistry;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
-  createMailboxTriggeredRun(threadId: string, thread: RuntimeThread, turnId: string, content: string, execution?: { unattended?: boolean }): Promise<{ done: Promise<void> }>;
+  createMailboxTriggeredRun(threadId: string, thread: RuntimeThread, turnId: string, content: string, execution: RuntimeMailboxExecutionOptions, beforeRun: () => Promise<void>): Promise<{ done: Promise<void> }>;
   publishMessage(
     threadId: string,
     turnId: string,
@@ -128,7 +129,7 @@ export class RuntimeTurnInputCoordinator {
     }
   }
 
-  async deliverMailbox(threadId: string, input: DeliverMailboxInput, execution: { unattended?: boolean } = {}): Promise<DeliverMailboxResponse> {
+  async deliverMailbox(threadId: string, input: DeliverMailboxInput, execution: RuntimeMailboxExecutionOptions = {}): Promise<DeliverMailboxResponse> {
     const content = input.content.trim();
     if (!content) throw new Error('mailbox content must not be empty');
     const active = this.options.turnTasks.activeForThread(threadId);
@@ -172,15 +173,14 @@ export class RuntimeTurnInputCoordinator {
 
     if (triggerTurn && !active) {
       const turnId = this.options.ids.id('turn');
-      await this.options.appendEvent(threadId, {
+      const run = await this.options.createMailboxTriggeredRun(threadId, thread, turnId, content, execution, () => this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
         threadId,
         turnId,
         type: 'mailbox.delivered',
         createdAt: this.options.clock.now().toISOString(),
         payload: delivery,
-      });
-      const run = await this.options.createMailboxTriggeredRun(threadId, thread, turnId, content, execution);
+      }));
       void run.done.catch(() => undefined);
       return { accepted: true, turnId };
     }
