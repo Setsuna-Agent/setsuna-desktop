@@ -3,7 +3,7 @@ import { AutomationPage, automationSetupPending, type AutomationClient } from '@
 import { ChatRouteAdapter } from '../../app/layout/ChatRouteAdapter.js';
 import type { AppRouteContentProps } from '../../app/layout/AppRouteContent.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { AutomationTopbar } from './AutomationTopbar.js';
+import { FeatureRouteTopbar } from '../feature-ui/FeatureRouteTopbar.js';
 import { AutomationModelPicker } from './AutomationModelPicker.js';
 
 const AutomationClientContext = createContext<AutomationClient | null>(null);
@@ -25,7 +25,7 @@ export function AutomationRouteAdapter(props: AppRouteContentProps) {
   return <AutomationPage client={client} threadId={props.runtime.currentThread?.id} openConversation={openConversation}
     ModelPicker={AutomationModelPicker}
     onSelectStarterPrompt={props.setDraft}
-    renderToolbar={(toolbar) => <AutomationTopbar {...toolbar} />}
+    renderToolbar={(toolbar) => <FeatureRouteTopbar {...toolbar} />}
     renderConversation={(starterContent, starterFooter, turnNavigationRequest) => <ChatRouteAdapter {...props}
       turnNavigationRequest={turnNavigationRequest}
       conversationOverviewVisibility={starterContent ? 'hidden' : props.conversationOverviewVisibility}

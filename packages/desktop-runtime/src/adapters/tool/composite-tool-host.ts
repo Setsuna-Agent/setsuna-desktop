@@ -27,6 +27,14 @@ export class CompositeToolHost implements ToolHost {
     return toolGroups.flat();
   }
 
+  async exclusiveToolScope(context: ToolExecutionContext): Promise<ReadonlySet<string> | null> {
+    for (const host of this.hosts) {
+      const scope = await host.exclusiveToolScope?.(context);
+      if (scope) return scope;
+    }
+    return null;
+  }
+
   async environmentForToolContext(context: ToolExecutionContext) {
     for (const host of this.hosts) {
       const environment = await host.environmentForToolContext?.(context);

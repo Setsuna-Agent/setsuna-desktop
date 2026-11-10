@@ -25,10 +25,13 @@ import { SkillsFeatureServiceBoundary } from './SkillsFeatureBoundary.js';
 import { UsageFeatureServiceBoundary } from './UsageFeatureBoundary.js';
 import type { AutomationClient } from '@setsuna-desktop/feature-automation/renderer';
 import { AutomationFeatureServiceBoundary } from './automation/AutomationFeatureBoundary.js';
+import type { AssistantsRendererService } from '@setsuna-desktop/feature-assistants/renderer';
+import { AssistantsFeatureServiceBoundary } from './assistants/AssistantsFeatureBoundary.js';
 
 export type BuiltinRendererFeatureServices = Readonly<{
   pullRequests?: ThreadPullRequestsStateService | null;
   automation?: AutomationClient | null;
+  assistants?: AssistantsRendererService | null;
   collaboration: CollaborationRendererStateService;
   capabilitiesRefresh: CapabilitiesRefreshCoordinator;
   conversationDebug: ConversationDebugRendererService;
@@ -66,7 +69,9 @@ export function BuiltinRendererFeatureServicesBoundary({
                       <PluginManagementFeatureServiceBoundary service={services.pluginManagement}>
                         <SkillsFeatureServiceBoundary service={services.skills}>
                           <PullRequestsFeatureServiceBoundary service={services.pullRequests ?? null}>
-                            <AutomationFeatureServiceBoundary client={services.automation ?? null}>{children}</AutomationFeatureServiceBoundary>
+                            <AutomationFeatureServiceBoundary client={services.automation ?? null}>
+                              <AssistantsFeatureServiceBoundary service={services.assistants ?? null}>{children}</AssistantsFeatureServiceBoundary>
+                            </AutomationFeatureServiceBoundary>
                           </PullRequestsFeatureServiceBoundary>
                         </SkillsFeatureServiceBoundary>
                       </PluginManagementFeatureServiceBoundary>

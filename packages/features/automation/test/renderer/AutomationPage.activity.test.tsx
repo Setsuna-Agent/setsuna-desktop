@@ -39,7 +39,8 @@ it.each([false, true])('retries deletion of the clicked run without deleting its
   render(<ConfirmationProvider><AutomationPage client={client} threadId="setup_A" openConversation={openConversation}
     onSelectStarterPrompt={vi.fn()} ModelPicker={() => null} renderConversation={() => null}
     renderToolbar={() => null} translate={t} locale="en-US" /></ConfirmationProvider>);
-  const record = await screen.findByRole('button', { name: /^Run owner.*Completed/u });
+  const activity = within((await screen.findByRole('heading', { name: 'Activity' })).closest('section')!);
+  const record = activity.getByRole('button', { name: 'Run owner' });
   await waitFor(() => expect(record.hasAttribute('disabled')).toBe(false));
 
   const remove = async () => {
@@ -50,7 +51,7 @@ it.each([false, true])('retries deletion of the clicked run without deleting its
   await remove();
   await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Could not delete the run'));
   await remove();
-  await waitFor(() => expect(screen.queryByRole('button', { name: /^Run owner.*Completed/u })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole('heading', { name: 'Activity' })).toBeNull());
   expect(deleteRun.mock.calls).toEqual([['B', 'run_B'], ['B', 'run_B']]);
   expect(client.delete).not.toHaveBeenCalled();
   expect(openConversation).toHaveBeenCalledExactlyOnceWith('setup_A');

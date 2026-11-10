@@ -40,6 +40,7 @@
     "undici": "7.29.1",
     "yaml": "^2.8.1",
     "zod": "^4.4.3",
+    "@setsuna-desktop/feature-assistants": "workspace:*",
     "@setsuna-desktop/feature-automation": "workspace:*",
     "@setsuna-desktop/feature-computer-use": "workspace:*",
     "@setsuna-desktop/feature-notifications": "workspace:*"

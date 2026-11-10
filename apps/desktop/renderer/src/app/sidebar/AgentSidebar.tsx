@@ -18,6 +18,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type Ref,
 } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -40,6 +41,7 @@ const isProjectActionTarget = (target: EventTarget | null) =>
 export function AgentSidebar({
   activeProjectId,
   activeThreadId,
+  assistantEntries,
   collapsed = false,
   runningThreadId,
   activeView,
@@ -83,6 +85,8 @@ export function AgentSidebar({
 }: {
   activeProjectId: string | null;
   activeThreadId?: string | null;
+  /** Feature-provided shortcuts in the fixed command area, below new chat. */
+  assistantEntries?: ReactNode;
   collapsed?: boolean;
   runningThreadId?: string | null;
   activeView: 'chat' | 'capabilities' | 'pull-requests';
@@ -144,6 +148,7 @@ export function AgentSidebar({
             <span className="desktop-agent-command__label">{t('app.newChat')}</span>
           </Button>
         </ShortcutTooltip>
+        {assistantEntries}
         <ShortcutTooltip commandId="app.searchChats" label={t('sidebar.search')} placement="bottom">
           <Button variant="ghost" ref={searchTriggerRef} className={`desktop-agent-command ${searchOpen ? 'is-active' : ''}`} type="button" onClick={onToggleSearch}>
             <Search className="desktop-agent-command__icon" size={15} />

@@ -29,6 +29,7 @@ packages/features/<feature>/
 | --- | --- | :---: | :---: | :---: | :---: | --- |
 | `approval-review` | `approval-review` | O | — | — | O | 自动审批的模型判定、策略约束、专用模型设置与人工回退 |
 | `artifact` | `artifact` | R | — | — | R | 发布 workspace 文件、持久工具结果、Artifact 展示与宿主原生拖出 |
+| [`assistants`](assistants.md) | `assistants` | O | — | — | O | 首页单助理入口、共享对话、授权项目、持久任务关系与 QQ 回报 |
 | `automation` | `automation` | O | — | — | O | 对话创建定时任务、本机调度、无人值守执行与删除任务后的运行记录保留 |
 | `browser` | `browser` | R | R | B | R | 内置浏览器、guest/CDP 控制、Agent Browser tools |
 | `collaboration` | `collaboration` | O | — | — | O | 子任务/协作线程状态、投影与 spawn result |

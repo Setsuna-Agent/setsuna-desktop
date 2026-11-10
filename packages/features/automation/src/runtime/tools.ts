@@ -1,5 +1,5 @@
 import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
-import { automationDraftCodec, identity, record, type AutomationToolService } from '../contracts/index.js';
+import { automationDraftCodec, automationScheduleInputSchema, identity, record, type AutomationToolService } from '../contracts/index.js';
 import type { AutomationService } from './service.js';
 
 export class AutomationTools implements AutomationToolService {
@@ -19,16 +19,7 @@ export class AutomationTools implements AutomationToolService {
           task_id: { type: 'string', description: '编辑或操作现有任务时必填；使用 list 返回的真实 ID。' },
           title: { type: 'string', maxLength: 120 },
           prompt: { type: 'string', description: '执行任务时发送给 agent 的完整、自包含任务内容。' },
-          schedule: {
-            type: 'object', additionalProperties: false, required: ['kind'],
-            properties: {
-              kind: { type: 'string', enum: ['once', 'interval', 'daily', 'weekdays', 'weekly', 'custom'] },
-              at: { type: 'string', description: 'once：本机执行时间所对应的 ISO 日期时间。' },
-              minutes: { type: 'integer', minimum: 1, description: 'interval：间隔分钟。' },
-              time: { type: 'string', description: '日历重复规则的本机 HH:mm 时间。' },
-              weekdays: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 6 }, description: 'weekly 选一天，custom 选多天；0 为周日。' },
-            },
-          },
+          schedule: automationScheduleInputSchema,
           new_chat: { type: 'boolean', description: '每次运行是否新建对话，默认 false。' },
           project_id: { type: ['string', 'null'], description: '执行对话所属项目，使用可用项目的真实 ID；null 放到普通对话。创建时省略继承来源对话的项目，编辑时省略保留原项目。' },
           model_selection: {

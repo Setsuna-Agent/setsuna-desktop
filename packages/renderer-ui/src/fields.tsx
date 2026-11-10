@@ -4,16 +4,19 @@ import { cn } from './utils.js';
 
 export type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & {
   leadingIcon?: ReactNode;
+  /** An interactive prefix, such as the project or assistant icon picker. */
+  leadingControl?: ReactNode;
   /** `search` is the compact, borderless filter field used in panel toolbars and lists. */
   appearance?: 'default' | 'search';
 };
-export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField({ appearance = 'default', className, leadingIcon, ...props }, ref) {
+export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField({ appearance = 'default', className, leadingIcon, leadingControl, ...props }, ref) {
   const search = appearance === 'search';
   const input = <input {...props} ref={ref} className={cn('sd-field', search && 'sd-field--search', className)} />;
-  if (!leadingIcon) return input;
+  if (!leadingIcon && !leadingControl) return input;
   return (
     <span className={cn('sd-field-shell', search && 'sd-field-shell--search')}>
-      <span className="sd-field-shell__icon" aria-hidden="true">{leadingIcon}</span>
+      {leadingControl ? <span className="sd-field-shell__control">{leadingControl}</span>
+        : <span className="sd-field-shell__icon" aria-hidden="true">{leadingIcon}</span>}
       {input}
     </span>
   );

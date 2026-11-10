@@ -54,3 +54,14 @@
   height: 64px;
   border-radius: 16px;
 }
+
+.desktop-icon-avatar--glyph {
+  width: 16px;
+  height: 16px;
+  background: transparent;
+}
+
+.desktop-icon-avatar--glyph svg {
+  width: 100%;
+  height: 100%;
+}

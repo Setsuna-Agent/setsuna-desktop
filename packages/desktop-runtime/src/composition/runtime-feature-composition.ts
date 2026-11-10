@@ -4,6 +4,9 @@ import { pullRequestsRuntimeFeature } from '@setsuna-desktop/feature-pull-reques
 import { automationFeature, automationRuntimeHostCapability, automationToolServiceCapability } from '@setsuna-desktop/feature-automation/contracts';
 import { automationRuntimeFeature } from '@setsuna-desktop/feature-automation/runtime';
 import { createAutomationRuntimeHost } from './automation-runtime-host.js';
+import { assistantsFeature, assistantsRuntimeHostCapability, assistantsToolServiceCapability } from '@setsuna-desktop/feature-assistants/contracts';
+import { assistantsRuntimeFeature } from '@setsuna-desktop/feature-assistants/runtime';
+import { createAssistantsRuntimeHost } from './assistants-runtime-host.js';
 import { githubCliInstallationHostCapability, pullRequestsFeature, pullRequestsWorkspaceCapability, pullRequestToolServiceCapability } from '@setsuna-desktop/feature-pull-requests/contracts';
 import { readPluginConnectorStatuses } from '../adapters/plugin/plugin-connector-status.js';
 import {
@@ -153,6 +156,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
   optional: [
     notificationsRuntimeFeature,
     automationRuntimeFeature,
+    assistantsRuntimeFeature,
     pullRequestsRuntimeFeature,
     approvalReviewRuntimeFeature,
     collaborationRuntimeFeature,
@@ -179,6 +183,7 @@ export async function activateBuiltinRuntimeFeatures(
         getThread: (threadId: string) => runtime.threadStore.getThread(threadId),
       }),
       provideHostCapability(automationRuntimeHostCapability, createAutomationRuntimeHost(runtime)),
+      provideHostCapability(assistantsRuntimeHostCapability, createAssistantsRuntimeHost(runtime)),
       provideHostCapability(pullRequestsWorkspaceCapability, runtime.workspaceProjects),
       provideHostCapability(githubCliInstallationHostCapability, { dataDir: runtime.dataDir, fetch: runtime.networkProxyFetch.forRoute() }),
       provideHostCapability(runtimeRouteRegistrarCapability, runtime.featureRoutes),
@@ -572,6 +577,14 @@ export async function activateBuiltinRuntimeFeatures(
     }, ({ tools }) => {
       const unbind = runtime.automationToolHost.bind(tools);
       tools.startScheduler();
+      return unbind;
+    });
+    host.bindWhenFeatureAvailable(assistantsFeature.id, {
+      tools: requiredCapability(assistantsToolServiceCapability),
+    }, ({ tools }) => {
+      const unbind = runtime.assistantToolHost.bind(tools);
+      // Recovery and QQ connections run in the background; readiness never waits for them.
+      tools.start();
       return unbind;
     });
     return host.composition;

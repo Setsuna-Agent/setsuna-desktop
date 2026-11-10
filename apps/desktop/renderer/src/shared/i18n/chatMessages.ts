@@ -1,5 +1,6 @@
 export const chatZhCN = {
   'chat.composer.placeholder': '输入消息（输入 / 唤起命令）',
+  'chat.composer.messagePlaceholder': '发送消息',
   'chat.composer.projectPlaceholder': '输入消息（输入 / 唤起命令，输入 @ 检索文件）',
   'chat.composer.model': '模型',
   'chat.composer.selectConfiguredModel': '选择本地配置模型',
@@ -170,6 +171,7 @@ export const chatZhCN = {
 
 export const chatEnUS = {
   'chat.composer.placeholder': 'Message Setsuna (type / for commands)',
+  'chat.composer.messagePlaceholder': 'Send a message',
   'chat.composer.projectPlaceholder': 'Message Setsuna (type / for commands, type @ to search files)',
   'chat.composer.model': 'Model',
   'chat.composer.selectConfiguredModel': 'Select a locally configured model',

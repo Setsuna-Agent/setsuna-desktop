@@ -30,7 +30,9 @@ import type { RuntimeHookUse } from './activity/runtimeHookUsage.js';
 import { isDisplayableRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
 import { isActiveRuntimeToolRun, isPendingRuntimeUserInput } from '../tool-runs/runtimeToolRunState.js';
 import { formatGoalExitSummary } from '../goalFormatting.js';
-import type { AnswerApprovalHandler, WorkHistoryExpandedChangeHandler } from './chat-workspace-types.js';
+import type { AnswerApprovalHandler, ChatPresentation, WorkHistoryExpandedChangeHandler } from './chat-workspace-types.js';
+import { ChatMessengerReply } from './messenger/ChatMessengerReply.js';
+import { messengerReplyContent, messengerReplySegments } from './messenger/chatMessengerMessages.js';
 import {
   createAssistantGuidanceTimelinePlan,
   type AssistantGuidanceTimelinePlan,
@@ -68,6 +70,7 @@ export { ActiveWorkPlaceholder } from './ChatWorkHistory.js';
 export { DeleteSelectionBar } from './ChatDeleteSelectionBar.js';
 
 export const MessageItem = memo(function MessageItem({
+  presentation = 'workspace',
   activeAssistantItemId,
   activeTurnId,
   contextCompactionRunning = false,
@@ -88,6 +91,7 @@ export const MessageItem = memo(function MessageItem({
   showThinkingInTranscript = false,
   workHistoryExpanded = false,
 }: {
+  presentation?: ChatPresentation;
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
   contextCompactionRunning?: boolean;
@@ -116,6 +120,7 @@ export const MessageItem = memo(function MessageItem({
   if (item.type === 'assistant') {
     return (
       <AssistantRunItem
+        presentation={presentation}
         activeTurnId={activeTurnId}
         activeAssistantItemId={activeAssistantItemId}
         contextCompactionActive={contextCompactionRunning && item.id === activeAssistantItemId}
@@ -153,7 +158,7 @@ export const MessageItem = memo(function MessageItem({
     .filter((steerMessage) => !assistantTimelineSteerMessageIds.has(steerMessage.id));
   // Handled guidance belongs to the assistant work timeline at its real event position. Only keep
   // this fallback for a failed/unhandled steer that has no completed assistant response to own it.
-  const showExtractedGuidance = Boolean(!steered && message.turnId && message.turnId !== activeTurnId && !item.guidanceProcessed && fallbackGuidanceMessages.length && !workHistoryExpanded);
+  const showExtractedGuidance = Boolean(presentation !== 'messenger' && !steered && message.turnId && message.turnId !== activeTurnId && !item.guidanceProcessed && fallbackGuidanceMessages.length && !workHistoryExpanded);
   if (editor) return editor;
   const hasAttachments = Boolean(message.attachments?.length);
   return (
@@ -163,7 +168,7 @@ export const MessageItem = memo(function MessageItem({
         <MessageBubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
-          footer={pending ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} forkMessageId={steered ? null : message.id} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
+          footer={pending ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} forkMessageId={presentation === 'messenger' || steered ? null : message.id} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={presentation === 'messenger' || steered ? 'none' : 'before-actions'} />}
           align="end"
           variant="soft"
         />
@@ -174,6 +179,7 @@ export const MessageItem = memo(function MessageItem({
 });
 
 function AssistantRunItem({
+  presentation,
   activeAssistantItemId,
   activeTurnId,
   contextCompactionActive,
@@ -190,6 +196,7 @@ function AssistantRunItem({
   selectedForDelete,
   showThinkingInTranscript,
 }: {
+  presentation: ChatPresentation;
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
   contextCompactionActive: boolean;
@@ -207,6 +214,7 @@ function AssistantRunItem({
   showThinkingInTranscript: boolean;
 }) {
   const { locale, t } = useI18n();
+  const messenger = presentation === 'messenger';
   const status = assistantRunStatus(item);
   const belongsToActiveTurn = assistantRunIsActive(item, activeTurnId);
   const active = belongsToActiveTurn && item.id === activeAssistantItemId;
@@ -214,15 +222,15 @@ function AssistantRunItem({
   const lastSegment = item.segments[item.segments.length - 1];
   const footerMessage = {
     ...(lastSegment ?? item.segments[0]),
-    content: assistantRunCopyText(item, t, locale),
+    content: messenger ? messengerReplySegments(item).map(messengerReplyContent).join('\n\n') : assistantRunCopyText(item, t, locale),
   } as RuntimeMessage;
   return (
     <article data-message-id={chatDisplayItemRenderKey(item)} className={['chat-bubble-item', 'chat-bubble-item--assistant', streaming ? 'chat-bubble-item--active' : '', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
       {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <MessageBubble
         className="chat-ai-bubble"
-        content={<AssistantRunContent active={active} contextCompactionActive={contextCompactionActive} item={item} onAnswerApproval={onAnswerApproval} onFileChangesAction={onFileChangesAction} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} hookUses={hookUses} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
-        footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} forkMessageId={item.messageIds.at(-1)} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} timePosition="after-actions" />}
+        content={messenger ? <ChatMessengerReply item={item} /> : <AssistantRunContent active={active} contextCompactionActive={contextCompactionActive} item={item} onAnswerApproval={onAnswerApproval} onFileChangesAction={onFileChangesAction} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} hookUses={hookUses} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
+        footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} forkMessageId={messenger ? null : item.messageIds.at(-1)} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} timePosition={messenger ? 'none' : 'after-actions'} />}
         align="start"
         variant="ghost"
       />

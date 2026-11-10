@@ -44,6 +44,7 @@ import { SqliteThreadStore } from '../adapters/store/sqlite-thread-store.js';
 import { ModelLatencyLog } from '../adapters/model/model-latency-log.js';
 import { ArtifactToolHost } from '../adapters/tool/artifact-tool-host.js';
 import { AutomationToolHost } from '../adapters/tool/automation-tool-host.js';
+import { AssistantToolHost } from '../adapters/tool/assistant-tool-host.js';
 import { ComputerToolHost } from '../adapters/tool/computer-tool-host.js';
 import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
 import { CompositeToolHost } from '../adapters/tool/composite-tool-host.js';
@@ -239,6 +240,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   );
   const artifactToolHost = new ArtifactToolHost();
   const automationToolHost = new AutomationToolHost();
+  const assistantToolHost = new AssistantToolHost();
   const notificationToolHost = new NotificationToolHost();
   const pullRequestToolHost = new PullRequestToolHost();
   const browserToolHost = new BrowserToolHost();
@@ -250,6 +252,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     ...(options.runtimeApi ? [new RuntimeApiToolHost(options.runtimeApi, pluginStore)] : []),
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
     automationToolHost,
+    assistantToolHost,
     notificationToolHost,
     pullRequestToolHost,
     browserToolHost,
@@ -311,6 +314,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     agentLoop,
     appVersion: options.appVersion ?? 'dev',
     artifactToolHost,
+    assistantToolHost,
     automationToolHost,
     notificationToolHost,
     pullRequestToolHost,

@@ -1,4 +1,5 @@
 import { useComposerModelSelection } from './composer/preferences/useComposerModelSelection.js';
+import type { ChatPresentation } from './conversation/chat-workspace-types.js';
 import { ChatPromptInput } from './composer/editor/ChatPromptInput.js';
 import type { WorkspaceDraftReference } from './session/chatDraftReferences.js';
 import type { ComposerSlot } from './composer/editor/types.js';
@@ -17,6 +18,7 @@ import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import {
   chatComposerStatusSlot,
   type ChatComposerActiveTurn,
+  type ChatThinkingSelection,
 } from '@setsuna-desktop/renderer-contracts/chat';
 import {
   useCallback,
@@ -37,7 +39,7 @@ import { RendererOwnedListSlot } from '../../kernel/renderer-plugins/RendererKer
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import { ChatAttachmentTray } from './composer/ChatAttachmentTray.js';
-import { ChatComposerFooter } from './composer/ChatComposerFooter.js';
+import { ChatComposerCommandButton, ChatComposerFooter, ChatComposerPrimaryAction } from './composer/ChatComposerFooter.js';
 import { ChatComposerOverlays } from './composer/ChatComposerOverlays.js';
 import { ChatSendQueue } from './composer/ChatSendQueue.js';
 import type { SlashCommandMenuItem } from './composer/ChatSlashCommandMenu.js';
@@ -111,11 +113,13 @@ export function composerActiveTurn(
 }
 
 export function ChatComposer({
+  presentation = 'workspace',
   preferenceKey,
   activeTurnId,
   activeProject,
   client,
   config,
+  defaultThinking,
   canClearContext,
   contextCompacting = false,
   contextUsage,
@@ -153,11 +157,13 @@ export function ChatComposer({
   onCapabilitySelectionRequestConsumed,
   onWorkspaceMentionRequestConsumed,
 }: {
+  presentation?: ChatPresentation;
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
   preferenceKey?: string;
   client: DesktopRuntimeClient;
   config: RuntimeConfigState | null;
+  defaultThinking?: ChatThinkingSelection;
   canClearContext: boolean;
   contextCompacting?: boolean;
   contextUsage: ChatContextTokenUsage;
@@ -199,6 +205,7 @@ export function ChatComposer({
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
 }) {
   const { t } = useI18n();
+  const messenger = presentation === 'messenger';
   const initialSlotConfigRef = useRef<ComposerSlot[] | null>(null);
   if (initialSlotConfigRef.current === null) initialSlotConfigRef.current = createReferenceDraftSlots(draft, plugins, skills, draftSkillReferences, draftWorkspaceReferences);
   const [selectedSkills, setSelectedSkills] = useState(() => filterSelectedSkillsBySlots(skills, initialSlotConfigRef.current!));
@@ -228,7 +235,7 @@ export function ChatComposer({
   const sendQueuedTurnInputNow = queuedTurnActions.sendQueuedTurnInputNow;
   const getComposerEditor = useCallback(() => senderRef.current, []);
   const getComposerInputElement = useCallback(() => getComposerEditor()?.inputElement ?? null, [getComposerEditor]);
-  const { selectedThreadModel, turnModelSelection, selectModel, defaultThinking } = useComposerModelSelection({ preferenceKey, config, currentThread, activeProject, onSelectModel });
+  const { selectedThreadModel, turnModelSelection, selectModel, defaultThinking: projectThinking } = useComposerModelSelection({ preferenceKey, config, currentThread, activeProject, onSelectModel });
   const activeComposerTurn = useMemo(
     () => composerActiveTurn(currentThread, activeTurnId),
     [activeTurnId, currentThread?.turns],
@@ -242,7 +249,7 @@ export function ChatComposer({
   const modeController = useChatComposerModeController({
     currentThreadId: currentThread?.id,
     preferenceKey,
-    defaultThinking,
+    defaultThinking: defaultThinking ?? projectThinking,
     model: selectedThreadModel.model,
     provider: selectedThreadModel.provider,
     sendIntentControl: draftSendIntent === undefined ? undefined : { value: draftSendIntent, onChange: setDraftSendIntent },
@@ -348,6 +355,7 @@ export function ChatComposer({
     hasReviewIncompatibleContent: Boolean(attachmentItems.length || selectedSkills.length || selectedPluginIds.length),
     query: commandController.slashQuery,
     plugins,
+    presentation,
     selectedPluginIds,
     selectedSkills,
     sideChatAvailable: Boolean(onOpenSideChat),
@@ -371,6 +379,7 @@ export function ChatComposer({
     selectedSkills,
     skills,
     plugins,
+    presentation,
     selectedPluginIds,
     t,
   ]);
@@ -751,7 +760,7 @@ export function ChatComposer({
         }}
       />
       <div className="chat-composer-stack">
-        {currentThread ? (
+        {currentThread && !messenger ? (
           <RendererOwnedListSlot
             slot={chatComposerStatusSlot}
             props={{
@@ -779,10 +788,14 @@ export function ChatComposer({
         disabled={submitting || queuedTurnEdit.retrieving}
         slotConfig={initialSlotConfigRef.current}
         loading={Boolean(activeTurnId)}
-        placeholder={placeholder ?? t(projectConversation
+        layout={messenger ? 'inline' : 'stacked'}
+        leadingAction={messenger ? <ChatComposerCommandButton iconSize={18}
+          active={commandController.forcedSlashMenuOpen} disabled={submitting || queuedTurnEdit.retrieving}
+          onOpen={openSlashMenu} /> : undefined}
+        placeholder={placeholder ?? t(messenger ? 'chat.composer.messagePlaceholder' : projectConversation
           ? 'chat.composer.projectPlaceholder'
           : 'chat.composer.placeholder')}
-        autoSize={{ minRows: 2, maxRows: 6 }}
+        autoSize={{ minRows: messenger ? 1 : 2, maxRows: 6 }}
         onBlur={commandController.handleComposerBlur}
         onChange={handleChange}
         onFocus={commandController.handleComposerFocus}
@@ -797,7 +810,12 @@ export function ChatComposer({
         header={
           <ChatAttachmentTray disabled={submitting || attachmentsSending} items={attachmentItems} onRemove={removeAttachment} />
         }
-        footer={(actions) => (
+        footer={(actions) => messenger ? (
+          <ChatComposerPrimaryAction hasActiveTurn={Boolean(activeTurnId)} senderActions={actions} primaryAction={{
+            attachmentOnlyReady, attachmentsBusy, queueReady: activeQueueReady,
+            submitting: submitting || queuedTurnEdit.retrieving, onCancelActiveTurn, onSubmit: () => void submitDraft(draft),
+          }} />
+        ) : (
           <ChatComposerFooter
             commandControl={{
               active: commandController.forcedSlashMenuOpen,

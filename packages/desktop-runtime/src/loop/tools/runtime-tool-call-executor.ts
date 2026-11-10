@@ -266,9 +266,9 @@ export class RuntimeToolCallExecutor {
       }
       if (
         (this.options.collaborationControl().isToolName(toolCall.name) || this.options.goalCoordinator().isToolName(toolCall.name))
-        && (await this.options.threadStore.getThread(context.threadId))?.kind === 'side'
+        && (toolRouter?.withholdsRuntimeFeatureTools || (await this.options.threadStore.getThread(context.threadId))?.kind === 'side')
       ) {
-        content = `Tool ${toolCall.name} is unavailable in a side conversation.`;
+        content = `Tool ${toolCall.name} is unavailable in this conversation.`;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'error');
       }
@@ -351,8 +351,8 @@ export class RuntimeToolCallExecutor {
     const registration = this.appServerDynamicToolsByThread.get(threadId);
     const tool = registration?.toolsByName.get(name);
     if (!registration || !tool) return null;
-    // 完整 host catalog 和 runtime 自带工具始终保留名称所有权。
-    if (toolRouter?.reservesDynamicToolName(name)) return null;
+    // 完整 host catalog 和 runtime 自带工具始终保留名称所有权；独占工具范围的轮次不运行动态工具。
+    if (toolRouter?.reservesDynamicToolName(name) || toolRouter?.withholdsRuntimeFeatureTools) return null;
     return { registration, tool };
   }
 

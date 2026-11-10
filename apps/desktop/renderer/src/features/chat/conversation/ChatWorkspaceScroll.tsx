@@ -354,12 +354,15 @@ export function useConversationOverviewLayout(
 }
 
 function readConversationOverviewLayout(conversation: HTMLElement, content: HTMLElement): ConversationOverviewLayout {
+  const contentStyle = window.getComputedStyle(content);
+  const measuredOverviewWidth = Number.parseFloat(contentStyle.getPropertyValue('--chat-overview-panel-width'));
+  const overviewWidth = measuredOverviewWidth > 0 ? measuredOverviewWidth : undefined;
   const workbench = conversation.closest<HTMLElement>('.app-workbench');
   if (workbench && !conversation.closest('.desktop-chat-panel--side')) {
     const shellStyle = window.getComputedStyle(workbench);
     const sidebarWidth = Number.parseFloat(shellStyle.getPropertyValue('--app-sidebar-width'));
     const workspaceWidth = Number.parseFloat(shellStyle.getPropertyValue('--desktop-agent-workspace-width'));
-    const maxContentWidth = Number.parseFloat(window.getComputedStyle(content).getPropertyValue('--chat-content-max-width'));
+    const maxContentWidth = Number.parseFloat(contentStyle.getPropertyValue('--chat-content-max-width'));
     if ([sidebarWidth, workspaceWidth, maxContentWidth].every(Number.isFinite)) {
       // Use the grid's destination, not its animated intermediate widths. Otherwise
       // centered -> shifted -> hidden briefly moves the Markdown out and back.
@@ -368,9 +371,10 @@ function readConversationOverviewLayout(conversation: HTMLElement, content: HTML
       return conversationOverviewLayout({
         conversationWidth,
         contentWidth: Math.min(maxContentWidth, conversationWidth),
+        overviewWidth,
       });
     }
   }
   // Standalone/side conversations keep measuring their own CSS-pixel bounds.
-  return conversationOverviewLayout({ conversationWidth: conversation.clientWidth, contentWidth: content.offsetWidth });
+  return conversationOverviewLayout({ conversationWidth: conversation.clientWidth, contentWidth: content.offsetWidth, overviewWidth });
 }

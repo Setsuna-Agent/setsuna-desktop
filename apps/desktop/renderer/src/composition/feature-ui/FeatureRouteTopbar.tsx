@@ -1,9 +1,14 @@
-import type { AutomationToolbarProps } from '@setsuna-desktop/feature-automation/renderer';
+import type { IconButtonProps } from '@setsuna-desktop/renderer-ui';
 import { AppRouteTopbarPortal } from '../../shared/ui/AppRouteTopbarPortal.js';
 import { ActionTooltip, IconButton } from '../../shared/ui/primitives.js';
 
-/** ShellFrame places this in the macOS titlebar or Windows content header. */
-export function AutomationTopbar({ title, actions }: AutomationToolbarProps) {
+export type FeatureRouteTopbarProps = Readonly<{
+  title: string;
+  actions: readonly (IconButtonProps & { id: string })[];
+}>;
+
+/** Feature routes own their actions; ShellFrame places this in the macOS titlebar or Windows content header. */
+export function FeatureRouteTopbar({ title, actions }: FeatureRouteTopbarProps) {
   return (
     <AppRouteTopbarPortal>
       <div className="app-topbar__route-content">

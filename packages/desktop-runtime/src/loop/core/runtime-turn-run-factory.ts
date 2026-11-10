@@ -25,6 +25,7 @@ import {
 } from './runtime-thread-model.js';
 
 export type RuntimeTurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
+export type RuntimeMailboxExecutionOptions = Pick<SendTurnInput, 'thinking' | 'thinkingEffort'> & { unattended?: boolean };
 
 export type RuntimeTurnExecutionOptions = {
   userInitiated?: boolean;
@@ -138,34 +139,43 @@ export class RuntimeTurnRunFactory {
     return { turnId, done: run.done };
   }
 
-  async createMailboxTriggered(threadId: string, thread: RuntimeThread, turnId: string, content: string, execution: { unattended?: boolean } = {}): Promise<{ turnId: string; done: Promise<void> }> {
+  async createMailboxTriggered(threadId: string, thread: RuntimeThread, turnId: string, content: string, execution: RuntimeMailboxExecutionOptions, beforeRun: () => Promise<void>): Promise<{ turnId: string; done: Promise<void> }> {
     const turnModel = await this.resolveTurnModel(thread);
     const taskKind = isCollaborationChildThread(thread) ? 'subagent' : 'regular';
+    let prepared!: Promise<void>;
     const run = this.options.turnTasks.run({
       turnId,
       threadId,
       taskKind,
       acceptingSteers: true,
-    }, (task) => this.options.runTurn({
-      attachments: [],
-      signal: task.controller.signal,
-      skillIds: [],
-      text: `Mailbox message received: ${content.slice(0, 160)}`,
-      turnModel,
-      thread,
-      threadId,
-      turnId,
-      options: {
-        unattended: execution.unattended,
-        runtimeContextMessages: execution.unattended ? unattendedTurnContext(turnId, this.options.clock.now().toISOString()) : undefined,
-        includeUserMessageInModel: true,
-        publishUserMessage: false,
-        ...(taskKind === 'subagent'
-          ? { inputKind: 'subagent_task' as const, promptSource: 'collaboration' as const }
-          : {}),
-        taskKind,
-      },
-    }));
+    }, (task) => {
+      // Claim the turn slot before recording success; a racing user turn must not leave a phantom receipt.
+      prepared = Promise.resolve().then(beforeRun);
+      return prepared.then(() => this.options.runTurn({
+        attachments: [],
+        signal: task.controller.signal,
+        skillIds: [],
+        text: `Mailbox message received: ${content.slice(0, 160)}`,
+        turnModel,
+        thinkingOptions: execution.thinking === undefined ? undefined : turnThinkingOptions(execution),
+        thread,
+        threadId,
+        turnId,
+        options: {
+          unattended: execution.unattended,
+          runtimeContextMessages: execution.unattended ? unattendedTurnContext(turnId, this.options.clock.now().toISOString()) : undefined,
+          includeUserMessageInModel: true,
+          publishUserMessage: false,
+          ...(taskKind === 'subagent'
+            ? { inputKind: 'subagent_task' as const, promptSource: 'collaboration' as const }
+            : {}),
+          taskKind,
+        },
+      }));
+    });
+    void run.done.catch(() => undefined);
+    try { await prepared; }
+    catch (error) { await run.done.catch(() => undefined); throw error; }
     return { turnId, done: run.done };
   }
 

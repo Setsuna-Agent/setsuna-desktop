@@ -28,6 +28,7 @@ import { CapabilitiesRouteAdapter } from './CapabilitiesRouteAdapter.js';
 import { ChatRouteAdapter } from './ChatRouteAdapter.js';
 import { SettingsRouteAdapter } from './SettingsRouteAdapter.js';
 import { AutomationRouteAdapter } from '../../composition/automation/AutomationFeatureBoundary.js';
+import { AssistantConversationAdapter, AssistantWorkConversationAdapter } from '../../composition/assistants/AssistantsFeatureBoundary.js';
 import type { ChatStarterProjectSelection } from '../../features/chat/conversation/ChatStarterWorkspace.js';
 
 export type AppRouteContentProps = Readonly<{
@@ -86,6 +87,8 @@ export type AppRouteContentProps = Readonly<{
 
 export function AppRouteContent(props: AppRouteContentProps) {
   if (props.activeView === 'automation') return <AutomationRouteAdapter {...props} />;
+  if (props.activeView === 'chat' && props.runtime.currentThread?.featureId === 'assistants') return <AssistantConversationAdapter {...props} />;
+  if (props.activeView === 'chat' && props.runtime.currentThread?.origin?.featureId === 'assistants') return <AssistantWorkConversationAdapter {...props} />;
   if (props.activeView === 'settings') return <SettingsRouteAdapter {...props} />;
   if (props.activeView === 'capabilities') return <CapabilitiesRouteAdapter {...props} />;
   return <ChatRouteAdapter {...props} />;

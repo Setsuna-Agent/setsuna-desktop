@@ -13,6 +13,7 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onSubmit'> & {
   allowEmptySubmit?: boolean;
   autoSize?: { minRows: number; maxRows: number };
   submitOn?: 'enter' | 'mod-enter';
+  layout?: 'stacked' | 'inline'; leadingAction?: ReactNode;
   header?: ReactNode; footer?: (actions: ReactNode) => ReactNode;
   onChange?(value: string, event?: unknown, slots?: ComposerSlot[]): void;
   onPasteFile?(files: FileList): void;
@@ -21,7 +22,7 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onSubmit'> & {
 };
 type TagPortal = { element: HTMLElement; slot: Extract<ComposerSlot, { type: 'tag' }> };
 
-export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPromptInput({ value = '', slotConfig, disabled, loading, placeholder, allowEmptySubmit = false, 'aria-label': ariaLabel, autoSize = { minRows: 2, maxRows: 6 }, submitOn = 'enter', header, footer, onChange, onSubmit, onCancel, onPasteFile, onKeyDown, ...props }, ref) {
+export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPromptInput({ value = '', slotConfig, disabled, loading, placeholder, allowEmptySubmit = false, 'aria-label': ariaLabel, autoSize = { minRows: 2, maxRows: 6 }, submitOn = 'enter', layout = 'stacked', leadingAction, header, footer, onChange, onSubmit, onCancel, onPasteFile, onKeyDown, ...props }, ref) {
   const { t } = useI18n();
   const elementRef = useRef<HTMLDivElement | null>(null);
   const revealCaret = useComposerCaretScroll(elementRef);
@@ -134,8 +135,9 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
     onClick={() => loading ? onCancel?.() : onSubmit?.(elementRef.current ? readComposerDocument(elementRef.current, references.current).map(slotText).join('') : value)}>
     <ChatSubmitIcon stop={Boolean(loading)} />
   </Button>;
-  return <div className="chat-prompt" data-disabled={disabled || undefined}>
+  return <div className={`chat-prompt ${layout === 'inline' ? 'chat-prompt--inline' : ''}`} data-disabled={disabled || undefined}>
     {header}
+    {leadingAction ? <div className="chat-prompt__leading-action">{leadingAction}</div> : null}
     {/* Keep the editor focusable during the temporary contentEditable lock used for sending. */}
     <div {...props} ref={elementRef} className="chat-prompt__input" contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" aria-label={ariaLabel ?? placeholder} aria-disabled={disabled}
       tabIndex={disabled ? -1 : 0}

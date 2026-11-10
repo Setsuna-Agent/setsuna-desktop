@@ -256,6 +256,7 @@ export class RuntimeSamplingContextBuilder {
       ...(goalExecution ? { goalExecution } : {}),
       threadId,
       projectId: thread.projectId,
+      featureId: thread.featureId,
       turnId,
       modelCapabilities: {
         supportsImages: activeModelSupportsImages,
@@ -288,6 +289,9 @@ export class RuntimeSamplingContextBuilder {
     const collaborationTools = collaborationControl.toolDefinitions(stepRuntimeConfig)
       .filter((tool) => taskKind !== 'subagent' || tool.name === 'send_input');
     const skillActivationText = currentTurnSkillActivationText(orderedConversationMessages, turnId);
+    // A Feature-owned conversation (e.g. an assistant) may confine the turn to its own tools.
+    const exclusiveTools = toolAccess === 'none' ? null : await this.options.toolHost?.exclusiveToolScope?.(toolContext) ?? null;
+    const allowTool = runtimeToolFilter(toolAccess, exclusiveTools);
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
           toolHost: this.options.toolHost,
@@ -297,7 +301,8 @@ export class RuntimeSamplingContextBuilder {
           orchestrator: this.options.toolExecutor.toolOrchestratorFor(toolContext, stepRuntimeConfig),
           context: toolContext,
           approvalPolicy: stepRuntimeConfig?.approvalPolicy ?? 'on-request',
-          ...(toolAccess === 'read-only' ? { allowTool: (tool: RuntimeToolDefinition) => isRuntimeReadOnlyTool(tool.name) } : {}),
+          ...(allowTool ? { allowTool } : {}),
+          ...(exclusiveTools ? { exclusiveScope: true } : {}),
           strictApprovalRequiresSerial: Boolean(this.options.approvalGate && (stepRuntimeConfig?.approvalPolicy ?? 'on-request') === 'strict'),
           toolResultStore: this.options.toolResultStore,
           programsEnabled: this.options.toolExecutor.programsEnabled,
@@ -307,9 +312,9 @@ export class RuntimeSamplingContextBuilder {
       ? undefined
       : modelFacingTools(
           toolRouter?.tools,
-          dynamicTools,
-          collaborationTools,
-          goalTools,
+          exclusiveTools ? undefined : dynamicTools,
+          exclusiveTools ? [] : collaborationTools,
+          exclusiveTools ? [] : goalTools,
           toolRouter?.catalogToolDefinitions,
         );
     const sideConversation = (snapshotThread ?? thread).kind === 'side';
@@ -583,6 +588,15 @@ function goalExecutionForTurn({
     thinking,
     thinkingEffort: thinking ? thinkingOptions?.reasoningEffort : undefined,
   };
+}
+
+/** Combines the turn's read-only policy with an exclusive Feature tool scope; undefined allows the full catalog. */
+function runtimeToolFilter(
+  toolAccess: 'all' | 'read-only' | 'none',
+  exclusiveTools: ReadonlySet<string> | null,
+): ((tool: RuntimeToolDefinition) => boolean) | undefined {
+  if (toolAccess !== 'read-only' && !exclusiveTools) return undefined;
+  return (tool) => (toolAccess !== 'read-only' || isRuntimeReadOnlyTool(tool.name)) && (!exclusiveTools || exclusiveTools.has(tool.name));
 }
 
 function runtimeToolFeatureFlags(

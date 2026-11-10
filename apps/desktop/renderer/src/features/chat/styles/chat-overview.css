@@ -3,8 +3,19 @@
   top: 10px;
   right: 10px;
   z-index: 8;
-  max-width: min(300px, calc(100% - 20px));
+  max-width: min(var(--chat-overview-panel-width, 284px), calc(100% - 20px));
   pointer-events: none;
+}
+
+.chat-conversation-overview--custom {
+  bottom: 10px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.chat-conversation-overview--custom > .chat-conversation-overview-panel {
+  max-height: 100%;
+  overflow-y: auto;
 }
 
 .chat-conversation-overview-panel {
@@ -15,7 +26,7 @@
   /* Feature sections must shrink within the panel even with unbroken titles. */
   grid-template-columns: minmax(0, 1fr);
   gap: 7px;
-  width: 284px;
+  width: var(--chat-overview-panel-width, 284px);
   max-width: 100%;
   box-sizing: border-box;
   padding: 12px 10px 10px;

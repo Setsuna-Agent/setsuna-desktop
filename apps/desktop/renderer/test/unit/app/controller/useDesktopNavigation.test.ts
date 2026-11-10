@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { parsePluginMentions, pluginMentionText, type DesktopRuntimeClient, type RuntimeThread, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { browserTabMentionText } from '@setsuna-desktop/feature-browser/contracts';
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useDesktopNavigation } from '../../../../src/app/controller/useDesktopNavigation.js';
@@ -171,12 +171,40 @@ it.each(['loaded', 'failed'] as const)('commits the chat route only with its req
   expect(result.current.currentThread).toEqual(outcome === 'loaded' ? target : original);
 });
 
+it('打开助理的请求迟到时，不覆盖后来选中的普通对话', async () => {
+  const original = { ...automationThread, id: 'ordinary', featureId: undefined };
+  const other = { ...original, id: 'other' };
+  const { result, getThread } = setupAutomationNavigation(original);
+  let resolveDestination!: (id: string) => void;
+  const destination = new Promise<string>((resolve) => { resolveDestination = resolve; });
+  const openAssistant = vi.fn(() => destination);
+  let pending!: Promise<boolean>;
+  act(() => { pending = result.current.navigation.selectThreadInView(openAssistant, 'chat'); });
+  await waitFor(() => expect(openAssistant).toHaveBeenCalledOnce());
+  getThread.mockResolvedValueOnce(other);
+  await act(() => result.current.navigation.selectThreadInView('other', 'chat'));
+  await act(async () => { resolveDestination('assistant-thread'); expect(await pending).toBe(false); });
+  expect(result.current.currentThread).toEqual(other);
+  expect(getThread).toHaveBeenCalledExactlyOnceWith('other');
+});
+
+it('从自动化返回首页时恢复助理对话及其未发送草稿', async () => {
+  const assistant = { ...automationThread, id: 'assistant', featureId: 'assistants' };
+  const { result } = setupAutomationNavigation(assistant);
+  act(() => result.current.composer.setDraft('未发送的助理消息'));
+  await act(() => result.current.navigation.changeView('automation'));
+  await act(() => result.current.navigation.selectThreadInView(automationThread.id, 'automation'));
+  await act(() => result.current.navigation.changeView('chat'));
+  expect(result.current.currentThread).toEqual(assistant);
+  expect(result.current.composer.draft).toBe('未发送的助理消息');
+});
+
 it.each([
   { existing: false, projectId: null, viaSettings: false },
   { existing: false, projectId: 'project', viaSettings: false },
   { existing: true, projectId: null, viaSettings: false },
   { existing: true, projectId: 'project', viaSettings: true },
-])('restores the chat and its draft after automation: %j', async ({ existing, projectId, viaSettings }) => {
+])('离开功能会话后恢复原聊天与草稿：%j', async ({ existing, projectId, viaSettings }) => {
   const original = existing
     ? { ...automationThread, id: 'ordinary', featureId: undefined, projectId: projectId ?? undefined }
     : null;

@@ -15,6 +15,7 @@ import { ReviewFeatureHostBoundary } from '../../../../../src/composition/review
 import { BottomToolsPanel } from '../../../../../src/features/workspace/BottomToolsPanel.js';
 import { useDesktopWorkspacePanels, useSidePanelTransition } from '../../../../../src/features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../../../../src/features/workspace/hooks/useProjectWorkspace.js';
+import type { MainView } from '../../../../../src/app/types.js';
 import type { ThreadWorkspaceStatus } from '../../../../../src/features/workspace/hooks/useThreadWorkspace.js';
 import type { ChatComposerTargetIdentity } from '../../../../../src/features/chat/hooks/useChatComposerSession.js';
 import { MarkdownContentBlock } from '../../../../../src/features/chat/markdown/MarkdownContentBlock.js';
@@ -221,7 +222,7 @@ it('closes only the visible active side tab, leaving bottom and collapsed tabs i
     activeProject: null, activeView, conversationDebugEnabled: false,
     targetIdentity: 'new-thread-slot:global', workspaceStatus: 'ready', setError: vi.fn(),
   }), {
-    initialProps: { activeView: 'chat' },
+    initialProps: { activeView: 'chat' as MainView },
     wrapper: ({ children }) => <I18nProvider initialLocale="zh-CN" messageCatalog={messageCatalog}>
       <ToastProvider><ReviewFeatureHostBoundary>{children}</ReviewFeatureHostBoundary></ToastProvider>
     </I18nProvider>,

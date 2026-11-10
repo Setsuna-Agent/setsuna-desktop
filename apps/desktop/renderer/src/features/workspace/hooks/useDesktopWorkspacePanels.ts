@@ -10,6 +10,8 @@ import {
 } from '../../../composition/workspace-apps-feature-adapter.js';
 import { useReviewFeatureState } from '../../../composition/review-feature-adapter.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { isConversationView } from '../../../app/mainViews.js';
+import type { MainView } from '../../../app/types.js';
 import {
   chatComposerTargetIdentity,
   type ChatComposerTargetIdentity,
@@ -67,7 +69,7 @@ type SidePanelTransitionPhase = 'opening' | 'closing' | null;
 
 type WorkspacePanelsOptions = {
   activeProject: WorkspaceProject | null | undefined;
-  activeView: string;
+  activeView: MainView;
   conversationDebugEnabled: boolean | null;
   setError: (message: string | null) => void;
   targetIdentity: ChatComposerTargetIdentity;
@@ -155,7 +157,7 @@ export function useDesktopWorkspacePanels({
   const selectedWorkspaceApp = workspaceApps.find((app) => app.id === selectedWorkspaceAppId) ?? workspaceApps[0] ?? null;
   const sideActivePanel = activePanelInSlot(sidePanelSlot);
   const bottomActivePanel = activePanelInSlot(bottomPanelSlot);
-  const workspaceViewVisible = activeView === 'chat' || activeView === 'automation';
+  const workspaceViewVisible = isConversationView(activeView);
   const sidePanelVisible = workspaceViewVisible && sidePanelExpanded && Boolean(sideActivePanel);
   const sidePanelTransition = useSidePanelTransition(sidePanelVisible);
   const sidePanelPresent = sidePanelTransition.present;

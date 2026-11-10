@@ -22,6 +22,27 @@ const plugin: RuntimePluginSummary = {
       navigation: { label: '我的表格' }, document: { htmlResourceId: 'html', actionIds: [] } }] } },
 };
 
+it.each(['plus', 'slash'])('助理输入框通过 %s 选择插件和 Skill 后，发送保留二者的引用标识', async (trigger) => {
+  const skill: RuntimeSkillSummary = { id: 'review', name: 'Review', kind: 'builtin', enabled: true };
+  const send = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => false);
+  render(<Harness presentation="messenger" plugins={[plugin]} skills={[skill]} send={send} />);
+  const input = screen.getByRole('textbox');
+  const openMenu = () => {
+    if (trigger === 'plus') fireEvent.click(screen.getByRole('button', { name: '打开命令菜单' }));
+    else paste(input, '/');
+  };
+  openMenu();
+  fireEvent.mouseDown(await screen.findByRole('option', { name: /Review/ }));
+  openMenu();
+  fireEvent.mouseDown(await screen.findByRole('option', { name: /Tables/ }));
+  paste(input, '解释一下');
+  fireEvent.keyDown(input, { key: 'Enter' });
+  await waitFor(() => expect(send).toHaveBeenCalledOnce());
+  const [content, options] = send.mock.calls[0]!;
+  expect(parsePluginMentions(String(content))).toEqual([expect.objectContaining({ pluginId: plugin.id })]);
+  expect(options).toMatchObject({ skillIds: ['review'], skillReferences: [{ skillId: 'review', start: 0, end: 6 }] });
+});
+
 it('attaches an app by @ without a project, restores its draft and preserves its identity when sent', async () => {
   const send = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
   const view = render(<Harness initialDraft="@表格" plugins={[plugin]} send={send} />);
@@ -610,7 +631,8 @@ function SessionHarness({ target, client, send, skills, windowKey, queuedTurnInp
     queuedTurnInputs={queuedTurnInputs} queuedTurnActions={queuedTurnActions} />;
 }
 
-function Harness({ preferenceKey, project, newThread = false, initialDraft = '', activeTurnId = null, client = {} as DesktopRuntimeClient, messages = [], skills = [], plugins = [], tabs = [], threadId = 'thread-1', send = async () => false, session, queuedTurnInputs = [], queuedTurnActions }: {
+function Harness({ presentation, preferenceKey, project, newThread = false, initialDraft = '', activeTurnId = null, client = {} as DesktopRuntimeClient, messages = [], skills = [], plugins = [], tabs = [], threadId = 'thread-1', send = async () => false, session, queuedTurnInputs = [], queuedTurnActions }: {
+  presentation?: Parameters<typeof ChatComposer>[0]['presentation'];
   preferenceKey?: string; project?: WorkspaceProject; newThread?: boolean;
   initialDraft?: string;
   activeTurnId?: string | null;
@@ -627,6 +649,7 @@ function Harness({ preferenceKey, project, newThread = false, initialDraft = '',
 }) {
   const [draft, setDraft] = useState(initialDraft);
   return <RendererPluginTestHost><BrowserTabMentionsProvider value={tabs}><ChatComposer
+    presentation={presentation}
     key={session?.composerKey} attachmentStore={session?.attachmentStore}
     draftSkillReferences={session?.draftSkillReferences}
     draftSendIntent={session?.draftSendIntent}

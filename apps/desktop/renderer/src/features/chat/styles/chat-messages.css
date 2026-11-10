@@ -37,6 +37,7 @@
 }
 
 .chat-main-conversation {
+  --chat-overview-panel-width: 284px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -145,7 +146,7 @@
 
 /* 将正文放到概览卡片左侧的可用区域正中，最小间距与卡片右边距一致。 */
 .chat-main-conversation--overview-shifted {
-  --chat-overview-expanded-shift: 147px;
+  --chat-overview-expanded-shift: calc((var(--chat-overview-panel-width) + 10px) / 2);
 }
 
 .chat-main-conversation--overview-shifted .chat-content-frame,

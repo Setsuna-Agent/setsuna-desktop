@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { automationScheduleCodec } from '../../src/contracts/index.js';
-import { nextAutomationRun } from '../../src/runtime/schedule.js';
+import { nextAutomationRun } from '../../src/contracts/schedule.js';
 
 afterEach(() => vi.restoreAllMocks());
 

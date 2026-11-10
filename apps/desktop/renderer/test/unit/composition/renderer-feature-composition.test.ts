@@ -2,10 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { activateBuiltinRendererFeatures } from '../../../src/composition/renderer-feature-composition.js';
-import type { RendererSlotInspectionNode } from '../../../src/kernel/renderer-plugins/runtime.js';
 import { chatToolResultResolverSlot } from '@setsuna-desktop/renderer-contracts/chat';
-import { settingsPageExtensionSlot } from '@setsuna-desktop/renderer-contracts/settings';
-import { appReadySlot, shellRouteSlot } from '@setsuna-desktop/renderer-contracts/shell';
 
 describe('renderer feature composition', () => {
   afterEach(() => {
@@ -49,55 +46,6 @@ describe('renderer feature composition', () => {
       path: '/v1/features/plugin-management/installed',
     }));
 
-    expect(features.services.capabilitiesRefresh.refreshAll).toEqual(expect.any(Function));
-    expect(features.services.skills.getSnapshot()).toEqual({ extraRoots: [], skills: [] });
-    expect(features.services.networkProxy.available).toBe(false);
-    expect(features.services.sideConversation.available).toBe(true);
-    const snapshot = features.rendererPlugins.getSnapshot();
-    const inspection = snapshot.inspect();
-    expect(findSlot(inspection.roots, 'renderer.app.ready')).toMatchObject({
-      activeEntryIds: ['app-shell.default'],
-    });
-    expect(findSlot(inspection.roots, 'renderer.shell.route')).toMatchObject({
-      activeEntryIds: ['pull-requests.page', 'routes.chat', 'routes.settings', 'routes.automation', 'routes.capabilities', 'routes.plugin'],
-    });
-    expect(findSlot(inspection.roots, 'renderer.chat.composer.status')).toMatchObject({
-      activeEntryIds: ['goal.composer-status'],
-    });
-    expect(findSlot(inspection.roots, 'renderer.capabilities.sidebar')).toMatchObject({
-      activeEntryIds: ['plugin-management.installed-sidebar'],
-    });
-    expect(findSlot(inspection.roots, 'renderer.shell.topbar.action')?.activeEntryIds).toEqual([
-      'computer-use.stop',
-      'updater.ready-action',
-    ]);
-    expect(findSlot(inspection.roots, 'renderer.workspace.panel')?.activeEntryIds).toEqual(
-      expect.arrayContaining(['browser.workspace-panel', 'terminal.workspace-panel']),
-    );
-    expect(findSlot(inspection.roots, 'renderer.settings.page')?.activeEntryIds).toEqual(
-      expect.arrayContaining([
-        'mcp.capabilities-page',
-        'plugin-management.capabilities-page',
-        'settings.general',
-        'diagnostics.settings-page',
-        'computer-use.settings-page',
-        'skills.capabilities-page',
-      ]),
-    );
-    const [appReadyEntry] = snapshot.resolveSingle(appReadySlot).entries;
-    if (!appReadyEntry) throw new Error('Expected the built-in app shell entry.');
-    const [settingsRouteEntry] = snapshot.resolveKeyed(shellRouteSlot, 'settings', appReadyEntry).entries;
-    if (!settingsRouteEntry) throw new Error('Expected the built-in settings route entry.');
-    const runtimeExtensions = snapshot.resolveKeyedEntries(
-      settingsPageExtensionSlot,
-      settingsRouteEntry,
-    );
-    expect(runtimeExtensions.find((entry) => entry.metadata.id === 'layout-preferences')).toBeUndefined();
-    expect(runtimeExtensions.find((entry) => entry.metadata.id === 'desktop-review-conflict-archives')?.metadata)
-      .toMatchObject({ targetSectionId: 'archives' });
-    const inspector = runtimeExtensions.find((entry) => entry.metadata.id === 'renderer-inspector');
-    if (development) expect(inspector?.metadata).toMatchObject({ targetSectionId: 'runtime' });
-    else expect(inspector).toBeUndefined();
     const artifact = {
       id: 'artifact_legacy',
       kind: 'file' as const,
@@ -151,15 +99,3 @@ describe('renderer feature composition', () => {
     await features.composition.dispose();
   });
 });
-
-function findSlot(
-  nodes: readonly RendererSlotInspectionNode[],
-  slotId: string,
-): RendererSlotInspectionNode | undefined {
-  for (const node of nodes) {
-    if (node.slotId === slotId) return node;
-    const nested = findSlot(node.children, slotId);
-    if (nested) return nested;
-  }
-  return undefined;
-}

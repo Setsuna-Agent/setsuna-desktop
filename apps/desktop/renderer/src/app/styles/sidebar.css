@@ -48,6 +48,8 @@
 }
 
 .desktop-agent-command {
+  /* Shared Button hover/press feedback must use the same fill as sidebar rows. */
+  --desktop-agent-control-hover-bg: var(--desktop-agent-sidebar-hover-bg);
   display: flex;
   align-items: center;
   gap: var(--desktop-agent-leading-gap);
@@ -63,10 +65,6 @@
   text-align: left;
 }
 
-.desktop-agent-command:hover {
-  background: var(--desktop-agent-sidebar-hover-bg);
-}
-
 .desktop-agent-command.is-active {
   color: var(--app-text);
   background: var(--desktop-agent-sidebar-hover-bg);
@@ -76,6 +74,21 @@
   flex: 0 0 var(--desktop-agent-icon-size);
   width: var(--desktop-agent-icon-size);
   color: currentColor;
+}
+
+/* The parent command area owns the insets, including for the assistant shortcut. */
+.desktop-agent-sidebar__assistants {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.desktop-agent-command > .desktop-agent-command__avatar {
+  flex: 0 0 var(--desktop-agent-icon-size);
+  width: var(--desktop-agent-icon-size);
+  height: var(--desktop-agent-icon-size);
+  border-radius: 5px;
 }
 
 .desktop-agent-command__label {

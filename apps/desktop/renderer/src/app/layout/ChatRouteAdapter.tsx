@@ -1,8 +1,8 @@
 import { resolveWorkspaceFileReference, workspaceProjectRoots } from '@setsuna-desktop/contracts';
 import { searchWorkspaceMentions } from '../../features/chat/mentions/searchWorkspaceMentions.js';
 import type { WorkspaceFileChangeAction } from '@setsuna-desktop/contracts';
-import type { ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ChatThinkingSelection, ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { latestBrowserFeatureOpenRequest } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { usePluginManagementFeatureSnapshot } from '../../composition/PluginManagementFeatureBoundary.js';
 import { useSkillsFeatureSnapshot } from '../../composition/SkillsFeatureBoundary.js';
@@ -19,7 +19,7 @@ import { ChatForkProvider } from '../../features/chat/fork/ChatForkAction.js';
 import { useChatStarterLocation } from '../../features/chat/hooks/useChatStarterLocation.js';
 import { useBrowserAnnotationSend } from '../../features/chat/hooks/useBrowserAnnotationSend.js';
 import { useChatSubmissionQueue } from '../../features/chat/hooks/useChatSubmissionQueue.js';
-import type { ChatStarterPresentation } from '../../features/chat/conversation/chat-workspace-types.js';
+import type { ChatPresentation, ChatStarterPresentation } from '../../features/chat/conversation/chat-workspace-types.js';
 import { AppChatSurface } from './AppChatSurface.js';
 import type { AppRouteContentProps } from './AppRouteContent.js';
 import type { ChatConversationSurfaceModel } from './ChatConversationSurface.js';
@@ -39,11 +39,14 @@ type ChatRouteAdapterProps = Omit<
   | 'setActiveView'
   | 'settingsLocation'
   | 'onSettingsNavigate'
-> & { starterPresentation?: ChatStarterPresentation; turnNavigationRequest?: ChatTurnNavigationRequest };
+> & { conversationInfo?: ReactNode; presentation?: ChatPresentation; starterPresentation?: ChatStarterPresentation; turnNavigationRequest?: ChatTurnNavigationRequest; defaultThinking?: ChatThinkingSelection };
 
 export function ChatRouteAdapter({
+  conversationInfo,
+  presentation,
   starterPresentation,
   turnNavigationRequest,
+  defaultThinking,
   starterProjectSelection,
   activeProject,
   activeWorkspace,
@@ -181,8 +184,11 @@ export function ChatRouteAdapter({
     return result;
   };
   const conversation: ChatConversationSurfaceModel = {
+    conversationInfo,
+    presentation,
     starterPresentation,
     turnNavigationRequest,
+    defaultThinking,
     starterProjectSelection,
     starterLocationSelection: starterLocation.selection,
     activeTurnId: runtime.activeTurnId,

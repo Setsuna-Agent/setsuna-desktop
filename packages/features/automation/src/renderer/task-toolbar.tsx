@@ -1,6 +1,6 @@
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { IconButtonProps } from '@setsuna-desktop/renderer-ui';
-import { Pause, Play, RotateCw, Settings2, Trash2 } from 'lucide-react';
+import { Pause, Play, RotateCw, Settings, Trash2 } from 'lucide-react';
 import type { AutomationTask } from '../contracts/index.js';
 import type { AutomationTaskActions } from './useAutomationTaskActions.js';
 
@@ -22,7 +22,7 @@ export function createAutomationToolbar(
     actions: [
       {
         id: 'edit', label: t('feature.automation.edit'), disabled: busy,
-        onClick: () => actions.edit(task), children: <Settings2 />,
+        onClick: () => actions.edit(task), children: <Settings />,
       },
       {
         id: 'status', label: t(task.status === 'active' ? 'feature.automation.pause' : 'feature.automation.resume'), disabled: busy,

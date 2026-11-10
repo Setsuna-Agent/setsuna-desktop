@@ -46,7 +46,7 @@ export function ProjectIconPicker({ value, disabled, onChange }: Readonly<{
           </div>
         </>
       )}>
-      <IconButton className="desktop-project-editor__icon" label={t('sidebar.changeProjectIcon')} disabled={disabled}>
+      <IconButton label={t('sidebar.changeProjectIcon')} disabled={disabled}>
         <ProjectIcon icon={value} size={16} />
       </IconButton>
     </Popover>

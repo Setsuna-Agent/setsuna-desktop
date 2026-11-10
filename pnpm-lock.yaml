@@ -53,6 +53,7 @@ importers:
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-approval-review': workspace:*
       '@setsuna-desktop/feature-artifact': workspace:*
+      '@setsuna-desktop/feature-assistants': workspace:*
       '@setsuna-desktop/feature-automation': workspace:*
       '@setsuna-desktop/feature-browser': workspace:*
       '@setsuna-desktop/feature-collaboration': workspace:*
@@ -154,6 +155,7 @@ importers:
       '@setsuna-desktop/contracts': link:packages/contracts
       '@setsuna-desktop/feature-approval-review': link:packages/features/approval-review
       '@setsuna-desktop/feature-artifact': link:packages/features/artifact
+      '@setsuna-desktop/feature-assistants': link:packages/features/assistants
       '@setsuna-desktop/feature-automation': link:packages/features/automation
       '@setsuna-desktop/feature-browser': link:packages/features/browser
       '@setsuna-desktop/feature-collaboration': link:packages/features/collaboration
@@ -253,6 +255,7 @@ importers:
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-approval-review': workspace:*
       '@setsuna-desktop/feature-artifact': workspace:*
+      '@setsuna-desktop/feature-assistants': workspace:*
       '@setsuna-desktop/feature-automation': workspace:*
       '@setsuna-desktop/feature-browser': workspace:*
       '@setsuna-desktop/feature-collaboration': workspace:*
@@ -288,6 +291,7 @@ importers:
       '@setsuna-desktop/contracts': link:../contracts
       '@setsuna-desktop/feature-approval-review': link:../features/approval-review
       '@setsuna-desktop/feature-artifact': link:../features/artifact
+      '@setsuna-desktop/feature-assistants': link:../features/assistants
       '@setsuna-desktop/feature-automation': link:../features/automation
       '@setsuna-desktop/feature-browser': link:../features/browser
       '@setsuna-desktop/feature-collaboration': link:../features/collaboration
@@ -350,6 +354,24 @@ importers:
       react: ^18.3.1
     dependencies:
       '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
+      '@setsuna-desktop/renderer-ui': link:../../renderer-ui
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
+
+  packages/features/assistants:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-automation': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/renderer-contracts': workspace:*
+      '@setsuna-desktop/renderer-ui': workspace:*
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-automation': link:../automation
       '@setsuna-desktop/feature-core': link:../../feature-core
       '@setsuna-desktop/renderer-contracts': link:../../renderer-contracts
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui

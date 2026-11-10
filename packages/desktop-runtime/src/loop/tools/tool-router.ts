@@ -90,6 +90,8 @@ export type RuntimeToolRouterOptions = {
   context: RuntimeToolExecutionContext;
   approvalPolicy: RuntimeConfigState['approvalPolicy'];
   allowTool?(tool: RuntimeToolDefinition): boolean;
+  /** Set when a host confined this turn to its own tools; runtime feature tools must not run either. */
+  exclusiveScope?: boolean;
   strictApprovalRequiresSerial?: boolean;
   toolResultStore?: ToolResultStore;
   programsEnabled?: boolean;
@@ -143,6 +145,11 @@ export class RuntimeToolRouter {
       ? [] : (await options.pluginStore?.listPlugins())?.plugins ?? [];
     return new RuntimeToolRouter(options,
       catalogTools.map((tool) => withToolDiscoverySource(tool, profiles.get(tool.name)?.plugin, plugins)), profiles, plugins);
+  }
+
+  /** Collaboration, Goal and App Server dynamic tools are withheld from exclusively scoped turns. */
+  get withholdsRuntimeFeatureTools(): boolean {
+    return this.options.exclusiveScope === true;
   }
 
   /** 本次请求实际下发给模型的完整可见工具目录。 */

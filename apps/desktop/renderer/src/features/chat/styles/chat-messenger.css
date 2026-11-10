@@ -1,0 +1,71 @@
+.desktop-chat-panel--messenger .chat-main-conversation--with-bottom-sender {
+  --chat-message-bottom-gap: 12px;
+}
+
+.desktop-chat-panel--messenger .chat-bubble-list {
+  gap: 12px;
+}
+
+.chat-message-timestamp {
+  align-self: center;
+  margin-block: 8px 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.desktop-chat-panel--messenger .chat-user-turn {
+  width: 90%;
+}
+
+.desktop-chat-panel--messenger .chat-ai-bubble.sd-message {
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: 90%;
+}
+
+.desktop-chat-panel--messenger .chat-ai-bubble .sd-message__body {
+  flex: 0 1 auto;
+  width: auto;
+}
+
+.desktop-chat-panel--messenger .chat-ai-bubble .sd-message__content {
+  padding: 10px 16px;
+  border-radius: 22px;
+  background: var(--app-surface-muted);
+}
+
+.desktop-chat-panel--messenger .chat-user-bubble {
+  --chat-message-user-bg: var(--app-primary);
+}
+
+.desktop-chat-panel--messenger .chat-user-bubble .sd-message__content {
+  padding: 8px 16px;
+  border-radius: 22px;
+  color: var(--app-primary-text);
+}
+
+.desktop-chat-panel--messenger .chat-user-bubble--with-attachments .sd-message__content {
+  padding: 0;
+  background: transparent;
+}
+
+.desktop-chat-panel--messenger .chat-user-bubble--with-attachments .chat-user-message-content__text {
+  padding: 8px 16px;
+  border-radius: 22px;
+}
+
+.desktop-chat-panel--messenger .chat-bubble-item .sd-message__footer {
+  margin-block-start: 2px;
+}
+
+.chat-messenger-reply {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.desktop-chat-panel--messenger .chat-starter {
+  padding-block: 32px;
+}

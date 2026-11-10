@@ -83,6 +83,7 @@
     "@setsuna-desktop/contracts": "workspace:*",
     "@setsuna-desktop/feature-approval-review": "workspace:*",
     "@setsuna-desktop/feature-artifact": "workspace:*",
+    "@setsuna-desktop/feature-assistants": "workspace:*",
     "@setsuna-desktop/feature-automation": "workspace:*",
     "@setsuna-desktop/feature-browser": "workspace:*",
     "@setsuna-desktop/feature-collaboration": "workspace:*",

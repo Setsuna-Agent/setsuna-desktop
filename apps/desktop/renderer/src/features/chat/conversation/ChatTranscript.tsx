@@ -49,7 +49,9 @@ import { createChatMessageNavigation } from './navigation/chatMessageNavigation.
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 import { StreamingScrollPinProvider } from './StreamingScrollPinProvider.js';
 import { ChatThreadProvider } from './ChatThreadProvider.js';
-import type { AnswerApprovalHandler, WorkHistoryExpandedChangeHandler } from './chat-workspace-types.js';
+import type { AnswerApprovalHandler, ChatPresentation, WorkHistoryExpandedChangeHandler } from './chat-workspace-types.js';
+import { ChatMessageTimestamp } from './messenger/ChatMessageTimestamp.js';
+import { messengerDisplayItems, messengerItemTimestamp } from './messenger/chatMessengerMessages.js';
 import {
   activeAssistantRunItemId,
   chatDisplayItemRenderKey,
@@ -84,6 +86,7 @@ type ChatTranscriptMutationProps =
     };
 
 type ChatTranscriptProps = ChatTranscriptMutationProps & {
+  presentation?: ChatPresentation;
   turnNavigationRequest?: ChatTurnNavigationRequest;
   findRequest?: number;
   onFindRequestConsumed?(requestId: number): void;
@@ -114,11 +117,12 @@ type ChatTranscriptProps = ChatTranscriptMutationProps & {
  * contentRef 由父级注入；节点挂载/替换通过回调通知外层环境面板重绑尺寸监听。
  */
 export function ChatTranscript({
+  presentation = 'workspace',
   turnNavigationRequest,
   findRequest = 0,
   onFindRequestConsumed,
   activeTurnId,
-  contextCompactionRunning,
+  contextCompactionRunning: compactionRunning,
   contentRef,
   onContentNodeChange,
   currentThread,
@@ -141,6 +145,8 @@ export function ChatTranscript({
   scrollToBottomRef,
 }: ChatTranscriptProps) {
   const { t } = useI18n();
+  const messenger = presentation === 'messenger';
+  const contextCompactionRunning = !messenger && compactionRunning;
   const attachContent = useCallback((node: HTMLDivElement | null) => {
     contentRef.current = node;
     onContentNodeChange?.(node);
@@ -156,32 +162,33 @@ export function ChatTranscript({
   const pendingMessageIds = useMemo(() => new Set(pendingMessages.map((message) => message.id)), [pendingMessages]);
   const displayItems = useMemo(() => {
     const threadId = currentThread?.id ?? null;
-    const next = createChatDisplayItems(pendingMessages.length ? [...messages, ...pendingMessages] : messages);
+    const transcriptItems = createChatDisplayItems(pendingMessages.length ? [...messages, ...pendingMessages] : messages);
+    const next = messenger ? messengerDisplayItems(transcriptItems) : transcriptItems;
     const items = displayItemsRef.current.threadId === threadId
       ? reconcileChatDisplayItems(displayItemsRef.current.items, next)
       : next;
     displayItemsRef.current = { items, threadId };
     return items;
-  }, [currentThread?.id, messages, pendingMessages]);
+  }, [currentThread?.id, messages, messenger, pendingMessages]);
   // Pending submissions cannot participate in operations against persisted message IDs.
   const mutableDisplayItems = useMemo(() => displayItems.filter((item) => !pendingMessageIds.has(item.id)), [displayItems, pendingMessageIds]);
   const historyScrollAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const pluginUsesByTurnIdRef = useRef<ReturnType<typeof runtimePluginUsesByTurn>>(new Map());
   const pluginUsesByTurnId = useMemo(
     () => {
-      const next = runtimePluginUsesByTurn(historyThread, skills, plugins);
+      const next = messenger ? new Map() : runtimePluginUsesByTurn(historyThread, skills, plugins);
       const reconciled = reconcileRuntimePluginUsesByTurn(pluginUsesByTurnIdRef.current, next);
       pluginUsesByTurnIdRef.current = reconciled;
       return reconciled;
     },
-    [historyThread, plugins, skills],
+    [historyThread, messenger, plugins, skills],
   );
   const hookUsesByTurnIdRef = useRef(new Map<string, RuntimeHookUse[]>());
   const hookUsesByTurnId = useMemo(() => {
-    const next = runtimeHookUsesByTurn(historyThread, hookUsesByTurnIdRef.current);
+    const next = messenger ? new Map<string, RuntimeHookUse[]>() : runtimeHookUsesByTurn(historyThread, hookUsesByTurnIdRef.current);
     hookUsesByTurnIdRef.current = next;
     return next;
-  }, [historyThread]);
+  }, [historyThread, messenger]);
   const {
     actionError,
     allDeleteSelected,
@@ -268,7 +275,7 @@ export function ChatTranscript({
   const activeAssistantItemId = useMemo(() => activeAssistantRunItemId(renderedDisplayItems, activeTurnId), [activeTurnId, renderedDisplayItems]);
   const activeAssistantVisible = Boolean(activeAssistantItemId);
   const activeUserVisible = useMemo(() => Boolean(activeTurnId && renderedDisplayItems.some((item) => item.type === 'user' && item.message.turnId === activeTurnId)), [activeTurnId, renderedDisplayItems]);
-  const showActiveTurnPlaceholder = Boolean(activeTurnId && !contextCompactionRunning && !activeAssistantVisible);
+  const showActiveTurnPlaceholder = Boolean(!messenger && activeTurnId && !contextCompactionRunning && !activeAssistantVisible);
   const activePlaceholderUserItemId = useMemo(() => {
     if (!showActiveTurnPlaceholder || !activeTurnId) return null;
     return [...renderedDisplayItems].reverse().find((item) => item.type === 'user' && item.message.turnId === activeTurnId)?.id ?? null;
@@ -371,9 +378,11 @@ export function ChatTranscript({
                         onShowAll={showEarlierMessages}
                       />
                     ) : null}
-                    {renderedDisplayItems.map((item) => (
+                    {renderedDisplayItems.map((item, index) => (
                       <ChatThreadProvider key={chatDisplayItemRenderKey(item)} threadId={currentThread?.id ?? null} fileChangeStates={currentThread?.fileChangeStates} fileChangeGroups={messageHistory.fileChangeGroups}>
+                        {messenger ? <ChatMessageTimestamp value={messengerItemTimestamp(item)} previous={messengerItemTimestamp(renderedDisplayItems[index - 1])} /> : null}
                         <MessageItem
+                          presentation={presentation}
                           {...messageMutationHandlers}
                           activeAssistantItemId={activeAssistantItemId}
                           activeTurnId={activeTurnId}
@@ -395,7 +404,7 @@ export function ChatTranscript({
                           showThinkingInTranscript={showThinkingInTranscript}
                           workHistoryExpanded={userTurnWorkHistoryExpanded(item, assistantItemIdByTurnId, expandedWorkHistoryItemIds)}
                         />
-                        {item.type === 'user' && (item.id === activePlaceholderUserItemId || (
+                        {!messenger && item.type === 'user' && (item.id === activePlaceholderUserItemId || (
                           item.message.turnId && !assistantItemIdByTurnId.has(item.message.turnId)
                           && hookUsesByTurnId.has(item.message.turnId)
                         )) ? (
@@ -437,7 +446,7 @@ export function ChatTranscript({
           onScrollToOffset={scrollToReadingOffset}
         />
       ) : null}
-      {!showEmptyStarter && !deleteMode && !editingMessageId ? (
+      {!messenger && !showEmptyStarter && !deleteMode && !editingMessageId ? (
         <ChatMessageRail
           key={currentThread?.id ?? 'no-thread'}
           items={navigationItems}

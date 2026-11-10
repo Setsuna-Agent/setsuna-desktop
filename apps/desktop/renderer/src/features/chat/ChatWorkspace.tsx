@@ -20,6 +20,7 @@ import {
   chatComposerSlot,
   chatConversationSlot,
   chatDetailsSlot,
+  type ChatThinkingSelection,
   type ChatTurnNavigationRequest,
 } from '@setsuna-desktop/renderer-contracts/chat';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -42,7 +43,7 @@ import { ChatModelSetupNotice } from './ChatModelSetupNotice.js';
 import type { ChatModelSelectionHandler } from './chatModelSelection.js';
 import { useConversationOverviewLayout } from './conversation/ChatWorkspaceScroll.js';
 import { ConversationOverviewPanel } from './conversation/ConversationOverviewPanel.js';
-import type { AnswerApprovalHandler, ChatStarterPresentation } from './conversation/chat-workspace-types.js';
+import type { AnswerApprovalHandler, ChatPresentation, ChatStarterPresentation } from './conversation/chat-workspace-types.js';
 import { ChatStarter, ChatStarterContent } from './conversation/ChatStarter.js';
 import { activeModelContextBudget, contextTokenUsageFromThread } from './conversation/chatContextUsage.js';
 import { conversationOverviewFromMessages } from './conversation/chatConversationOverview.js';
@@ -56,7 +57,10 @@ import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { RendererOwnedSingleSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 
 export function ChatWorkspace({
+  conversationInfo,
+  presentation = 'workspace',
   turnNavigationRequest,
+  defaultThinking,
   activeTurnId,
   activeProject,
   canClearContext,
@@ -110,7 +114,10 @@ export function ChatWorkspace({
   plugins = [],
   variant = 'main',
 }: {
+  conversationInfo?: ReactNode;
+  presentation?: ChatPresentation;
   turnNavigationRequest?: ChatTurnNavigationRequest;
+  defaultThinking?: ChatThinkingSelection;
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
   canClearContext: boolean;
@@ -167,6 +174,7 @@ export function ChatWorkspace({
   plugins?: RuntimePluginSummary[];
   variant?: 'main' | 'side';
 }) {
+  const messenger = presentation === 'messenger';
   const messageHistory = useThreadMessageHistory(client, currentThread);
   const messages = messageHistory.messages;
   const { pendingMessages, sendInput, submitting } = useChatSendPresentation({
@@ -187,13 +195,14 @@ export function ChatWorkspace({
     activeModelContextBudget(config, historyThread),
   ), [config, historyThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
-  const conversationOverview = useMemo(() => (variant === 'main'
+  const conversationOverview = useMemo(() => (variant === 'main' && !messenger
     ? conversationOverviewFromMessages(messages, activeTurnId, messageHistory.fileChangeGroups) : null),
-  [activeTurnId, messageHistory.fileChangeGroups, messages, variant]);
+  [activeTurnId, messageHistory.fileChangeGroups, messages, messenger, variant]);
   const overviewLayout = useConversationOverviewLayout(conversationRef, contentNode);
   const overviewVisible = conversationOverviewVisibility === 'shown'
     || (conversationOverviewVisibility === 'auto' && overviewLayout !== 'hidden');
   const overviewShiftsContent = overviewVisible && overviewLayout === 'shifted';
+  const hasOverview = Boolean(conversationInfo || conversationOverview);
   const starterSourceVisible = variant === 'main' && !activeTurnId && !pendingMessages.length
     && (starterPresentation?.visible ?? messages.length === 0);
   const starterIdentity = currentThread?.id ?? composerKey;
@@ -220,12 +229,12 @@ export function ChatWorkspace({
   const conversationClassName = [
     'chat-main-conversation',
     showEmptyStarter ? '' : 'chat-main-conversation--with-transcript',
-    showEmptyStarter || deleteModeActive ? '' : 'chat-main-conversation--with-bottom-sender',
-    conversationOverview && overviewShiftsContent ? 'chat-main-conversation--overview-shifted' : '',
+    (showEmptyStarter && !messenger) || deleteModeActive ? '' : 'chat-main-conversation--with-bottom-sender',
+    hasOverview && overviewShiftsContent ? 'chat-main-conversation--overview-shifted' : '',
   ].filter(Boolean).join(' ');
   useEffect(() => {
-    onConversationOverviewRenderedChange?.(Boolean(conversationOverview && overviewVisible));
-  }, [conversationOverview, onConversationOverviewRenderedChange, overviewVisible]);
+    onConversationOverviewRenderedChange?.(hasOverview && overviewVisible);
+  }, [hasOverview, onConversationOverviewRenderedChange, overviewVisible]);
   const handleSend = useCallback<NonNullable<typeof onSend>>(
     async (value, options) => {
       // 发送消息代表用户重新关注最新进度；同时恢复 sticky，后续流式内容会持续贴底。
@@ -252,6 +261,7 @@ export function ChatWorkspace({
         surfaceInstanceId: composerSurfaceInstanceId,
         renderDefault: () => (
           <ChatComposer
+            presentation={presentation}
             key={composerKey}
             preferenceKey={composerKey}
             attachmentStore={attachmentStore}
@@ -262,6 +272,7 @@ export function ChatWorkspace({
             contextCompacting={contextCompactionRunning}
             contextUsage={contextUsage}
             config={config}
+            defaultThinking={defaultThinking}
             currentThread={historyThread}
             draft={draft}
             draftSkillReferences={draftSkillReferences}
@@ -306,7 +317,7 @@ export function ChatWorkspace({
     />
   );
   return (
-    <main className={`chat-main-panel desktop-chat-panel ${variant === 'side' ? 'desktop-chat-panel--side' : ''}`}>
+    <main className={`chat-main-panel desktop-chat-panel ${variant === 'side' ? 'desktop-chat-panel--side' : ''} ${messenger ? 'desktop-chat-panel--messenger' : ''}`}>
       <div className="chat-main-workspace">
         <div className={conversationClassName} ref={conversationRef}>
           {showEmptyStarter ? (
@@ -314,7 +325,7 @@ export function ChatWorkspace({
               <div className="chat-content-frame" ref={setContentNode}>
                 <ChatStarter
                   key={starterKey}
-                  composer={composer(true)}
+                  composer={messenger ? null : composer(true)}
                   contextBar={!starterPresentation && (!currentThread || starterSettlePhase) ? starterControls : undefined}
                   footer={starterPresentation?.footer}
                   settleComposerHeight={starterComposerHeight}
@@ -335,6 +346,7 @@ export function ChatWorkspace({
             </div>
           ) : conversation(() => (
             <ChatTranscript
+              presentation={presentation}
               turnNavigationRequest={turnNavigationRequest}
               findRequest={findInChatRequest}
               onFindRequestConsumed={onFindInChatRequestConsumed}
@@ -360,15 +372,15 @@ export function ChatWorkspace({
               onOpenFileReview={onOpenFileReview}
             />
           ))}
-          {currentThread && !currentThread.parentThreadId ? <CollaborationApprovals key={currentThread.id} parentThreadId={currentThread.id} client={client} /> : null}
-          {overviewVisible && conversationOverview ? (
-            <div className="chat-conversation-overview">
+          {!messenger && currentThread && !currentThread.parentThreadId ? <CollaborationApprovals key={currentThread.id} parentThreadId={currentThread.id} client={client} /> : null}
+          {overviewVisible && hasOverview ? (
+            <div className={`chat-conversation-overview ${conversationInfo ? 'chat-conversation-overview--custom' : ''}`}>
               <RendererOwnedSingleSlot
                 instanceKey={surfaceInstanceId}
                 slot={chatDetailsSlot}
                 props={{
                   surfaceInstanceId,
-                  renderDefault: () => (
+                  renderDefault: () => conversationInfo ? <div className="chat-conversation-overview-panel">{conversationInfo}</div> : conversationOverview ? (
                     <ConversationOverviewPanel
                       activeProject={activeProject}
                       overview={conversationOverview}
@@ -378,12 +390,12 @@ export function ChatWorkspace({
                       onOpenReview={onOpenFileReview}
                       currentThread={currentThread}
                     />
-                  ),
+                  ) : null,
                 }}
               />
             </div>
           ) : null}
-          {showEmptyStarter || deleteModeActive ? null : composer()}
+          {(showEmptyStarter && !messenger) || deleteModeActive ? null : composer()}
         </div>
       </div>
     </main>

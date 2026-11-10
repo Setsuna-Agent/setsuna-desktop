@@ -84,9 +84,10 @@ export function useChatComposerModeController({
       if (current.modelKey !== modelCapabilities.preferenceKey) {
         return createModelThinkingSelectionState(modelCapabilities, defaultThinking);
       }
-      // Project selection can reuse a new-chat session with the same model.
-      // Refresh its defaults until the user chooses or the conversation starts.
-      if (!currentThreadId && !current.explicitlySelected && (
+      // Explicit feature settings also apply to existing conversations. Project draft defaults
+      // still stop following changes once the user has made a choice or started a conversation.
+      const followsDefaults = currentThreadId ? Boolean(defaultThinking) : !current.explicitlySelected;
+      if (followsDefaults && (
         current.defaults?.enabled !== defaultThinking?.enabled
         || current.defaults?.effort !== defaultThinking?.effort
       )) {
