@@ -10,8 +10,8 @@ export function AssistantQqSecretField({ disabled, ...options }: AssistantQqSecr
   const unavailable = disabled || secret.action !== null || (!options.value.trim() && !options.configured);
   const revealLabel = t(secret.revealed ? 'feature.assistants.qqSecretHide' : 'feature.assistants.qqSecretShow');
   const copyLabel = t(secret.copied ? 'feature.assistants.qqSecretCopied' : 'feature.assistants.qqSecretCopy');
-  return <div className="assistant-form__row">
-    <label htmlFor={inputId}>{t('feature.assistants.qqSecret')}</label>
+  return <div className="sd-form-field">
+    <label className="sd-form-label" htmlFor={inputId}>{t('feature.assistants.qqSecret')}</label>
     <div className="assistant-form__secret">
       <TextField id={inputId} disabled={disabled} type={secret.revealed ? 'text' : 'password'}
         autoComplete="off" spellCheck={false} maxLength={256} value={secret.inputValue}

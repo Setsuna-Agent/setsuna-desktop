@@ -51,7 +51,7 @@ export function PluginAppAppearanceDialog({ appearance, defaultName, pluginName,
             onClose();
             onViewPlugin();
           }}>{t('pluginUi.linkedPlugin', { name: pluginName })}</button>
-          <Button type="button" variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
           <Button type="submit" variant="primary" disabled={!name.trim() || reading}>{t('common.save')}</Button>
         </div>
       </form>

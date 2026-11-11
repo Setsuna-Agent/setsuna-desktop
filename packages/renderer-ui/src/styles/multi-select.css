@@ -1,0 +1,81 @@
+.sd-multi-select-field__value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sd-multi-select-field__count {
+  flex: 0 0 auto;
+  padding-inline: 6px;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-secondary);
+  background: var(--app-surface-muted);
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.sd-multi-select-field__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.sd-multi-select-menu.sd-popover {
+  display: flex;
+  padding: 8px;
+  width: min(
+    calc(var(--radix-popover-content-available-width) * var(--app-page-scale-inverse, 1)),
+    max(calc(var(--radix-popover-trigger-width) * var(--app-page-scale-inverse, 1)), 240px)
+  );
+  max-height: min(320px, calc(var(--radix-popover-content-available-height) * var(--app-page-scale-inverse, 1)));
+  animation: none;
+}
+
+.sd-multi-select-menu__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sd-multi-select-menu__body > .sd-field { flex: 0 0 auto; }
+
+.sd-multi-select-menu__options {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sd-multi-select-menu__option {
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  border-radius: var(--app-menu-item-radius);
+  font-size: 13px;
+}
+
+.sd-multi-select-menu__option:not(.is-disabled):is(:hover, :focus-within) {
+  background: var(--app-menu-highlight-bg);
+}
+
+.sd-multi-select-menu__option > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-multi-select-menu__empty {
+  padding: 8px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}

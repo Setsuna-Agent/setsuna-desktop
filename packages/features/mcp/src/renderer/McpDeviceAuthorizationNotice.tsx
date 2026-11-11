@@ -31,7 +31,7 @@ export function McpDeviceAuthorizationNotice({ challenge, syncingTools, openExte
             <ui.Button variant="primary" disabled={authorization.pending} icon={<ExternalLink size={15} />} onClick={() => void authorization.open()}>
               {translate('feature.mcp.device.open')}
             </ui.Button>
-            <ui.Button variant="ghost" onClick={onCancel}>{translate('feature.mcp.device.cancel')}</ui.Button>
+            <ui.Button variant="secondary" onClick={onCancel}>{translate('feature.mcp.device.cancel')}</ui.Button>
           </div>
           <div className="desktop-mcp-device-authorization__footer">
             <span><Loader2 size={13} className="is-spinning" aria-hidden="true" />{translate('feature.mcp.awaitingAuthorization')}</span>
@@ -40,7 +40,7 @@ export function McpDeviceAuthorizationNotice({ challenge, syncingTools, openExte
         </>
       ) : <>
         <span className="desktop-mcp-device-authorization__preparing" role="status"><Loader2 size={18} className="is-spinning" aria-hidden="true" />{translate(syncingTools ? 'feature.mcp.syncingTools' : 'feature.mcp.awaitingAuthorization')}</span>
-        <ui.Button variant="ghost" onClick={onCancel}>{translate('feature.mcp.device.cancel')}</ui.Button>
+        <ui.Button variant="secondary" onClick={onCancel}>{translate('feature.mcp.device.cancel')}</ui.Button>
       </>}
     </div>
   );

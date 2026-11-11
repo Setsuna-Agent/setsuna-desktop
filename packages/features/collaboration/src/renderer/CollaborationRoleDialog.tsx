@@ -1,6 +1,6 @@
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { SettingsViewUi } from '@setsuna-desktop/renderer-contracts/settings';
-import { ConfirmDialogTrigger } from '@setsuna-desktop/renderer-ui';
+import { ConfirmDialogTrigger, TextField } from '@setsuna-desktop/renderer-ui';
 import { useId, useState } from 'react';
 import { BUILTIN_COLLABORATION_ROLES, type CollaborationAgentRole, type CollaborationModelOption } from '../contracts/index.js';
 import { CollaborationReasoningSelect } from './CollaborationReasoningSelect.js';
@@ -25,6 +25,7 @@ export function CollaborationRoleDialog({
   const [readingAvatar, setReadingAvatar] = useState(false);
   const busy = saving || readingAvatar;
   const formId = useId();
+  const nameId = useId();
   const patch = (value: Partial<CollaborationAgentRole>) => setDraft((current) => ({ ...current, ...value }));
   const requestClose = () => { if (!saving) onClose(); };
   const builtin = BUILTIN_COLLABORATION_ROLES.some((name) => name === role.name);
@@ -61,14 +62,13 @@ export function CollaborationRoleDialog({
         // Renaming a built-in creates a custom role, so retain its currently visible text.
         void onSave(draft.name.trim() === role.name ? draft : { ...draft, description, instructions });
       }}>
-        <div className="collaboration-role-dialog__identity">
-          <CollaborationAvatarPicker value={draft.avatar} seed={draft.name || 'default'} disabled={busy} translate={t}
-            onChange={(avatar) => patch({ avatar })} onBusyChange={setReadingAvatar} />
-          <label className="collaboration-role-dialog__field">
-            <span>{t('feature.collaboration.settings.name')}</span>
-            <ui.TextField value={draft.name} autoFocus={creating} disabled={busy || role.name === 'default'}
-              required maxLength={64} spellCheck={false} onChange={(event) => patch({ name: event.target.value })} />
-          </label>
+        <div className="collaboration-role-dialog__field">
+          <label htmlFor={nameId}>{t('feature.collaboration.settings.name')}</label>
+          <TextField id={nameId} className="collaboration-role-dialog__name" value={draft.name}
+            autoFocus={creating} disabled={busy || role.name === 'default'}
+            required maxLength={64} spellCheck={false} onChange={(event) => patch({ name: event.target.value })}
+            leadingControl={<CollaborationAvatarPicker value={draft.avatar} seed={draft.name || 'default'}
+              disabled={busy} translate={t} onChange={(avatar) => patch({ avatar })} onBusyChange={setReadingAvatar} />} />
         </div>
         <label className="collaboration-role-dialog__field">
           <span>{t('feature.collaboration.settings.description')}</span>

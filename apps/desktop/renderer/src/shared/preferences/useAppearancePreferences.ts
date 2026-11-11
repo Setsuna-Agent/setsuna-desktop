@@ -5,8 +5,8 @@ export const fontSizeOptions = ['80', '85', '90', '95', '100', '105', '110', '11
 export type FontSizeMode = typeof fontSizeOptions[number];
 
 export const fontWeightOptions = [
-  { label: '较细（默认）', value: '400' },
-  { label: '标准', value: '500' },
+  { label: '较细', value: '400' },
+  { label: '标准（默认）', value: '500' },
   { label: '较粗', value: '600' },
 ] as const;
 export type FontWeightMode = typeof fontWeightOptions[number]['value'];
@@ -25,6 +25,12 @@ export const fontFamilyOptions = [
     label: 'System Default',
     value: 'system',
     css: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif',
+    platforms: ['all'],
+  },
+  {
+    label: 'Figtree',
+    value: 'figtree',
+    css: '"Figtree", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif',
     platforms: ['all'],
   },
   {
@@ -221,6 +227,8 @@ export type FontFamilyOption = typeof fontFamilyOptions[number];
 const fontSizeStorageKey = 'setusna-font-size';
 const fontFamilyStorageKey = 'setusna-font-family';
 const fontWeightStorageKey = 'setusna-font-weight';
+const defaultFontFamily: FontFamilyMode = 'system';
+const defaultFontWeight: FontWeightMode = '500';
 const appearanceChangeEventName = 'setsuna-appearance-change';
 
 const legacyFontSizeMap: Record<string, FontSizeMode> = {
@@ -301,13 +309,13 @@ function getInitialFontSize(): FontSizeMode {
 function getInitialFontFamily(): FontFamilyMode {
   const saved = readBrowserStorageValue(fontFamilyStorageKey);
   if (fontFamilyOptions.some((item) => item.value === saved)) return saved as FontFamilyMode;
-  return saved ? legacyFontFamilyMap[saved] ?? 'system' : 'system';
+  return saved ? legacyFontFamilyMap[saved] ?? defaultFontFamily : defaultFontFamily;
 }
 
 function getInitialFontWeight(): FontWeightMode {
   const saved = readBrowserStorageValue(fontWeightStorageKey);
   if (fontWeightOptions.some((item) => item.value === saved)) return saved as FontWeightMode;
-  return '400';
+  return defaultFontWeight;
 }
 
 function applyAppearance(fontSize: FontSizeMode, fontFamily: FontFamilyMode, fontWeight: FontWeightMode): void {

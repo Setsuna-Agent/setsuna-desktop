@@ -1,4 +1,5 @@
 import {
+  DEFAULT_VIRTUAL_FILE_METRICS,
   getSingularPatch,
   setLanguageOverride,
   type FileDiff as PierreFileDiff,
@@ -33,6 +34,7 @@ import { useCodeViewFind } from './useCodeViewFind.js';
 import { useDiffFind } from './useDiffFind.js';
 import scrollbarCSS from '../styles/scrollbars.css?raw';
 import contentFindCSS from '../styles/content-find-highlights.css?raw';
+import diffCSS from '../styles/code-diff.css?raw';
 
 type CodeFileViewProps = {
   cacheKey?: string;
@@ -74,6 +76,9 @@ export const pierreSurfaceStyle = {
   '--diffs-font-size': '12px',
   '--diffs-line-height': '20px',
 } as CSSProperties;
+
+// Match code-diff.css so virtual scrolling uses the visible first-line position.
+const pierreDiffMetrics = { ...DEFAULT_VIRTUAL_FILE_METRICS, paddingTop: 0 };
 
 export function CodeFileView({
   cacheKey,
@@ -226,7 +231,7 @@ function CodePatchSurface({ className, fileDiff, layout, lineAnnotations, onPost
   }, [findPostRender, onPostRender]);
   const options = usePierreDiffOptions<ReactNode>({ layout, onPostRender: postRender, showHeader, wrap });
   return <FileDiff className={['setsuna-pierre-surface', className].filter(Boolean).join(' ')}
-    disableWorkerPool fileDiff={fileDiff} lineAnnotations={lineAnnotations} options={options}
+    disableWorkerPool fileDiff={fileDiff} lineAnnotations={lineAnnotations} metrics={pierreDiffMetrics} options={options}
     renderAnnotation={(annotation) => annotation.metadata} style={pierreSurfaceStyle} />;
 }
 
@@ -287,7 +292,7 @@ export function usePierreDiffOptions<LAnnotation = undefined>({
     overflow: wrap ? 'wrap' as const : 'scroll' as const,
     theme: appearance.themes,
     themeType: appearance.resolvedTheme,
-    unsafeCSS: `${scrollbarCSS}\n${contentFindCSS}`,
+    unsafeCSS: `${scrollbarCSS}\n${contentFindCSS}\n${diffCSS}`,
   }), [appearance.resolvedTheme, appearance.themes, layout, onPostRender, showHeader, wrap]);
 }
 

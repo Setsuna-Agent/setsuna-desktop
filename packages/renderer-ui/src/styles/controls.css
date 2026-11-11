@@ -1,4 +1,4 @@
-/* beUI's compact product controls. Geometry and state styling have one owner. */
+/* Compact desktop controls share the host's Neutral geometry and state tokens. */
 
 /* Layout defaults must yield to host rows/grids regardless of CSS import order. */
 :where(.sd-button) {
@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  gap: 6px;
+  gap: 8px;
   min-height: var(--app-control-height);
   padding: 5px 12px;
   border: 1px solid var(--app-border);
@@ -31,7 +31,7 @@
   text-decoration: none;
   white-space: nowrap;
   user-select: none;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+  transition: background var(--app-duration-fast) ease, border-color var(--app-duration-fast) ease, color var(--app-duration-fast) ease;
 }
 
 /* Press feedback only changes color so controls and popup anchors stay still. */
@@ -87,7 +87,8 @@
 
 :where(.sd-button--small) {
   min-height: 28px;
-  padding: 3px 9px;
+  padding: 3px 8px;
+  border-radius: var(--app-radius-sm);
 }
 
 .sd-button--small {
@@ -158,10 +159,10 @@
   width: 100%;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  padding: 6px 10px;
+  padding: 6px 12px;
   color: var(--app-text);
   background: var(--app-surface);
-  transition: border-color 150ms ease, background 150ms ease;
+  transition: border-color var(--app-duration-fast) ease, background var(--app-duration-fast) ease;
 }
 
 .sd-field, .sd-textarea {
@@ -340,7 +341,7 @@
   border-radius: 999px;
   background: var(--app-border-strong);
   flex-shrink: 0;
-  transition: background 160ms ease;
+  transition: background var(--app-duration-fast) ease;
 }
 
 .sd-switch[data-state='checked'] {

@@ -61,7 +61,7 @@ export function WorkspaceGitBranchCreateControl({
           ? <Loader2 className="chat-git-loading-icon" size={13} />
           : compact ? t('feature.review.git.create') : <Check size={13} />}
       </Button>
-      <Button variant="ghost" type="button" disabled={busy} onClick={onCancelCreate}>
+      <Button variant="secondary" type="button" disabled={busy} onClick={onCancelCreate}>
         {t('common.cancel')}
       </Button>
     </form>

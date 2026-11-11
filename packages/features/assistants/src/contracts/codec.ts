@@ -1,4 +1,4 @@
-import { normalizeBrandIconConfig } from '@setsuna-desktop/contracts';
+import { normalizeBrandIconConfig, normalizeWorkspaceProjectIcon } from '@setsuna-desktop/contracts';
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { automationScheduleCodec } from '@setsuna-desktop/feature-automation/contracts';
 import type {
@@ -232,7 +232,10 @@ function model(value: unknown): AssistantModel {
 
 function project(value: unknown): AssistantProject {
   const input = record(value);
-  return { id: identity(input.id), name: text(input.name, 'name', 512), path: text(input.path, 'path', 4_096), git: input.git === true };
+  return {
+    id: identity(input.id), name: text(input.name, 'name', 512), path: text(input.path, 'path', 4_096), git: input.git === true,
+    ...optional('icon', input.icon, normalizeWorkspaceProjectIcon),
+  };
 }
 
 function connector(value: unknown): AssistantConnectorStatus {

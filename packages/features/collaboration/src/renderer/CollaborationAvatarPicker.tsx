@@ -58,7 +58,7 @@ export function CollaborationAvatarPicker({ value, seed, disabled, translate: t,
           <Button size="small" disabled={disabled} className="collaboration-avatar-picker__upload"
             onClick={() => fileInput.current?.click()}><Upload size={14} />{t('feature.collaboration.avatar.upload')}</Button>
         </>}>
-        <IconButton className="collaboration-role-dialog__avatar" label={t('feature.collaboration.avatar.change')} disabled={disabled}>
+        <IconButton label={t('feature.collaboration.avatar.change')} disabled={disabled}>
           {avatar(value, 24)}
         </IconButton>
       </Popover>

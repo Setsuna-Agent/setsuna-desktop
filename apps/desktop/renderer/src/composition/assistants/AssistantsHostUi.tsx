@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconAvatarPicker } from '../../shared/ui/icon-avatars/IconAvatarPicker.js';
 import { PresetAvatar } from '../../shared/ui/icon-avatars/PresetAvatar.js';
+import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
 import { useIconAvatarDraft } from '../../shared/ui/icon-avatars/useIconAvatarDraft.js';
 import { FeatureModelPicker } from '../feature-ui/FeatureModelPicker.js';
 import { ASSISTANT_AVATAR_PRESETS, DEFAULT_ASSISTANT_AVATAR } from './assistant-avatar-presets.js';
@@ -50,4 +51,5 @@ export const assistantsHostUi: AssistantsHostUi = Object.freeze({
   Avatar: AssistantAvatar,
   AvatarField: AssistantAvatarField,
   ModelPicker: AssistantModelPicker,
+  ProjectIcon,
 });

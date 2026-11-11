@@ -14,8 +14,8 @@
 
 .sd-popover {
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
-  background: var(--app-surface);
+  border-radius: var(--app-radius-container);
+  background: var(--app-surface-overlay);
   box-shadow: var(--app-shadow-popover);
   color: var(--app-text);
   transform-origin: var(--radix-dropdown-menu-content-transform-origin, var(--radix-popover-content-transform-origin, center));
@@ -84,7 +84,7 @@
 }
 
 .sd-tooltip {
-  /* Rich titles inherit a readable palette on the tooltip's dark surface. */
+  /* Rich titles inherit a readable palette on the tooltip's inverted surface. */
   --app-text: var(--app-tooltip-text);
   --app-text-muted: color-mix(in srgb, var(--app-tooltip-text) 72%, transparent);
   --app-text-secondary: var(--app-text-muted);
@@ -95,7 +95,7 @@
   padding: 6px 10px;
   color: var(--app-text);
   background: var(--app-tooltip-bg);
-  border-radius: var(--app-radius-xl);
+  border-radius: var(--app-radius-sm);
   box-shadow: var(--app-tooltip-shadow);
   font-size: 12px;
   line-height: 18px;
@@ -134,8 +134,7 @@
   position: fixed;
   inset: 0;
   z-index: var(--app-z-dialog);
-  background: rgb(0 0 0 / 30%);
-  backdrop-filter: blur(3px);
+  background: var(--app-overlay-bg);
   animation: sd-fade-enter 160ms ease;
 }
 
@@ -154,8 +153,8 @@
   margin: 0;
   padding: 0;
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-xl);
-  background: var(--app-surface);
+  border-radius: var(--app-radius-container);
+  background: var(--app-surface-overlay);
   color: var(--app-text);
   box-shadow: var(--app-shadow-modal);
   font-family: var(--app-font-family);
@@ -266,7 +265,7 @@
   margin-top: 20px;
 }
 
-/* Dialog actions keep the full button shape, including borderless cancel actions. */
+/* Dialog action rows share the standard control corners. */
 :where(.sd-dialog__footer, .sd-dialog-form-actions) .sd-button:not(.sd-icon-button) {
   border-radius: var(--app-radius-control);
 }

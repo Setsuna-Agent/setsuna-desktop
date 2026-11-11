@@ -1,12 +1,18 @@
 .desktop-project-editor__body {
   display: grid;
-  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  align-items: start;
+  gap: 24px;
 }
 
-.desktop-project-editor__field {
-  display: grid;
-  min-width: 0;
-  gap: 7px;
+.desktop-project-editor__field-hint {
+  max-width: 100%;
+  margin-inline-start: auto;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  text-align: end;
 }
 
 .desktop-project-editor__defaults-mode {
@@ -59,47 +65,10 @@
   .desktop-project-editor__defaults-mode::before { transition: none; }
 }
 
-.desktop-project-editor__notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--app-primary) 20%, transparent);
-  border-radius: var(--app-radius-md);
-  color: var(--app-text-secondary);
-  background: color-mix(in srgb, var(--app-primary) 6%, var(--app-surface));
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.desktop-project-editor__notice > svg {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  color: var(--app-primary);
-}
-
-.desktop-project-editor__skills-list {
-  display: grid;
-  grid-auto-rows: min-content;
-  gap: 8px;
-  max-height: min(240px, 30vh);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.desktop-project-editor__field > span:first-child,
-.desktop-project-editor__field > label {
-  color: var(--app-text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-}
-
 .desktop-project-editor__directory {
   overflow: hidden;
   border: 1px solid var(--desktop-agent-subtle-divider);
   border-radius: var(--app-radius-lg);
-  background: var(--app-surface-subtle);
 }
 
 .desktop-project-editor__directory-row,

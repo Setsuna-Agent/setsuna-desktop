@@ -25,7 +25,7 @@ it('旧 QQ 入口恢复到原助理的共享对话，轮询和 StrictMode 不重
   const openConversation = vi.fn(async () => true);
   const page = (threadId: string) => <StrictMode><AssistantConversation service={service} threadId={threadId}
     openConversation={openConversation} renderConversation={() => null} renderToolbar={() => null} translate={(key) => key}
-    ui={{ Avatar: () => null, AvatarField: () => null, ModelPicker: () => null }} /></StrictMode>;
+    ui={{ Avatar: () => null, AvatarField: () => null, ModelPicker: () => null, ProjectIcon: () => null }} /></StrictMode>;
   const { rerender } = render(page('old-qq'));
   await waitFor(() => expect(openConversation).toHaveBeenCalledExactlyOnceWith('owner-shared'));
   rerender(page('owner-shared'));
@@ -53,7 +53,7 @@ it('信息面板中的提醒定位到同一聊天的执行轮次，重复点击�
   render(<ConfirmationProvider><AssistantConversation service={service} threadId="shared" openConversation={openConversation}
     renderConversation={(_starter, _thinking, info, request) => { navigation = request; return info; }}
     renderToolbar={() => null} translate={(key) => key}
-    ui={{ Avatar: () => null, AvatarField: () => null, ModelPicker: () => null }} /></ConfirmationProvider>);
+    ui={{ Avatar: () => null, AvatarField: () => null, ModelPicker: () => null, ProjectIcon: () => null }} /></ConfirmationProvider>);
   fireEvent.click(await screen.findByRole('button', { name: '早安提醒' }));
   expect(navigation).toEqual({ requestId: 1, threadId: 'shared', turnId: 'greeting_turn' });
   fireEvent.click(screen.getByRole('button', { name: '早安提醒' }));

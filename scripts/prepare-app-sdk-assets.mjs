@@ -15,12 +15,15 @@ await mkdir(shared, { recursive: true });
 const sharedRoot = path.join(root, 'packages/renderer-ui');
 await cp(path.join(sharedRoot, 'dist'), path.join(shared, 'dist'), { recursive: true });
 await cp(path.join(sharedRoot, 'src/styles'), path.join(shared, 'src/styles'), { recursive: true });
+// Shared CSS uses relative font URLs; ship the assets and their license alongside it.
+await cp(path.join(sharedRoot, 'src/assets'), path.join(shared, 'src/assets'), { recursive: true });
 await copyFile(path.join(sharedRoot, 'package.json'), path.join(shared, 'package.json'));
 const manifest = JSON.parse(await readFile(path.join(root, 'packages/app-sdk/package.json'), 'utf8'));
 delete manifest.devDependencies;
 delete manifest.scripts;
 manifest.dependencies = { '@setsuna-desktop/renderer-ui': 'file:dist/renderer-ui' };
 await writeFile(path.join(destination, 'package.json'), JSON.stringify(manifest, null, 2));
+await copyFile(path.join(root, 'THIRD_PARTY_NOTICES.md'), path.join(destination, 'THIRD_PARTY_NOTICES.md'));
 await copyFile(path.join(root, 'plugins/app-builder/skills/create-plugin-in-chat/assets/ui-base.css'), path.join(destination, 'ui-base.css'));
 await copyFile(path.join(root, 'apps/desktop/renderer/src/shared/styles/tokens.css'), path.join(destination, 'tokens.css'));
 // CSS copying alone misses utilities used by controls such as Tabs. Compile only

@@ -104,7 +104,7 @@
 
 .sd-message__content--soft {
   padding: 10px 14px;
-  border-radius: var(--app-radius-xl);
+  border-radius: var(--chat-message-radius);
   background: var(--chat-message-user-bg);
 }
 

@@ -20,7 +20,7 @@ export function RenameThreadDialog({
       <form onSubmit={(event) => { event.preventDefault(); onSave(); }}>
         <TextField autoFocus value={title} aria-label={t('dialog.chatTitle')} placeholder={t('dialog.chatTitle')} onChange={(event) => onChange(event.target.value)} />
         <div className="sd-dialog-form-actions">
-          <Button variant="ghost" onClick={onCancel}>{t('common.cancel')}</Button>
+          <Button variant="secondary" onClick={onCancel}>{t('common.cancel')}</Button>
           <Button type="submit" variant="primary" disabled={!title.trim()}>{t('common.save')}</Button>
         </div>
       </form>

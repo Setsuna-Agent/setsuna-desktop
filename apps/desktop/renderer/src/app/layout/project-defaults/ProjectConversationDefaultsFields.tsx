@@ -1,5 +1,5 @@
 import { canFollowWorkspaceConversationDefaults, type WorkspaceConversationDefaults, type WorkspaceProject } from '@setsuna-desktop/contracts';
-import { Button, Disclosure } from '@setsuna-desktop/renderer-ui';
+import { Button } from '@setsuna-desktop/renderer-ui';
 import { useRef } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { SelectField } from '../../../shared/ui/primitives.js';
@@ -29,18 +29,21 @@ export function ProjectConversationDefaultsFields({ value, projects, projectId, 
       onChange(customDraft.current);
     }
   };
-  return <Disclosure title={t('sidebar.conversationDefaults')}>
-    <div className="desktop-project-editor__defaults-mode" data-following={following}
-      role="group" aria-label={t('sidebar.conversationDefaults')}>
-      <Button variant="ghost" aria-pressed={!following} disabled={disabled} onClick={() => changeMode('custom')}>
-        {t('sidebar.customDefaults')}
-      </Button>
-      <Button variant="ghost" aria-pressed={following} disabled={disabled} onClick={() => changeMode('follow')}>
-        {t('sidebar.followDefaults')}
-      </Button>
+  return <section className="sd-form-stack">
+    <div className="sd-form-field">
+      <h3 className="sd-form-label">{t('sidebar.conversationDefaults')}</h3>
+      <div className="desktop-project-editor__defaults-mode" data-following={following}
+        role="group" aria-label={t('sidebar.conversationDefaults')}>
+        <Button variant="ghost" aria-pressed={!following} disabled={disabled} onClick={() => changeMode('custom')}>
+          {t('sidebar.customDefaults')}
+        </Button>
+        <Button variant="ghost" aria-pressed={following} disabled={disabled} onClick={() => changeMode('follow')}>
+          {t('sidebar.followDefaults')}
+        </Button>
+      </div>
     </div>
-    {following ? <label className="desktop-project-editor__field">
-      <span>{t('sidebar.defaultsSource')}</span>
+    {following ? <label className="sd-form-field">
+      <span className="sd-form-label">{t('sidebar.defaultsSource')}</span>
       <SelectField aria-label={t('sidebar.defaultsSource')} value={value.sourceProjectId} disabled={disabled}
         onValueChange={(sourceProjectId) => onChange({ sourceProjectId })}>
         <option value="" disabled>{t('sidebar.chooseDefaultsSource')}</option>
@@ -48,5 +51,5 @@ export function ProjectConversationDefaultsFields({ value, projects, projectId, 
         {sources.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
       </SelectField>
     </label> : <ProjectConversationOptionsFields value={value} disabled={disabled} onChange={onChange} />}
-  </Disclosure>;
+  </section>;
 }

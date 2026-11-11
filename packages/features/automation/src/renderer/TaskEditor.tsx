@@ -42,54 +42,55 @@ export function TaskEditor({ task, threadId, client, models, projects, ModelPick
   };
   return <><Dialog title={t(task ? 'feature.automation.edit' : 'feature.automation.createTitle')} onClose={requestClose} dismissible={!busy && !confirmDiscard} width={560} className="automation-editor"
     footer={<><Button onClick={requestClose} disabled={busy}>{t('feature.automation.cancel')}</Button><Button variant="primary" type="submit" form={formId} loading={busy}>{t(task ? 'feature.automation.save' : 'feature.automation.create')}</Button></>}>
-    <form id={formId} className="automation-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-      <label className="automation-form__field">
-        <span>{t('feature.automation.taskTitle')}</span>
+    <form id={formId} className="automation-form sd-form-stack" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <label className="sd-form-field">
+        <span className="sd-form-label">{t('feature.automation.taskTitle')}</span>
         <TextField disabled={busy} required maxLength={120} value={form.title} onChange={(event) => update('title', event.target.value)} />
       </label>
-      <label className="automation-form__field">
-        <span>{t('feature.automation.prompt')}</span>
+      <label className="sd-form-field">
+        <span className="sd-form-label">{t('feature.automation.prompt')}</span>
         <TextArea disabled={busy} required maxLength={32_000} rows={4} value={form.prompt} onChange={(event) => update('prompt', event.target.value)} />
       </label>
-      {/* Project and schedule share one settings-style group so the rows read as a single block. */}
-      <div className="automation-form__group">
-        <label className="automation-form__row"><span>{t('feature.automation.project')}</span>
-          <SelectField disabled={busy} aria-label={t('feature.automation.project')} value={form.projectId ?? ''} onValueChange={(value) => update('projectId', value || null)}>
-            <option value="">{t('feature.automation.noProject')}</option>
-            {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-          </SelectField>
-        </label>
-        <label className="automation-form__row"><span>{t('feature.automation.repeat')}</span>
+      <label className="sd-form-field"><span className="sd-form-label">{t('feature.automation.project')}</span>
+        <SelectField disabled={busy} aria-label={t('feature.automation.project')} value={form.projectId ?? ''} onValueChange={(value) => update('projectId', value || null)}>
+          <option value="">{t('feature.automation.noProject')}</option>
+          {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+        </SelectField>
+      </label>
+      <div className="sd-form-grid">
+        <label className="sd-form-field"><span className="sd-form-label">{t('feature.automation.repeat')}</span>
           <SelectField disabled={busy} aria-label={t('feature.automation.repeat')} value={form.kind}
             onValueChange={(kind) => setForm((current) => ({ ...current, kind: kind as AutomationForm['kind'], ...(kind === 'weekly' ? { weekdays: [current.weekdays[0] ?? 1] } : {}) }))}>
             {(['once', 'interval', 'daily', 'weekdays', 'weekly', 'custom'] as const).map((kind) => <option key={kind} value={kind}>{t(`feature.automation.${kind}`)}</option>)}
           </SelectField>
         </label>
-        {form.kind === 'weekly' || form.kind === 'custom' ? <WeekdayPicker disabled={busy} multiple={form.kind === 'custom'} value={form.weekdays} translate={t} onChange={(weekdays) => update('weekdays', weekdays)} /> : null}
         {form.kind === 'interval'
-          ? <label className="automation-form__row"><span>{t('feature.automation.minutes')}</span>
+          ? <label className="sd-form-field"><span className="sd-form-label">{t('feature.automation.minutes')}</span>
             <TextField disabled={busy} required type="number" min={1} max={525_600} value={form.minutes} onChange={(event) => update('minutes', Number(event.target.value))} />
           </label>
-          : <div className="automation-form__row"><span>{t('feature.automation.time')}</span>
+          : <div className="sd-form-field"><span className="sd-form-label">{t('feature.automation.time')}</span>
             <ScheduleTimePicker disabled={busy} value={form.kind === 'once' ? form.at : form.time} translate={t} onChange={(value) => update(form.kind === 'once' ? 'at' : 'time', value)} />
           </div>}
       </div>
+      {form.kind === 'weekly' || form.kind === 'custom' ? <WeekdayPicker disabled={busy} multiple={form.kind === 'custom'} value={form.weekdays} translate={t} onChange={(weekdays) => update('weekdays', weekdays)} /> : null}
       <details className="automation-form__advanced">
         <summary><ChevronRight size={14} aria-hidden="true" />{t('feature.automation.advanced')}</summary>
-        <div className="automation-form__group">
-          <div className="automation-form__row"><span>{t('feature.automation.newChat')}</span>
+        <div className="sd-form-stack">
+          <div className="sd-form-row"><span className="sd-form-label">{t('feature.automation.newChat')}</span>
             <Switch disabled={busy} checked={form.newChat} label={t('feature.automation.newChat')} onCheckedChange={(value) => update('newChat', value)} />
           </div>
-          <div className="automation-form__row"><span>{t('feature.automation.model')}</span>
-            <ModelPicker models={models} value={selection} disabled={busy} translate={t}
-              onChange={(value) => setForm((current) => ({ ...current, modelKey: value ? JSON.stringify(value) : '', thinkingEffort: '' }))} />
+          <div className="sd-form-grid">
+            <div className="sd-form-field"><span className="sd-form-label">{t('feature.automation.model')}</span>
+              <ModelPicker models={models} value={selection} disabled={busy} translate={t}
+                onChange={(value) => setForm((current) => ({ ...current, modelKey: value ? JSON.stringify(value) : '', thinkingEffort: '' }))} />
+            </div>
+            <label className="sd-form-field"><span className="sd-form-label">{t('feature.automation.effort')}</span>
+              <SelectField disabled={busy} aria-label={t('feature.automation.effort')} value={form.thinkingEffort} onValueChange={(effort) => update('thinkingEffort', effort)}>
+                <option value="">{t('feature.automation.noEffort')}</option>
+                {(model?.thinkingEfforts ?? (form.thinkingEffort ? [form.thinkingEffort] : [])).map((effort) => <option key={effort} value={effort}>{effort}</option>)}
+              </SelectField>
+            </label>
           </div>
-          <label className="automation-form__row"><span>{t('feature.automation.effort')}</span>
-            <SelectField disabled={busy} aria-label={t('feature.automation.effort')} value={form.thinkingEffort} onValueChange={(effort) => update('thinkingEffort', effort)}>
-              <option value="">{t('feature.automation.noEffort')}</option>
-              {(model?.thinkingEfforts ?? (form.thinkingEffort ? [form.thinkingEffort] : [])).map((effort) => <option key={effort} value={effort}>{effort}</option>)}
-            </SelectField>
-          </label>
         </div>
       </details>
       {error ? <ToastNotice message={error} /> : null}

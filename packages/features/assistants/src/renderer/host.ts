@@ -1,4 +1,4 @@
-import type { BrandIconConfig, RuntimeConfiguredModelReference } from '@setsuna-desktop/contracts';
+import type { BrandIconConfig, RuntimeConfiguredModelReference, WorkspaceProjectIcon } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { IconButtonProps } from '@setsuna-desktop/renderer-ui';
 import type { ComponentType } from 'react';
@@ -29,11 +29,12 @@ export type AssistantModelPickerProps = Readonly<{
   onChange(value: RuntimeConfiguredModelReference | undefined): void;
 }>;
 
-/** Desktop avatar and model controls; the feature cannot import the host's shared UI directly. */
+/** Desktop identity and model controls; the feature cannot import the host's shared UI directly. */
 export type AssistantsHostUi = Readonly<{
   Avatar: ComponentType<AssistantAvatarProps>;
   AvatarField: ComponentType<AssistantAvatarFieldProps>;
   ModelPicker: ComponentType<AssistantModelPickerProps>;
+  ProjectIcon: ComponentType<{ icon?: WorkspaceProjectIcon; size?: number }>;
 }>;
 
 export type AssistantsToolbarProps = Readonly<{

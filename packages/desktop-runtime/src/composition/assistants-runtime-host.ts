@@ -59,7 +59,8 @@ export function createAssistantsRuntimeHost(runtime: RuntimeContainer): Assistan
     async listProjects() {
       const { projects } = await runtime.workspaceProjects.listProjects();
       return projects.filter((project) => project.path && !project.archivedAt)
-        .map((project) => ({ id: project.id, name: project.name, path: project.path!, git: Boolean(project.gitRoot) }));
+        .map((project) => ({ id: project.id, name: project.name, path: project.path!, git: Boolean(project.gitRoot),
+          ...(project.icon ? { icon: project.icon } : {}) }));
     },
     async listModels() {
       const config = await runtime.configStore.getConfig();
