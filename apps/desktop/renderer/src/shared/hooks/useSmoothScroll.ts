@@ -1,7 +1,7 @@
 import Lenis from 'lenis';
 import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react';
 
-/** Contained Lenis scrolling, as used by beUI's Scroll Animation component. */
+/** Animate explicit message navigation while keeping manual scrolling native. */
 export function useSmoothScroll({
   scrollRef,
   contentRef,
@@ -32,7 +32,8 @@ export function useSmoothScroll({
         wrapper,
         content,
         lerp: 0.1,
-        smoothWheel: true,
+        // Wheel/trackpad input already has native timing; extra easing leaves a trailing backlog.
+        smoothWheel: false,
         syncTouch: false,
         allowNestedScroll: true,
         // Streaming changes the limit before ResizeObserver's debounced measurement.
@@ -55,8 +56,7 @@ export function useSmoothScroll({
         if (frame !== null) window.cancelAnimationFrame(frame);
         frame = null;
       };
-      // Keep the desktop idle between gestures instead of running a permanent RAF loop.
-      lenis.on('virtual-scroll', requestFrame);
+      // Only explicit navigation requests animation frames; native gestures need none.
       controllerRef.current = { lenis, requestFrame, cancelFrame };
     };
     syncPreference();

@@ -77,7 +77,7 @@ it.each(['unselected paragraph', 'file tree'])('keeps file actions when right-cl
   range.selectNodeContents(text);
   document.getSelection()!.addRange(range);
   const clicked = target === 'file tree'
-    ? await screen.findByRole('button', { name: 'report.docx' })
+    ? await screen.findByRole('button', { name: 'report.docx', current: true })
     : screen.getByText('没有选中的段落');
 
   fireEvent.contextMenu(clicked);
@@ -98,7 +98,7 @@ function Preview() {
   const tree = useWorkspaceFileTree({ workspaceKey: 'project', enabled: true, searchEntries });
   return <I18nProvider initialLocale="zh-CN"><ToastProvider><AppTextContextMenu /><WorkspacePanel
     activePanel={createFilePanel(file.path)} activeProject={{ id: file.projectId, name: 'Repo', path: '/repo', createdAt: '', updatedAt: '' }}
-    filePreview={file} fileFocusRequest={null} fileTree={tree} entryOperationPending={false}
+    filePreview={file} fileFocusRequest={null} fileTree={tree} entryOperationPending={false} onSearchProjectEntries={searchEntries}
     fileDraft={{ content: '', editing: false, canEdit: false, dirty: false,
       error: null, errorMessage: null, preparing: false, saving: false, isSaving: () => false,
       save: async () => true, confirmDiscardChanges: async () => true, confirmDiscardAllChanges: async () => true,

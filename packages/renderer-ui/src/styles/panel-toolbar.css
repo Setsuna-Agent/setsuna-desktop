@@ -41,6 +41,13 @@
   margin-left: auto;
 }
 
+.sd-panel-toolbar__path {
+  flex: 0 1 auto;
+  gap: 4px;
+  padding-inline: 4px var(--desktop-panel-gutter);
+  overflow: hidden;
+}
+
 .sd-panel-toolbar__group {
   display: inline-flex;
   align-items: center;

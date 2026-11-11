@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserSettingsNavigationProvider } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
+import { useAssistantsFeature } from '../../composition/assistants/AssistantsFeatureBoundary.js';
+import { useAssistantConversationEntry } from '../../composition/assistants/useAssistantConversationEntry.js';
 import { TerminalActionsHostProvider, type TerminalActionsHost } from '../../composition/TerminalWorkspaceFeatureBoundary.js';
 import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
 import { useContentFindTarget } from '../../shared/find/useContentFindTarget.js';
@@ -29,6 +31,7 @@ import { useAppNavigationHistory, type AppNavigationLocation } from '../controll
 import { useSidebarThreadNavigation } from '../controller/useSidebarThreadNavigation.js';
 import { useToast } from '../providers/ToastProvider.js';
 import { usePinnedThreads } from '../sidebar/usePinnedThreads.js';
+import { usePinnedProjects } from '../sidebar/usePinnedProjects.js';
 import { useThreadMenu } from '../thread-menu/useThreadMenu.js';
 import { AppOverlays } from './AppOverlays.js';
 import { AppChatToolbarTitle } from './AppChatToolbarTitle.js';
@@ -126,7 +129,16 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const currentThread = runtime.currentThread;
   const assistantChat = activeView === 'chat' && currentThread?.featureId === 'assistants';
   const toast = useToast();
+  const assistantService = useAssistantsFeature();
+  const openAssistantConversation = useCallback(
+    (destination: () => Promise<string>) => navigation.selectThreadInView(destination, 'chat'),
+    [navigation.selectThreadInView],
+  );
+  const assistantEntry = useAssistantConversationEntry({
+    service: assistantService, onOpenConversation: openAssistantConversation, onError: toast.error,
+  });
   const pins = usePinnedThreads(runtime.projects, threadsByProjectId, globalThreads);
+  const projectPins = usePinnedProjects(runtime.projects);
   const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
   useEffect(() => setToolbarMenuOpen(false), [activeView, activeProjectId, currentThread?.id]);
   // Both entry points share one pending-fork guard and the target's actual workspace.
@@ -306,6 +318,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     'app.openAutomation': {
       execute: openAutomation,
     },
+    'app.openAssistant': {
+      enabled: assistantEntry.available && !assistantEntry.opening,
+      execute: () => void assistantEntry.open(),
+    },
     'app.toggleTheme': {
       // Use the same toggle and transition origin as pointer activation.
       execute: () => themeToggleTriggerRef.current?.click(),
@@ -407,6 +423,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       execute: (event) => reloadBrowserPanel('hard', event),
     },
   }), [
+    assistantEntry.available,
+    assistantEntry.opening,
+    assistantEntry.open,
     activeBrowserPanelId,
     activeView,
     activeWorkspace,
@@ -585,8 +604,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         props={{
           renderDefault: () => (
             <AppSidebarSurface
+              assistantEntry={assistantEntry}
               threadMenu={threadMenu}
               pins={pins}
+              projectPins={projectPins}
               onOpenThreadInNewWindow={openThreadInNewWindow}
               activeProjectId={activeProjectId}
               activeThreadId={runtime.currentThread?.id}

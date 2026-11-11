@@ -1,5 +1,5 @@
 .desktop-settings-panel {
-  --chat-settings-divider: color-mix(in srgb, var(--app-border) 52%, transparent);
+  --chat-settings-divider: var(--app-border);
   --settings-standard-control-width: 260px;
 
   display: grid;
@@ -155,16 +155,16 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .desktop-settings-panel .chat-user-settings__page-heading h1 {
   min-width: 0;
   margin: 0;
   color: var(--app-text);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
-  line-height: 26px;
+  line-height: 28px;
 }
 
 .desktop-settings-panel .chat-user-settings__page-heading-copy {
@@ -268,13 +268,13 @@
 .desktop-settings-panel .chat-user-settings__general-section,
 .desktop-settings-panel .chat-user-settings__runtime-card {
   border: 1px solid var(--chat-settings-divider);
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-container);
   background: var(--app-surface);
   overflow: hidden;
 }
 
 .desktop-settings-panel .chat-user-settings__row {
-  --settings-row-padding-inline: 14px;
+  --settings-row-padding-inline: 16px;
 
   display: grid;
   position: relative;
@@ -372,6 +372,34 @@
   min-width: 0;
   justify-self: end;
   max-width: 360px;
+}
+
+/* Preference rows use compact selects; stacked forms can supply their field dimensions. */
+.desktop-settings-panel .sd-field.sd-select-field {
+  flex: 0 1 auto;
+  justify-self: end;
+  width: var(--settings-select-width, fit-content);
+  min-width: 0;
+  max-width: 100%;
+  height: var(--settings-select-height, 28px);
+  min-height: var(--settings-select-height, 28px);
+  margin-inline-start: auto;
+  padding: 0 10px;
+  gap: 6px;
+  border-radius: var(--app-radius-sm);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.desktop-settings-panel .sd-select-field > .sd-select-field__icon {
+  flex-basis: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.desktop-settings-panel .sd-select-field > .sd-select-field__chevron {
+  width: 12px;
+  height: 12px;
 }
 
 /* Rows reserve a control column; align its contents as well as the column itself. */
@@ -780,5 +808,5 @@
 @container settings-group (max-width: 480px) {
   .desktop-settings-panel .sd-settings-field-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .desktop-settings-panel .sd-settings-field-row > .sd-settings-row__control,
-  .desktop-settings-panel .sd-settings-field-row > .settings-local-control { width: 100%; min-width: 0; }
+  .desktop-settings-panel .sd-settings-field-row > .settings-local-control:not(.sd-select-field) { width: 100%; min-width: 0; }
 }

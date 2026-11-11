@@ -18,7 +18,7 @@ export function GitSettingsDialog({ onClose }: { onClose: () => void }) {
       subtitle={t('feature.review.git.settingsDescription')} closeLabel={t('common.cancel')} onClose={close}
       footer={(
         <div className="git-settings__actions">
-          <Button variant="ghost" type="button" disabled={pending === 'saving'} onClick={close}>{t('common.cancel')}</Button>
+          <Button variant="secondary" type="button" disabled={pending === 'saving'} onClick={close}>{t('common.cancel')}</Button>
           <Button variant="primary" type="button" disabled={disabled || !draft.commitMessagePrompt.trim() || !draft.conflictResolutionPrompt.trim() || error === 'conflict'} onClick={() => { void save().then((saved) => { if (saved) onClose(); }); }}>
             {t(pending === 'saving' ? 'feature.review.git.promptSaving' : 'feature.review.git.promptSave')}
           </Button>

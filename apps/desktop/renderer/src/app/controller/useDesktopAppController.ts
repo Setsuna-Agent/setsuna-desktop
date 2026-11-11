@@ -21,7 +21,7 @@ import {
   useChatComposerSession,
 } from '../../features/chat/hooks/useChatComposerSession.js';
 import { useChatTurnActions } from '../../features/chat/hooks/useChatTurnActions.js';
-import { useDesktopPanelResize } from '../../features/workspace/hooks/useDesktopPanelResize.js';
+import { useDesktopWorkbenchLayout } from './useDesktopWorkbenchLayout.js';
 import { useDesktopWorkspacePanels } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import { useWorkspaceRecoveryKey } from '../../features/workspace/hooks/useWorkspaceRecoveryKey.js';
 import { useProjectWorkspace } from '../../features/workspace/hooks/useProjectWorkspace.js';
@@ -43,7 +43,6 @@ import { useCapabilitiesRefreshCoordinator } from '../../composition/Capabilitie
 import { useReviewFeatureService } from '../../composition/ReviewFeatureBoundary.js';
 import type { RuntimeTurnSettlement } from '../../services/runtime-client/useRuntimeThreadState.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
-import { shouldCollapseSidebar, useDesktopSidebarAutoCollapse } from './useDesktopSidebarAutoCollapse.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
 import { useThreadDeletionGuard } from './useThreadDeletionGuard.js';
 
@@ -53,9 +52,6 @@ export function useDesktopAppController() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [newThreadDraftId, setNewThreadDraftId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<MainView>('chat');
-  const [sidebarManuallyCollapsed, setSidebarManuallyCollapsed] = useState(false);
-  const [sidebarManuallyExpanded, setSidebarManuallyExpanded] = useState(false);
-  const [capabilitiesSidebarCollapsed, setCapabilitiesSidebarCollapsed] = useState(false);
   const [capabilitySelectionRequest, setCapabilitySelectionRequest] = useState<ChatCapabilitySelectionRequest | null>(null);
   const capabilitySelectionRequestIdRef = useRef(0);
 
@@ -180,7 +176,8 @@ export function useDesktopAppController() {
     handleTerminalResizeStart,
     handleWorkspaceResizeStep,
     handleWorkspaceResizeStart,
-    fitWorkspaceForExpandedSidebar,
+    setSidebarCollapsed,
+    sidebarCollapsed,
     toggleWorkspaceMaximized,
     sidebarMaxWidth,
     sidebarMinWidth,
@@ -194,46 +191,11 @@ export function useDesktopAppController() {
     workspaceSinglePane,
     workspaceMinWidth,
     workspaceWidth,
-  } = useDesktopPanelResize(shellRef, {
+  } = useDesktopWorkbenchLayout(shellRef, {
+    activeView,
     bottomPanelVisible: bottomPanelReservesLayout,
-    sidebarManuallyCollapsed,
-    sidebarManuallyExpanded,
     workspaceVisible: workspacePanelReservesLayout,
   });
-  const sidebarCanExpand = useDesktopSidebarAutoCollapse({
-    shellRef,
-    sidebarWidth,
-    workspaceVisible: workspacePanelReservesLayout,
-    workspaceWidth: workspaceLayoutWidth,
-  });
-  const chatSidebarCollapsed = shouldCollapseSidebar({
-    canExpand: sidebarCanExpand,
-    manuallyCollapsed: sidebarManuallyCollapsed,
-    manuallyExpanded: sidebarManuallyExpanded,
-  });
-  // 插件导航有独立的折叠状态，切换页面不会改写聊天侧栏的偏好。
-  const sidebarCollapsed = isFeatureConversationView(activeView) ? workspaceSinglePane
-    : activeView === 'capabilities' ? capabilitiesSidebarCollapsed
-    : (activeView === 'chat' && workspaceSinglePane) || chatSidebarCollapsed;
-  const setSidebarCollapsed = useCallback((value: SetStateAction<boolean>) => {
-    if (activeView === 'capabilities') {
-      setCapabilitiesSidebarCollapsed(value);
-      return;
-    }
-    const nextCollapsed = typeof value === 'function' ? value(sidebarCollapsed) : value;
-    if (nextCollapsed) {
-      setSidebarManuallyCollapsed(true);
-      setSidebarManuallyExpanded(false);
-      return;
-    }
-    fitWorkspaceForExpandedSidebar();
-    setSidebarManuallyCollapsed(false);
-    setSidebarManuallyExpanded(true);
-  }, [activeView, fitWorkspaceForExpandedSidebar, sidebarCollapsed]);
-
-  useEffect(() => {
-    setSidebarManuallyExpanded(false);
-  }, [sidebarCanExpand]);
 
   const filePanel = [sideActivePanel, bottomActivePanel].find((panel) => panel?.type === 'file' || panel?.type === 'files');
   const fileRootId = filePanel?.rootId ?? workspaceProjectRoots(activeWorkspace)[0]?.id;

@@ -88,7 +88,7 @@ export type SettingsSelectFieldProps = Readonly<{
   className?: string;
   disabled?: boolean;
   id?: string;
-  /** Horizontal edge of the trigger the popup lines up with; it always opens below. */
+  /** Horizontal edge of the trigger the popup lines up with (default: end). */
   menuAlign?: 'start' | 'end';
   /** Minimum popup width in px; the menu never renders narrower than its trigger. */
   menuMinWidth?: number;

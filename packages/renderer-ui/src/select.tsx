@@ -17,6 +17,7 @@ import { overlayContainer } from './portal.js';
 type SelectOption = {
   disabled: boolean;
   label: ReactNode;
+  style?: CSSProperties;
   value: string;
 };
 
@@ -28,7 +29,7 @@ export type SelectFieldProps = {
   disabled?: boolean;
   id?: string;
   menuClassName?: string;
-  /** Horizontal edge of the trigger the popup lines up with; it always opens below. */
+  /** Horizontal edge of the trigger the popup lines up with (default: end). */
   menuAlign?: 'start' | 'end';
   menuMinWidth?: number;
   name?: string;
@@ -53,7 +54,7 @@ export function SelectField({
   disabled = false,
   id,
   menuClassName = '',
-  menuAlign = 'start',
+  menuAlign = 'end',
   menuMinWidth,
   name,
   onValueChange,
@@ -111,7 +112,7 @@ export function SelectField({
             <Primitive.Viewport className="sd-select-menu__viewport">
               {options.map((option, index) => (
                 <Primitive.Item key={`${option.value}:${index}`} value={`${OPTION_VALUE_PREFIX}${option.value}`}
-                  className={`sd-select-menu__option${renderOptionIcon ? ' sd-select-menu__option--with-icon' : ''}`} disabled={option.disabled}>
+                  className={`sd-select-menu__option${renderOptionIcon ? ' sd-select-menu__option--with-icon' : ''}`} disabled={option.disabled} style={option.style}>
                   {/* Keep decorative glyphs out of the text used for keyboard typeahead. */}
                   {renderOptionIcon ? <span className="sd-select-field__icon" aria-hidden="true">{renderOptionIcon(option.value)}</span> : null}
                   <Primitive.ItemText>{option.label}</Primitive.ItemText>
@@ -160,6 +161,7 @@ function optionElements(children: ReactNode): SelectOption[] {
     return [{
       disabled: Boolean(option.props.disabled),
       label: option.props.children,
+      style: option.props.style,
       value: String(option.props.value ?? ''),
     }];
   });

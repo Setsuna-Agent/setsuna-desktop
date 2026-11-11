@@ -106,7 +106,7 @@ export function ProjectEditorDialog({
         ) : null}
       </span>
       <span>
-        <Button disabled={busy} type="button" variant="ghost" onClick={onClose}>
+        <Button disabled={busy} type="button" variant="secondary" onClick={onClose}>
           {t('common.cancel')}
         </Button>
         <Button disabled={busy || !name.trim() || !validDefaults} form={formId} type="submit" variant="primary">
@@ -119,59 +119,61 @@ export function ProjectEditorDialog({
   return (
     <Dialog title={t(project ? 'sidebar.editProject' : 'sidebar.createProject')}
       className="desktop-project-editor"
-      width={520} footer={footer} dismissible={!busy} onClose={onClose}>
+      width={900} footer={footer} dismissible={!busy} onClose={onClose}>
       <form id={formId} aria-busy={busy} onSubmit={(event) => void submit(event)}>
         <div className="desktop-project-editor__body">
-          <div className="desktop-project-editor__field">
-            <label htmlFor={nameId}>{t('sidebar.projectName')}</label>
-            <TextField
-              leadingControl={<ProjectIconPicker value={icon} disabled={busy} onChange={setIcon} />}
-              id={nameId}
-              autoFocus
-              disabled={busy}
-              maxLength={WORKSPACE_PROJECT_NAME_MAX_CHARS}
-              required
-              value={name}
-              placeholder={t('sidebar.projectNamePlaceholder')}
-              onChange={(event) => setName(event.currentTarget.value)}
-            />
-          </div>
-
-          <div className="desktop-project-editor__field">
-            <span>{t('sidebar.projectDirectory')}</span>
-            <div className="desktop-project-editor__directory">
-              {roots.map((root, index) => (
-                <div className="desktop-project-editor__directory-row" key={root.id}>
-                  <Folder size={15} aria-hidden="true" />
-                  <span title={root.path}>{workspaceRootName(root)}</span>
-                  {index === 0 ? <span className="desktop-project-editor__primary">{t('sidebar.primaryDirectory')}</span> : (
-                    <IconButton label={t('sidebar.makePrimaryDirectory')} disabled={busy}
-                      onClick={() => setRoots((current) => [root, ...current.filter((item) => item.id !== root.id)])}>
-                      <Star size={14} />
-                    </IconButton>
-                  )}
-                  <IconButton label={t('sidebar.unbindProjectDirectory')} disabled={busy}
-                    onClick={() => setRoots((current) => current.filter((item) => item.id !== root.id))}>
-                    <X size={14} />
-                  </IconButton>
-                </div>
-              ))}
-              <UiButton variant="ghost"
-                className="desktop-project-editor__choose-directory"
-                type="button"
+          <div className="sd-form-stack">
+            <div className="sd-form-field">
+              <label className="sd-form-label" htmlFor={nameId}>{t('sidebar.projectName')}</label>
+              <TextField
+                leadingControl={<ProjectIconPicker value={icon} disabled={busy} onChange={setIcon} />}
+                id={nameId}
+                autoFocus
                 disabled={busy}
-                onClick={() => void chooseDirectory()}
-              >
-                <FolderPlus size={15} aria-hidden="true" />
-                <span>{t('sidebar.addProjectDirectory')}</span>
-              </UiButton>
+                maxLength={WORKSPACE_PROJECT_NAME_MAX_CHARS}
+                required
+                value={name}
+                placeholder={t('sidebar.projectNamePlaceholder')}
+                onChange={(event) => setName(event.currentTarget.value)}
+              />
+            </div>
+
+            <div className="sd-form-field">
+              <span className="sd-form-label">{t('sidebar.projectDirectory')}</span>
+              <div className="desktop-project-editor__directory">
+                {roots.map((root, index) => (
+                  <div className="desktop-project-editor__directory-row" key={root.id}>
+                    <Folder size={15} aria-hidden="true" />
+                    <span title={root.path}>{workspaceRootName(root)}</span>
+                    {index === 0 ? <span className="desktop-project-editor__primary">{t('sidebar.primaryDirectory')}</span> : (
+                      <IconButton label={t('sidebar.makePrimaryDirectory')} disabled={busy}
+                        onClick={() => setRoots((current) => [root, ...current.filter((item) => item.id !== root.id)])}>
+                        <Star size={14} />
+                      </IconButton>
+                    )}
+                    <IconButton label={t('sidebar.unbindProjectDirectory')} disabled={busy}
+                      onClick={() => setRoots((current) => current.filter((item) => item.id !== root.id))}>
+                      <X size={14} />
+                    </IconButton>
+                  </div>
+                ))}
+                <UiButton variant="ghost"
+                  className="desktop-project-editor__choose-directory"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void chooseDirectory()}
+                >
+                  <FolderPlus size={15} aria-hidden="true" />
+                  <span>{t('sidebar.addProjectDirectory')}</span>
+                </UiButton>
+              </div>
             </div>
           </div>
 
           <ProjectConversationDefaultsFields value={conversationDefaults} projects={projects} projectId={project?.id}
             disabled={busy} onChange={setConversationDefaults} />
-          {error ? <ToastNotice message={error} /> : null}
         </div>
+        {error ? <ToastNotice message={error} /> : null}
       </form>
     </Dialog>
   );

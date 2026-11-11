@@ -1,8 +1,8 @@
 :root {
   color-scheme: light;
-  /* 渲染前默认值与外观设置中的“跟随系统”选项保持一致。 */
+  /* 渲染前默认值与外观设置中的系统字体和标准字重保持一致。 */
   --app-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'PingFang SC', 'Hiragino Sans GB', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', ui-sans-serif, system-ui, sans-serif;
-  --app-font-weight: 400;
+  --app-font-weight: 500;
   --app-code-font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   --app-font-size: 14px;
   --app-visual-viewport-height: 100dvh;
@@ -10,64 +10,60 @@
   --app-page-scale-inverse: 1;
   --app-scaled-viewport-width: calc(100vw / var(--app-page-scale));
   --app-scaled-viewport-height: calc(var(--app-visual-viewport-height, 100dvh) / var(--app-page-scale));
+  /* 浅色主内容区保持白色；中性层次用于侧栏、局部表面和浮层。 */
   --app-bg: #ffffff;
-  --app-window-bg: #fafafa;
+  --app-window-bg: var(--app-bg);
   /* 默认“柔和”预设的外框与侧栏底色。 */
-  --app-sidebar-bg: #fbfbfb;
-  --app-shell-bg: #f4f4f4;
-  --app-sidebar-text: #4b4943;
-  --app-sidebar-text-secondary: #77746d;
+  --app-sidebar-bg: #f1f1f1;
+  --app-shell-bg: #e2e2e2;
+  --app-sidebar-text: #474747;
+  --app-sidebar-text-secondary: #6a6a6a;
   --app-surface: #ffffff;
+  --app-surface-overlay: #ffffff;
   --app-surface-subtle: #fafafa;
-  --app-surface-muted: #f5f5f5;
-  --app-border: #eaeaea;
+  --app-surface-muted: #f1f1f1;
+  --app-border: rgb(0 0 0 / 8%);
   --app-border-strong: #d4d4d4;
   /* The chat prompt keeps a persistent shadow; compact fields stay flat. */
-  --chat-prompt-shadow: 0 2px 10px rgb(0 0 0 / 10%);
+  --chat-prompt-shadow: var(--app-shadow-low);
   --app-text: #242424;
   --app-text-muted: #666666;
   --app-text-secondary: var(--app-text-muted);
-  --app-text-subtle: #707070;
-  --app-muted: #a3a3a3;
+  --app-text-subtle: #6a6a6a;
+  --app-muted: #919191;
   --app-focus: rgba(0, 0, 0, 0.12);
   --app-focus-ring: 0 0 0 3px var(--app-focus);
   --app-field-focus-border: color-mix(in srgb, var(--app-text) 50%, var(--app-surface));
   /* 非文本控件的 outline 焦点色；共享控件用实色 primary，内嵌文字与行操作用较轻的这一档。 */
   --app-focus-outline: color-mix(in srgb, var(--app-primary) 50%, transparent);
+  /* 三档浮起层级共用同一套明暗阴影，业务只选用途。 */
+  --app-shadow-low: 0 2px 4px rgb(0 0 0 / 5%), 0 4px 8px rgb(0 0 0 / 10%);
+  --app-shadow-medium: 0 2px 4px rgb(0 0 0 / 5%), 0 4px 12px rgb(0 0 0 / 10%);
+  --app-shadow-high: 0 4px 6px rgb(0 0 0 / 10%), 0 12px 24px rgb(0 0 0 / 15%);
   --app-shadow-hairline: 0 0 0 1px var(--app-border);
   --app-shadow-workbench: 0 2px 8px color-mix(in srgb, #000000 5%, transparent);
   --app-shadow-scroll-edge: 0 3px 6px -3px color-mix(in srgb, #000000 6%, transparent);
   --app-shadow-button:
     0 0 0 1px var(--app-border-strong),
     0 1px 2px color-mix(in srgb, #000000 6%, transparent);
-  --app-shadow-surface:
-    0 0 0 1px var(--app-border),
-    0 1px 2px color-mix(in srgb, #000000 5%, transparent),
-    0 2px 6px color-mix(in srgb, #000000 3%, transparent);
-  --app-shadow-raised:
-    0 0 0 1px var(--app-border),
-    0 2px 8px color-mix(in srgb, #000000 7%, transparent),
-    0 8px 24px color-mix(in srgb, #000000 4%, transparent);
-  --app-shadow-overlay:
-    0 0 0 1px var(--app-border),
-    0 8px 28px color-mix(in srgb, #000000 14%, transparent);
+  --app-shadow-surface: var(--app-shadow-hairline), var(--app-shadow-low);
+  --app-shadow-raised: var(--app-shadow-hairline), var(--app-shadow-medium);
+  --app-shadow-overlay: var(--app-shadow-hairline), var(--app-shadow-high);
   --app-shadow-inset-field: inset 0 1px 2px color-mix(in srgb, #000000 10%, transparent);
-  --app-shadow-popover: 0 8px 24px color-mix(in srgb, #000000 8%, transparent), 0 1px 3px color-mix(in srgb, #000000 6%, transparent);
-  --app-shadow-modal: 0 24px 64px color-mix(in srgb, #000000 18%, transparent), 0 4px 16px color-mix(in srgb, #000000 8%, transparent);
-  /* Compact native-style menus highlight rows with the same neutral fill as other
-     controls, independent of accent presets. The surface stays near-opaque with a
-     hairline edge and a soft, short shadow so floating layers read as lifted without
-     a heavy halo or content bleeding through. */
-  --app-menu-bg: rgb(252 252 253 / 94%);
-  --app-menu-backdrop-filter: blur(24px) saturate(150%);
-  --app-menu-border: rgb(0 0 0 / 8%);
-  --app-menu-shadow: 0 6px 20px rgb(0 0 0 / 8%), 0 1px 3px rgb(0 0 0 / 6%);
-  --app-menu-radius: 10px;
-  --app-menu-item-radius: 5px;
+  --app-shadow-popover: var(--app-shadow-medium);
+  --app-shadow-modal: var(--app-shadow-high);
+  --app-overlay-bg: rgb(0 0 0 / 50%);
+  /* 不透明浮层与中性行高亮避免正文透出，也不依赖背景模糊。 */
+  --app-menu-bg: var(--app-surface-overlay);
+  --app-menu-backdrop-filter: none;
+  --app-menu-border: var(--app-border);
+  --app-menu-shadow: var(--app-shadow-popover);
+  --app-menu-radius: var(--app-radius-container);
+  --app-menu-item-radius: var(--app-radius-sm);
   --app-menu-item-height: 26px;
   --app-menu-highlight-bg: var(--desktop-agent-control-hover-bg);
-  --app-tooltip-bg: #1c1e20;
-  --app-tooltip-text: #f9fafb;
+  --app-tooltip-bg: #1b1b1b;
+  --app-tooltip-text: #ffffff;
   --app-tooltip-shadow: 0 2px 8px rgb(0 0 0 / 18%), 0 1px 2px rgb(0 0 0 / 12%);
   /* 内容查找高亮；也会经继承进入代码查看器的 Shadow DOM。 */
   --app-find-match-bg: #ffe69b;
@@ -82,8 +78,8 @@
   --app-orange-hover: #fb923c;
   --app-orange-active: #ea580c;
   --app-orange-text: #ffffff;
-  --app-primary: #242424;
-  --app-primary-hover: #333333;
+  --app-primary: #1b1b1b;
+  --app-primary-hover: #303030;
   --app-primary-text: #ffffff;
   --app-accent-subtle: color-mix(in srgb, var(--app-primary) 6%, var(--app-surface));
   --app-accent-soft: color-mix(in srgb, var(--app-primary) 10%, var(--app-surface));
@@ -107,17 +103,20 @@
   --desktop-git-graph-orange: var(--sd-palette-orange);
   --desktop-git-graph-pink: var(--sd-palette-pink);
   --desktop-git-graph-red: var(--sd-palette-red);
-  /* beUI geometry: compact fields, pill actions, rounded surfaces. */
-  --app-radius-xs: 6px;
+  /* 按用途区分控件、容器与聊天表面圆角；普通表单字段使用 8px。 */
+  --app-radius-control: 12px;
+  --app-radius-container: 16px;
+  --app-radius-chat: 18px;
+  --app-radius-xs: 8px;
   --app-radius-sm: 8px;
-  --app-radius-md: 8px;
-  --app-radius-lg: 10px;
-  --app-radius-xl: 18px;
+  --app-radius-md: var(--app-radius-control);
+  --app-radius-lg: var(--app-radius-container);
+  --app-radius-xl: var(--app-radius-container);
   /* 嵌入式内容分组：详情元数据、能力分组、Git 面板卡片等弱表面。 */
-  --app-radius-group: 12px;
-  --app-radius-full: 999px;
-  --app-radius-control: var(--app-radius-full);
-  --app-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --app-radius-group: var(--app-radius-container);
+  --app-radius-full: 9999px;
+  --app-ease-out: cubic-bezier(0.24, 1, 0.4, 1);
+  --app-duration-fast: 125ms;
   /* 按钮、开关、列表行等可操作控件的统一禁用透明度；字段另有背景变化，不共用此值。 */
   --app-disabled-opacity: 0.45;
   /* 拖拽预览浮于工作区之上，但低于 Dialog 等宿主浮层。 */
@@ -184,11 +183,11 @@
   --desktop-agent-panel-bg: var(--app-surface);
   --desktop-agent-main-bg: var(--app-bg);
   --desktop-agent-main-surface: var(--app-surface);
-  --desktop-agent-divider: #eaeaea;
-  --desktop-agent-subtle-divider: #f0f0f0;
+  --desktop-agent-divider: var(--app-border);
+  --desktop-agent-subtle-divider: color-mix(in srgb, var(--app-border) 60%, transparent);
   --desktop-agent-panel-border: color-mix(in srgb, var(--app-border) 72%, transparent);
   /* 控件可能与标签重叠，因此其悬停填充必须保持完全不透明。 */
-  --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 9%, var(--app-surface));
+  --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 5%, var(--app-surface));
   /* 中性控件让悬停与选中状态在不同强调色主题下保持视觉一致。 */
   --desktop-agent-control-active-bg: var(--desktop-agent-control-hover-bg);
   --desktop-agent-input-shadow:
@@ -199,7 +198,7 @@
     0 5px 16px rgba(0, 0, 0, 0.025);
   --desktop-agent-sidebar-hover-bg: color-mix(in srgb, var(--app-sidebar-text) 6%, var(--app-sidebar-bg));
   --desktop-agent-sidebar-active-bg: color-mix(in srgb, var(--app-sidebar-text) 10%, var(--app-sidebar-bg));
-  --desktop-agent-sidebar-active-text: #242424;
+  --desktop-agent-sidebar-active-text: var(--app-text);
   --desktop-agent-sidebar-active-shadow: none;
   --desktop-agent-sidebar-edge: color-mix(in srgb, var(--app-sidebar-text) 12%, var(--app-shell-bg));
   --desktop-agent-sidebar-separator-color: rgba(0, 0, 0, 0.045);
@@ -207,21 +206,22 @@
   --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-button-hover-border: color-mix(in srgb, var(--app-text) 28%, var(--app-border));
   --desktop-agent-button-hover-bg: var(--desktop-agent-control-hover-bg);
-  /* 亮色用户消息固定使用中性色，避免被强调色染脏。 */
+  /* 用户消息保留浅中性底色和紧凑圆角，独立于 Composer 的大圆角。 */
   --chat-message-user-bg: #f4f4f4;
-  --chat-code-bg: #fafafa;
+  --chat-message-radius: 18px;
+  --chat-code-bg: var(--app-surface-subtle);
   --chat-content-max-width: 750px;
   --chat-content-inline-padding: 28px;
-  --chat-prompt-inline-padding: 14px;
-  --chat-composer-bottom-inset: 16px;
+  --chat-prompt-inline-padding: 20px;
+  --chat-composer-bottom-inset: 12px;
   --chat-message-footer-gap: 3px;
   --chat-scrollbar-width: 6px;
   --chat-scrollbar-thumb: #e4e4e5;
   --chat-scrollbar-thumb-hover: #585a5b;
   --desktop-inline-icon-size: 18px;
-  --chat-send-bg: #242424;
-  --chat-send-bg-hover: #333333;
-  --chat-send-bg-active: #171717;
+  --chat-send-bg: var(--app-primary);
+  --chat-send-bg-hover: var(--app-primary-hover);
+  --chat-send-bg-active: #000000;
   /* Scoped built-in Feature views consume this small semantic palette instead
      of depending on a light-only fallback or the host's component classes. */
   --sd-color-text: var(--app-text);
@@ -290,54 +290,44 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --app-bg: #181818;
-  --app-window-bg: #181818;
+  --app-bg: #1b1b1b;
   --app-toolbar-tab-active-bg: var(--desktop-agent-sidebar-hover-bg);
-  --app-sidebar-bg: #292927;
-  --app-shell-bg: #232321;
-  --app-sidebar-text: #d5d4cf;
-  --app-sidebar-text-secondary: #a3a29b;
-  --app-surface: #202020;
-  --app-menu-bg: rgb(36 36 36 / 94%);
-  /* Dark surfaces need a light hairline and a deeper shadow to separate from the page. */
-  --app-menu-border: rgb(255 255 255 / 9%);
-  --app-menu-shadow: 0 8px 24px rgb(0 0 0 / 36%), 0 1px 3px rgb(0 0 0 / 24%);
+  --app-sidebar-bg: #262626;
+  --app-shell-bg: #1b1b1b;
+  --app-sidebar-text: #e2e2e2;
+  --app-sidebar-text-secondary: #9e9e9e;
+  --app-surface: #262626;
+  --app-surface-overlay: #1b1b1b;
   --app-surface-subtle: #222222;
-  --app-surface-muted: #282828;
-  --app-border: #303030;
-  --app-border-strong: #454545;
-  --chat-prompt-shadow: 0 2px 10px rgb(0 0 0 / 35%);
-  --app-text: #e4e4e4;
-  --app-text-muted: #aaaaaa;
+  --app-surface-muted: #1b1b1b;
+  --app-border: rgb(255 255 255 / 10%);
+  --app-border-strong: #525252;
+  --app-text: #ffffff;
+  --app-text-muted: #9e9e9e;
   --app-text-secondary: var(--app-text-muted);
-  --app-text-subtle: #999999;
-  --app-muted: #737373;
+  --app-text-subtle: #919191;
+  --app-muted: #525252;
   --app-focus: rgba(255, 255, 255, 0.14);
-  --app-shadow-hairline: 0 0 0 1px var(--app-border);
+  /* 暗色浮层用内侧亮边与阴影共同分层，避免仅加深底色。 */
+  --app-shadow-low: 0 2px 4px rgb(0 0 0 / 25%), 0 4px 8px rgb(0 0 0 / 40%), inset 0 0 0 1px rgb(255 255 255 / 8%);
+  --app-shadow-medium: 0 2px 4px rgb(0 0 0 / 35%), 0 4px 12px rgb(0 0 0 / 50%), inset 0 0 0 1px rgb(255 255 255 / 12%);
+  --app-shadow-high: 0 4px 6px rgb(0 0 0 / 50%), 0 12px 24px rgb(0 0 0 / 70%), inset 0 0 0 1px rgb(255 255 255 / 15%);
+  --app-overlay-bg: rgb(0 0 0 / 80%);
   --app-shadow-workbench: 0 2px 8px color-mix(in srgb, #000000 16%, transparent);
   --app-shadow-scroll-edge: 0 3px 6px -3px color-mix(in srgb, #000000 16%, transparent);
   --app-shadow-button:
     0 0 0 1px color-mix(in srgb, #ffffff 10%, transparent),
     0 1px 2px color-mix(in srgb, #000000 30%, transparent);
-  --app-shadow-surface:
-    0 0 0 1px color-mix(in srgb, #ffffff 11%, transparent),
-    0 1px 2px color-mix(in srgb, #000000 20%, transparent),
-    0 2px 6px color-mix(in srgb, #000000 20%, transparent);
-  --app-shadow-raised:
-    0 0 0 1px color-mix(in srgb, #ffffff 13%, transparent),
-    0 2px 10px color-mix(in srgb, #000000 22%, transparent);
-  --app-shadow-overlay:
-    0 0 0 1px color-mix(in srgb, #ffffff 15%, transparent),
-    0 8px 28px color-mix(in srgb, #000000 34%, transparent);
   --app-shadow-inset-field: inset 0 1px 2px color-mix(in srgb, #000000 40%, transparent);
-  --app-tooltip-bg: #2b2b2b;
+  --app-tooltip-bg: #f1f1f1;
+  --app-tooltip-text: #111111;
   --app-find-match-bg: #5c4a12;
   --app-find-match-text: #f5f5f5;
   --app-find-active-bg: #c2671c;
   --app-find-active-text: #ffffff;
-  --app-primary: #f4f4f5;
+  --app-primary: #f1f1f1;
   --app-primary-hover: #ffffff;
-  --app-primary-text: #181818;
+  --app-primary-text: #111111;
   --app-danger: #f87171;
   --app-danger-bg: rgba(248, 113, 113, 0.11);
   --app-info: #60a5fa;
@@ -351,29 +341,21 @@
   --desktop-agent-panel-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-main-bg: var(--app-bg);
   --desktop-agent-main-surface: var(--app-surface);
-  /* 暗色表面为中性灰阶，分隔线保持同一色相，避免偏蓝的线条。 */
-  --desktop-agent-divider: #373737;
-  --desktop-agent-subtle-divider: #2e2e2e;
-  --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 10%, var(--app-surface));
   --desktop-agent-input-shadow:
     0 2px 10px rgba(0, 0, 0, 0.28),
     0 10px 28px rgba(0, 0, 0, 0.18);
   --desktop-agent-composer-shadow:
     0 1px 5px rgba(0, 0, 0, 0.18),
     0 6px 18px rgba(0, 0, 0, 0.1);
-  --desktop-agent-sidebar-active-text: #fafafa;
   --desktop-agent-sidebar-separator-color: rgba(0, 0, 0, 0.18);
   --desktop-agent-accent: var(--app-primary);
   --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-button-hover-border: color-mix(in srgb, var(--app-text) 28%, var(--app-border));
   --desktop-agent-button-hover-bg: var(--desktop-agent-control-hover-bg);
-  --chat-message-user-bg: var(--app-accent-subtle);
-  --chat-code-bg: #202020;
+  --chat-message-user-bg: #303030;
   --chat-scrollbar-thumb: #585a5b;
   --chat-scrollbar-thumb-hover: #8a8c8d;
-  --chat-send-bg: #f4f4f5;
-  --chat-send-bg-hover: #ffffff;
-  --chat-send-bg-active: #e4e4e7;
+  --chat-send-bg-active: #e2e2e2;
 }
 
 :root[data-theme='light'][data-sidebar-background-style='plain'] {

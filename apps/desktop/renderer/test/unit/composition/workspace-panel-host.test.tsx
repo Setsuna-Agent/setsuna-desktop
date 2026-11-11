@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { DesktopGitHistoryPage } from '@setsuna-desktop/feature-review/contracts';
 import type { WorkspaceEntrySearchResponse } from '@setsuna-desktop/contracts';
 import { appReadySlot, shellRouteSlot } from '@setsuna-desktop/renderer-contracts/shell';
@@ -172,13 +172,13 @@ it('creates, renames and deletes entries from the tree menu, preserving state wh
     expect((screen.getByRole('textbox', { name: '名称' }) as HTMLInputElement).value).toBe('existing.vue');
     fireEvent.change(screen.getByRole('textbox', { name: '名称' }), { target: { value: 'widget.vue' } });
     fireEvent.click(screen.getByRole('button', { name: '确认' }));
-    fireEvent.contextMenu(await screen.findByRole('button', { name: 'widget.vue' }));
+    fireEvent.contextMenu(await screen.findByRole('button', { name: 'widget.vue', current: true }));
     fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }));
     expect((screen.getByRole('textbox', { name: '名称' }) as HTMLInputElement).value).toBe('widget.vue');
     fireEvent.change(screen.getByRole('textbox', { name: '名称' }), { target: { value: 'renamed.vue' } });
     fireEvent.click(screen.getByRole('button', { name: '确认' }));
     await screen.findByRole('button', { name: 'renamed.vue' });
-    fireEvent.contextMenu(screen.getByRole('button', { name: 'assets' }));
+    fireEvent.contextMenu(within(view.container.querySelector<HTMLElement>('.desktop-file-list')!).getByRole('button', { name: 'assets' }));
     fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }));
     fireEvent.change(screen.getByRole('textbox', { name: '名称' }), { target: { value: 'widgets' } });
     fireEvent.click(screen.getByRole('button', { name: '确认' }));
@@ -288,7 +288,7 @@ function FilesWorkspace({
       panelId: activePanel.id, panelType: activePanel.type, placement: 'side', projectId: 'project_1',
       surfaceInstanceId: activePanel.id, threadId: 'thread_1', translate: t, visible: true,
       renderDefault: () => <WorkspacePanel
-        {...panelProps} activePanel={activePanel} fileTree={fileTree}
+        {...panelProps} activePanel={activePanel} fileTree={fileTree} onSearchProjectEntries={searchEntries}
         onCreateEntry={onCreateEntry} onRenameEntry={onRenameEntry} onMoveEntry={onMoveEntry} onDeleteEntry={onDeleteEntry}
         onOpenProjectFile={(filePath) => setActivePanel(createFilePanel(filePath))}
         onOpenEntry={(entry) => setActivePanel(createFilePanel(entry.path))}
@@ -341,7 +341,7 @@ const panelProps = {
   onCreateEntry: async () => null, onRenameEntry: async () => null,
   onMoveEntry: async () => null,
   onDeleteEntry: async () => false,
-  onOpenEntry: noop, onOpenProjectFile: noop, onOpenFilesPanel: noop,
+  onOpenEntry: noop, onSearchProjectEntries: vi.fn(), onOpenProjectFile: noop, onOpenFilesPanel: noop,
   onOpenBrowser: noop, onOpenSideChat: noop, onOpenTerminalPanel: noop, onReviewRefresh: noop,
   onReviewBaseRefChange: noop, onReviewSourceChange: noop, onRevealFile: noop,
 } satisfies Omit<ComponentProps<typeof WorkspacePanel>, 'fileTree'>;

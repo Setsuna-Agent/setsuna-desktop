@@ -228,7 +228,7 @@ export function GeneralSettings({
             </span>
             <SelectField className="settings-local-control" value={selectedFont.value} style={{ fontFamily: selectedFont.css }} onValueChange={(nextValue) => setFontFamily(nextValue as FontFamilyMode)}>
               {fontFamilySelectOptions.map((option) => (
-                <option key={option.value} value={option.value}>
+                <option key={option.value} value={option.value} style={{ fontFamily: option.css }}>
                   {option.label}
                 </option>
               ))}
@@ -284,7 +284,7 @@ export function GeneralSettings({
             </span>
             <SelectField aria-label={t('settings.general.codeFont')} className="settings-local-control" value={selectedCodeFont.value} style={{ fontFamily: selectedCodeFont.css }} onValueChange={(nextValue) => setCodeFontFamily(nextValue as CodeFontFamilyMode)}>
               {codeFontFamilySelectOptions.map((option) => (
-                <option key={option.value} value={option.value}>
+                <option key={option.value} value={option.value} style={{ fontFamily: option.css }}>
                   {option.label}
                 </option>
               ))}

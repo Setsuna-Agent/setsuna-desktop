@@ -151,7 +151,7 @@ function GitChangesWorkspace({ workspaceRoot, sourceRootPicker, editingMessage =
       <header className="git-changes-toolbar sd-panel-toolbar">
         {showingDiff && detailOpen ? <ReviewIconButton className="git-changes-toolbar__back app-shell-icon-control"
           label={t('feature.review.history.back')} onClick={closeDetail}><ArrowLeft size={15} /></ReviewIconButton> : null}
-        {sourceRootPicker || headerFile ? <div className="git-changes-toolbar__path sd-panel-toolbar__surface">
+        {sourceRootPicker || headerFile ? <div className="git-changes-toolbar__path sd-panel-toolbar__surface sd-panel-toolbar__path">
           {sourceRootPicker}
           {sourceRootPicker && headerFile ? <ChevronRight className="git-changes-toolbar__path-separator" aria-hidden="true" size={12} /> : null}
           {headerFile ? <>

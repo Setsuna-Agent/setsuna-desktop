@@ -26,11 +26,13 @@ function setup(platform: KeyboardShortcutPlatform) {
   const openChat = vi.fn();
   const openPullRequests = vi.fn();
   const openAutomation = vi.fn();
+  const openAssistant = vi.fn();
   const toggleTheme = vi.fn();
   const handlers = {
     'app.openChat': { execute: openChat },
     'app.openPullRequests': { execute: openPullRequests },
     'app.openAutomation': { execute: openAutomation },
+    'app.openAssistant': { execute: openAssistant },
     'app.toggleTheme': { execute: toggleTheme },
   };
   const hook = renderHook(() => useAppKeyboardShortcuts(handlers), {
@@ -38,7 +40,7 @@ function setup(platform: KeyboardShortcutPlatform) {
       <KeyboardShortcutsProvider initialPlatform={platform}>{children}</KeyboardShortcutsProvider>
     ),
   });
-  return { ...hook, openChat, openPullRequests, openAutomation, toggleTheme, syncBindings, unsubscribe,
+  return { ...hook, openChat, openPullRequests, openAutomation, openAssistant, toggleTheme, syncBindings, unsubscribe,
     forward: (event: DesktopKeyboardShortcutInput) => forwardInput(event) };
 }
 
@@ -48,19 +50,21 @@ function press(input: KeyboardEventInit) {
   return event;
 }
 
-it.each(['darwin', 'win32'] as const)('dispatches the rail commands on %s and suppresses them during confirmation', (platform) => {
+it.each(['darwin', 'win32'] as const)('dispatches navigation commands on %s and suppresses them during confirmation', (platform) => {
   const state = setup(platform);
   const modifier = platform === 'darwin' ? { metaKey: true } : { ctrlKey: true };
   const shortcuts = [
     { ...modifier, code: 'Digit1', key: '1' },
     { ...modifier, code: 'Digit2', key: '2' },
     { ...modifier, code: 'Digit3', key: '3' },
+    { ...modifier, code: 'Digit4', key: '4' },
     { ...modifier, code: 'KeyM', key: 'M', shiftKey: true },
   ];
   for (const shortcut of shortcuts) expect(press(shortcut).defaultPrevented).toBe(true);
   expect(state.openChat).toHaveBeenCalledOnce();
   expect(state.openPullRequests).toHaveBeenCalledOnce();
   expect(state.openAutomation).toHaveBeenCalledOnce();
+  expect(state.openAssistant).toHaveBeenCalledOnce();
   expect(state.toggleTheme).toHaveBeenCalledOnce();
 
   const modal = document.createElement('div');
@@ -72,11 +76,12 @@ it.each(['darwin', 'win32'] as const)('dispatches the rail commands on %s and su
   expect(state.openChat).toHaveBeenCalledOnce();
   expect(state.openPullRequests).toHaveBeenCalledOnce();
   expect(state.openAutomation).toHaveBeenCalledOnce();
+  expect(state.openAssistant).toHaveBeenCalledOnce();
   expect(state.toggleTheme).toHaveBeenCalledOnce();
 
   expect(state.syncBindings).toHaveBeenLastCalledWith(platform === 'darwin'
-    ? ['Meta+Digit1', 'Meta+Digit2', 'Meta+Digit3', 'Shift+Meta+KeyM']
-    : ['Control+Digit1', 'Control+Digit2', 'Control+Digit3', 'Control+Shift+KeyM']);
+    ? ['Meta+Digit1', 'Meta+Digit2', 'Meta+Digit3', 'Meta+Digit4', 'Shift+Meta+KeyM']
+    : ['Control+Digit1', 'Control+Digit2', 'Control+Digit3', 'Control+Digit4', 'Control+Shift+KeyM']);
   act(() => state.forward({
     altGraph: false, altKey: false, ctrlKey: false, metaKey: false, shiftKey: false,
     isComposing: false, repeat: false, ...modifier, code: 'Digit3', key: '3',
@@ -117,5 +122,6 @@ it('uses user overrides and leaves disabled or conflicting defaults inactive', (
   press({ code: 'Digit4', metaKey: true });
   expect(state.toggleTheme).toHaveBeenCalledOnce();
   expect(state.openAutomation).toHaveBeenCalledOnce();
+  expect(state.openAssistant).not.toHaveBeenCalled();
   expect(state.syncBindings).toHaveBeenLastCalledWith(['Meta+Digit4', 'Meta+KeyY']);
 });

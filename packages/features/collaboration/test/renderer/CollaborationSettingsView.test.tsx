@@ -51,7 +51,7 @@ it('updates inherited role text with the UI language without freezing it on save
   expect((view.getByLabelText('指令') as HTMLTextAreaElement).value).toContain('在约定的文件分工范围内');
   view.rerender(page('en-US'));
   expect((view.getByLabelText('Instructions') as HTMLTextAreaElement).value).toContain('Implement the assigned change');
-  fireEvent.change(view.getByRole('combobox', { name: 'Model' }), { target: { value: 'fast' } });
+  fireEvent.change(within(view.getByRole('dialog')).getByRole('combobox', { name: 'Model' }), { target: { value: 'fast' } });
   fireEvent.click(view.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
   expect(state.settings.roles.find((role) => role.name === 'worker')).toMatchObject({ description: null, instructions: null, model: { modelId: 'fast' } });

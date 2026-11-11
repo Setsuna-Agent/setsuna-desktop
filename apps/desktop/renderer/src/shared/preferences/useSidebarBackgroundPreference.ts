@@ -6,7 +6,7 @@ import {
 } from './browserStorage.js';
 
 export const sidebarBackgroundOptions = [
-  { value: 'soft', label: '柔和', lightSwatch: '#fbfbfb', darkSwatch: '#292927' },
+  { value: 'soft', label: '柔和', lightSwatch: '#f1f1f1', darkSwatch: '#262626' },
   { value: 'plain', label: '素净', lightSwatch: '#ffffff', darkSwatch: '#222222' },
   { value: 'contrast', label: '层次', lightSwatch: '#e8ecef', darkSwatch: '#2a2e31' },
 ] as const;

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { Assistant, AssistantsSnapshot } from '../../src/contracts/index.js';
@@ -25,19 +26,24 @@ describe('助理编辑保存', () => {
     };
     const onSaved = vi.fn();
     const onClose = vi.fn();
-    render(<AssistantEditor snapshot={snapshot} service={{ client, store: createAssistantsStore(client) }} translate={t}
-      ui={{ Avatar: () => null, AvatarField: () => null, ModelPicker: () => null }} onSaved={onSaved} onDeleted={vi.fn()} onClose={onClose} />);
+    const user = userEvent.setup();
+    const projects = [{ id: 'project', name: '工作项目', path: '/workspace/project', git: false }];
+    render(<AssistantEditor snapshot={{ ...snapshot, projects }} service={{ client, store: createAssistantsStore(client) }} translate={t}
+      ui={{ Avatar: () => null, AvatarField: () => null, ModelPicker: () => null, ProjectIcon: () => null }} onSaved={onSaved} onDeleted={vi.fn()} onClose={onClose} />);
     const name = screen.getByRole('textbox', { name: 'feature.assistants.name' });
     fireEvent.change(name, { target: { value: '助理' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'feature.assistants.qqAppId' }), { target: { value: '123' } });
     fireEvent.change(screen.getByLabelText('feature.assistants.qqSecret'), { target: { value: 'secret-for-retry' } });
     fireEvent.click(screen.getByRole('switch', { name: 'feature.assistants.qqMarkdownEnabled' }));
+    await user.click(screen.getByRole('button', { name: 'feature.assistants.projects' }));
+    await user.click(screen.getByRole('checkbox', { name: '工作项目' }));
+    await user.keyboard('{Escape}');
     fireEvent.click(screen.getByRole('button', { name: 'feature.assistants.qqGuide' }));
     fireEvent.click(screen.getByRole('button', { name: 'feature.assistants.back' }));
     const save = screen.getByRole('button', { name: 'feature.assistants.save' });
     fireEvent.click(save);
     await waitFor(() => expect(screen.getByText('密钥存储暂不可用')).toBeTruthy());
-    expect(client.create).toHaveBeenCalledWith(expect.objectContaining({ qq: { appId: '123', enabled: true, markdownEnabled: false } }));
+    expect(client.create).toHaveBeenCalledWith(expect.objectContaining({ projectIds: ['project'], qq: { appId: '123', enabled: true, markdownEnabled: false } }));
     expect(onSaved).not.toHaveBeenCalled();
     fireEvent.change(name, { target: { value: '修改后的助理' } });
     fireEvent.click(screen.getByRole('button', { name: 'feature.assistants.qqGuide' }));
@@ -47,7 +53,7 @@ describe('助理编辑保存', () => {
     fireEvent.click(screen.getByRole('button', { name: 'feature.assistants.save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved));
     expect(client.create).toHaveBeenCalledTimes(1);
-    expect(client.update).toHaveBeenCalledWith(saved.id, expect.objectContaining({ name: '修改后的助理', qq: { appId: '123', enabled: true, markdownEnabled: false } }));
+    expect(client.update).toHaveBeenCalledWith(saved.id, expect.objectContaining({ name: '修改后的助理', projectIds: ['project'], qq: { appId: '123', enabled: true, markdownEnabled: false } }));
     expect(client.setQqSecret).toHaveBeenNthCalledWith(2, saved.id, 'secret-for-retry');
   });
 

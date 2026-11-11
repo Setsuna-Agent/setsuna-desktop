@@ -78,7 +78,7 @@ export function ScheduleTimePicker({ disabled, value, onChange, translate: t }: 
             <footer><Button type="button" size="small" onClick={() => setOpen(false)}>{t('feature.automation.time.done')}</Button></footer>
           </div>
         )}>
-        <IconButton disabled={disabled} type="button" label={`${t('feature.automation.time')}: ${displayValue}`} aria-expanded={open && !disabled}>
+        <IconButton className="automation-time-picker__trigger" disabled={disabled} type="button" label={`${t('feature.automation.time')}: ${displayValue}`} aria-expanded={open && !disabled}>
           <TimeIcon size={15} aria-hidden="true" />
         </IconButton>
       </Popover>

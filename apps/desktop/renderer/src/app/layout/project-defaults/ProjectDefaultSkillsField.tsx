@@ -1,7 +1,6 @@
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
-import { Checkbox, Disclosure, TextField } from '@setsuna-desktop/renderer-ui';
-import { Info } from 'lucide-react';
-import { useState } from 'react';
+import { MultiSelectField } from '@setsuna-desktop/renderer-ui';
+import { useId } from 'react';
 import { useSkillsFeatureSnapshot } from '../../../composition/SkillsFeatureBoundary.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 
@@ -12,28 +11,22 @@ export function ProjectDefaultSkillsField({ value = [], disabled, onChange }: Re
 }>) {
   const { t } = useI18n();
   const { skills } = useSkillsFeatureSnapshot();
-  const [query, setQuery] = useState('');
+  const fieldId = useId();
+  const hintId = `${fieldId}-hint`;
   const selected = new Set(value);
   const choices: Pick<RuntimeSkillSummary, 'id' | 'name' | 'description'>[] = [
     ...skills.filter((skill) => skill.enabled || selected.has(skill.id)),
     ...value.filter((id) => !skills.some((skill) => skill.id === id)).map((id) => ({ id, name: id })),
   ];
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const visibleSkills = choices.filter((skill) => (
-    `${skill.name} ${skill.id} ${skill.description ?? ''}`.toLocaleLowerCase().includes(normalizedQuery)
-  ));
-
-  return <Disclosure title={t('sidebar.defaultSkills')}>
-    <p className="desktop-project-editor__notice" role="note"><Info size={16} aria-hidden="true" />
-      <span>{t('sidebar.defaultSkillsNotice')}</span>
-    </p>
-    <TextField aria-label={t('capabilities.search.skills')} placeholder={t('capabilities.search.skills')}
-      value={query} onChange={(event) => setQuery(event.target.value)} disabled={disabled} />
-    <div key={normalizedQuery} className="desktop-project-editor__skills-list">
-      {visibleSkills.map((skill) => <Checkbox key={skill.id} checked={selected.has(skill.id)} disabled={disabled}
-        onChange={(checked) => onChange(checked ? [...selected, skill.id] : value.filter((id) => id !== skill.id))}>
-        {skill.name}
-      </Checkbox>)}
+  return <div className="sd-form-field">
+    <div className="sd-form-field-heading">
+      <label className="sd-form-label" htmlFor={fieldId}>{t('sidebar.defaultSkills')}</label>
+      <span id={hintId} className="desktop-project-editor__field-hint">{t('sidebar.defaultSkillsNotice')}</span>
     </div>
-  </Disclosure>;
+    <MultiSelectField id={fieldId} aria-label={t('sidebar.defaultSkills')} aria-describedby={hintId} disabled={disabled}
+      value={value} onValueChange={onChange}
+      options={choices.map((skill) => ({ value: skill.id, label: skill.name, searchText: skill.description }))}
+      placeholder={t('sidebar.selectDefaultSkills')} searchPlaceholder={t('capabilities.search.skills')}
+      emptyLabel={t('sidebar.noMatchingSkills')} />
+  </div>;
 }

@@ -15,6 +15,7 @@ export { ProgressRing } from './progress.js';
 export { ImagePreview, ImagePreviewGroup } from './image-preview.js';
 export { MessageBubble } from './message.js';
 export { SelectField, type SelectFieldProps } from './select.js';
+export { MultiSelectField, type MultiSelectFieldProps, type MultiSelectOption } from './multi-select/multi-select.js';
 export { UiProvider } from './locale.js';
 export { ToastStack, type ToastEntry, type ToastTone } from './toast/stack.js';
 export { ToastProvider, ToastNotice, useToast, enqueueToast, type ToastApi, type ToastOptions } from './toast/provider.js';
@@ -23,6 +24,7 @@ export { WheelPicker, type WheelPickerOption, type WheelPickerProps } from './wh
 export { ResizeHandle } from './resize-handle.js';
 export { FileTreeToggle } from './file-tree-toggle.js';
 export { FileTreeSurface, FileTreeRow } from './file-tree.js';
+export { FilePathBreadcrumb, type FilePathDirectoryProps } from './file-path-breadcrumb/file-path-breadcrumb.js';
 export { useNativeDragPreview, useDragReorderPreview } from './drag/drag-feedback.js';
 export { useReorderLayout, useListChangeLayout, animateReorderLayout, reorderItemRect } from './drag/reorder-layout.js';
 export { FileIcon } from './file-icon.js';

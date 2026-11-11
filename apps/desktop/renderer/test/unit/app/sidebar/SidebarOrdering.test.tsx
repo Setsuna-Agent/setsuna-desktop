@@ -20,12 +20,13 @@ const chat = (id: string, projectId?: string): RuntimeThreadSummary => ({
 });
 const projectChats = Array.from({ length: 6 }, (_, i) => chat(`a${i + 1}`, 'a'));
 
-function fixture() {
+function fixture(overrides: Partial<ComponentProps<typeof AgentSidebar>> = {}) {
   const noop = vi.fn();
   const props: ComponentProps<typeof AgentSidebar> = {
     activeProjectId: null, activeView: 'chat', collapsedProjectIds: new Set(), forceExpandedProjectIds: new Set(),
     globalThreads: ['g1', 'g2', 'p1', 'p2'].map((id) => chat(id)),
     pinnedThreads: [chat('p1'), chat('p2')], pinnedThreadIds: new Set(['p1', 'p2']),
+    pinnedProjects: [], pinnedProjectIds: new Set(), onToggleProjectPin: noop,
     projects, projectActionMenuId: null, projectsCollapsed: false,
     searchOpen: false, searchTriggerRef: createRef(), sessionsCollapsed: false, threadActionMenuId: null,
     threadsByProjectId: new Map([['a', projectChats], ['b', [chat('b1', 'b'), chat('b2', 'b')]]]),
@@ -38,6 +39,7 @@ function fixture() {
     onOpenThreadInNewWindow: noop, onRenameThread: noop,
     threadMenu: { canFork: false, canCreateWorktree: false, apps: [], fork: async () => undefined,
       openWith: async () => undefined, deleteThread: async () => undefined, exportThread: async () => undefined, close: noop },
+    ...overrides,
   };
   return { ...render(<ToastProvider><AgentSidebar {...props} /></ToastProvider>), props, noop };
 }
@@ -88,10 +90,58 @@ it('orders each chat group independently, keeps hidden chats, and preserves the 
   }
   expect(saved()).toEqual({
     'threads:project:a': ['a5', 'a1', 'a2', 'a3', 'a4', 'a6'],
-    'threads:global': ['g2', 'g1'], 'threads:pinned': ['p2', 'p1'],
+    'threads:global': ['g2', 'g1'], pinned: ['thread:p2', 'thread:p1'],
   });
   expect(projectChats.every((thread) => thread.projectId === 'a')).toBe(true);
   expect(view.noop).not.toHaveBeenCalled();
+});
+
+it('reorders pinned projects and chats together, restores the mixed order, and keeps child chats in their project', () => {
+  const overrides = { pinnedProjects: [projects[0]!], pinnedProjectIds: new Set(['a']) };
+  let view = fixture(overrides);
+  const move = (source: string, target: string, after = false) => {
+    const data = transfer();
+    drag('dragstart', button(source), data);
+    drag('dragover', button(target), data, after ? 1 : -1);
+    drag('drop', button(target), data, after ? 1 : -1);
+    drag('dragend', button(source), data);
+    return data;
+  };
+  move('Project a', 'Chat p1');
+  expect(saved().pinned).toEqual(['project:a', 'thread:p1', 'thread:p2']);
+  const reference = move('Chat p2', 'Project a');
+  expect(readThreadReferenceDrag(reference)).toEqual({ id: 'p2', title: 'Chat p2' });
+  expect(saved().pinned).toEqual(['thread:p2', 'project:a', 'thread:p1']);
+  expect(view.noop).not.toHaveBeenCalled();
+
+  view.unmount();
+  view = fixture(overrides);
+  move('Chat p2', 'Chat p1', true);
+  expect(saved().pinned).toEqual(['project:a', 'thread:p1', 'thread:p2']);
+  // A child's drag belongs to its own list, even inside a pinned project.
+  move('Chat a1', 'Chat p1');
+  expect(saved()).toEqual({ pinned: ['project:a', 'thread:p1', 'thread:p2'] });
+  move('Chat a5', 'Chat a1');
+  expect(saved()['threads:project:a']).toEqual(['a5', 'a1', 'a2', 'a3', 'a4', 'a6']);
+  fireEvent.click(button('Chat a1'));
+  expect(view.noop).toHaveBeenCalledExactlyOnceWith('a1');
+  expect(projectChats.every((thread) => thread.projectId === 'a')).toBe(true);
+});
+
+it('keeps the previous pinned-chat order on the first mixed drag and distinguishes project and chat identities', () => {
+  localStorage.setItem(SIDEBAR_ORDER_STORAGE_KEY, JSON.stringify({ 'threads:pinned': ['p2', 'a', 'p1'] }));
+  fixture({
+    pinnedProjects: [projects[0]!], pinnedProjectIds: new Set(['a']),
+    pinnedThreads: [chat('a'), chat('p1'), chat('p2')], pinnedThreadIds: new Set(['a', 'p1', 'p2']),
+  });
+  const data = transfer();
+  drag('dragstart', button('Project a'), data);
+  drag('dragover', button('Chat a'), data);
+  drag('drop', button('Chat a'), data);
+  expect(saved()).toEqual({
+    'threads:pinned': ['p2', 'a', 'p1'],
+    pinned: ['thread:p2', 'project:a', 'thread:a', 'thread:p1'],
+  });
 });
 
 it('rejects cross-group and external drops, and leaves order untouched after cancellation or a stale drag', () => {

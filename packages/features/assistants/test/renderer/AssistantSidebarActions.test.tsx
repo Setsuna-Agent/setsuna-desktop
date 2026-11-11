@@ -100,7 +100,7 @@ function mountPanel() {
   function App() {
     const current = useAssistantsSnapshot(service.store)!;
     return <AssistantInfoPanel service={service} snapshot={current} assistant={current.assistants[0]!}
-      ui={{ Avatar: () => null, AvatarField: () => null, ModelPicker: () => null }}
+      ui={{ Avatar: () => null, AvatarField: () => null, ModelPicker: () => null, ProjectIcon: () => null }}
       onOpenTask={openTask} onOpenReminder={vi.fn()} translate={t} />;
   }
   render(<StrictMode><ConfirmationProvider><App /></ConfirmationProvider></StrictMode>);

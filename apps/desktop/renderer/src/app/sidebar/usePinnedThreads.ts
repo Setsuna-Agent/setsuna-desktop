@@ -1,6 +1,6 @@
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
+import { useCallback, useMemo } from 'react';
+import { usePinnedSidebarIds } from './usePinnedSidebarIds.js';
 
 export const PINNED_THREADS_STORAGE_KEY = 'setsuna-pinned-threads-v1';
 
@@ -9,25 +9,8 @@ export function usePinnedThreads(
   threadsByProjectId: Map<string, RuntimeThreadSummary[]>,
   globalThreads: RuntimeThreadSummary[],
 ) {
-  const [pinnedThreadIds, setPinnedThreadIds] = useState(readPinnedThreadIds);
-
-  useEffect(() => {
-    const sync = (event: StorageEvent) => {
-      if (event.key === PINNED_THREADS_STORAGE_KEY || event.key === null) setPinnedThreadIds(readPinnedThreadIds());
-    };
-    window.addEventListener('storage', sync);
-    return () => window.removeEventListener('storage', sync);
-  }, []);
-
-  const togglePinnedThread = useCallback((thread: RuntimeThreadSummary) => {
-    // Read the latest shared value so another window's pins are preserved.
-    const current = readPinnedThreadIds();
-    const next = current.has(thread.id)
-      ? new Set([...current].filter((id) => id !== thread.id))
-      : new Set([thread.id, ...current]);
-    writeBrowserStorageValue(PINNED_THREADS_STORAGE_KEY, JSON.stringify([...next]));
-    setPinnedThreadIds(next);
-  }, []);
+  const { ids: pinnedThreadIds, toggle } = usePinnedSidebarIds(PINNED_THREADS_STORAGE_KEY);
+  const togglePinnedThread = useCallback((thread: RuntimeThreadSummary) => toggle(thread.id), [toggle]);
 
   const pinnedThreads = useMemo(() => {
     const availableThreads = new Map([
@@ -46,14 +29,3 @@ export function usePinnedThreads(
 }
 
 export type PinnedThreadsState = ReturnType<typeof usePinnedThreads>;
-
-function readPinnedThreadIds(): Set<string> {
-  try {
-    const value: unknown = JSON.parse(readBrowserStorageValue(PINNED_THREADS_STORAGE_KEY) ?? '[]');
-    return new Set(Array.isArray(value)
-      ? value.filter((id): id is string => typeof id === 'string' && id.length > 0)
-      : []);
-  } catch {
-    return new Set();
-  }
-}

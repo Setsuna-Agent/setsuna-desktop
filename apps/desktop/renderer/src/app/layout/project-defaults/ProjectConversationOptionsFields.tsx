@@ -19,14 +19,14 @@ export function ProjectConversationOptionsFields({ value, disabled, onChange }: 
     : chatDefaultModelSelection(state).model;
 
   return <>
-    <label className="desktop-project-editor__field">
-      <span>{t('sidebar.defaultModel')}</span>
+    <label className="sd-form-field">
+      <span className="sd-form-label">{t('sidebar.defaultModel')}</span>
       <ConfiguredModelPicker options={modelOptions(state)} aria-label={t('sidebar.defaultModel')} value={value.model ?? null}
         defaultLabel={t('sidebar.inheritDefault')} unavailableLabel={t('sidebar.unavailableDefault')} disabled={disabled || !state}
         onChange={(model) => onChange({ ...value, model: model ?? undefined, thinking: undefined })} />
     </label>
-    <label className="desktop-project-editor__field">
-      <span>{t('sidebar.defaultThinking')}</span>
+    <label className="sd-form-field">
+      <span className="sd-form-label">{t('sidebar.defaultThinking')}</span>
       <SelectField aria-label={t('sidebar.defaultThinking')}
         value={!model?.thinkingEnabled || !value.thinking ? 'inherit' : value.thinking.enabled ? value.thinking.effort || 'enabled' : 'off'}
         disabled={disabled || !model?.thinkingEnabled}

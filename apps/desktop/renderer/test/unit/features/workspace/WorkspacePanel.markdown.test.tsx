@@ -24,7 +24,7 @@ function Document({ currentFile = file, initialContent = currentFile.content, fo
   const tree = useWorkspaceFileTree({ workspaceKey: 'project', enabled: false, searchEntries: vi.fn() });
   return <I18nProvider initialLocale="zh-CN"><ToastProvider><WorkspacePanel
     activePanel={createFilePanel(currentFile.path)} activeProject={{ id: 'project', name: 'Repo', path: '/repo', createdAt: '', updatedAt: '' }}
-    filePreview={currentFile} fileFocusRequest={focus} fileTree={tree} entryOperationPending={false}
+    filePreview={currentFile} fileFocusRequest={focus} fileTree={tree} entryOperationPending={false} onSearchProjectEntries={vi.fn()}
     fileDraft={{ content, editing, canEdit: editing, dirty: content !== currentFile.content,
       error: null, errorMessage: null, preparing: false, saving: false, isSaving: () => false,
       save: async () => true, confirmDiscardChanges: async () => true, confirmDiscardAllChanges: async () => true, hasUnsavedChanges: false, hasDirtyEntry: () => false, discardEntry: () => undefined, isFileDirty: () => false, updateContent: setContent, relocateEntry: noop }}

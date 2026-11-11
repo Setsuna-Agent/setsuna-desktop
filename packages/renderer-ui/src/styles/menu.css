@@ -1,7 +1,7 @@
 /* Action menus, selects and searchable pickers share a static surface. */
 .sd-menu-surface {
   box-sizing: border-box;
-  padding: 4px;
+  padding: 8px;
   border: 1px solid var(--app-menu-border);
   border-radius: var(--app-menu-radius);
   color: var(--app-text);

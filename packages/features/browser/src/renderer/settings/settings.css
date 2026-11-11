@@ -8,7 +8,7 @@
 .browser-settings-editor__field > span { color: var(--app-text-secondary); font-size: 12px; font-weight: 500; }
 .browser-settings-editor__field > .sd-field { min-height: 36px; }
 .browser-settings-editor__field > .sd-field:read-only { color: var(--app-text-muted); background: var(--app-surface-muted); }
-.browser-settings-editor__group { overflow: hidden; border: 1px solid var(--desktop-agent-subtle-divider); border-radius: var(--app-radius-lg); background: var(--app-surface-subtle); }
+.browser-settings-editor__group { overflow: hidden; border: 1px solid var(--desktop-agent-subtle-divider); border-radius: var(--app-radius-lg); }
 .browser-settings-editor__group > * + * { border-top: 1px solid var(--desktop-agent-subtle-divider); }
 .browser-settings-editor__row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 12px; box-sizing: border-box; color: var(--app-text); font-size: 13px; }
 .browser-settings-editor__row.sd-checkbox { display: flex; width: 100%; gap: 10px; cursor: pointer; }

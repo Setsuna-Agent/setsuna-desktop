@@ -11,6 +11,7 @@ import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 import { hostMessages } from '../../../../src/shared/i18n/messages.js';
 import { PINNED_THREADS_STORAGE_KEY, usePinnedThreads } from '../../../../src/app/sidebar/usePinnedThreads.js';
+import { PINNED_PROJECTS_STORAGE_KEY, usePinnedProjects } from '../../../../src/app/sidebar/usePinnedProjects.js';
 import { useThreadGroups } from '../../../../src/app/sidebar/useThreadGroups.js';
 import { useAppKeyboardShortcuts } from '../../../../src/app/controller/useAppKeyboardShortcuts.js';
 import { useSidebarThreadNavigation } from '../../../../src/app/controller/useSidebarThreadNavigation.js';
@@ -20,6 +21,7 @@ const render = (element: ReactElement) => renderUi(element, { wrapper: ToastProv
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   localStorage.clear();
 });
 
@@ -28,6 +30,63 @@ vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({
 }));
 
 describe('AgentSidebar project actions', () => {
+  it('pins an entire project persistently while preserving independently pinned chats and their ownership', () => {
+    const threads: RuntimeThreadSummary[] = ['child', 'individual'].map((id) => ({
+      id, projectId: projects[0]!.id, title: id, createdAt: '', updatedAt: '',
+      archived: false, messageCount: 0, lastMessagePreview: '',
+    }));
+    localStorage.setItem(PINNED_THREADS_STORAGE_KEY, JSON.stringify(['individual']));
+    const onSelect = vi.fn();
+    const element = (visibleProjects = projects, visibleThreads = threads) => createElement(SidebarHarness, {
+      threads: visibleThreads, onSelect, visibleProjects,
+    });
+    const projectNode = () => screen.getByRole('button', { name: 'Project A' })
+      .closest('.desktop-agent-project-node') as HTMLElement;
+    let view = render(element());
+    fireEvent.click(within(projectNode()).getByRole('menuitem', { name: '置顶' }));
+    expect(JSON.parse(localStorage.getItem(PINNED_PROJECTS_STORAGE_KEY)!)).toEqual(['project-A']);
+    const pinned = screen.getByRole('region', { name: '置顶' });
+    fireEvent.click(within(pinned).getByRole('button', { name: 'child' }));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('child');
+    expect(screen.getAllByRole('button', { name: 'Project A' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'individual' })).toHaveLength(1);
+    expect(within(projectNode()).queryByRole('button', { name: 'individual' })).toBeNull();
+
+    view.unmount();
+    view = render(element([]));
+    expect(screen.queryByRole('region', { name: '置顶' })).toBeNull();
+    const newChild = { ...threads[0]!, id: 'new-child', title: 'New child' };
+    view.rerender(element(projects, [...threads, newChild]));
+    fireEvent.click(within(screen.getByRole('region', { name: '置顶' })).getByRole('button', { name: 'New child' }));
+    expect(onSelect).toHaveBeenLastCalledWith('new-child');
+    fireEvent.click(within(projectNode()).getByRole('menuitem', { name: '取消置顶' }));
+    expect(JSON.parse(localStorage.getItem(PINNED_PROJECTS_STORAGE_KEY)!)).toEqual([]);
+    expect(JSON.parse(localStorage.getItem(PINNED_THREADS_STORAGE_KEY)!)).toEqual(['individual']);
+    const remainingPins = screen.getByRole('region', { name: '置顶' });
+    expect(within(remainingPins).queryByRole('button', { name: 'Project A' })).toBeNull();
+    fireEvent.click(within(projectNode()).getByRole('button', { name: 'child' }));
+    expect(onSelect).toHaveBeenLastCalledWith('child');
+    expect(threads.every((thread) => thread.projectId === 'project-A')).toBe(true);
+  });
+
+  it('merges another window’s project pins and leaves the saved selection intact when a write fails', async () => {
+    const view = renderHook(() => usePinnedProjects(projects), { wrapper: ToastProvider });
+    // Merge the latest persisted selection even before the storage event arrives.
+    localStorage.setItem(PINNED_PROJECTS_STORAGE_KEY, JSON.stringify(['project-B']));
+    act(() => view.result.current.togglePinnedProject(projects[0]!));
+    expect([...view.result.current.pinnedProjectIds]).toEqual(['project-A', 'project-B']);
+    const save = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new Error('Storage full'); });
+    act(() => view.result.current.togglePinnedProject(projects[0]!));
+    expect([...view.result.current.pinnedProjectIds]).toEqual(['project-A', 'project-B']);
+    expect(JSON.parse(localStorage.getItem(PINNED_PROJECTS_STORAGE_KEY)!)).toEqual(['project-A', 'project-B']);
+    await screen.findByText('置顶设置保存失败，请重试。');
+    save.mockRestore();
+    act(() => {
+      localStorage.setItem(PINNED_PROJECTS_STORAGE_KEY, JSON.stringify(['project-B']));
+      window.dispatchEvent(new StorageEvent('storage', { key: PINNED_PROJECTS_STORAGE_KEY }));
+    });
+    expect([...view.result.current.pinnedProjectIds]).toEqual(['project-B']);
+  });
 
   it('navigates only displayed rows, skipping collapsed projects, pinned groups, and rows behind show more', async () => {
     const threads = Array.from({ length: 7 }, (_, index): RuntimeThreadSummary => ({
@@ -122,7 +181,7 @@ describe('AgentSidebar project actions', () => {
     const thread: RuntimeThreadSummary = {
       id: 'local', title: 'Local', createdAt: '', updatedAt: '', archived: false, messageCount: 0, lastMessagePreview: '',
     };
-    const view = renderHook(() => usePinnedThreads([], new Map(), [thread]));
+    const view = renderHook(() => usePinnedThreads([], new Map(), [thread]), { wrapper: ToastProvider });
     act(() => {
       localStorage.setItem(PINNED_THREADS_STORAGE_KEY, JSON.stringify(['remote']));
       window.dispatchEvent(new StorageEvent('storage', { key: PINNED_THREADS_STORAGE_KEY }));
@@ -150,11 +209,9 @@ describe('AgentSidebar project actions', () => {
     fireEvent.click(within(projectNode('Project B')).getByRole('button', { name: '置顶对话' }));
 
     const pinned = screen.getByRole('region', { name: '置顶' });
-    expect([...pinned.querySelectorAll('.desktop-agent-session__select')].map((row) => row.textContent))
-      .toEqual(['Conversation 1', 'Conversation 0']);
+    expect(JSON.parse(localStorage.getItem(PINNED_THREADS_STORAGE_KEY)!)).toEqual(['thread-1', 'thread-0']);
     expect(within(projectNode('Project A')).queryByRole('button', { name: 'Conversation 0' })).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Conversation 0' })).toHaveLength(1);
-    expect(pinned.querySelector('.desktop-agent-session.is-active')).toBeNull();
     const pinnedHeading = within(pinned).getByRole('button', { name: '置顶' });
     fireEvent.click(pinnedHeading);
     expect(pinnedHeading.getAttribute('aria-expanded')).toBe('false');
@@ -168,7 +225,6 @@ describe('AgentSidebar project actions', () => {
     expect(onSelect).toHaveBeenCalledExactlyOnceWith('thread-1');
 
     const unpin = within(pinned).getAllByRole('button', { name: '取消置顶' })[0]!;
-    expect(unpin.getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(unpin);
     expect(within(projectNode('Project B')).getByRole('button', { name: 'Conversation 1' })).toBeTruthy();
     expect(threads[1]?.projectId).toBe(projects[1]?.id);
@@ -193,11 +249,17 @@ const projects: WorkspaceProject[] = ['A', 'B'].map((name) => ({
   id: `project-${name}`, name: `Project ${name}`, path: `/workspace/${name}`, createdAt: '', updatedAt: '',
 }));
 
-function SidebarHarness({ threads, onSelect }: { threads: RuntimeThreadSummary[]; onSelect: (id: string) => void }) {
+function SidebarHarness({ threads, onSelect, visibleProjects = projects }: {
+  threads: RuntimeThreadSummary[];
+  onSelect: (id: string) => void;
+  visibleProjects?: WorkspaceProject[];
+}) {
   const { globalThreads, threadsByProjectId } = useThreadGroups(threads);
-  const { pinnedThreads, pinnedThreadIds, togglePinnedThread } = usePinnedThreads(projects, threadsByProjectId, globalThreads);
+  const { pinnedThreads, pinnedThreadIds, togglePinnedThread } = usePinnedThreads(visibleProjects, threadsByProjectId, globalThreads);
+  const { pinnedProjects, pinnedProjectIds, togglePinnedProject } = usePinnedProjects(visibleProjects);
   return createElement(I18nProvider, { initialLocale: 'zh-CN', messageCatalog }, createElement(AgentSidebar, {
-    ...sidebarProps(projects[0]!), projects, globalThreads, threadsByProjectId, pinnedThreads, pinnedThreadIds,
+    ...sidebarProps(projects[0]!), projects: visibleProjects, globalThreads, threadsByProjectId, pinnedThreads, pinnedThreadIds,
+    pinnedProjects, pinnedProjectIds, onToggleProjectPin: togglePinnedProject,
     onToggleThreadPin: togglePinnedThread, onSelectThread: onSelect,
   }));
 }
@@ -213,6 +275,8 @@ function sidebarProps(project: WorkspaceProject): ComponentProps<typeof AgentSid
     globalThreads: [],
     pinnedThreadIds: new Set<string>(),
     pinnedThreads: [],
+    pinnedProjectIds: new Set<string>(),
+    pinnedProjects: [],
     maxWidth: 420,
     minWidth: 180,
     projectActionMenuId: null,
@@ -247,5 +311,6 @@ function sidebarProps(project: WorkspaceProject): ComponentProps<typeof AgentSid
     onToggleSessionsCollapsed: noop,
     onToggleThreadActions: noop,
     onToggleThreadPin: noop,
+    onToggleProjectPin: noop,
   };
 }

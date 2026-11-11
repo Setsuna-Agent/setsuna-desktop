@@ -9,10 +9,13 @@ import type { AssistantsClient } from '@setsuna-desktop/feature-assistants/rende
 import type { RendererOwnedSlotRenderer } from '@setsuna-desktop/feature-core/renderer';
 import { createAssistantsStore } from '../../../../../../../packages/features/assistants/src/renderer/store.js';
 import { useDesktopNavigation } from '../../../../src/app/controller/useDesktopNavigation.js';
+import { useAppKeyboardShortcuts } from '../../../../src/app/controller/useAppKeyboardShortcuts.js';
 import { AppRouteContent, type AppRouteContentProps } from '../../../../src/app/layout/AppRouteContent.js';
 import type { MainView } from '../../../../src/app/types.js';
 import { AssistantsFeatureServiceBoundary } from '../../../../src/composition/assistants/AssistantsFeatureBoundary.js';
 import { AssistantSidebarEntry } from '../../../../src/composition/assistants/AssistantSidebarEntry.js';
+import { useAssistantConversationEntry } from '../../../../src/composition/assistants/useAssistantConversationEntry.js';
+import { KeyboardShortcutsProvider } from '../../../../src/shared/shortcuts/KeyboardShortcutsProvider.js';
 import { ChatWorkspace } from '../../../../src/features/chat/ChatWorkspace.js';
 import { RendererPluginTestHost } from '../../support/RendererPluginTestHost.js';
 import { writeChatThinkingPreference } from '../../../../src/features/chat/composer/chatThinkingPreferences.js';
@@ -24,11 +27,11 @@ vi.mock('../../../../src/app/layout/ChatRouteAdapter.js', () => ({
 }));
 vi.mock('../../../../src/composition/feature-ui/FeatureRouteTopbar.js', () => ({ FeatureRouteTopbar: () => null }));
 vi.mock('../../../../src/composition/assistants/AssistantsHostUi.js', () => ({ AssistantAvatar: () => null, assistantsHostUi: {
-  Avatar: () => null, AvatarField: () => null, ModelPicker: () => null,
+  Avatar: () => null, AvatarField: () => null, ModelPicker: () => null, ProjectIcon: () => null,
 } }));
 afterEach(() => { cleanup(); localStorage.clear(); });
 
-it.each([false, true])('首页进入助理聊天、跳转项目任务并原地编辑同一助理（StrictMode：%s）', async (strict) => {
+it.each([false, true])('快捷键尊重导航确认，助理聊天与项目任务共用侧栏入口（StrictMode：%s）', async (strict) => {
   const user = userEvent.setup();
   const at = '2026-10-01T00:00:00Z';
   const config = { activeProviderId: 'provider', providers: [{
@@ -72,27 +75,42 @@ it.each([false, true])('首页进入助理聊天、跳转项目任务并原地�
   let finishRefresh!: (threads: []) => void;
   const refresh = new Promise<[]>((resolve) => { finishRefresh = resolve; });
   const reloadThreads = vi.fn(() => refresh);
+  let finishDiscard!: (accepted: boolean) => void;
+  const discard = new Promise<boolean>((resolve) => { finishDiscard = resolve; });
+  const confirmDiscardProjectFile = vi.fn().mockReturnValueOnce(discard).mockResolvedValue(true);
   function App() {
-    const [activeView, setActiveView] = useState<MainView>('chat');
+    const [activeView, setActiveView] = useState<MainView>('settings');
     const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
     const [currentThread, setCurrentThread] = useState<RuntimeThread | null>(null);
     const navigation = useDesktopNavigation({
       activeView, setActiveView, activeProjectId, setActiveProjectId, currentThread, setCurrentThread,
-      client: runtimeClient, confirmDiscardProjectFile: async () => true,
+      client: runtimeClient, confirmDiscardProjectFile,
       projects: [], setProjects: vi.fn(), onError: vi.fn(), threadsByProjectId: new Map(), reloadThreads,
       resetNewThreadWorkspacePanels: vi.fn(), resetProjectWorkspaceState: vi.fn(), resetThreadWorkspacePanels: vi.fn(),
     });
+    const entry = useAssistantConversationEntry({ service, onError: vi.fn(),
+      onOpenConversation: (destination) => navigation.selectThreadInView(destination, 'chat') });
+    useAppKeyboardShortcuts({ 'app.openAssistant': { enabled: entry.available && !entry.opening, execute: () => void entry.open() } });
     return <AssistantsFeatureServiceBoundary service={service}>
-      <AssistantSidebarEntry activeThreadId={currentThread?.id} onOpenConversation={(destination) => navigation.selectThreadInView(destination, 'chat')} />
+      {activeView === 'chat' ? <><AssistantSidebarEntry activeThreadId={currentThread?.id} entry={entry} />
       <AppRouteContent {...{
         activeView, runtime: { currentThread, reloadThreads, client: runtimeClient, config, threads: [], archivedThreads: [] }, onSelectConversation: navigation.selectThreadInView,
         conversationOverviewVisibility: currentThread?.featureId === 'assistants' ? 'shown' : 'auto',
-      } as unknown as AppRouteContentProps} />
+      } as unknown as AppRouteContentProps} /></> : null}
     </AssistantsFeatureServiceBoundary>;
   }
-  render(strict ? <StrictMode><App /></StrictMode> : <App />);
+  render(<KeyboardShortcutsProvider initialPlatform="win32">{strict ? <StrictMode><App /></StrictMode> : <App />}</KeyboardShortcutsProvider>);
   try {
-    fireEvent.click(await screen.findByRole('button', { name: '助理' }));
+    // Rapid invocations before React commits must share one pending navigation decision.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit4', key: '4', ctrlKey: true }));
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit4', key: '4', ctrlKey: true }));
+    });
+    expect(confirmDiscardProjectFile).toHaveBeenCalledOnce();
+    await act(async () => { finishDiscard(false); await discard; });
+    expect(client.openConversation).not.toHaveBeenCalled();
+    expect(getThread).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { code: 'Digit4', key: '4', ctrlKey: true });
     await screen.findByText('结果 local');
     // Slash text is an ordinary assistant message, never a workspace command.
     await user.type(screen.getByRole('textbox'), '/compact{Enter}');
@@ -120,7 +138,7 @@ it.each([false, true])('首页进入助理聊天、跳转项目任务并原地�
     await waitFor(() => expect(client.update).toHaveBeenCalledExactlyOnceWith('owner', expect.objectContaining({ name: '改名后的助理' })));
     expect(client.create).not.toHaveBeenCalled();
     expect(getThread.mock.calls.map(([id]) => id)).toEqual(['local', 'first', 'local', 'second']);
-  } finally { await act(async () => { finishRefresh([]); await refresh; }); }
+  } finally { await act(async () => { finishDiscard(false); finishRefresh([]); await refresh; }); }
 });
 
 function Conversation({ runtime, presentation, starterPresentation, turnNavigationRequest, defaultThinking, conversationInfo, conversationOverviewVisibility }: AppRouteContentProps & Pick<Parameters<typeof ChatWorkspace>[0], 'presentation' | 'starterPresentation' | 'turnNavigationRequest' | 'defaultThinking' | 'conversationInfo'>) {

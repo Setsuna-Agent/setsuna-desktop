@@ -33,15 +33,15 @@ describe('ProjectEditorDialog', () => {
     const user = userEvent.setup();
     render(<ProjectEditorDialog project={null} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
     await user.type(screen.getByRole('textbox', { name: '项目名称' }), 'Configured');
-    await user.click(screen.getByRole('button', { name: '新对话默认配置' }));
     // Global model inheritance must still allow an independent thinking preference.
     expect(screen.getByRole('combobox', { name: '思考强度' }).hasAttribute('disabled')).toBe(false);
-    await user.click(screen.getByRole('button', { name: '默认模型' }));
+    await user.click(screen.getByRole('button', { name: '模型' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Project model' }));
     await user.click(screen.getByRole('combobox', { name: '思考强度' }));
     await user.click(await screen.findByRole('option', { name: 'high' }));
     await user.click(screen.getByRole('button', { name: '默认技能' }));
-    await user.click(screen.getByRole('checkbox', { name: 'Project skill' }));
+    await user.keyboard('{ArrowDown} ');
+    await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: '保存' }));
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ conversationDefaults: {
       model: { providerId: 'provider', modelId: 'project' }, thinking: { enabled: true, effort: 'high' }, skillIds: ['skill'],
@@ -54,7 +54,6 @@ describe('ProjectEditorDialog', () => {
     const onSave = vi.fn(async () => true);
     const user = userEvent.setup();
     render(<ProjectEditorDialog project={project} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
-    await user.click(screen.getByRole('button', { name: '新对话默认配置' }));
     await user.click(screen.getByRole('button', { name: '默认技能' }));
     const search = screen.getByRole('textbox', { name: '搜索 Skill...' });
     await user.type(search, 'INSPECT');
@@ -63,6 +62,7 @@ describe('ProjectEditorDialog', () => {
     await user.clear(search);
     await user.type(search, 'missing-skill');
     await user.click(screen.getByRole('checkbox', { name: 'missing-skill' }));
+    await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: '保存' }));
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       conversationDefaults: { skillIds: ['skill', 'review'] },
@@ -78,7 +78,6 @@ describe('ProjectEditorDialog', () => {
     const onSave = vi.fn(async () => false);
     const user = userEvent.setup();
     render(<ProjectEditorDialog project={project} projects={[project, source]} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
-    await user.click(screen.getByRole('button', { name: '新对话默认配置' }));
     await user.click(screen.getByRole('button', { name: '跟随其他项目' }));
     expect(screen.getByRole('button', { name: '保存' }).hasAttribute('disabled')).toBe(true);
     await user.click(screen.getByRole('combobox', { name: '来源项目' }));

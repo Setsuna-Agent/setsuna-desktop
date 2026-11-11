@@ -13,6 +13,7 @@ import {
   Columns2,
   GitBranch,
   RefreshCw,
+  Rows2,
   Search,
   WrapText,
 } from 'lucide-react';
@@ -396,7 +397,7 @@ export function DesktopReviewPanel({
               <ActionTooltip title={reviewFileExpansionTip}>
                 <IconButton
                   aria-pressed={!effectiveFileExpansionRequest.expanded}
-                  className="desktop-review-panel__file-expansion-toggle app-shell-icon-control"
+                  className="desktop-review-panel__file-expansion-toggle app-shell-icon-control app-shell-icon-control--icon-state"
                   disabled={!hasReviewFiles || bulkExpandDisabled}
                   label={reviewFileExpansionTip}
                   title=""
@@ -410,19 +411,19 @@ export function DesktopReviewPanel({
             <ActionTooltip title={reviewLayoutToggleTip}>
               <IconButton
                 aria-pressed={reviewDiffLayout === 'split'}
-                className="desktop-review-panel__layout-toggle app-shell-icon-control"
+                className="desktop-review-panel__layout-toggle app-shell-icon-control app-shell-icon-control--icon-state"
                 label={reviewLayoutToggleTip}
                 title=""
                 variant="ghost"
                 onClick={handleReviewDiffLayoutToggle}
               >
-                <Columns2 size={14} />
+                {reviewDiffLayout === 'split' ? <Columns2 size={14} /> : <Rows2 size={14} />}
               </IconButton>
             </ActionTooltip>
             <ActionTooltip title={reviewLineWrapToggleTip}>
               <IconButton
                 aria-pressed={reviewLineWrap}
-                className="desktop-review-panel__wrap-toggle app-shell-icon-control"
+                className="desktop-review-panel__wrap-toggle app-shell-icon-control app-shell-icon-control--icon-state"
                 label={reviewLineWrapToggleTip}
                 title=""
                 variant="ghost"

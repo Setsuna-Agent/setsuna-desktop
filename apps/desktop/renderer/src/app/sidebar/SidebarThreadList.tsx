@@ -34,7 +34,6 @@ export function nextSidebarVisibleCount(
 export function SidebarThreadList({
   menuThreadId,
   project,
-  projectsById,
   runningThreadId,
   selectedThreadId,
   threads,
@@ -49,11 +48,10 @@ export function SidebarThreadList({
 }: {
   menuThreadId: string | null;
   project?: WorkspaceProject;
-  projectsById?: ReadonlyMap<string, WorkspaceProject>;
   runningThreadId?: string | null;
   selectedThreadId?: string | null;
   threads: RuntimeThreadSummary[];
-  variant: 'global' | 'project' | 'pinned';
+  variant: 'global' | 'project';
   onArchive: (thread: RuntimeThreadSummary) => void;
   threadMenu: ThreadMenuState;
   onOpenInNewWindow: (threadId: string) => void;
@@ -67,9 +65,7 @@ export function SidebarThreadList({
     ? PROJECT_CONVERSATION_BATCH_SIZE
     : GLOBAL_CONVERSATION_BATCH_SIZE;
   // Creation time remains the default until this group is manually reordered.
-  const defaultThreads = useMemo(() => variant === 'pinned'
-    ? threads
-    : [...threads].sort((left, right) => right.createdAt.localeCompare(left.createdAt)), [threads, variant]);
+  const defaultThreads = useMemo(() => [...threads].sort((left, right) => right.createdAt.localeCompare(left.createdAt)), [threads]);
   const scope = variant === 'project' ? `threads:project:${project?.id ?? ''}` : `threads:${variant}`;
   const order = useSidebarOrder(scope, defaultThreads);
   const orderedThreads = order.items;
@@ -98,8 +94,7 @@ export function SidebarThreadList({
         <SidebarThreadRow
           key={thread.id}
           menuOpen={menuThreadId === thread.id}
-          project={project ?? (thread.projectId ? projectsById?.get(thread.projectId) : undefined)}
-          pinned={variant === 'pinned'}
+          project={project}
           running={runningThreadId === thread.id}
           selected={selectedThreadId === thread.id}
           thread={thread}

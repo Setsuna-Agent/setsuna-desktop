@@ -1,11 +1,11 @@
 .desktop-settings-panel .chat-user-settings__personalization-section {
-  gap: 14px;
+  gap: 16px;
   padding: 0;
 }
 
 .desktop-settings-panel .chat-user-settings__personalization-card {
   border: 1px solid var(--chat-settings-divider);
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-container);
   background: var(--app-surface);
   overflow: hidden;
 }
@@ -52,7 +52,6 @@
   min-height: 184px;
   padding-bottom: 28px;
   overflow-x: hidden;
-  border-radius: var(--app-radius-sm);
 }
 
 .desktop-settings-panel .chat-user-settings__prompt-count {

@@ -4,48 +4,24 @@
 .assistant-conversation-unavailable { grid-column: 2 / -1; grid-row: content / -1; display: grid; place-content: center; color: var(--app-text-muted); font-size: 13px; }
 .assistants-starter { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .assistants-starter h1 { margin: 0; font-size: 20px; font-weight: 500; }
-/* Editor: stacked fields above settings-style row groups, matching the automation task editor. */
-.assistant-form { --assistant-form-control-width: 220px; display: grid; gap: 18px; }
+/* Keep assistant details and QQ settings side by side while both columns fit. */
+.assistant-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  align-items: start;
+  gap: 24px;
+}
 .assistant-avatar-picker.sd-popover { width: min(344px, calc(100vw - 32px)); padding: 12px; max-height: min(480px, var(--radix-popover-content-available-height)); overflow-y: auto; }
-.assistant-form__field { display: grid; gap: 7px; min-width: 0; }
-.assistant-form__field > :is(label, span:not(.sd-field-shell)), .assistant-form__projects > legend, .assistant-form__qq-header > h3 { margin: 0; padding: 0; color: var(--app-text-secondary); font-size: 12px; font-weight: 500; }
-.assistant-form__field > .sd-textarea { min-height: 72px; max-height: 200px; border-radius: var(--app-radius-lg); }
-.assistant-form__group { overflow: hidden; border: 1px solid var(--desktop-agent-subtle-divider); border-radius: var(--app-radius-lg); background: var(--app-surface-subtle); }
-.assistant-form__group > * + * { border-top: 1px solid var(--desktop-agent-subtle-divider); }
-.assistant-form__row, .assistant-form__peer { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 6px 12px; box-sizing: border-box; font-size: 13px; }
-.assistant-form__row > :is(.sd-field, .assistant-form__secret) { flex: 0 0 auto; width: min(var(--assistant-form-control-width), 60%); }
+.assistant-form .sd-textarea { min-height: 72px; max-height: 200px; }
+.assistant-form__peers { overflow: hidden; border: 1px solid var(--desktop-agent-subtle-divider); border-radius: var(--app-radius-lg); }
+.assistant-form__peer + .assistant-form__peer { border-top: 1px solid var(--desktop-agent-subtle-divider); }
+.assistant-form__peer { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 6px 12px; box-sizing: border-box; font-size: 13px; }
 .assistant-form__secret { position: relative; min-width: 0; }
 .assistant-form__secret > .sd-field { padding-right: 64px; }
 .assistant-form__secret-actions { position: absolute; top: 50%; right: 4px; display: flex; gap: 2px; transform: translateY(-50%); }
 .assistant-form__secret-action.sd-icon-button { width: 24px; height: 24px; }
-.assistant-form__projects { min-width: 0; margin: 0; padding: 0; border: 0; font-size: 13px; }
-.assistant-form__projects > legend { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-bottom: 8px; }
-.assistant-form__project-options {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
-  gap: 8px;
-}
-.assistant-form__project {
-  min-width: 0;
-  min-height: 36px;
-  padding: 8px 12px;
-  box-sizing: border-box;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface);
-  cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease;
-}
-.assistant-form__project:hover:not(.is-disabled) { border-color: var(--app-border-strong); background: var(--app-surface-subtle); }
-.assistant-form__project:has(:checked) { border-color: var(--app-accent-border); background: var(--app-accent-subtle); }
-.assistant-form__project:has(:checked):hover:not(.is-disabled) { background: var(--app-accent-soft); }
-.assistant-form__project.is-disabled { cursor: default; }
-.assistant-form__project-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.assistant-form__empty { color: var(--app-text-muted); }
-.assistant-form__qq { display: grid; gap: 10px; }
+.assistant-form__qq { display: grid; gap: 18px; min-width: 0; }
 .assistant-form__qq-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; user-select: none; }
-.assistant-form__status { display: inline-flex; align-items: center; gap: 8px; color: var(--app-text-muted); }
-.assistant-form__status[data-state='connected'] { color: var(--app-success, var(--app-text)); }
 .assistant-form__peer-name { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
 .assistant-form__peer-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .assistant-form__peer-name em { flex: 0 0 auto; color: var(--app-text-muted); font-size: 12px; font-style: normal; white-space: nowrap; }

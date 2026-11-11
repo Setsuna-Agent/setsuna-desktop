@@ -188,7 +188,7 @@ function GoalStatus({
         onClose={() => setEditOpen(false)}
         footer={(
           <div className={styles.editorActions}>
-            <Button variant="ghost" type="button" disabled={Boolean(pendingAction)} onClick={() => setEditOpen(false)}>
+            <Button variant="secondary" type="button" disabled={Boolean(pendingAction)} onClick={() => setEditOpen(false)}>
               {translate('feature.goal.cancel')}
             </Button>
             <Button variant="primary"

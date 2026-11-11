@@ -485,8 +485,8 @@
   box-shadow: none;
   opacity: 0;
   pointer-events: none;
+  /* Match the title's immediate padding change so fading actions never overlap restored text. */
   transition:
-    opacity 160ms ease,
     background 160ms ease,
     color 160ms ease;
 }

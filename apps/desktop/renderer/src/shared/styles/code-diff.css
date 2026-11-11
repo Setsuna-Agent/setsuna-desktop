@@ -1,0 +1,6 @@
+/* Join the code to its file header. Split/wrapped diffs put padding on the root. */
+[data-code],
+[data-diff][data-overflow="wrap"],
+[data-diff][data-dehydrated][data-diff-type="split"][data-overflow="scroll"] {
+  padding-top: 0;
+}

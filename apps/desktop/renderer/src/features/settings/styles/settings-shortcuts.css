@@ -172,10 +172,17 @@
   padding: 0 10px;
 }
 
+/* The binding container owns the rounded outline; its inner buttons stay flush. */
+.settings-shortcuts__binding-key,
+.settings-shortcuts__binding-remove {
+  border-radius: 0;
+}
+
 .settings-shortcuts__binding-remove,
 .settings-shortcuts__binding-remove-placeholder {
   display: inline-grid;
   width: 28px;
+  padding: 0;
   place-items: center;
   border-left: 1px solid var(--app-border);
 }
@@ -194,19 +201,12 @@
   white-space: nowrap;
 }
 
-.settings-shortcuts__add {
-  display: inline-grid;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  place-items: center;
-  border-radius: var(--app-radius-xs);
-}
-
+.settings-shortcuts__add,
 .settings-shortcuts__reset {
   display: inline-grid;
   width: 30px;
   height: 30px;
+  padding: 0;
   place-items: center;
   border-radius: var(--app-radius-xs);
 }

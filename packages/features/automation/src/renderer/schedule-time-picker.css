@@ -1,19 +1,26 @@
 .automation-time-picker {
-  display: flex;
+  display: grid;
   align-items: center;
-  width: min(300px, 60%);
-  gap: 4px;
+  width: 100%;
+  min-width: 0;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
+/* Share one cell so the picker button sits inside the input's outline. */
 .automation-time-picker > .sd-field {
-  flex: 1;
+  grid-area: 1 / 1;
+  width: 100%;
   min-width: 0;
+  padding-inline-end: 36px;
 }
 
-.automation-time-picker .sd-icon-button {
-  flex-shrink: 0;
+.automation-time-picker__trigger {
+  grid-area: 1 / 1;
+  justify-self: end;
+  width: 26px;
+  height: 26px;
+  margin-inline-end: 4px;
 }
 
 .automation-time-picker__popover {

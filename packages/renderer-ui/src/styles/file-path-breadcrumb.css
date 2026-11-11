@@ -1,0 +1,62 @@
+.sd-file-breadcrumb,
+.sd-file-breadcrumb__parents,
+.sd-file-breadcrumb__segments {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.sd-file-breadcrumb {
+  flex: 0 1 auto;
+  gap: 2px;
+}
+
+/* Clip the oldest directories first while keeping the filename at the trailing edge. */
+.sd-file-breadcrumb__parents {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+
+.sd-file-breadcrumb__segments {
+  flex: 0 0 auto;
+}
+
+.sd-file-breadcrumb__segments > svg {
+  flex: 0 0 auto;
+  color: var(--app-text-subtle);
+}
+
+.sd-file-breadcrumb__segment.sd-button {
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 26px;
+  padding: 0 4px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.sd-file-breadcrumb__segment.is-current {
+  flex: 0 1 auto;
+  color: var(--app-text);
+}
+
+.sd-file-breadcrumb__segment > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-file-breadcrumb__popover.sd-popover {
+  width: 360px;
+  max-width: calc(var(--app-scaled-viewport-width) - 16px);
+  max-height: min(400px, 60vh);
+  padding: 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.sd-file-breadcrumb__tree {
+  padding: 2px;
+}

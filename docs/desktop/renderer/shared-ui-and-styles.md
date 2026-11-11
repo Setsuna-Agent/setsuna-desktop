@@ -37,17 +37,23 @@ Skill 列表、详情、命令菜单和聊天引用统一通过 `shared/ui/Skill
 
 `@setsuna-desktop/renderer-ui` 是宿主和 Feature 共用的控件入口，源码按 [beUI](https://beui.dev) 的可复制组件方式维护。按钮、字段、复选框、开关、滑块、选择器、菜单、Popover、Tooltip、Dialog、图片预览、消息气泡和通知栈均由这个包持有；React 版本继续保持 18。
 
+视觉基础对齐 Astryx Neutral，由宿主 `tokens.css` 提供中性色、控件/容器/聊天圆角和三档阴影。保留 beUI / Radix 的既有交互实现，不引入 Astryx 的组件、reset 或第二套主题 provider。共享 `styles/fonts.css` 从 `src/assets/fonts/` 加载可选的本地 Figtree Latin 可变字体；SDK 打包同步复制字体与许可。`initializeAppearancePreference()` 读取并应用已保存的偏好，未保存或无效时使用 System Default 与标准字重（500），不自动写入或重置设置。
+
 独立 React 应用通过 `@setsuna/app` 使用同一份公共组件与样式，详见 [React 自定义应用](../../extensions/plugins/react-apps.md)。`DocumentMarkdown` 也由共享 UI 包持有，供宿主文档阅读和应用的 `Markdown` 入口复用；通用排版在 `renderer-ui/src/styles/markdown.css`，聊天流式块、文件导航和代码操作仍归 Chat。SDK 只打包纯 UI，不包含宿主本机 API 或业务服务。
 
 OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`。基础字号、字体和字重映射到宿主 token，正文与默认控件沿用 `--app-font-size` 的 14px 基线；复合 `font` token 同步映射，避免上游内置的 16px 字号和字体覆盖宿主偏好。密度继续由现有页面缩放统一应用，主题 token 不重复乘以 `--app-page-scale`。
 
 审查、变更、文件、浏览器、PR 和协作任务详情的主头部复用 `renderer-ui/src/styles/panel-toolbar.css`：统一上下留白、最小高度、胶囊边框、主题阴影和操作分组。Feature 只维护路径、来源、地址输入、任务信息和按钮的内容及伸缩规则；源码与预览使用单个文字按钮切换。
 
+文件与变更的路径导航复用 `FilePathBreadcrumb` 和 `file-path-breadcrumb.css`，统一分段按钮、目录弹层和长路径裁剪；目录数据与选择动作由各自 owner 提供，关闭时卸载弹层内容。
+
 `MermaidDiagram` 为聊天、工作区文件预览和 `DocumentMarkdown` 的 `mermaid` 代码块提供图表。Mermaid 按需加载，流式更新合并后串行布局，卸载或源码变化会取消尚未开始的任务并丢弃迟到结果；加载或语法失败保留各入口的源码视图。渲染使用 strict 安全模式，生成的 SVG 作为图片展示，不绑定图表中的链接或脚本。`mermaid-theme.ts` 将宿主字体与颜色 token 转成图片内可用的主题，使用无渐变、无阴影的扁平节点；主题和字体改变时重新渲染。图表在正文中按可用宽度完整展示，点击复用 `ImagePreview` 放大查看。
 
 `renderMermaidDiagram(code, theme, signal)` 也作为共享 API 供 HTML 对话导出调用，复用同一安全配置和串行队列，返回可直接内嵌的 SVG 图片 data URL；导出文件不需要加载 Mermaid 脚本。
 
 - Motion 负责复选框、开关和通知动画；`motion.ts` 提供复选框与通知使用的 spring 参数，开关的参数随组件维护。
+- `styles/form.css` 统一弹层表单的标签、字段间距与响应式字段网格；项目、助理和自动化复用 `sd-form-field`、`sd-form-label`、`sd-form-stack`、`sd-form-grid`，开关使用 `sd-form-row`。各业务只维护自身列布局和特殊控件尺寸。
+- `MultiSelectField` 组合共享 Popover、Checkbox 和字段样式，提供搜索、连续勾选与“首项 +N”展示；选项可传入 `icon`，同时显示在候选和收起后的首项中。选中值由表单持有，搜索只筛选候选；方向键在搜索和选项之间移动，空格勾选，Esc 收起并返回字段。业务侧负责候选来源与保存。
 - `Dock` / `DockItem` / `DockSeparator` 直接采用 [beUI Dock](https://beui.dev/components/motion/dock) 的组件源码，复用已有 `motion.ts` 和 `utils.ts`；变更面板组合它们承载常驻的文件导航与侧栏开关，业务选择与悬停列表仍由 Review Feature 持有。
 - `toast/provider.tsx` 持有共享通知队列、去重、同时展示数量限制和 `useToast`。宿主 `app/providers/ToastProvider.tsx` 只注入本地化标签；Feature 的 `SettingsViewUi.Toast` 和页面中的 `ToastNotice` 复用同一队列。状态驱动的通知在错误清除、重试或组件卸载时撤下。最多同时展示四条，其余等待展示后才开始计时；hover 或内部键盘焦点暂停剩余计时。`durationMs: null` 保留至主动关闭或 owner 撤下，`action` 提供重试等操作。跨页面保存的错误由常驻 owner 持有，不随编辑页卸载撤下。独立 SDK 控件没有外层 provider 时，`ToastNotice` 使用局部队列；需要跨控件共享通知的应用应挂载 `ToastProvider`。
 - 通知区域保持 live-region 语义，避免被模态弹窗隐藏；点击通知不触发 Dialog 的外部点击关闭，失败后的表单和重试入口继续保留。
@@ -59,13 +65,15 @@ OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`
 - Dialog 的入场动画由 `overlays.css` 持有：弹窗上移 12px 并淡入（180ms ease-out），遮罩淡入（160ms ease）。弹窗已去掉 scale 动画，居中与入场位移统一使用 `translate`；12px 按应用密度缩放，减少动态效果偏好下禁用入场动画。
 - Radix 提供浮层定位、焦点约束、嵌套子菜单、键盘操作和关闭行为。控件遵循本项目的窄 API，不提供 Ant Design 兼容层。
 - `Dropdown` / `Popover` 将实际打开态投影为触发元素上的 `data-overlay-open`；嵌套浮层共用同一入口时合并打开态，避免 Tooltip 等控件的 `data-state` 覆盖菜单状态。共享按钮、文件树行和业务自定义行据此保留原有 hover / 激活外观；坐标菜单由所属 owner 将实际 target 关联到具体入口，关闭时随 target 清除。交互规则见 [浮窗触发入口约束](../../design.md)。
-- 应用内菜单由 `MenuSurface` 与 `menu.css` 统一为紧凑圆角面板、细边框、柔和阴影和即时中性填充高亮；右键、按钮下拉、坐标菜单、子菜单、侧栏、添加面板、浏览器窗口与能力创建菜单共用视觉层。Select、项目/分支选择器也使用相同菜单样式。底色采用接近不透明的 `--app-menu-bg`，浅色与深色分别配置，背景模糊由 `--app-menu-backdrop-filter` 统一控制。输入框上方的命令、插件、Skill 与 @ 候选列表由聊天样式持有，使用不透明面板和中性选中背景，避免下方页面文字透出。菜单直接显示/关闭，不使用展开、裁切、缩放或滑动高亮动画；键盘导航、禁用项与危险项仍由原组件管理。系统托盘菜单由操作系统绘制。
+- 应用内菜单由 `MenuSurface` 与 `menu.css` 统一为紧凑圆角面板、细边框、柔和阴影和即时中性填充高亮；右键、按钮下拉、坐标菜单、子菜单、侧栏、添加面板、浏览器窗口与能力创建菜单共用视觉层。Select、项目/分支选择器也使用相同菜单样式。底色由不透明的 `--app-surface-overlay` 映射到 `--app-menu-bg`，浅色与深色分别配置，不使用背景模糊。菜单外框、内边距与行圆角分别为 16 / 8 / 8px，行高仍为 26px。输入框上方的命令、插件、Skill 与 @ 候选列表由聊天样式持有，使用不透明面板和中性选中背景，避免下方页面文字透出。菜单直接显示/关闭，不使用展开、裁切、缩放或滑动高亮动画；键盘导航、禁用项与危险项仍由原组件管理。系统托盘菜单由操作系统绘制。
 - 菜单、Select 与项目/分支选择器的行文字统一使用 `--app-text`（危险项等语义色优先）；菜单高亮只改变行底色（`--app-menu-highlight-bg`，即 `--desktop-agent-control-hover-bg`），文字、图标、快捷键和危险项保持原有颜色；选择类菜单通过 `sd-menu-surface--neutral` 额外为当前选中项保留同一底色。
+- `SelectField` 和 `MultiSelectField` 默认在触发器下方按末端对齐（`bottom-end`），视口空间不足时由 Radix 自动避让。`SelectField` 保留原生 `<option>` 的 `style`，界面字体与代码字体菜单用每项自身的字体渲染名称。
 - `AppTextContextMenu` 使用 `PointMenu` 为输入框提供剪切、复制、粘贴，为正文选区提供复制；已处理的专用右键菜单优先。菜单关闭后恢复原焦点与选区，通过 preload 的 `windowControls.executeTextEdit` 调用当前宿主窗口的原生编辑命令，复用编辑器已有的结构化剪贴板、附件粘贴和撤销链路。
 - `ui/primitives.tsx` / `SelectField.tsx` 保留宿主导出；`SettingsViewUi.tsx` 将同一实现注入 Feature 的 Settings UI contract。
+- 设置页横向配置行的下拉触发器由 `settings-base.css` 统一为 28px 高、8px 圆角和细边框，按当前选项内容收缩并靠右排列；带图标的选项与模型选择器沿用同一规则，长名称按可用宽度省略。上下排列的编辑表单通过 `--settings-select-width`、`--settings-select-height` 定义字段尺寸：模型服务表单铺满各自列，并与文本框保持 34px 等高。菜单交互由原控件负责。
 - 设置子页复用 `SettingsViewUi.PageLayout` 的返回按钮、面包屑和内容宽度；表单自带标题时使用 `showHeading={false}` 保留导航，避免重复标题。
 - `shared/ui/model-picker/` 持有聊天、自动任务和设置页共用的模型搜索、服务分组、品牌图标与悬停详情。Feature 通过 `SettingsViewUi.ModelPicker` 传入可用模型和引用，宿主 `composition/ModelProviderFeatureBoundary.tsx` 只补充模型服务投影中的元数据；候选范围仍由各任务的可用列表决定，缺少元数据不隐藏候选。
-- 插件配置表单复用 `settings-form.css` 的 `sd-settings-form`：浅灰圆角卡片、统一输入控件间距、图标底板和中性分隔线。图片生成、视觉识别与声明式插件设置共用这层外观；各 Feature 只维护字段排布、业务状态和结果展示，不再各自绘制外框。
+- 插件配置表单复用 `settings-form.css` 的 `sd-settings-form`：内容表面、细边界、16px 容器圆角、24px 分组留白、图标底板和中性分隔线。图片生成、视觉识别与声明式插件设置共用这层外观；各 Feature 只维护字段排布、业务状态和结果展示，不再各自绘制外框。
 - `I18nProvider` 同步共享控件的中英文标签；外观和字体继续由宿主偏好控制。
 - 业务专用内容仍留在所属 Feature，弹窗外壳使用共享 `Dialog`，不要复制 backdrop、Escape 监听或 focus trap。
 - 标题同排的页签或操作使用 `Dialog.headerActions`，与标题保持独立语义；正文提交操作继续放在 `footer`。
@@ -83,7 +91,7 @@ OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`
 
 ## Chat prompt
 
-`features/chat/composer/editor/ChatPromptInput.tsx` 采用 beUI Prompt Input 的表面和发送操作，保留本项目需要的富文本引用。`composerDocument.ts` 持有 DOM 与 slot 文档转换；引用标签通过 portal 渲染，发送值使用 slot 的序列化文本，避免文件显示名代替完整路径。
+`features/chat/composer/editor/ChatPromptInput.tsx` 保留 beUI Prompt Input 的发送操作与本项目的富文本引用，表面使用 18px 的 chat 圆角和常驻 low 阴影。`composerDocument.ts` 持有 DOM 与 slot 文档转换；引用标签通过 portal 渲染，发送值使用 slot 的序列化文本，避免文件显示名代替完整路径。
 
 编辑器支持 IME、Shift+Enter、选区插入、技能和文件引用、结构化剪贴板与本机撤销事务。队列、附件、模型、命令菜单和提交逻辑仍由 ChatComposer 及已有 hook 管理。不要在编辑器里访问 runtime。
 

@@ -401,6 +401,10 @@
 }
 
 .model-provider-settings__field {
+  /* Labels sit above these controls, so match the adjacent text fields. */
+  --settings-select-width: 100%;
+  --settings-select-height: 34px;
+
   display: grid;
   gap: 6px;
   min-width: 0;

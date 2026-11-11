@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppChatToolbarTitle } from '../../../../src/app/layout/AppChatToolbarTitle.js';
+import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
 import { SidebarThreadRow } from '../../../../src/app/sidebar/SidebarThreadRow.js';
 import { usePinnedThreads } from '../../../../src/app/sidebar/usePinnedThreads.js';
 import type { ThreadMenuOptions } from '../../../../src/app/thread-menu/threadMenuItems.js';
@@ -69,7 +70,7 @@ it('shares pin and unpin state with the sidebar immediately', async () => {
         onSelect={vi.fn()} onToggleMenu={vi.fn()} />
     </>;
   }
-  render(<Harness />);
+  render(<Harness />, { wrapper: ToastProvider });
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: '对话操作' }));
   await user.click(await screen.findByRole('menuitem', { name: '置顶对话' }));

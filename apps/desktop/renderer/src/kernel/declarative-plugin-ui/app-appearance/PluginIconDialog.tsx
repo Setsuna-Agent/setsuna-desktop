@@ -32,7 +32,7 @@ export default function PluginIconDialog({ pluginId, renderDefault, onClose }: R
       <div className="sd-dialog-form-actions">
         <Button type="button" variant="ghost" className="plugin-icon-dialog__reset" disabled={reading}
           onClick={() => { draft.setAvatar(undefined); setAvatarColor(undefined); }}>{t('pluginUi.resetPluginIcon')}</Button>
-        <Button type="button" variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
         <Button type="submit" variant="primary" disabled={reading}>{t('common.save')}</Button>
       </div>
     </form>

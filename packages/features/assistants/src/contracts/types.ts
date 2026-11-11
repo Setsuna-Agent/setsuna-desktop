@@ -1,4 +1,4 @@
-import type { BrandIconConfig, RuntimeConfiguredModelReference } from '@setsuna-desktop/contracts';
+import type { BrandIconConfig, RuntimeConfiguredModelReference, WorkspaceProjectIcon } from '@setsuna-desktop/contracts';
 import type { AutomationSchedule } from '@setsuna-desktop/feature-automation/contracts';
 
 export type AssistantQqSettings = {
@@ -168,7 +168,7 @@ export type AssistantsState = {
   inbox: AssistantInboxEntry[];
 };
 
-export type AssistantProject = { id: string; name: string; path: string; git: boolean };
+export type AssistantProject = { id: string; name: string; path: string; git: boolean; icon?: WorkspaceProjectIcon };
 
 export type AssistantModel = {
   providerId: string;

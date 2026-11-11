@@ -99,7 +99,7 @@ export function ProviderConnection({
               value={plan?.id ?? ''}
               onValueChange={(value) => {
                 const next = catalogProvider.plans.find((candidate) => candidate.id === value);
-                if (next) onChange(selectCatalogPlan(provider, next));
+                if (next) onChange(selectCatalogPlan(provider, next, plan));
               }}
             >
               {catalogProvider.plans.map((candidate) => (
