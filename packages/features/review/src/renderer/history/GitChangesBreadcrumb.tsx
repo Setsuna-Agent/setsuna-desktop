@@ -1,6 +1,5 @@
-import { Button, FileTreeRow, FileTreeSurface, Popover } from '@setsuna-desktop/renderer-ui';
-import { ChevronRight } from 'lucide-react';
-import { Fragment, useMemo, useRef, useState, type RefObject } from 'react';
+import { FilePathBreadcrumb, FileTreeRow, FileTreeSurface } from '@setsuna-desktop/renderer-ui';
+import { useMemo, useState, type Ref } from 'react';
 import type { DesktopGitChangedFile } from '../../contracts/index.js';
 import { useReviewRendererHost } from '../host.js';
 import { buildReviewFileTree, type ReviewFileTreeNode } from '../model/reviewFileTree.js';
@@ -12,43 +11,17 @@ export function GitChangesBreadcrumb({ file, files, onSelect }: {
   onSelect(file: DesktopGitChangedFile): void;
 }) {
   const { translate: t } = useReviewRendererHost();
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const selectedRef = useRef<HTMLButtonElement>(null);
-  const parts = file.path.split(/[\\/]+/u).filter(Boolean);
-  const segment = (name: string, index: number, current: boolean) => {
-    const directory = parts.slice(0, current ? index : index + 1).join('/');
-    return <Popover open={openIndex === index} onOpenChange={(open) => setOpenIndex(open ? index : null)}
-      placement="bottomLeft" className="sd-menu-surface sd-menu-surface--neutral git-changes-breadcrumb__popover"
-      contentLabel={directory || t('feature.review.history.filePath')}
-      onOpenAutoFocus={(event) => {
-        const selected = selectedRef.current;
-        if (!selected) return;
-        event.preventDefault();
-        selected.focus({ preventScroll: true });
-        selected.scrollIntoView?.({ block: 'nearest' });
-      }}
-      content={openIndex === index ? <BreadcrumbFileTree key={directory} directory={directory} files={files}
-        selectedPath={file.path} selectedRef={selectedRef}
-        onSelect={(selected) => { setOpenIndex(null); onSelect(selected); }} /> : null}>
-      <Button variant="ghost" size="small" className={'git-changes-breadcrumb__segment' + (current ? ' is-current' : '')}
-        aria-current={current ? 'page' : undefined} title={current ? file.path : directory}><span>{name}</span></Button>
-    </Popover>;
-  };
-  return <nav className="git-changes-breadcrumb" aria-label={t('feature.review.history.filePath')}>
-    {parts.length > 1 ? <span className="git-changes-breadcrumb__parents"><span className="git-changes-breadcrumb__segments">
-      {parts.slice(0, -1).map((name, index) => <Fragment key={parts.slice(0, index + 1).join('/')}>
-        {segment(name, index, false)}<ChevronRight aria-hidden="true" size={12} />
-      </Fragment>)}
-    </span></span> : null}
-    {segment(parts.at(-1) ?? file.path, parts.length - 1, true)}
-  </nav>;
+  return <FilePathBreadcrumb path={file.path} label={t('feature.review.history.filePath')}
+    renderDirectory={({ directory, selectedRef, close }) => <BreadcrumbFileTree directory={directory} files={files}
+      selectedPath={file.path} selectedRef={selectedRef}
+      onSelect={(selected) => { close(); onSelect(selected); }} />} />;
 }
 
 function BreadcrumbFileTree({ directory, files, selectedPath, selectedRef, onSelect }: {
   directory: string;
   files: DesktopGitChangedFile[];
   selectedPath: string;
-  selectedRef: RefObject<HTMLButtonElement>;
+  selectedRef: Ref<HTMLButtonElement>;
   onSelect(file: DesktopGitChangedFile): void;
 }) {
   // Build only while a path popup is open; the normal panel mount does no extra tree work.
@@ -84,7 +57,7 @@ function BreadcrumbFileTree({ directory, files, selectedPath, selectedRef, onSel
       {node.type === 'directory' && opened ? node.children.map((child) => renderNode(child, depth + 1)) : null}
     </div>;
   };
-  return <FileTreeSurface className="git-changes-breadcrumb__tree" layoutDependency={layoutDependency}>
+  return <FileTreeSurface layoutDependency={layoutDependency}>
     {nodes.map((node) => renderNode(node))}
   </FileTreeSurface>;
 }

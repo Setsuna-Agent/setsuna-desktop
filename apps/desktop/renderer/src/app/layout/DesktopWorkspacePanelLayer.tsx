@@ -279,6 +279,7 @@ export function DesktopWorkspacePanelLayer({
     onOpenBrowser: actions.onOpenBrowser,
     onOpenConversationDebug: panels.conversationDebugEnabled ? actions.onOpenConversationDebug : undefined,
     onOpenEntry: actions.onOpenEntry,
+    onSearchProjectEntries: actions.onSearchProjectEntries,
     onOpenFilesPanel: actions.onOpenFilesPanel,
     onOpenFileWithApp: actions.onOpenFileWithApp,
     onOpenProjectFile: actions.onOpenProjectFile,

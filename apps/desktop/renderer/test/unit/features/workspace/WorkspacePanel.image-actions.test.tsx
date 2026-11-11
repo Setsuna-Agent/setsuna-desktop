@@ -121,7 +121,7 @@ function Preview({ currentFile, searchEntries, onOpenEntry = noop }: {
     enabled: Boolean(searchEntries), searchEntries: searchEntries ?? vi.fn() });
   return <I18nProvider initialLocale="zh-CN"><ToastProvider><WorkspacePanel
     activePanel={createFilePanel(currentFile.path, currentFile.rootId)} activeProject={{ id: currentFile.projectId, name: 'Repo', path: '/repo', createdAt: '', updatedAt: '' }}
-    filePreview={currentFile} fileFocusRequest={null} fileTree={tree} entryOperationPending={false}
+    filePreview={currentFile} fileFocusRequest={null} fileTree={tree} entryOperationPending={false} onSearchProjectEntries={searchEntries ?? vi.fn()}
     fileDraft={{ content: '', editing: false, canEdit: false, dirty: false,
       error: null, errorMessage: null, preparing: false, saving: false, isSaving: () => false,
       save: async () => true, confirmDiscardChanges: async () => true, confirmDiscardAllChanges: async () => true,

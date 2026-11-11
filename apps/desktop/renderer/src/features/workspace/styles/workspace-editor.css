@@ -96,26 +96,6 @@ body.desktop-file-tree-resizing .desktop-workspace-body--file-explorer {
   justify-content: space-between;
 }
 
-.desktop-editor__crumb-path {
-  display: inline-flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding-inline: 10px;
-  overflow: hidden;
-}
-
-/* Directory recedes so the filename reads first, as in the review file rows. */
-.desktop-editor__crumb-path .desktop-workspace-file-path__directory,
-.desktop-editor__crumb-path .desktop-workspace-file-path__separator {
-  color: var(--app-text-subtle);
-}
-
-.desktop-editor__crumb-path .desktop-workspace-file-path__filename {
-  font-weight: var(--app-font-weight);
-}
-
 .desktop-editor__crumb-actions {
   display: inline-flex;
   flex: 0 0 auto;

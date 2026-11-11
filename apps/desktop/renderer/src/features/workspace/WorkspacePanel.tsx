@@ -41,6 +41,7 @@ import {
 } from './editor/useWorkspaceCodeViewSurface.js';
 import { WorkspaceCodeViewScrollbar } from './editor/WorkspaceCodeViewScrollbar.js';
 import type { WorkspaceFileTreeState } from './hooks/useWorkspaceFileTree.js';
+import type { SearchWorkspaceEntries } from './hooks/useWorkspaceBreadcrumbDirectory.js';
 import { useWorkspaceEntryDrag } from './hooks/useWorkspaceEntryDrag.js';
 import { useWorkspaceImageCopy } from './hooks/useWorkspaceImageCopy.js';
 import { isWorkspaceImagePath } from './media/workspaceImageClipboard.js';
@@ -62,7 +63,8 @@ import {
   WorkspaceFileContextMenu,
   type WorkspaceFileContextTarget,
 } from './WorkspaceFileContextMenu.js';
-import { WorkspaceFileIcon, WorkspaceFilePath } from './WorkspaceFileIcon.js';
+import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
+import { WorkspaceFileBreadcrumb } from './WorkspaceFileBreadcrumb.js';
 import { WorkspaceEntryDialog, type WorkspaceEntryDialogRequest } from './WorkspaceEntryDialog.js';
 import { WorkspaceDocumentPreview } from './documents/WorkspaceDocumentPreview.js';
 import {
@@ -109,6 +111,7 @@ export function WorkspacePanel({
   onExternalOpenFile,
   onOpenFileWithApp,
   onOpenEntry,
+  onSearchProjectEntries,
   onOpenProjectFile,
   onOpenFilesPanel,
   onOpenBrowser,
@@ -148,6 +151,7 @@ export function WorkspacePanel({
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
   onOpenEntry: (entry: WorkspaceEntry) => void;
+  onSearchProjectEntries: SearchWorkspaceEntries;
   onOpenProjectFile: (filePath: string, line?: number) => void;
   onOpenFilesPanel: () => void;
   onOpenBrowser: (url?: string) => void;
@@ -192,8 +196,6 @@ export function WorkspacePanel({
     && activeProject?.id === workspaceFilePreview.projectId && activePanel.rootId === workspaceFilePreview.rootId ? workspaceFilePreview : null;
   const fileView = useWorkspaceFileViewMode(filePreview, fileFocusRequest);
   const activeProjectLabel = activeProject?.name ?? t('workspace.files.noProject');
-  const editorPath = activePanel.type === 'file' && activePanel.filePath
-    ? `${activeProjectLabel}/${activePanel.filePath}` : activeProjectLabel;
   const addReviewFileToConversation = useCallback(
     (filePath: string) => onAddFileToConversation(workspaceFileMentionEntry(filePath)),
     [onAddFileToConversation],
@@ -265,9 +267,11 @@ export function WorkspacePanel({
 
   const fileEditorHeader = showsFileExplorer ? (
     <header className="desktop-editor__crumb sd-panel-toolbar">
-      <span className="desktop-editor__crumb-path sd-panel-toolbar__surface">
-        <WorkspaceFilePath path={editorPath} />
-      </span>
+      <div className="sd-panel-toolbar__path sd-panel-toolbar__surface">
+        <WorkspaceFileBreadcrumb workspaceKey={JSON.stringify([activeProject?.id, activeProject?.path, activePanel.rootId])}
+          rootLabel={activeProjectLabel} path={activePanel.type === 'file' ? activePanel.filePath ?? '' : ''}
+          disabled={!activeProject || entryOperationPending} searchEntries={onSearchProjectEntries} onOpenEntry={onOpenEntry} />
+      </div>
       <span className="desktop-editor__crumb-actions sd-panel-toolbar__surface sd-panel-toolbar__actions">
         {fileView.canPreview ? (
           <span className="sd-panel-toolbar__group">
