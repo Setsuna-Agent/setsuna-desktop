@@ -222,6 +222,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
       if (showEmptyStarter || event.ctrlKey || event.deltaY === 0) return;
       const node = scrollRef.current;
       if (!node) return;
+      cancelSmoothScroll();
       const distanceToBottom = scrollDistanceToBottom(node);
       if (event.deltaY < 0 || distanceToBottom > scrollBottomThresholdPx) {
         releasePinnedScrollForUser();
@@ -229,7 +230,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
       }
       markUserScrollIntent();
     },
-    [markUserScrollIntent, releasePinnedScrollForUser, scrollDistanceToBottom, showEmptyStarter],
+    [cancelSmoothScroll, markUserScrollIntent, releasePinnedScrollForUser, scrollDistanceToBottom, showEmptyStarter],
   );
 
   const handleScrollTouchMove = useCallback(
