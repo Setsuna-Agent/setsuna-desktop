@@ -65,11 +65,15 @@ export function selectCatalogProvider(
 export function selectCatalogPlan(
   provider: ProviderConfigState,
   plan: ModelProviderCatalogPlan,
+  currentPlan: ModelProviderCatalogPlan | undefined,
 ): ProviderConfigState {
+  // Only move preset endpoints; custom URL paths are case-sensitive and must be preserved.
+  const usesPresetUrl = currentPlan?.provider === provider.provider
+    && provider.baseUrl.trim().replace(/\/+$/u, '') === currentPlan.baseUrl.trim().replace(/\/+$/u, '');
   return {
     ...provider,
     provider: plan.provider,
-    baseUrl: plan.baseUrl,
+    baseUrl: usesPresetUrl ? plan.baseUrl : provider.baseUrl,
   };
 }
 

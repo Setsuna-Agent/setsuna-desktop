@@ -1,8 +1,9 @@
 import type { ProviderConfigState } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
-import type { ModelProviderCatalogProvider } from '../../src/contracts/index.js';
+import type { ModelProviderCatalogPlan, ModelProviderCatalogProvider } from '../../src/contracts/index.js';
 import {
   attachInferredCatalogProviders,
+  catalogPlanForConfig,
   configuredModelFromCatalog,
   detachCatalogProvider,
   selectCatalogPlan,
@@ -37,7 +38,33 @@ describe('model provider catalog selection', () => {
       provider: 'openai-responses',
       baseUrl: 'https://gateway.example/v1',
       models: [],
-    })).toEqual({ ...selected, provider: 'openai-responses', baseUrl: 'https://gateway.example/v1' });
+    }, catalogProvider.plans[0])).toEqual({ ...selected, provider: 'openai-responses', baseUrl: 'https://gateway.example/v1' });
+  });
+
+  it.each([
+    ['http://127.0.0.1:8317/v1', 'http://127.0.0.1:8317/v1'],
+    ['https://api.example/gateway/v1', 'https://api.example/gateway/v1'],
+    ['https://api.example/V1', 'https://api.example/V1'],
+    [' https://api.example/v1/ ', 'https://api.example/anthropic'],
+  ])('switches protocol without replacing a customized endpoint: %s', (baseUrl, expectedBaseUrl) => {
+    const currentPlan: ModelProviderCatalogPlan = {
+      id: 'gateway:chat', name: 'Chat Completions', provider: 'openai-compatible',
+      baseUrl: 'https://api.example/v1', models: [],
+    };
+    const nextPlan: ModelProviderCatalogPlan = {
+      id: 'gateway:anthropic', name: 'Anthropic Messages', provider: 'anthropic',
+      baseUrl: 'https://api.example/anthropic', models: [],
+    };
+    const catalogProvider: ModelProviderCatalogProvider = {
+      id: 'gateway', name: 'Gateway', plans: [currentPlan, nextPlan],
+    };
+    const provider: ProviderConfigState = {
+      ...providerFixture(), catalogProviderId: 'gateway', provider: 'openai-compatible', baseUrl,
+    };
+
+    const selected = selectCatalogPlan(provider, nextPlan, catalogPlanForConfig(provider, catalogProvider));
+
+    expect(selected).toEqual({ ...provider, provider: 'anthropic', baseUrl: expectedBaseUrl });
   });
 
   it('copies Pi model capabilities and can detach back to a custom service', () => {
