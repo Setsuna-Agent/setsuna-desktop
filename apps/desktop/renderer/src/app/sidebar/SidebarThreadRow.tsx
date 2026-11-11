@@ -24,6 +24,7 @@ export function SidebarThreadRow({
   selected,
   thread,
   reorder,
+  reorderId = thread.id,
   variant,
   onArchive,
   onOpenInNewWindow,
@@ -40,6 +41,7 @@ export function SidebarThreadRow({
   selected: boolean;
   thread: RuntimeThreadSummary;
   reorder?: SidebarReorder;
+  reorderId?: string;
   variant: 'global' | 'project' | 'pinned';
   onArchive: (thread: RuntimeThreadSummary) => void;
   onOpenInNewWindow: (threadId: string) => void;
@@ -49,7 +51,7 @@ export function SidebarThreadRow({
   onTogglePin: (thread: RuntimeThreadSummary) => void;
 }) {
   const { t } = useI18n();
-  const threadDrag = useSidebarThreadDrag(thread, reorder);
+  const threadDrag = useSidebarThreadDrag(thread, reorder, reorderId);
   const sidebarMenuOpen = useContext(SidebarMenuOpenContext);
   const hoverDisabled = sidebarMenuOpen || menuOpen || threadDrag.dragging || Boolean(reorder?.dragging);
   // 线程列表快照包含整个 runtime 的活动状态；在经过防抖的侧边栏快照尚未更新时，
@@ -134,7 +136,7 @@ export function SidebarThreadRow({
   return (
     <div
       className={className}
-      {...reorder?.rowProps(thread.id)}
+      {...reorder?.rowProps(reorderId)}
       data-dragging={threadDrag.dragging || undefined}
       onContextMenu={handleContextMenu}
       onMouseEnter={() => setHovered(!hoverDisabled)}

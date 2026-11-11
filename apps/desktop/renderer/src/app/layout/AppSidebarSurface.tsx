@@ -3,13 +3,17 @@ import type { PointerEvent as ReactPointerEvent, Ref } from 'react';
 import type { DesktopNavigationState } from '../controller/useDesktopNavigation.js';
 import { AgentSidebar } from '../sidebar/AgentSidebar.js';
 import { AssistantSidebarEntry } from '../../composition/assistants/AssistantSidebarEntry.js';
+import type { AssistantConversationEntry } from '../../composition/assistants/useAssistantConversationEntry.js';
 import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
 import type { PinnedThreadsState } from '../sidebar/usePinnedThreads.js';
+import type { PinnedProjectsState } from '../sidebar/usePinnedProjects.js';
 import type { MainView } from '../types.js';
 
 export function AppSidebarSurface({
+  assistantEntry,
   threadMenu,
   pins,
+  projectPins,
   activeProjectId,
   activeThreadId,
   runningThreadId,
@@ -27,8 +31,10 @@ export function AppSidebarSurface({
   onResizeStart,
   onOpenThreadInNewWindow,
 }: {
+  assistantEntry: AssistantConversationEntry;
   threadMenu: ThreadMenuState;
   pins: PinnedThreadsState;
+  projectPins: PinnedProjectsState;
   activeProjectId: string | null;
   activeThreadId?: string | null;
   runningThreadId?: string | null;
@@ -47,6 +53,7 @@ export function AppSidebarSurface({
   onOpenThreadInNewWindow: (threadId: string) => void;
 }) {
   const { pinnedThreadIds, pinnedThreads, togglePinnedThread } = pins;
+  const { pinnedProjectIds, pinnedProjects, togglePinnedProject } = projectPins;
   if (activeView !== 'chat') return null;
 
   return (
@@ -57,12 +64,15 @@ export function AppSidebarSurface({
       collapsed={sidebarCollapsed}
       runningThreadId={runningThreadId}
       activeView="chat"
-      assistantEntries={<AssistantSidebarEntry activeThreadId={activeThreadId} onOpenConversation={(destination) => navigation.selectThreadInView(destination, 'chat')} />}
+      assistantEntries={<AssistantSidebarEntry activeThreadId={activeThreadId} entry={assistantEntry} />}
       collapsedProjectIds={navigation.collapsedProjectIds}
       forceExpandedProjectIds={navigation.forceExpandedProjectIds}
       globalThreads={globalThreads}
       pinnedThreadIds={pinnedThreadIds}
       pinnedThreads={pinnedThreads}
+      pinnedProjectIds={pinnedProjectIds}
+      pinnedProjects={pinnedProjects}
+      onToggleProjectPin={togglePinnedProject}
       onToggleThreadPin={togglePinnedThread}
       projectActionMenuId={navigation.projectActionMenuId}
       projects={projects}

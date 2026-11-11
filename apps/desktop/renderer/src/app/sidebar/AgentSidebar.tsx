@@ -1,42 +1,28 @@
 import type { ThreadMenuState } from '../thread-menu/useThreadMenu.js';
-import { useConfirm } from '@setsuna-desktop/renderer-ui';
-import { ResizeHandle, Button, useNativeDragPreview } from '@setsuna-desktop/renderer-ui';
+import { ResizeHandle, Button } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import {
-  Archive,
   ChevronDown,
   FolderPlus,
-  MoreHorizontal,
   Plus,
   Search,
-  Settings,
-  Trash2,
 } from 'lucide-react';
 import {
-  useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type Ref,
 } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { AppSidebar } from '../../shared/ui/AppSidebar.js';
-import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { SidebarCollapsibleContent } from './SidebarCollapsibleContent.js';
-import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 import { SidebarMenuOpenContext } from './SidebarMenuContext.js';
-import { SidebarProjectHoverCard } from './SidebarProjectHoverCard.js';
 import { SidebarThreadList } from './SidebarThreadList.js';
-import { PinnedThreadSection } from './PinnedThreadSection.js';
+import { PinnedSection } from './PinnedSection.js';
+import { SidebarProjectList, type SidebarProjectListProps } from './SidebarProjectList.js';
 import { useSidebarNavigationHint } from './useSidebarNavigationHint.js';
-import { SidebarOrderProvider, useSidebarOrder } from './SidebarOrderProvider.js';
-import { useSidebarReorder } from './useSidebarReorder.js';
-
-const isProjectActionTarget = (target: EventTarget | null) =>
-  target instanceof HTMLElement && Boolean(target.closest('.desktop-agent-project__actions'));
+import { SidebarOrderProvider } from './SidebarOrderProvider.js';
 
 export function AgentSidebar({
   activeProjectId,
@@ -50,6 +36,8 @@ export function AgentSidebar({
   globalThreads,
   pinnedThreadIds,
   pinnedThreads,
+  pinnedProjectIds,
+  pinnedProjects,
   projectActionMenuId,
   projects,
   projectsCollapsed,
@@ -79,6 +67,7 @@ export function AgentSidebar({
   onToggleSessionsCollapsed,
   onToggleThreadActions,
   onToggleThreadPin,
+  onToggleProjectPin,
   threadMenu,
   onOpenThreadInNewWindow,
   onRenameThread,
@@ -95,6 +84,8 @@ export function AgentSidebar({
   globalThreads: RuntimeThreadSummary[];
   pinnedThreadIds: ReadonlySet<string>;
   pinnedThreads: RuntimeThreadSummary[];
+  pinnedProjectIds: ReadonlySet<string>;
+  pinnedProjects: WorkspaceProject[];
   projectActionMenuId: string | null;
   projects: WorkspaceProject[];
   projectsCollapsed: boolean;
@@ -124,6 +115,7 @@ export function AgentSidebar({
   onToggleSessionsCollapsed: () => void;
   onToggleThreadActions: (threadId: string) => void;
   onToggleThreadPin: (thread: RuntimeThreadSummary) => void;
+  onToggleProjectPin: (project: WorkspaceProject) => void;
   threadMenu: ThreadMenuState;
   onOpenThreadInNewWindow: (threadId: string) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
@@ -132,6 +124,13 @@ export function AgentSidebar({
   const [scrolled, setScrolled] = useState(false);
   const navigationHint = useSidebarNavigationHint(activeView === 'chat' && !collapsed);
   const menuOpen = Boolean(threadActionMenuId || projectActionMenuId);
+  const projectListProps: Omit<SidebarProjectListProps, 'projects'> = {
+    pinnedThreadIds, pinnedProjectIds, activeProjectId, activeThreadId, runningThreadId,
+    collapsedProjectIds, forceExpandedProjectIds, projectActionMenuId, threadActionMenuId, threadsByProjectId,
+    onArchiveThread, onArchiveProject, onCreateProjectThread, onEditProject, onRemoveProject,
+    threadMenu, onOpenThreadInNewWindow, onRenameThread, onToggleProjectCollapsed, onSelectThread,
+    onToggleProjectActions, onToggleProjectPin, onToggleThreadActions, onToggleThreadPin,
+  };
 
   const sidebar = (
     <AppSidebar
@@ -160,47 +159,19 @@ export function AgentSidebar({
         className="desktop-agent-sidebar__body"
         onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 0)}
       >
-        <PinnedThreadSection
-          menuThreadId={threadActionMenuId}
+        <PinnedSection
+          projectListProps={projectListProps}
+          pinnedProjects={pinnedProjects}
           projects={projects}
-          runningThreadId={runningThreadId}
-          selectedThreadId={activeThreadId}
           threads={pinnedThreads}
-          onArchive={onArchiveThread}
-          threadMenu={threadMenu}
-          onOpenInNewWindow={onOpenThreadInNewWindow}
-          onRename={onRenameThread}
-          onSelect={onSelectThread}
-          onToggleMenu={onToggleThreadActions}
-          onTogglePin={onToggleThreadPin}
         />
         <ProjectSection
-          pinnedThreadIds={pinnedThreadIds}
-          activeProjectId={activeProjectId}
-          activeThreadId={activeThreadId}
-          runningThreadId={runningThreadId}
-          collapsedProjectIds={collapsedProjectIds}
-          forceExpandedProjectIds={forceExpandedProjectIds}
-          projectActionMenuId={projectActionMenuId}
-          projects={projects}
+          listProps={projectListProps}
+          projects={projects.filter((project) => !pinnedProjectIds.has(project.id))}
           projectsCollapsed={projectsCollapsed}
-          threadActionMenuId={threadActionMenuId}
-          threadsByProjectId={threadsByProjectId}
-          onArchiveThread={onArchiveThread}
-          onArchiveProject={onArchiveProject}
-          onCreateProjectThread={onCreateProjectThread}
-          onEditProject={onEditProject}
-          onRemoveProject={onRemoveProject}
-          threadMenu={threadMenu}
-          onOpenThreadInNewWindow={onOpenThreadInNewWindow}
-          onRenameThread={onRenameThread}
+          showEmpty={projects.length === 0}
           onCreateProject={onCreateProject}
-          onToggleProjectCollapsed={onToggleProjectCollapsed}
-          onSelectThread={onSelectThread}
-          onToggleProjectActions={onToggleProjectActions}
           onToggleProjectsCollapsed={onToggleProjectsCollapsed}
-          onToggleThreadActions={onToggleThreadActions}
-          onToggleThreadPin={onToggleThreadPin}
         />
         <GlobalThreadSection
           pinnedThreadIds={pinnedThreadIds}
@@ -249,67 +220,15 @@ export function AgentSidebar({
   </SidebarOrderProvider>;
 }
 
-function ProjectSection({
-  pinnedThreadIds,
-  activeProjectId,
-  activeThreadId,
-  runningThreadId,
-  collapsedProjectIds,
-  forceExpandedProjectIds,
-  projectActionMenuId,
-  projects,
-  projectsCollapsed,
-  threadActionMenuId,
-  threadsByProjectId,
-  onArchiveThread,
-  onArchiveProject,
-  onCreateProjectThread,
-  onEditProject,
-  onRemoveProject,
-  threadMenu,
-  onOpenThreadInNewWindow,
-  onRenameThread,
-  onCreateProject,
-  onToggleProjectCollapsed,
-  onSelectThread,
-  onToggleProjectActions,
-  onToggleProjectsCollapsed,
-  onToggleThreadActions,
-  onToggleThreadPin,
-}: {
-  pinnedThreadIds: ReadonlySet<string>;
-  activeProjectId: string | null;
-  activeThreadId?: string | null;
-  runningThreadId?: string | null;
-  collapsedProjectIds: Set<string>;
-  forceExpandedProjectIds: Set<string>;
-  projectActionMenuId: string | null;
+function ProjectSection({ projects, listProps, projectsCollapsed, showEmpty, onCreateProject, onToggleProjectsCollapsed }: {
   projects: WorkspaceProject[];
+  listProps: Omit<SidebarProjectListProps, 'projects'>;
   projectsCollapsed: boolean;
-  threadActionMenuId: string | null;
-  threadsByProjectId: Map<string, RuntimeThreadSummary[]>;
-  onArchiveThread: (thread: RuntimeThreadSummary) => void;
-  onArchiveProject: (project: WorkspaceProject) => void;
-  onCreateProjectThread: (projectId: string) => void;
-  onEditProject: (project: WorkspaceProject) => void;
-  onRemoveProject: (project: WorkspaceProject) => void;
-  threadMenu: ThreadMenuState;
-  onOpenThreadInNewWindow: (threadId: string) => void;
-  onRenameThread: (thread: RuntimeThreadSummary) => void;
-  onCreateProject: () => void;
-  onToggleProjectCollapsed: (projectId: string) => void;
-  onSelectThread: (threadId: string) => void;
-  onToggleProjectActions: (projectId: string) => void;
-  onToggleProjectsCollapsed: () => void;
-  onToggleThreadActions: (threadId: string) => void;
-  onToggleThreadPin: (thread: RuntimeThreadSummary) => void;
+  showEmpty: boolean;
+  onCreateProject(): void;
+  onToggleProjectsCollapsed(): void;
 }) {
   const { t } = useI18n();
-  const [menuPoint, setMenuPoint] = useState<{ projectId: string; x: number; y: number } | null>(null);
-  const order = useSidebarOrder('projects', projects);
-  const reorder = useSidebarReorder(order.items.map((project) => project.id), order.move);
-  const dragPreview = useNativeDragPreview();
-
   return (
     <section className="desktop-agent-sidebar__group">
       <div className="desktop-agent-sidebar__section-head">
@@ -331,221 +250,11 @@ function ProjectSection({
         </div>
       </div>
       <SidebarCollapsibleContent open={!projectsCollapsed}>
-        <div className="desktop-agent-sidebar__project-list">
-          <div className="project-list sidebar-reorder-list" ref={reorder.rootRef}>
-            {projectsCollapsed ? null : projects.length ? (
-              order.items.map((project) => {
-                const projectThreads = threadsByProjectId.get(project.id) ?? [];
-                const unpinnedThreads = projectThreads.filter((thread) => !pinnedThreadIds.has(thread.id));
-                const isActiveProject = project.id === activeProjectId;
-                const isForceExpandedProject = forceExpandedProjectIds.has(project.id);
-                const isProjectCollapsed = collapsedProjectIds.has(project.id) && !isForceExpandedProject;
-                const shouldShowChildren = !isProjectCollapsed && (isForceExpandedProject || isActiveProject || projectThreads.length > 0);
-
-                return (
-                  <div className="desktop-agent-project-node" key={project.id} {...reorder.rowProps(project.id)}>
-                    <SidebarProjectHoverCard
-                      disabled={projectActionMenuId === project.id || reorder.dragging}
-                      project={project}
-                      threadCount={projectThreads.length}
-                      onEditProject={onEditProject}
-                    >
-                      <div
-                        className={`desktop-agent-project${projectActionMenuId === project.id ? ' is-menu-open' : ''}`}
-                        onContextMenu={(event) => {
-                          if (isProjectActionTarget(event.target)) return;
-                          event.preventDefault();
-                          event.stopPropagation();
-                          setMenuPoint({ projectId: project.id, x: event.clientX, y: event.clientY });
-                          if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
-                        }}
-                      >
-                        <Button variant="ghost"
-                          className="desktop-agent-project__select"
-                          type="button"
-                          aria-expanded={!isProjectCollapsed}
-                          draggable={projects.length > 1}
-                          onDragStart={(event) => {
-                            reorder.start(event, project.id);
-                            dragPreview.start(event);
-                          }}
-                          onDragEnd={() => { dragPreview.end(); reorder.end(); }}
-                          onClick={() => onToggleProjectCollapsed(project.id)}
-                          onKeyDown={(event) => {
-                            if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
-                            event.preventDefault();
-                            const rect = event.currentTarget.getBoundingClientRect();
-                            setMenuPoint({ projectId: project.id, x: rect.left + 20, y: rect.bottom });
-                            if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
-                          }}
-                        >
-                          <ProjectIcon icon={project.icon} open={Boolean(project.path && !isProjectCollapsed)}
-                            className="desktop-agent-project__icon" />
-                          <span className="desktop-agent-project__text">
-                            <span className="desktop-agent-project__name">{project.name}</span>
-                            {!project.path ? <small>{t('sidebar.projectUnbound')}</small> : null}
-                          </span>
-                        </Button>
-                        <ProjectActionMenu
-                          anchorPoint={menuPoint?.projectId === project.id ? menuPoint : undefined}
-                          open={projectActionMenuId === project.id}
-                          project={project}
-                          onArchiveProject={onArchiveProject}
-                          onCreateProjectThread={onCreateProjectThread}
-                          onEditProject={onEditProject}
-                          onRemoveProject={onRemoveProject}
-                          onToggleProjectActions={(projectId) => { setMenuPoint(null); onToggleProjectActions(projectId); }}
-                        />
-                      </div>
-                    </SidebarProjectHoverCard>
-                    <SidebarCollapsibleContent open={shouldShowChildren}>
-                      <div className="desktop-agent-project__children">
-                        {projectThreads.length ? (
-                          <SidebarThreadList
-                            menuThreadId={threadActionMenuId}
-                            project={project}
-                            runningThreadId={runningThreadId}
-                            selectedThreadId={isActiveProject ? activeThreadId : null}
-                            threads={unpinnedThreads}
-                            variant="project"
-                            onArchive={onArchiveThread}
-                            threadMenu={threadMenu}
-                            onOpenInNewWindow={onOpenThreadInNewWindow}
-                            onRename={onRenameThread}
-                            onSelect={onSelectThread}
-                            onToggleMenu={onToggleThreadActions}
-                            onTogglePin={onToggleThreadPin}
-                          />
-                        ) : (
-                          <div className="desktop-agent-sidebar__empty desktop-agent-sidebar__empty--nested">{t('sidebar.emptyChats')}</div>
-                        )}
-                      </div>
-                    </SidebarCollapsibleContent>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="desktop-agent-sidebar__empty">{t('sidebar.emptyProjects')}</div>
-            )}
-          </div>
-        </div>
+        {projectsCollapsed ? null : projects.length
+          ? <SidebarProjectList {...listProps} projects={projects} />
+          : showEmpty ? <div className="desktop-agent-sidebar__empty">{t('sidebar.emptyProjects')}</div> : null}
       </SidebarCollapsibleContent>
     </section>
-  );
-}
-
-function ProjectActionMenu({
-  anchorPoint,
-  open,
-  project,
-  onArchiveProject,
-  onCreateProjectThread,
-  onEditProject,
-  onRemoveProject,
-  onToggleProjectActions,
-}: {
-  anchorPoint?: { x: number; y: number };
-  open: boolean;
-  project: WorkspaceProject;
-  onArchiveProject: (project: WorkspaceProject) => void;
-  onCreateProjectThread: (projectId: string) => void;
-  onEditProject: (project: WorkspaceProject) => void;
-  onRemoveProject: (project: WorkspaceProject) => void;
-  onToggleProjectActions: (projectId: string) => void;
-}) {
-  const { t } = useI18n();
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const confirm = useConfirm();
-  const toggleMenu = () => onToggleProjectActions(project.id);
-  const handleTriggerClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    toggleMenu();
-  };
-  const stopProjectActionEvent = (
-    event: ReactKeyboardEvent<HTMLSpanElement> | ReactMouseEvent<HTMLSpanElement> | ReactPointerEvent<HTMLSpanElement>,
-  ) => {
-    event.stopPropagation();
-  };
-  const stopProjectActionContextMenu = (event: ReactMouseEvent<HTMLSpanElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  return (
-    <span
-      className="desktop-agent-project__actions"
-      onClick={stopProjectActionEvent}
-      onMouseDown={stopProjectActionEvent}
-      onPointerDown={stopProjectActionEvent}
-      onContextMenu={stopProjectActionContextMenu}
-      onKeyDown={stopProjectActionEvent}
-    >
-      <Button variant="ghost"
-        className="desktop-agent-project__action desktop-agent-project__more"
-        ref={triggerRef}
-        type="button"
-        aria-label={t('sidebar.projectActions')}
-        aria-expanded={open}
-        data-overlay-open={open && !anchorPoint ? '' : undefined}
-        aria-haspopup="menu"
-        onClick={handleTriggerClick}
-      >
-        <MoreHorizontal size={14} />
-      </Button>
-      <SidebarFloatingMenu anchorPoint={anchorPoint} open={open} placement="bottom-right" triggerRef={triggerRef} onClose={toggleMenu}>
-        <Button variant="ghost"
-          type="button"
-          role="menuitem"
-          onClick={() => onEditProject(project)}
-        >
-          <Settings size={13} />
-          {t('sidebar.editProject')}
-        </Button>
-        <Button variant="ghost"
-          type="button"
-          role="menuitem"
-          onClick={async () => {
-            toggleMenu();
-            const confirmed = await confirm({
-              title: t('sidebar.archiveProject'),
-              description: t('sidebar.archiveProjectTitle', { project: project.name }),
-              confirmLabel: t('sidebar.archiveProject'),
-            });
-            if (confirmed) onArchiveProject(project);
-          }}
-        >
-          <Archive size={13} />
-          {t('sidebar.archiveProject')}
-        </Button>
-        <Button variant="danger"
-          type="button"
-          role="menuitem"
-          className="is-danger"
-          onClick={async () => {
-            toggleMenu();
-            const confirmed = await confirm({
-              title: t('common.remove'),
-              description: t('sidebar.removeProjectTitle', { project: project.name }),
-              confirmLabel: t('common.remove'),
-              danger: true,
-            });
-            if (confirmed) onRemoveProject(project);
-          }}
-        >
-          <Trash2 size={13} />
-          {t('common.remove')}
-        </Button>
-      </SidebarFloatingMenu>
-      <Button variant="ghost"
-        className="desktop-agent-project__action desktop-agent-project__new-thread"
-        type="button"
-        aria-label={t('sidebar.newProjectChat', { project: project.name })}
-        title={t('sidebar.newChat')}
-        onClick={() => onCreateProjectThread(project.id)}
-      >
-        <Plus size={14} />
-      </Button>
-    </span>
   );
 }
 
