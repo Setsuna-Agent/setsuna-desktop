@@ -94,7 +94,7 @@ export function ProviderConnection({
           </ui.SelectField>
         </Field>
         {catalogProvider && catalogProvider.plans.length > 1 ? (
-          <Field label={translate('feature.modelProvider.plan')}>
+          <Field className="is-wide" label={translate('feature.modelProvider.plan')}>
             <ui.SelectField
               value={plan?.id ?? ''}
               onValueChange={(value) => {
@@ -122,7 +122,7 @@ export function ProviderConnection({
           apiKey={apiKey}
           apiKeyPreview={provider.apiKeyPreview}
           apiKeySet={provider.apiKeySet}
-          className={catalogProvider && catalogProvider.plans.length > 1 ? '' : 'is-wide'}
+          className="is-wide"
           translate={translate}
           ui={ui}
           onChange={onApiKeyChange}

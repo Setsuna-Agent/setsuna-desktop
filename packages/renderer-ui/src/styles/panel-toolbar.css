@@ -30,10 +30,10 @@
 }
 
 .sd-panel-toolbar__surface {
-  border: 1px solid var(--app-border);
+  border: 1px solid var(--desktop-panel-divider);
   border-radius: var(--app-radius-full);
   background: var(--app-surface);
-  box-shadow: var(--app-shadow-card);
+  box-shadow: var(--app-shadow-toolbar);
 }
 
 .sd-panel-toolbar__actions {

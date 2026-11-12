@@ -27,6 +27,7 @@ import {
   useRef,
   useState,
   type ComponentRef,
+  type ReactNode,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import type {
@@ -113,6 +114,7 @@ export function composerActiveTurn(
 }
 
 export function ChatComposer({
+  header,
   presentation = 'workspace',
   preferenceKey,
   activeTurnId,
@@ -157,6 +159,7 @@ export function ChatComposer({
   onCapabilitySelectionRequestConsumed,
   onWorkspaceMentionRequestConsumed,
 }: {
+  header?: ReactNode;
   presentation?: ChatPresentation;
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
@@ -760,6 +763,7 @@ export function ChatComposer({
         }}
       />
       <div className="chat-composer-stack">
+        {header}
         {currentThread && !messenger ? (
           <RendererOwnedListSlot
             slot={chatComposerStatusSlot}

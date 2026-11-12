@@ -26,18 +26,18 @@
   min-width: 0;
   min-height: 0;
   border-right: 1px solid var(--model-provider-divider);
-  background: var(--app-surface);
+  background: var(--app-surface-subtle);
   overflow: hidden;
 }
 
 .model-provider-settings__rail-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
-  min-height: 50px;
-  padding: 12px 14px 10px;
+  min-height: 62px;
+  padding: 16px 16px 12px;
 }
 
 .model-provider-settings__editor-title > span,
@@ -51,9 +51,9 @@
 .model-provider-settings__section-head strong,
 .model-provider-settings__models-head strong {
   color: var(--app-text);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 18px;
+  line-height: 20px;
 }
 
 .model-provider-settings__models-head small {
@@ -66,8 +66,7 @@
   white-space: nowrap;
 }
 
-.model-provider-settings__rail-head h1,
-.model-provider-settings__editor-title strong {
+.model-provider-settings__rail-head h1 {
   margin: 0;
   color: var(--app-text);
   font-size: 15px;
@@ -85,7 +84,7 @@
 .model-provider-settings__rail-search {
   position: relative;
   min-width: 0;
-  margin: 0 12px 10px;
+  margin: 0 12px 12px;
 }
 
 .model-provider-settings__rail-search > svg {
@@ -101,16 +100,16 @@
   width: 100%;
   max-width: none;
   padding-left: 30px;
-  background: var(--app-surface-subtle);
+  background: var(--app-surface);
 }
 
 .model-provider-settings__rail-list {
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   min-height: 0;
-  padding: 0 10px 12px;
+  padding: 0 12px 16px;
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -129,19 +128,25 @@
   gap: 10px;
   width: 100%;
   min-width: 0;
-  min-height: 56px;
-  padding: 8px;
+  min-height: 62px;
+  padding: 10px;
   border: 1px solid transparent;
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-md);
   color: var(--app-text);
   background: transparent;
   text-align: left;
-  transition: border-color 140ms ease, background 140ms ease;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 
-.model-provider-settings__rail-item.sd-button:is(:hover, :active, :focus-visible, .is-active):not(:disabled) {
+.model-provider-settings__rail-item.sd-button:is(:hover, :active, :focus-visible):not(:disabled) {
   border-color: transparent;
   background: var(--desktop-agent-control-hover-bg);
+}
+
+.model-provider-settings__rail-item.sd-button.is-active:not(:disabled) {
+  border-color: var(--model-provider-divider);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card);
 }
 
 .model-provider-settings__rail-item[draggable='true'] {
@@ -207,17 +212,15 @@
 }
 
 .model-provider-settings__editor {
+  --model-provider-editor-width: 880px;
+
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
-  background: var(--app-surface-muted);
+  background: var(--app-surface);
   overflow: hidden;
   container: model-provider-editor / inline-size;
-}
-
-:root[data-theme='dark'] .model-provider-settings__editor {
-  background: var(--app-bg);
 }
 
 .model-provider-settings__editor-head {
@@ -225,16 +228,29 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
+  max-width: calc(var(--model-provider-editor-width) + 48px);
   min-width: 0;
-  min-height: 70px;
-  padding: 12px 24px 16px;
+  margin-inline: auto;
+  padding: 20px 24px;
 }
 
 .model-provider-settings__editor-title {
   display: inline-flex;
-  align-items: flex-start;
-  gap: 11px;
+  align-items: center;
+  gap: 12px;
   min-width: 0;
+}
+
+.model-provider-settings__editor-title > span {
+  gap: 3px;
+}
+
+.model-provider-settings__editor-title strong {
+  color: var(--app-text);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
 }
 
 .model-provider-settings__provider-icon-trigger,
@@ -338,16 +354,23 @@
 }
 
 .model-provider-settings__editor-body {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
   min-width: 0;
   min-height: 0;
-  padding: 0 24px 24px;
+  padding: 0 24px 28px;
   /* 连接配置和模型列表共用滚动区域，展开高级配置时也能完整访问模型。 */
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.model-provider-settings__editor-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: var(--model-provider-editor-width);
+  min-width: 0;
+  margin-inline: auto;
 }
 
 .model-provider-settings__editor .sd-icon-button.sd-button--danger:not(:hover, :active, :focus-visible) {
@@ -371,20 +394,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  min-height: 54px;
-  padding: 12px 16px;
+  min-height: 56px;
+  padding: 16px 20px;
 }
 
 .model-provider-settings__models-head {
   flex-wrap: wrap;
-  border-bottom: 1px solid var(--model-provider-divider);
-}
-
-.model-provider-settings__models-head strong {
-  font-size: 13px;
-  line-height: 20px;
 }
 
 .model-provider-settings__primary-fields,
@@ -392,12 +409,12 @@
 .model-provider-settings__model-editor {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 13px 16px;
+  gap: 16px;
   min-width: 0;
 }
 
 .model-provider-settings__primary-fields {
-  padding: 0 16px 12px;
+  padding: 0 20px 16px;
 }
 
 .model-provider-settings__field {
@@ -457,9 +474,9 @@
   gap: 7px;
   min-width: 0;
   color: var(--app-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 15px;
+  line-height: 18px;
 }
 
 .model-provider-settings__field > label em {
@@ -510,7 +527,7 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px 12px;
-  padding: 0 16px 12px;
+  padding: 0 20px 16px;
 }
 
 .model-provider-settings__connection-actions .model-provider-settings__advanced-trigger.sd-button {
@@ -518,15 +535,15 @@
   min-height: 28px;
   padding: 0;
   border: 0;
-  color: var(--app-primary);
+  color: var(--app-text-secondary);
   background: transparent;
   box-shadow: none;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 .model-provider-settings__connection-actions .model-provider-settings__advanced-trigger.sd-button:is(:hover, :active, :focus-visible):not(:disabled) {
-  color: var(--app-primary-hover);
+  color: var(--app-text);
   background: transparent;
 }
 
@@ -545,13 +562,33 @@
 }
 
 .model-provider-settings__advanced-fields {
-  padding: 2px 16px 16px;
+  padding: 20px;
+  border-top: 1px solid var(--model-provider-divider);
+  background: var(--app-surface-subtle);
 }
 
 .model-provider-settings__models-card {
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   min-height: 0;
+}
+
+.model-provider-settings__model-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-block: 1px solid var(--model-provider-divider);
+  background: var(--app-surface-subtle);
+}
+
+.model-provider-settings__model-toolbar .sd-button,
+.model-provider-settings__models-head .sd-button {
+  min-height: 30px;
+  font-size: 12px;
 }
 
 .model-provider-settings__model-actions {
@@ -575,8 +612,10 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
+  min-height: 68px;
+  padding: 12px 20px;
 }
 
 .model-provider-settings__model-list {
@@ -608,11 +647,6 @@
 
 .model-provider-settings__model-row.is-selected {
   background: var(--app-accent-subtle);
-}
-
-.model-provider-settings__model-summary {
-  min-height: 62px;
-  padding: 10px 16px;
 }
 
 .model-provider-settings__model-summary.is-selecting {
@@ -982,6 +1016,19 @@
 
   .model-provider-settings__editor-body {
     padding: 0 16px 16px;
+  }
+
+  .model-provider-settings__editor-content {
+    gap: 20px;
+  }
+
+  .model-provider-settings__section-head,
+  .model-provider-settings__models-head,
+  .model-provider-settings__primary-fields,
+  .model-provider-settings__connection-actions,
+  .model-provider-settings__advanced-fields,
+  .model-provider-settings__model-summary {
+    padding-inline: 16px;
   }
 
   .model-provider-settings__models-head {

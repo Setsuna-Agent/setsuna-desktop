@@ -40,6 +40,8 @@
   --app-shadow-low: 0 2px 4px rgb(0 0 0 / 5%), 0 4px 8px rgb(0 0 0 / 10%);
   --app-shadow-medium: 0 2px 4px rgb(0 0 0 / 5%), 0 4px 12px rgb(0 0 0 / 10%);
   --app-shadow-high: 0 4px 6px rgb(0 0 0 / 10%), 0 12px 24px rgb(0 0 0 / 15%);
+  /* 工具栏胶囊用接触浅影与扩散柔影分层，保持低于菜单的浮起感。 */
+  --app-shadow-toolbar: 0 1px 2px rgb(0 0 0 / 4%), 0 4px 12px rgb(0 0 0 / 6%);
   --app-shadow-hairline: 0 0 0 1px var(--app-border);
   --app-shadow-workbench: 0 2px 8px color-mix(in srgb, #000000 5%, transparent);
   --app-shadow-scroll-edge: 0 3px 6px -3px color-mix(in srgb, #000000 6%, transparent);
@@ -91,6 +93,10 @@
   --app-success-bg: color-mix(in srgb, var(--app-green) 12%, transparent);
   --app-warning-bg: color-mix(in srgb, var(--app-orange) 12%, transparent);
   --app-shadow-card: 0 1px 2px color-mix(in srgb, #000000 4%, transparent);
+  /* 分段切换共用不透明轨道与选中表面，避免不同宿主底色影响选中层级。 */
+  --app-segment-track-bg: color-mix(in srgb, var(--app-text) 5%, var(--app-bg));
+  --app-segment-selected-bg: var(--app-surface);
+  --app-segment-selected-shadow: var(--app-shadow-card), 0 0 0 1px color-mix(in srgb, var(--app-text) 6%, transparent);
   /* 等宽数字 chip（diff 统计、优先级徽章等），对齐参考站代码徽章风格。 */
   --app-mono-chip-bg: color-mix(in srgb, var(--app-text) 5%, transparent);
   --app-mono-chip-radius: var(--app-radius-xs);
@@ -312,6 +318,7 @@
   --app-shadow-low: 0 2px 4px rgb(0 0 0 / 25%), 0 4px 8px rgb(0 0 0 / 40%), inset 0 0 0 1px rgb(255 255 255 / 8%);
   --app-shadow-medium: 0 2px 4px rgb(0 0 0 / 35%), 0 4px 12px rgb(0 0 0 / 50%), inset 0 0 0 1px rgb(255 255 255 / 12%);
   --app-shadow-high: 0 4px 6px rgb(0 0 0 / 50%), 0 12px 24px rgb(0 0 0 / 70%), inset 0 0 0 1px rgb(255 255 255 / 15%);
+  --app-shadow-toolbar: 0 1px 2px rgb(0 0 0 / 20%), 0 4px 12px rgb(0 0 0 / 28%);
   --app-overlay-bg: rgb(0 0 0 / 80%);
   --app-shadow-workbench: 0 2px 8px color-mix(in srgb, #000000 16%, transparent);
   --app-shadow-scroll-edge: 0 3px 6px -3px color-mix(in srgb, #000000 16%, transparent);
@@ -334,6 +341,7 @@
   --app-success-bg: color-mix(in srgb, var(--app-green) 16%, transparent);
   --app-warning-bg: color-mix(in srgb, var(--app-orange) 16%, transparent);
   --app-shadow-card: 0 1px 2px color-mix(in srgb, #000000 22%, transparent);
+  --app-segment-selected-bg: color-mix(in srgb, var(--app-text) 12%, var(--app-surface));
   --app-mono-chip-bg: color-mix(in srgb, var(--app-text) 8%, transparent);
   --app-success: var(--app-green-hover);
   --app-warning: var(--app-orange-hover);

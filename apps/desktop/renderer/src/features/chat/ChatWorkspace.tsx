@@ -58,6 +58,7 @@ import { RendererOwnedSingleSlot } from '../../kernel/renderer-plugins/RendererK
 
 export function ChatWorkspace({
   conversationInfo,
+  composerHeader,
   presentation = 'workspace',
   turnNavigationRequest,
   defaultThinking,
@@ -115,6 +116,7 @@ export function ChatWorkspace({
   variant = 'main',
 }: {
   conversationInfo?: ReactNode;
+  composerHeader?: ReactNode;
   presentation?: ChatPresentation;
   turnNavigationRequest?: ChatTurnNavigationRequest;
   defaultThinking?: ChatThinkingSelection;
@@ -261,6 +263,7 @@ export function ChatWorkspace({
         surfaceInstanceId: composerSurfaceInstanceId,
         renderDefault: () => (
           <ChatComposer
+            header={composerHeader}
             presentation={presentation}
             key={composerKey}
             preferenceKey={composerKey}

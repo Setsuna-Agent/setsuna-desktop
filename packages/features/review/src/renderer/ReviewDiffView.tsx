@@ -280,6 +280,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
 }) {
   const {
     buildPatch,
+    hasTextContextMenuTarget,
     translate: t,
     ui: { CodePatchView, FileContextMenu },
   } = useReviewRendererHost();
@@ -372,7 +373,8 @@ const ReviewFileCard = memo(function ReviewFileCard({
   }, [focusedByRequest, focusRequest?.version]);
 
   const openDiffLineContextMenu = (event: MouseEvent) => {
-    if (!workspaceFilePath) return;
+    // Selected code belongs to the host's text menu; file actions are the fallback.
+    if (event.defaultPrevented || hasTextContextMenuTarget(event.nativeEvent) || !workspaceFilePath) return;
     event.preventDefault();
     event.stopPropagation();
     setLineContextMenu({

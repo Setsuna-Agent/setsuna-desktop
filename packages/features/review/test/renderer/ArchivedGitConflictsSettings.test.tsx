@@ -13,13 +13,10 @@ afterEach(cleanup);
 type Props = ComponentProps<typeof ArchivedGitConflictsSettings>;
 const ui: Props['ui'] = {
   Section: ({ children }) => <div>{children}</div>,
-  Group: ({ title, children }) => <section aria-label={String(title)}>{children}</section>,
-  Row: ({ className, label, description, children }) => <div className={className}>{label}{description}{children}</div>,
   Button: ({ children, icon: _icon, ...props }) => <button {...props}>{children}</button>,
   IconButton: forwardRef<HTMLButtonElement, ComponentProps<Props['ui']['IconButton']>>(function TestIconButton({ children, label, variant: _variant, ...props }, ref) {
     return <button ref={ref} aria-label={label} {...props}>{children}</button>;
   }),
-  EmptyState: ({ title }) => <p>{title}</p>,
   Toast: ({ message }) => <p role="alert">{message}</p>,
   Dialog: ({ title, children, onClose, closeLabel }) => <section role="dialog" aria-label={String(title)}><button onClick={onClose}>{closeLabel}</button>{children}</section>,
 };

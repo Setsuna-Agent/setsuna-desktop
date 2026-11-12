@@ -43,6 +43,7 @@ export function ProviderRail({
         <ui.Button
           className="model-provider-settings__add-provider"
           icon={<Plus size={13} />}
+          variant="ghost"
           onClick={() => {
             setSearch('');
             onAdd();
@@ -73,7 +74,7 @@ export function ProviderRail({
           >
             <BrandIcon provider={provider} />
             <span className="model-provider-settings__rail-copy">
-              <strong>{provider.name || provider.id}</strong>
+              <strong title={provider.name || provider.id}>{provider.name || provider.id}</strong>
               <small>
                 <span>{protocolLabel(provider.provider)}</span>
                 <i aria-hidden="true" />

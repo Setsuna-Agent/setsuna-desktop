@@ -42,6 +42,7 @@ import type {
 
 export type ChatConversationSurfaceModel = Readonly<{
   conversationInfo?: ReactNode;
+  composerHeader?: ReactNode;
   presentation?: ChatPresentation;
   starterPresentation?: ChatStarterPresentation;
   turnNavigationRequest?: ChatTurnNavigationRequest;
@@ -134,6 +135,7 @@ export function ChatConversationSurface({
     >
       <ChatWorkspace
         conversationInfo={model.conversationInfo}
+        composerHeader={model.composerHeader}
         presentation={model.presentation}
         turnNavigationRequest={model.turnNavigationRequest}
         defaultThinking={model.defaultThinking}

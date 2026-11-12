@@ -32,12 +32,15 @@ describe('助理编辑保存', () => {
       ui={{ Avatar: () => null, AvatarField: () => null, ModelPicker: () => null, ProjectIcon: () => null }} onSaved={onSaved} onDeleted={vi.fn()} onClose={onClose} />);
     const name = screen.getByRole('textbox', { name: 'feature.assistants.name' });
     fireEvent.change(name, { target: { value: '助理' } });
+    await user.click(screen.getByRole('tab', { name: 'feature.assistants.qq' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'feature.assistants.qqAppId' }), { target: { value: '123' } });
     fireEvent.change(screen.getByLabelText('feature.assistants.qqSecret'), { target: { value: 'secret-for-retry' } });
     fireEvent.click(screen.getByRole('switch', { name: 'feature.assistants.qqMarkdownEnabled' }));
+    await user.click(screen.getByRole('tab', { name: 'feature.assistants.title' }));
     await user.click(screen.getByRole('button', { name: 'feature.assistants.projects' }));
     await user.click(screen.getByRole('checkbox', { name: '工作项目' }));
     await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('tab', { name: 'feature.assistants.qq' }));
     fireEvent.click(screen.getByRole('button', { name: 'feature.assistants.qqGuide' }));
     fireEvent.click(screen.getByRole('button', { name: 'feature.assistants.back' }));
     const save = screen.getByRole('button', { name: 'feature.assistants.save' });

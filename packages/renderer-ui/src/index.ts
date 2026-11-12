@@ -29,6 +29,7 @@ export { useNativeDragPreview, useDragReorderPreview } from './drag/drag-feedbac
 export { useReorderLayout, useListChangeLayout, animateReorderLayout, reorderItemRect } from './drag/reorder-layout.js';
 export { FileIcon } from './file-icon.js';
 export { DetailSection } from './detail-section.js';
+export { ArchiveSection, ArchiveRow } from './archive/archive-list.js';
 export { CollapsibleContent, CollapsibleList, CollapsibleListItem } from './collapsible/collapsible.js';
 export { IconSwap } from './icons/icon-swap.js';
 export { DiffViewControls } from './diff-view-controls.js';

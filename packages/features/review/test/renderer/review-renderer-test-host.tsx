@@ -44,6 +44,7 @@ export function ReviewRendererTestHost({
     buildPatch: testDiffPatch,
     loadFileChangePreview,
     copyText,
+    hasTextContextMenuTarget: () => false,
     notifyError,
     openExternal,
     locale,

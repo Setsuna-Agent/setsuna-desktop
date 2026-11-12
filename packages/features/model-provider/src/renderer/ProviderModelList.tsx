@@ -134,18 +134,39 @@ export function ProviderModelList({
               <small>{translate('feature.modelProvider.selectedModelCount', { count: selectedModelIds.size })}</small>
             ) : null}
           </span>
-          <div className="model-provider-settings__model-actions">
-            {batchMode ? (
-              <>
-                <ui.Checkbox
-                  checked={allModelsSelected}
-                  indeterminate={selectedModelIds.size > 0 && !allModelsSelected}
-                  onChange={(checked) => setSelectedModelIds(checked
-                    ? new Set(provider.models.map((model) => model.id))
-                    : new Set())}
+          {batchMode ? null : (
+            <div className="model-provider-settings__model-actions">
+              <ui.Button icon={<Plus size={14} />} variant={catalogPlan ? 'ghost' : 'primary'} onClick={addCustomModel}>
+                {translate('feature.modelProvider.addCustomModel')}
+              </ui.Button>
+              {catalogPlan ? (
+                <ui.Button
+                  disabled={!availableModels.length}
+                  icon={<Plus size={14} />}
+                  variant="primary"
+                  onClick={() => setCatalogPickerOpen(true)}
                 >
-                  {translate('feature.modelProvider.selectAllModels')}
-                </ui.Checkbox>
+                  {availableModels.length
+                    ? translate('feature.modelProvider.addModel')
+                    : translate('feature.modelProvider.allModelsAdded')}
+                </ui.Button>
+              ) : null}
+            </div>
+          )}
+        </header>
+        <div className="model-provider-settings__model-toolbar">
+          {batchMode ? (
+            <>
+              <ui.Checkbox
+                checked={allModelsSelected}
+                indeterminate={selectedModelIds.size > 0 && !allModelsSelected}
+                onChange={(checked) => setSelectedModelIds(checked
+                  ? new Set(provider.models.map((model) => model.id))
+                  : new Set())}
+              >
+                {translate('feature.modelProvider.selectAllModels')}
+              </ui.Checkbox>
+              <div className="model-provider-settings__model-actions">
                 <ui.Button
                   disabled={!selectedModelIds.size}
                   icon={<Trash2 size={14} />}
@@ -157,11 +178,22 @@ export function ProviderModelList({
                 <ui.Button onClick={leaveBatchMode}>
                   {translate('feature.modelProvider.finishBatchManage')}
                 </ui.Button>
-              </>
-            ) : (
-              <>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="model-provider-settings__model-actions">
+                <ui.Button
+                  variant="ghost"
+                  disabled={discovering || !provider.baseUrl.trim()}
+                  icon={<RefreshCw className={discovering ? 'is-spinning' : undefined} size={14} />}
+                  onClick={() => void requestModelSync()}
+                >
+                  {translate('feature.modelProvider.syncModels')}
+                </ui.Button>
                 {catalogPlan ? (
                   <ui.Button
+                    variant="ghost"
                     disabled={refreshingCatalog}
                     icon={<RefreshCw className={refreshingCatalog ? 'is-spinning' : undefined} size={14} />}
                     onClick={onRefreshCatalog}
@@ -169,37 +201,15 @@ export function ProviderModelList({
                     {translate(refreshingCatalog ? 'feature.modelProvider.refreshingCatalog' : 'feature.modelProvider.refreshCatalog')}
                   </ui.Button>
                 ) : null}
-                {provider.models.length ? (
-                  <ui.Button icon={<ListChecks size={14} />} onClick={() => setBatchMode(true)}>
-                    {translate('feature.modelProvider.batchManageModels')}
-                  </ui.Button>
-                ) : null}
-                <ui.Button
-                  disabled={discovering || !provider.baseUrl.trim()}
-                  icon={<RefreshCw className={discovering ? 'is-spinning' : undefined} size={14} />}
-                  onClick={() => void requestModelSync()}
-                >
-                  {translate('feature.modelProvider.syncModels')}
+              </div>
+              {provider.models.length ? (
+                <ui.Button variant="ghost" icon={<ListChecks size={14} />} onClick={() => setBatchMode(true)}>
+                  {translate('feature.modelProvider.batchManageModels')}
                 </ui.Button>
-                <ui.Button icon={<Plus size={14} />} variant={catalogPlan ? 'secondary' : 'primary'} onClick={addCustomModel}>
-                  {translate('feature.modelProvider.addCustomModel')}
-                </ui.Button>
-                {catalogPlan ? (
-                  <ui.Button
-                    disabled={!availableModels.length}
-                    icon={<Plus size={14} />}
-                    variant="primary"
-                    onClick={() => setCatalogPickerOpen(true)}
-                  >
-                    {availableModels.length
-                      ? translate('feature.modelProvider.addModel')
-                      : translate('feature.modelProvider.allModelsAdded')}
-                  </ui.Button>
-                ) : null}
-              </>
-            )}
-          </div>
-        </header>
+              ) : null}
+            </>
+          )}
+        </div>
         {provider.models.length ? (
           <div className="model-provider-settings__model-browser">
             <div className="model-provider-settings__model-list" role="list">
@@ -355,8 +365,8 @@ function ModelRow({
             <span aria-hidden="true"><Pencil size={7} /></span>
           </UiButton>
           <span>
-            <strong>{displayName}</strong>
-            <code>{model.code || '—'}</code>
+            <strong title={displayName}>{displayName}</strong>
+            <code title={model.code}>{model.code || '—'}</code>
           </span>
         </div>
         <div className="model-provider-settings__model-meta">

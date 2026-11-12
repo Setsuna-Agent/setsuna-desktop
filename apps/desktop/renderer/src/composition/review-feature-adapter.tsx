@@ -24,6 +24,7 @@ import { CodePatchView } from '../shared/code/PierreCode.js';
 import { codeDiffLinesToPatch } from '../shared/code/diffPatch.js';
 import { useI18n } from '../shared/i18n/I18nProvider.js';
 import { copyTextToClipboard } from '../shared/lib/clipboard.js';
+import { captureTextContextMenuTarget } from '../shared/lib/textContextMenu.js';
 import { SettingsToggle } from '../shared/ui/SettingsViewUi.js';
 import { Checkbox } from '../shared/ui/primitives.js';
 import { SettingsModelPicker } from './ModelProviderFeatureBoundary.js';
@@ -65,6 +66,9 @@ export function ReviewFeatureHostBoundary({ children }: PropsWithChildren) {
     buildPatch: codeDiffLinesToPatch,
     loadFileChangePreview,
     copyText: copyTextToClipboard,
+    hasTextContextMenuTarget: (event) => Boolean(
+      window.setsunaDesktop?.windowControls.executeTextEdit && captureTextContextMenuTarget(event)
+    ),
     openExternal: (url) => window.setsunaDesktop?.links.openExternal(url) ?? Promise.resolve(false),
     locale,
     notifySuccess: (message) => {

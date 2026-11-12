@@ -1,17 +1,14 @@
 .desktop-review-panel.git-changes-panel {
-  /* Navigation matches the content canvas; cards use subtle themed elevation. */
+  /* Navigation shares the canvas; only the message input has its own surface. */
   --git-nav-bg: var(--desktop-panel-nav-bg);
   --git-surface: var(--app-surface);
   --git-border: var(--desktop-panel-divider);
-  --git-card-shadow:
-    inset 0 0 0 1px var(--app-border-strong),
-    var(--app-shadow-card);
   --git-row-hover-bg: color-mix(in srgb, var(--app-text) 4%, var(--git-surface));
   --git-row-active-bg: color-mix(in srgb, var(--app-text) 8%, var(--git-surface));
   --git-gutter: 10px;
   --git-row-inset: var(--desktop-panel-row-inset);
-  --git-file-row-height: 26px;
-  --git-history-heading-height: 34px;
+  --git-file-row-height: 40px;
+  --git-history-heading-height: 36px;
   container: git-changes / inline-size;
   flex: 1;
   /* The tab bar boundary spans both panes; inner headers stay borderless. */
@@ -143,19 +140,20 @@
   height: 16px;
 }
 
-.git-changes-composer { display: flex; flex-shrink: 0; flex-direction: column; gap: 6px; margin: 4px 8px 10px; }
-/* Keep the hairline inside each surface so overflow clipping cannot cut it off. */
-.git-changes-composer__surface,
-.git-changes-files,
-.git-history-graph,
-.git-conflict-history {
-  border-radius: var(--app-radius-group);
-  background: var(--git-surface);
-  box-shadow: var(--git-card-shadow);
+.git-changes-composer {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px var(--git-gutter) 8px;
 }
 
 .git-changes-composer__surface {
   padding: 8px;
+  border: 1px solid var(--git-border);
+  border-radius: var(--app-radius-control);
+  background: var(--git-surface);
+  box-shadow: var(--app-shadow-card);
 }
 .git-changes-composer__input { position: relative; }
 .git-changes-composer textarea {
@@ -181,9 +179,9 @@
 .git-changes-composer textarea::placeholder { color: var(--app-text-muted); }
 /* The composer surface owns the field outline and focus state. */
 .git-changes-composer .sd-textarea:focus { outline: 0; box-shadow: none; background: transparent; }
-.git-changes-composer__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.git-changes-composer__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .git-changes-composer__generate-tooltip { display: inline-flex; }
-.git-changes-composer__generate { display: grid; width: 28px; height: 28px; padding: 0; place-items: center; border: 0; border-radius: var(--app-radius-full); background: transparent; color: var(--app-text-muted); cursor: pointer; }
+.git-changes-composer__generate { display: grid; width: 28px; height: 28px; padding: 0; place-items: center; border: 0; border-radius: var(--app-radius-sm); background: transparent; color: var(--app-text-muted); cursor: pointer; }
 /* Resize only the message field, leaving the action row in place. */
 .git-changes-composer__resize {
   position: absolute;
@@ -199,26 +197,37 @@
 .git-changes-composer__submit {
   display: flex;
   align-items: stretch;
-  border-radius: var(--app-radius-full);
+  border-radius: var(--app-radius-sm);
   background: var(--git-row-hover-bg);
 }
-/* One neutral capsule joins both actions; Button owns hover, focus and disabled states. */
+/* The split button shares one surface; Button owns hover, focus and disabled states. */
 .git-changes-composer__commit-menu-tooltip {
+  position: relative;
   display: flex;
   flex: 0 0 24px;
+}
+.git-changes-composer__commit-menu-tooltip::before {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 0;
+  width: 1px;
+  background: var(--git-border);
+  pointer-events: none;
+  content: '';
 }
 .git-changes-composer__submit .sd-button { min-height: 28px; border: 0; }
 .git-changes-composer__commit-menu {
   width: 100%;
   padding: 0;
-  border-radius: var(--app-radius-full);
+  border-radius: var(--app-radius-sm);
   border-start-start-radius: 0;
   border-end-start-radius: 0;
 }
 .git-changes-nav__commit {
   flex: 1 1 0;
   min-width: 0;
-  border-radius: var(--app-radius-full);
+  border-radius: var(--app-radius-sm);
   border-start-end-radius: 0;
   border-end-end-radius: 0;
 }
@@ -278,7 +287,12 @@
 }
 
 .git-history-split {
-  padding: 0 8px 8px;
+  padding-bottom: 4px;
+}
+
+.git-history-graph,
+.git-conflict-history {
+  border-top: 1px solid var(--git-border);
 }
 
 .git-history-split__graph {
@@ -294,7 +308,7 @@
 .git-history-split__handle {
   position: relative;
   z-index: 1;
-  /* Overlay the gap between surfaces without adding a hard divider. */
+  /* Cover the section boundary without consuming the list's vertical space. */
   flex: 0 0 10px;
   width: 100%;
   margin: -5px 0;
@@ -302,7 +316,7 @@
   cursor: row-resize;
 }
 
-/* Surface elevation separates panes; resize hit areas stay visually quiet. */
+/* Section borders separate panes; resize hit areas stay visually quiet. */
 .git-changes-panel__resize-handle::after,
 .git-history-split__handle::after {
   content: none;
@@ -346,7 +360,7 @@
   justify-content: space-between;
   gap: 4px;
   width: calc(100% - 2 * var(--git-row-inset));
-  height: 26px;
+  height: 30px;
   margin-inline: var(--git-row-inset);
   padding: 0 calc(var(--git-gutter) - var(--git-row-inset));
   border: 0;
@@ -361,11 +375,14 @@ button.git-history-section-heading { cursor: pointer; }
 .git-history-section-heading > svg:first-child { color: var(--app-text-subtle); transition: transform 150ms ease; }
 .git-history-section-heading svg.is-collapsed { transform: rotate(-90deg); }
 .git-history-section-heading code { flex-shrink: 0; font-size: 10px; font-weight: 400; }
-.git-changes-files__group-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.git-changes-files__group-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .git-changes-files__group {
-  margin: 4px 0;
-  padding-bottom: 4px;
+  padding: 4px 0 8px;
   overflow: hidden;
+}
+
+.git-changes-files__group + .git-changes-files__group {
+  border-top: 1px solid var(--git-border);
 }
 
 .git-changes-files__group-heading { align-items: center; gap: 4px; }
@@ -389,7 +406,7 @@ button.git-history-section-heading { cursor: pointer; }
 .git-changes-files__search {
   display: flex;
   flex-shrink: 0;
-  margin: 8px 8px 4px;
+  margin: 4px var(--git-gutter) 8px;
 }
 .git-history-scroll-area {
   position: relative;
@@ -415,7 +432,7 @@ button.git-history-section-heading { cursor: pointer; }
 .git-changes-file {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   width: calc(100% - 2 * var(--git-row-inset));
   min-width: 0;
   height: var(--git-file-row-height);
@@ -434,12 +451,19 @@ button.git-history-section-heading { cursor: pointer; }
   contain-intrinsic-size: auto var(--git-file-row-height);
 }
 
-.git-changes-file__select { display: flex; flex: 1; align-items: center; gap: 4px; min-width: 0; height: var(--git-file-row-height); padding: 0; border: 0; border-radius: 0; background: transparent; cursor: pointer; font: inherit; text-align: left; }
-.git-changes-file__path { display: flex; align-items: baseline; gap: 7px; min-width: 0; overflow: hidden; }
+.git-changes-file__select { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; height: var(--git-file-row-height); padding: 0; border: 0; border-radius: 0; background: transparent; cursor: pointer; font: inherit; text-align: left; }
+.git-changes-file__path {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  align-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
 .git-changes-file__name,
 .git-changes-file__directory { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.git-changes-file__name { flex: 0 1 auto; min-width: 0; }
-.git-changes-file__directory { flex: 1 4 0; min-width: 0; color: var(--app-text-secondary); font-size: 11px; }
+.git-changes-file__name { min-width: 0; }
+.git-changes-file__directory { min-width: 0; color: var(--app-text-subtle); font-size: 11px; font-weight: 400; line-height: 14px; }
 .git-changes-file__actions,
 .git-changes-group__actions { display: none; flex-shrink: 0; align-self: center; align-items: center; }
 .git-changes-file:hover .git-changes-file__actions,
@@ -460,12 +484,13 @@ button.git-history-section-heading { cursor: pointer; }
 
 .git-history-graph > .git-history-section-heading,
 .git-conflict-history__header .git-history-section-heading {
-  height: calc(var(--git-history-heading-height) - 8px);
+  /* Keep the collapsed height inclusive of the section border and row margins. */
+  height: calc(var(--git-history-heading-height) - 9px);
   margin-block: 4px;
   border-radius: var(--app-radius-sm);
   background: transparent;
 }
-.git-history-graph__heading { flex: 1; }
+.git-history-graph__heading { flex: 1; font-weight: 500; }
 
 .git-history-graph__rows { position: relative; min-width: 100%; }
 .git-history-row {
@@ -631,7 +656,7 @@ button.git-history-section-heading:hover,
 .git-conflict-history__row[data-overlay-open] .git-conflict-history__entry { background: var(--git-row-hover-bg); }
 .git-conflict-history__entry[aria-pressed='true'] { background: var(--git-row-active-bg); }
 
-.git-conflict-history__header { position: relative; flex-shrink: 0; height: var(--git-history-heading-height); }
+.git-conflict-history__header { position: relative; flex-shrink: 0; height: calc(var(--git-history-heading-height) - 1px); }
 /* Reserve an action slot before the collapse chevron, which stays at the right edge. */
 .git-conflict-history__header .git-changes-count { margin-right: 26px; }
 .git-conflict-history__archive-all.sd-icon-button,
@@ -644,5 +669,3 @@ button.git-history-section-heading:hover,
 .git-conflict-history__row:is(:hover, :focus-within, [data-overlay-open]) time { visibility: hidden; }
 
 .git-conflict-archive-preview { height: min(65vh, 720px); border: 0; }
-.git-conflict-archive-path { display: block; overflow-wrap: anywhere; }
-.git-conflict-archive-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }

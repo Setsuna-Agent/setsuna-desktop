@@ -44,6 +44,8 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 - Active turn 的 stop/queue 语义。
 - `ChatSendQueue`。
 
+会话 owner 可通过 `ChatRouteAdapter` 的 `composerHeader` 向输入框上方注入操作内容，与发送队列共用现有容器；宿主只负责摆放。助理的 QQ 来源授权由 Assistants Feature 提供组件与操作逻辑，不依赖环境信息面板或消息正文。
+
 Composer state 由 `useChatComposerSession` 和专用 hooks 管理。应用运行期间，文字草稿、Skill ID 及其未裁剪文本引用范围、已选文件/目录的完整 entry 与引用范围、`chatAttachmentStore` 按 thread / new-thread-slot 独立保留，切换会话、新建会话或切换页面不会清空原草稿。选择空工作区、首次创建 runtime thread 时转移同一份草稿；目标已有文字或附件（包括上传中）时恢复目标草稿，并将来源草稿保留在原位置。恢复编辑器时按已保存的引用与范围重建槽位，未选择的 `@` 搜索文字保留为可编辑文本；发送时再把 Skill 范围换算到裁剪后的文本。附件上传和发送结果仍归原 session，成功发送只清理已提交附件，失败保留文字、Skill 引用和附件以便重试。`useChatAttachments` 只订阅附件状态，输入框卸载不再删除会话持有的附件；显式丢弃草稿或会话状态 owner 卸载时回收未发送资源。队列取回后的内容也按普通草稿保留。
 
 Renderer Slot 的实例身份沿用这套 session 语义：Conversation/Details 跟随具体 thread surface，Composer 则使用 `variant + composerKey`。首次发送把 new-thread slot claim 为新 thread 时，Composer Slot 不会因 threadId 出现而中途 remount。空白 starter 的可替换 Conversation 内容与宿主 Composer 是同级所有权；Conversation winner 即使完全替换默认内容，也不能让发送入口消失。
