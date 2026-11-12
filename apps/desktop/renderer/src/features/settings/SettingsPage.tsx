@@ -184,6 +184,7 @@ export function SettingsPage({
             selectedPage?.metadata.layout === 'wide' ? 'chat-user-settings__content--wide' : ''
           }`}
           data-settings-feature={selectedPage?.owner.featureId}
+          data-settings-section={resolvedSection}
         >
           {/* 常驻于分区之外：首次进入时 lazy 分区只留空内容区，不冒泡到路由级兜底；
               页内切换时配合 transition 保留旧分区直到 chunk 就绪。 */}

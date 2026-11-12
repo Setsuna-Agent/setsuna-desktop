@@ -84,7 +84,7 @@ export function ProviderEditor({
             <span aria-hidden="true"><Pencil size={8} /></span>
           </UiButton>
           <span>
-            <strong>{provider.name || provider.id}</strong>
+            <strong title={provider.name || provider.id}>{provider.name || provider.id}</strong>
             <small>{protocolLabel(provider.provider)} · {translate('feature.modelProvider.modelCount', { count: provider.models.length })}</small>
           </span>
         </div>
@@ -107,32 +107,34 @@ export function ProviderEditor({
         </div>
       </header>
       <div className="model-provider-settings__editor-body">
-        <ProviderConnection
-          BrandIcon={BrandIcon}
-          apiKey={apiKey}
-          catalog={catalog}
-          provider={provider}
-          proxyServers={proxyServers}
-          translate={translate}
-          ui={ui}
-          onApiKeyChange={onApiKeyChange}
-          onClearApiKey={onClearApiKey}
-          onCopyApiKey={onCopyApiKey}
-          onChange={onChange}
-          onTestConnection={onTestConnection}
-        />
-        <ProviderModelList
-          catalogPlan={catalogPlan}
-          discovering={discovering}
-          refreshingCatalog={refreshingCatalog}
-          host={host}
-          provider={provider}
-          translate={translate}
-          ui={ui}
-          onChange={onChange}
-          onDiscover={onDiscover}
-          onRefreshCatalog={onRefreshCatalog}
-        />
+        <div className="model-provider-settings__editor-content">
+          <ProviderConnection
+            BrandIcon={BrandIcon}
+            apiKey={apiKey}
+            catalog={catalog}
+            provider={provider}
+            proxyServers={proxyServers}
+            translate={translate}
+            ui={ui}
+            onApiKeyChange={onApiKeyChange}
+            onClearApiKey={onClearApiKey}
+            onCopyApiKey={onCopyApiKey}
+            onChange={onChange}
+            onTestConnection={onTestConnection}
+          />
+          <ProviderModelList
+            catalogPlan={catalogPlan}
+            discovering={discovering}
+            refreshingCatalog={refreshingCatalog}
+            host={host}
+            provider={provider}
+            translate={translate}
+            ui={ui}
+            onChange={onChange}
+            onDiscover={onDiscover}
+            onRefreshCatalog={onRefreshCatalog}
+          />
+        </div>
       </div>
       {iconPickerOpen ? (
         <BrandIconPicker

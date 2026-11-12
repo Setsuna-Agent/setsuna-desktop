@@ -144,7 +144,7 @@
   margin: 0 16px 12px;
   padding: 3px;
   border-radius: var(--app-radius-full);
-  background: var(--app-surface-muted);
+  background: var(--app-segment-track-bg);
 }
 
 .conversation-debug-inspector__tabs > .sd-button {
@@ -169,8 +169,8 @@
 
 .conversation-debug-inspector__tabs > .sd-button[aria-selected='true']:not(:disabled) {
   color: var(--app-text);
-  background: var(--app-surface);
-  box-shadow: var(--app-shadow-card);
+  background: var(--app-segment-selected-bg);
+  box-shadow: var(--app-segment-selected-shadow);
 }
 
 .conversation-debug-inspector__tabs > .sd-button:focus-visible {

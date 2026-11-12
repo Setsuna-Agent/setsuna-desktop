@@ -6,6 +6,7 @@ import type { TerminalAction } from '../../contracts/index.js';
 import { useTerminalActionsHost } from './context.js';
 import { TerminalActionDialog } from './TerminalActionDialog.js';
 import { TerminalActionIcon } from './TerminalActionIcon.js';
+import { TerminalActionsEmptyState } from './TerminalActionsEmptyState.js';
 import { useTerminalActionEditor } from './useTerminalActionEditor.js';
 import { useTerminalActions } from './useTerminalActions.js';
 import './actions.css';
@@ -62,7 +63,7 @@ function ActionList({ saved, onSave, initialAction, onDraftConsumed, translate: 
     {saved.length ? <ui.Group title={heading}>
       {saved.map((action) => <ui.NavigationRow key={action.id} label={action.name}
         icon={<TerminalActionIcon icon={action.icon} size={18} />} onClick={() => editor.open(action)} />)}
-    </ui.Group> : heading}
+    </ui.Group> : <>{heading}<TerminalActionsEmptyState /></>}
     {editor.editing ? <TerminalActionDialog key={editor.editing.action.id} mode="settings" translate={t}
       action={editor.editing.action} creating={editor.editing.creating} onSave={editor.save}
       onRemove={editor.editing.creating ? undefined : editor.remove} onClose={editor.close} /> : null}

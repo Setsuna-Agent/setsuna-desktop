@@ -68,6 +68,13 @@
 .feature-terminal-action-settings__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .feature-terminal-action-settings__heading h2 { margin: 0; font-size: 13px; font-weight: 600; line-height: 20px; }
 
+.feature-terminal-action-settings__empty {
+  display: grid;
+  min-height: min(360px, 48vh);
+  padding: 32px 24px;
+  place-items: center;
+}
+
 .feature-terminal-action-platform { min-width: 0; margin: 0; padding: 0; border: 0; }
 .feature-terminal-action-platform legend { margin-bottom: 6px; padding: 0; color: var(--app-text-muted); font-size: 12px; }
 .feature-terminal-action-platform label { display: inline-flex; cursor: pointer; }

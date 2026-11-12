@@ -1,18 +1,59 @@
-.desktop-settings-panel .task-model-settings {
-  gap: 14px;
-  padding: 0;
+/* The host owns one layout for core settings and independently contributed model groups. */
+.desktop-settings-panel [data-settings-section='taskModels'] {
+  --settings-standard-control-width: 280px;
+  --settings-select-width: 100%;
+  --settings-select-height: var(--app-control-height);
 }
 
-.desktop-settings-panel .task-model-settings__groups {
-  display: grid;
-  gap: 16px;
+.desktop-settings-panel [data-settings-section='taskModels'] .chat-user-settings__section-extensions {
+  gap: 24px;
+  margin-top: 24px;
 }
 
-.desktop-settings-panel .task-model-settings__group {
-  display: grid;
-  gap: 8px;
+.desktop-settings-panel [data-settings-section='taskModels'] .sd-settings-view {
+  gap: 24px;
 }
 
-.desktop-settings-panel .task-model-settings__group-title {
-  margin: 0;
+.desktop-settings-panel [data-settings-section='taskModels'] .sd-settings-group-title {
+  min-height: 20px;
+  padding-inline: 4px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.desktop-settings-panel [data-settings-section='taskModels'] .sd-settings-group {
+  box-shadow: var(--app-shadow-workbench);
+}
+
+.desktop-settings-panel [data-settings-section='taskModels'] .sd-settings-row {
+  --settings-row-padding-inline: 20px;
+}
+
+.desktop-settings-panel [data-settings-section='taskModels'] .sd-settings-field-row {
+  grid-template-columns: minmax(0, 1fr) var(--settings-standard-control-width);
+  column-gap: 24px;
+  min-height: 72px;
+  padding-block: 12px;
+}
+
+.desktop-settings-panel [data-settings-section='taskModels'] .sd-settings-row__copy {
+  gap: 6px;
+}
+
+.desktop-settings-panel [data-settings-section='taskModels'] .sd-settings-row__copy small {
+  line-height: 20px;
+}
+
+.desktop-settings-panel [data-settings-section='taskModels'] .sd-settings-row__control {
+  max-width: none;
+}
+
+@container settings-group (max-width: 560px) {
+  .desktop-settings-panel [data-settings-section='taskModels'] .sd-settings-field-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding-block: 16px;
+  }
 }

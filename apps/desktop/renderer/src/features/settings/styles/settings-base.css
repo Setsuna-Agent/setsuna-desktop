@@ -189,68 +189,6 @@
   gap: 14px;
 }
 
-.desktop-settings-panel .settings-archives-list {
-  display: grid;
-  border: 1px solid var(--chat-settings-divider);
-  border-radius: var(--app-radius-sm);
-  background: var(--app-surface);
-  overflow: hidden;
-}
-
-.desktop-settings-panel .settings-archives-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.desktop-settings-panel .settings-archives-row {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 11px 12px;
-}
-
-.desktop-settings-panel .settings-archives-row + .settings-archives-row {
-  border-top: 1px solid var(--chat-settings-divider);
-}
-
-.desktop-settings-panel .settings-archives-row__icon {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: var(--app-radius-sm);
-  background: var(--app-surface-muted);
-  color: var(--app-text-secondary);
-}
-
-.desktop-settings-panel .settings-archives-row__copy {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.desktop-settings-panel .settings-archives-row__copy strong,
-.desktop-settings-panel .settings-archives-row__copy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-settings-panel .settings-archives-row__copy strong {
-  color: var(--app-text);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.desktop-settings-panel .settings-archives-row__copy small {
-  color: var(--app-text-muted);
-  font-size: 11px;
-}
-
 .desktop-settings-panel .chat-user-settings__section-block {
   display: grid;
   min-width: 0;

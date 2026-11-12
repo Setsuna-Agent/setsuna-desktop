@@ -39,13 +39,17 @@ Skill 列表、详情、命令菜单和聊天引用统一通过 `shared/ui/Skill
 
 视觉基础对齐 Astryx Neutral，由宿主 `tokens.css` 提供中性色、控件/容器/聊天圆角和三档阴影。保留 beUI / Radix 的既有交互实现，不引入 Astryx 的组件、reset 或第二套主题 provider。共享 `styles/fonts.css` 从 `src/assets/fonts/` 加载可选的本地 Figtree Latin 可变字体；SDK 打包同步复制字体与许可。`initializeAppearancePreference()` 读取并应用已保存的偏好，未保存或无效时使用 System Default 与标准字重（500），不自动写入或重置设置。
 
+分段切换统一使用 `--app-segment-track-bg`、`--app-segment-selected-bg` 与 `--app-segment-selected-shadow`：轨道使用不透明底色，暗色选中项提高亮度。共享 Tabs 的 segment 变体、文档源码/预览切换、项目默认配置模式、运行活动与对话调试页沿用这套主题变量；各控件保留原有布局、动画与选择行为。
+
 独立 React 应用通过 `@setsuna/app` 使用同一份公共组件与样式，详见 [React 自定义应用](../../extensions/plugins/react-apps.md)。`DocumentMarkdown` 也由共享 UI 包持有，供宿主文档阅读和应用的 `Markdown` 入口复用；通用排版在 `renderer-ui/src/styles/markdown.css`，聊天流式块、文件导航和代码操作仍归 Chat。SDK 只打包纯 UI，不包含宿主本机 API 或业务服务。
 
 OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`。基础字号、字体和字重映射到宿主 token，正文与默认控件沿用 `--app-font-size` 的 14px 基线；复合 `font` token 同步映射，避免上游内置的 16px 字号和字体覆盖宿主偏好。密度继续由现有页面缩放统一应用，主题 token 不重复乘以 `--app-page-scale`。
 
-审查、变更、文件、浏览器、PR 和协作任务详情的主头部复用 `renderer-ui/src/styles/panel-toolbar.css`：统一上下留白、最小高度、胶囊边框、主题阴影和操作分组。Feature 只维护路径、来源、地址输入、任务信息和按钮的内容及伸缩规则；源码与预览使用单个文字按钮切换。
+审查、变更、文件、浏览器、PR 和协作任务详情的主头部复用 `renderer-ui/src/styles/panel-toolbar.css`：统一上下留白、最小高度、胶囊边框、主题阴影和操作分组。胶囊边框沿用 `--desktop-panel-divider`，`--app-shadow-toolbar` 在明暗主题中分别提供接触浅影与扩散柔影，浮起层级低于菜单。Feature 只维护路径、来源、地址输入、任务信息和按钮的内容及伸缩规则；源码与预览使用单个文字按钮切换。
 
 文件与变更的路径导航复用 `FilePathBreadcrumb` 和 `file-path-breadcrumb.css`，统一分段按钮、目录弹层和长路径裁剪；目录数据与选择动作由各自 owner 提供，关闭时卸载弹层内容。
+
+归档设置中的普通对话与 Review 冲突记录复用 `ArchiveSection`、`ArchiveRow` 和 `archive-list.css`，统一分组标题、轻量列表卡片、行内操作及空状态。容器只负责展示，数据读取、恢复、删除确认和失败通知仍由各业务 owner 维护；窄容器将操作换到下一行，长标题与路径保留完整 tooltip。
 
 `MermaidDiagram` 为聊天、工作区文件预览和 `DocumentMarkdown` 的 `mermaid` 代码块提供图表。Mermaid 按需加载，流式更新合并后串行布局，卸载或源码变化会取消尚未开始的任务并丢弃迟到结果；加载或语法失败保留各入口的源码视图。渲染使用 strict 安全模式，生成的 SVG 作为图片展示，不绑定图表中的链接或脚本。`mermaid-theme.ts` 将宿主字体与颜色 token 转成图片内可用的主题，使用无渐变、无阴影的扁平节点；主题和字体改变时重新渲染。图表在正文中按可用宽度完整展示，点击复用 `ImagePreview` 放大查看。
 
@@ -68,7 +72,7 @@ OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`
 - 应用内菜单由 `MenuSurface` 与 `menu.css` 统一为紧凑圆角面板、细边框、柔和阴影和即时中性填充高亮；右键、按钮下拉、坐标菜单、子菜单、侧栏、添加面板、浏览器窗口与能力创建菜单共用视觉层。Select、项目/分支选择器也使用相同菜单样式。底色由不透明的 `--app-surface-overlay` 映射到 `--app-menu-bg`，浅色与深色分别配置，不使用背景模糊。菜单外框、内边距与行圆角分别为 16 / 8 / 8px，行高仍为 26px。输入框上方的命令、插件、Skill 与 @ 候选列表由聊天样式持有，使用不透明面板和中性选中背景，避免下方页面文字透出。菜单直接显示/关闭，不使用展开、裁切、缩放或滑动高亮动画；键盘导航、禁用项与危险项仍由原组件管理。系统托盘菜单由操作系统绘制。
 - 菜单、Select 与项目/分支选择器的行文字统一使用 `--app-text`（危险项等语义色优先）；菜单高亮只改变行底色（`--app-menu-highlight-bg`，即 `--desktop-agent-control-hover-bg`），文字、图标、快捷键和危险项保持原有颜色；选择类菜单通过 `sd-menu-surface--neutral` 额外为当前选中项保留同一底色。
 - `SelectField` 和 `MultiSelectField` 默认在触发器下方按末端对齐（`bottom-end`），视口空间不足时由 Radix 自动避让。`SelectField` 保留原生 `<option>` 的 `style`，界面字体与代码字体菜单用每项自身的字体渲染名称。
-- `AppTextContextMenu` 使用 `PointMenu` 为输入框提供剪切、复制、粘贴，为正文选区提供复制；已处理的专用右键菜单优先。菜单关闭后恢复原焦点与选区，通过 preload 的 `windowControls.executeTextEdit` 调用当前宿主窗口的原生编辑命令，复用编辑器已有的结构化剪贴板、附件粘贴和撤销链路。
+- `AppTextContextMenu` 使用 `PointMenu` 为输入框提供剪切、复制、粘贴，为正文选区提供复制；已处理的专用右键菜单优先。选择菜单项或按 Escape 关闭后恢复原焦点与选区，通过 preload 的 `windowControls.executeTextEdit` 调用当前宿主窗口的原生编辑命令，复用编辑器已有的结构化剪贴板、附件粘贴和撤销链路。`PointMenu` 在外部操作或新菜单获得焦点后跳过旧菜单的延迟焦点恢复，支持菜单尚未关闭时再次右键切换目标。
 - `ui/primitives.tsx` / `SelectField.tsx` 保留宿主导出；`SettingsViewUi.tsx` 将同一实现注入 Feature 的 Settings UI contract。
 - 设置页横向配置行的下拉触发器由 `settings-base.css` 统一为 28px 高、8px 圆角和细边框，按当前选项内容收缩并靠右排列；带图标的选项与模型选择器沿用同一规则，长名称按可用宽度省略。上下排列的编辑表单通过 `--settings-select-width`、`--settings-select-height` 定义字段尺寸：模型服务表单铺满各自列，并与文本框保持 34px 等高。菜单交互由原控件负责。
 - 设置子页复用 `SettingsViewUi.PageLayout` 的返回按钮、面包屑和内容宽度；表单自带标题时使用 `showHeading={false}` 保留导航，避免重复标题。

@@ -76,6 +76,8 @@ Pi 目录升级不改写已保存连接的协议和地址。若厂商已切换�
 
 `packages/features/model-provider/src/renderer/` 持有 provider settings state、Pi 目录 typed client、自动保存、模型发现和 `model-provider` 设置视图。Host 设置页只负责 contribution 布局与品牌图标渲染，不再拥有 provider CRUD controller。
 
+页面保留左侧服务商导航，右侧将连接配置和模型列表放入限宽的共同滚动区。接入方案与 API Key 各占完整一行，高级配置独立分区；模型创建入口位于列表标题旁，同步、刷新目录与批量管理位于列表工具栏。窄窗口按内容区宽度切换布局。
+
 预置服务的主流程是厂商、接入方案、API Key 和模型目录；协议、Base URL、代理、请求头、图标与模型 token/capability override 位于高级配置。预置和自定义服务都提供同步模型和手动添加模型入口，目录外的型号沿用当前厂商和接入方案。选择“自定义兼容服务”后展开协议和 URL。
 
 厂商下拉框的选项和当前选中值共用宿主品牌图标，根据目录厂商名称、ID 与接入地址匹配；不受正在编辑的服务名称或自定义头像影响。“自定义兼容服务”使用通用服务器图标。图标通过共享 Select 的独立装饰槽渲染，不进入键盘输入匹配和选项名称。

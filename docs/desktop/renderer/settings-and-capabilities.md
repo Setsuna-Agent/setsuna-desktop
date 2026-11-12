@@ -43,7 +43,9 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 | 数据管理（`data-management`） | 同步、归档对话、存储空间 |
 | 系统（`system`） | 高级设置、实验性功能、日志、关于 |
 
-“存储空间”是设置侧栏“数据管理”组中的独立页面，点击后直接进入管理视图。`StorageUsageOverview` 用分段占用条和分类图例展示实际文件大小；历史对话、缓存与日志使用独立选择弹窗。历史对话可按最后更新时间、归档状态和标题筛选，切换筛选清空旧选择，避免删除不可见的目标。`useStorageManagement` 负责按需加载和操作状态；清理前使用共享确认对话框，批量删除遇到跨窗口取消会停止后续操作，关联附件沿用原有 owner 清理。部分失败保留未完成选择，刷新实际占用。只有进入存储空间页面或手动刷新才触发扫描。
+“存储空间”是设置侧栏“数据管理”组中的独立页面，点击后直接进入管理视图。`StorageUsageOverview` 将实际占用、分段占用条、分类图例和数据路径收在容量卡片内；历史对话、缓存与日志使用分组导航入口及独立选择弹窗。历史对话可按最后更新时间、归档状态和标题筛选，切换筛选清空旧选择，避免删除不可见的目标。
+
+`useStorageManagement` 独立加载磁盘占用和对话列表，任一完成即可使用对应入口。`storageUsageCache` 只持久化最近一次扫描的汇总大小和根目录身份；重新进入先读取匹配目录的统计，再后台更新，失败保留已有结果。扫描结束后即使页面已离开仍可保存统计，旧请求不能覆盖更新请求的缓存；切换根目录会重建页面，清空旧选择。首次扫描用共享 `Skeleton` 占位，不缓存对话内容或清理选择。扫描仅由进入页面、手动刷新或清理完成触发，不进入应用启动关键路径。清理前使用共享确认对话框，批量删除遇到跨窗口取消会停止后续操作，关联附件沿用原有 owner 清理。部分失败保留未完成选择；清理完成立即更新已删除的对话，重新统计占用在后台进行，不延长清理弹窗的忙碌状态。
 
 ### Sections
 
@@ -53,7 +55,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 | `PersonalizationSettings.tsx` | Global prompt、Setsuna style |
 | `RuntimeSettings.tsx` | Approval、permission、developer features、runtime 行为 |
 | `ExperimentalSettings.tsx` | 实验功能开关，以及触发时机、结果使用、用量与关闭行为说明 |
-| `TaskModelSettings.tsx` | 标题、代码审查、审批审查与上下文压缩等宿主任务的模型选择 |
+| `TaskModelSettings.tsx` | 宿主上下文压缩模型选择；其他专用模型由各 Feature 贡献 |
 | `ArchivedThreadsSettings.tsx` | 归档线程管理 |
 | `StorageSettings.tsx` | 分类磁盘占用、历史对话及附件、缓存和日志清理 |
 

@@ -511,6 +511,8 @@ export function BrowserPanel({
             aria-pressed={annotations.open} disabled={tab.showingHome || tab.loading || annotations.sending}
             onClick={annotations.toggle}><SquareDashedMousePointer size={13} /></Button>
           <BrowserPasswords bridge={bridge} tabId={tab.id} active={!tab.showingHome} hidden={hidden} notify={notify} translate={translate} />
+        </div>
+        <div className="desktop-browser-navigation__actions sd-panel-toolbar__surface sd-panel-toolbar__actions">
           <BrowserExtensions extensions={extensions} hidden={hidden} translate={translate}
             onOpenSettings={settingsNavigation?.openExtensionSettings} onOpenStore={() => navigateToUrl(BROWSER_WEB_STORE_URL)} />
           <BrowserRecordsToolbar state={records} hidden={hidden} menuButtonRef={menuButtonRef}

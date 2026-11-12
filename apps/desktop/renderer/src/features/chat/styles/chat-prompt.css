@@ -13,6 +13,11 @@
   transition: border-color var(--app-duration-fast) ease, background-color var(--app-duration-fast) ease;
 }
 
+:root[data-theme='dark'] .chat-prompt {
+  /* 前景输入框略亮于上方选择区，暗色层次不只依赖黑色阴影。 */
+  background: color-mix(in srgb, var(--app-text) 4%, var(--app-surface));
+}
+
 .chat-sender[data-drop-active] > .chat-prompt {
   border-color: var(--app-primary);
   background: var(--app-accent-subtle);
@@ -51,6 +56,10 @@
   position: absolute;
   pointer-events: none;
   color: color-mix(in srgb, var(--app-text-muted) 40%, transparent);
+}
+
+:root[data-theme='dark'] .chat-prompt__input[data-empty]::before {
+  color: var(--app-text-muted);
 }
 
 /* 末尾换行也需要可见的空行；占位只参与排版，不写入草稿或剪贴板。 */
