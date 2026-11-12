@@ -1,7 +1,7 @@
 export const storageZhCN = {
   'storage.title': '存储空间',
   'storage.thisDevice': '本机',
-  'storage.used': '已用 {size}',
+  'storage.used': '已用',
   'storage.refresh': '刷新',
   'storage.cache': '浏览器缓存',
   'storage.logs': '运行日志',
@@ -34,7 +34,7 @@ export const storageZhCN = {
 export const storageEnUS: Record<keyof typeof storageZhCN, string> = {
   'storage.title': 'Storage',
   'storage.thisDevice': 'This device',
-  'storage.used': '{size} used',
+  'storage.used': 'Used',
   'storage.refresh': 'Refresh',
   'storage.cache': 'Browser cache',
   'storage.logs': 'Runtime logs',
