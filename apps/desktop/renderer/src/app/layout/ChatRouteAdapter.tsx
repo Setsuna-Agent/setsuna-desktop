@@ -39,10 +39,11 @@ type ChatRouteAdapterProps = Omit<
   | 'setActiveView'
   | 'settingsLocation'
   | 'onSettingsNavigate'
-> & { conversationInfo?: ReactNode; presentation?: ChatPresentation; starterPresentation?: ChatStarterPresentation; turnNavigationRequest?: ChatTurnNavigationRequest; defaultThinking?: ChatThinkingSelection };
+> & { conversationInfo?: ReactNode; composerHeader?: ReactNode; presentation?: ChatPresentation; starterPresentation?: ChatStarterPresentation; turnNavigationRequest?: ChatTurnNavigationRequest; defaultThinking?: ChatThinkingSelection };
 
 export function ChatRouteAdapter({
   conversationInfo,
+  composerHeader,
   presentation,
   starterPresentation,
   turnNavigationRequest,
@@ -185,6 +186,7 @@ export function ChatRouteAdapter({
   };
   const conversation: ChatConversationSurfaceModel = {
     conversationInfo,
+    composerHeader,
     presentation,
     starterPresentation,
     turnNavigationRequest,

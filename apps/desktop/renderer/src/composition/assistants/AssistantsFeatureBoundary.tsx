@@ -57,8 +57,8 @@ export function AssistantConversationAdapter(props: AppRouteContentProps) {
   const starterVisible = !thread?.messages.length && !thread?.activeTurnId;
   return <AssistantConversation service={service} ui={assistantsHostUi} threadId={thread?.id} scheduledThreadIds={scheduledThreadIds}
     openConversation={openConversation} renderToolbar={(toolbar) => <FeatureRouteTopbar {...toolbar} />}
-    renderConversation={(starter, defaultThinking, info, navigation) => <ChatRouteAdapter {...props}
-      presentation="messenger" defaultThinking={defaultThinking} conversationInfo={info} turnNavigationRequest={navigation}
+    renderConversation={(starter, defaultThinking, info, navigation, composerHeader) => <ChatRouteAdapter {...props}
+      presentation="messenger" defaultThinking={defaultThinking} conversationInfo={info} turnNavigationRequest={navigation} composerHeader={composerHeader}
       starterPresentation={{ content: starter, visible: starterVisible }} />}
     translate={t} />;
 }

@@ -5,6 +5,7 @@ import { Button, ToastNotice } from '@setsuna-desktop/renderer-ui';
 import type { AssistantsRendererService } from './client.js';
 import type { AssistantsHostUi, AssistantsToolbarProps } from './host.js';
 import { AssistantInfoPanel } from './AssistantInfoPanel.js';
+import { AssistantPeerRequests } from './AssistantPeerRequests.js';
 import { errorMessage } from './errors.js';
 import { useAssistantsPolling } from './useAssistantsPolling.js';
 
@@ -15,7 +16,7 @@ export type AssistantConversationProps = {
   scheduledThreadIds?: ReadonlySet<string>;
   openConversation(threadId: string): Promise<boolean>;
   renderToolbar(props: AssistantsToolbarProps): ReactNode;
-  renderConversation(starter: ReactNode, thinking: ChatThinkingSelection, info: ReactNode, navigation?: ChatTurnNavigationRequest): ReactNode;
+  renderConversation(starter: ReactNode, thinking: ChatThinkingSelection, info: ReactNode, navigation?: ChatTurnNavigationRequest, composerHeader?: ReactNode): ReactNode;
   translate: RendererTranslate;
 };
 
@@ -41,7 +42,7 @@ export function AssistantConversation({ service, ui, threadId, scheduledThreadId
     {renderToolbar({ title: assistant.name, actions: [] })}
     {renderConversation(<div className="assistants-starter"><ui.Avatar assistant={assistant} size="list" /><h1>{assistant.name}</h1></div>, {
       enabled: Boolean(assistant.thinkingEffort), effort: assistant.thinkingEffort ?? '',
-    }, <AssistantInfoPanel assistant={assistant} snapshot={snapshot} service={service} ui={ui} scheduledThreadIds={scheduledThreadIds} translate={t}
+    }, <AssistantInfoPanel key={assistant.id} assistant={assistant} snapshot={snapshot} service={service} ui={ui} scheduledThreadIds={scheduledThreadIds} translate={t}
       onOpenTask={(task) => { void openConversation(task.workThreadId).catch((cause: unknown) => setActionError(errorMessage(cause))); }}
       onOpenReminder={(reminder) => {
         const run = reminder.lastRun;
@@ -50,7 +51,8 @@ export function AssistantConversation({ service, ui, threadId, scheduledThreadId
         } else if (conversation) {
           void openConversation(conversation.threadId).catch((cause: unknown) => setActionError(errorMessage(cause)));
         }
-      }} />, navigation?.threadId === threadId ? navigation : undefined)}
+      }} />, navigation?.threadId === threadId ? navigation : undefined,
+    <AssistantPeerRequests key={assistant.id} assistantId={assistant.id} snapshot={snapshot} service={service} translate={t} />)}
     <ToastNotice message={actionError} />
   </>;
 }

@@ -42,7 +42,7 @@ export type AssistantQqPeer = AssistantPeerRef & {
   assistantId: string;
   /** Optional platform-provided name; authorization and routing always use openid. */
   displayName?: string;
-  /** Unknown senders stay pending until the owner allows them in the assistant editor. */
+  /** Unknown senders stay pending until the owner explicitly allows them on the desktop. */
   status: 'pending' | 'allowed';
   firstSeenAt: string;
   lastSeenAt: string;

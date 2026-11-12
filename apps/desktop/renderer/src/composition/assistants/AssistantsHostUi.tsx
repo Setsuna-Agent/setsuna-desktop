@@ -1,5 +1,6 @@
 import type { AssistantAvatarFieldProps, AssistantAvatarProps, AssistantModelPickerProps, AssistantsHostUi } from '@setsuna-desktop/feature-assistants/renderer';
 import { IconButton, normalizeIconColor, Popover, ToastNotice } from '@setsuna-desktop/renderer-ui';
+import { Pencil } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconAvatarPicker } from '../../shared/ui/icon-avatars/IconAvatarPicker.js';
@@ -35,8 +36,9 @@ function AssistantAvatarField({ value, seed, label, disabled, onBusyChange, onCh
         onReset={() => { draft.setAvatar(undefined); onChange({}); setOpen(false); }}
         onColorChange={(avatarColor) => onChange({ ...value, avatarColor })} />
     }>
-      <IconButton label={label} disabled={disabled || draft.loading !== null}>
-        <AssistantAvatar assistant={{ ...value, id: seed ?? '' }} className="desktop-icon-avatar--glyph" />
+      <IconButton label={label} className="assistant-profile-avatar" disabled={disabled || draft.loading !== null}>
+        <AssistantAvatar assistant={{ ...value, id: seed ?? '' }} size="list" className="assistant-profile-avatar__image" />
+        <span className="assistant-profile-avatar__edit" aria-hidden="true"><Pencil size={12} /></span>
       </IconButton>
     </Popover>
     {draft.error ? <ToastNotice key={draft.errorRevision} message={draft.error} /> : null}

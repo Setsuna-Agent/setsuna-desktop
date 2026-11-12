@@ -162,3 +162,26 @@
 .assistant-task-row__open {
   color: var(--assistant-info-arrow);
 }
+
+.assistant-reminder__details {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.assistant-reminder__details dt {
+  margin-bottom: 6px;
+  color: var(--app-text-muted);
+}
+
+.assistant-reminder__details dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.assistant-reminder__delete {
+  margin-right: auto;
+}

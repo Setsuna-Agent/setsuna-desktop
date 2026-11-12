@@ -33,7 +33,7 @@ it('旧 QQ 入口恢复到原助理的共享对话，轮询和 StrictMode 不重
   expect(openConversation).toHaveBeenCalledExactlyOnceWith('owner-shared');
 });
 
-it('信息面板中的提醒定位到同一聊天的执行轮次，重复点击仍定位；项目任务继续打开项目对话', async () => {
+it('提醒详情按最新快照定位执行轮次，重复打开仍定位；项目任务继续打开项目对话', async () => {
   const at = '2026-10-01T00:00:00Z';
   const snapshot: AssistantsSnapshot = {
     assistants: [{ id: 'owner', name: '助理', personality: '', projectIds: [], createdAt: at, updatedAt: at }],
@@ -55,9 +55,15 @@ it('信息面板中的提醒定位到同一聊天的执行轮次，重复点击�
     renderToolbar={() => null} translate={(key) => key}
     ui={{ Avatar: () => null, AvatarField: () => null, ModelPicker: () => null, ProjectIcon: () => null }} /></ConfirmationProvider>);
   fireEvent.click(await screen.findByRole('button', { name: '早安提醒' }));
-  expect(navigation).toEqual({ requestId: 1, threadId: 'shared', turnId: 'greeting_turn' });
+  expect(navigation).toBeUndefined();
+  await act(() => service.store.publish({ ...snapshot, reminders: [{ ...snapshot.reminders[0]!,
+    lastRun: { ...snapshot.reminders[0]!.lastRun!, turnId: 'latest_greeting_turn' },
+  }] }));
+  fireEvent.click(await screen.findByRole('button', { name: 'feature.assistants.reminder.openLastRun' }));
+  expect(navigation).toEqual({ requestId: 1, threadId: 'shared', turnId: 'latest_greeting_turn' });
   fireEvent.click(screen.getByRole('button', { name: '早安提醒' }));
-  expect(navigation).toEqual({ requestId: 2, threadId: 'shared', turnId: 'greeting_turn' });
+  fireEvent.click(await screen.findByRole('button', { name: 'feature.assistants.reminder.openLastRun' }));
+  expect(navigation).toEqual({ requestId: 2, threadId: 'shared', turnId: 'latest_greeting_turn' });
   expect(openConversation).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: '项目工作' }));
   expect(openConversation).toHaveBeenCalledExactlyOnceWith('work');

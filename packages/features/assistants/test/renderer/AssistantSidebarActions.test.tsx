@@ -56,6 +56,30 @@ it('删除取消后不执行；从信息面板删除任务只删除目标条目�
   expect(f.openTask).not.toHaveBeenCalled();
 });
 
+it('未执行的提醒可从详情删除，失败后保留入口重试且不删除同 ID 的项目任务', async () => {
+  const f = mountPanel();
+  vi.mocked(f.client.deleteSidebarEntry).mockRejectedValueOnce(new Error('删除失败'));
+  fireEvent.click(await screen.findByRole('button', { name: '早安提醒' }));
+  const removeFromDetails = async () => {
+    fireEvent.click(within(await screen.findByRole('dialog', { name: '早安提醒' })).getByRole('button', { name: '删除' }));
+    await confirm('删除');
+  };
+  await removeFromDetails();
+  await screen.findByText('删除失败');
+  expect(f.service.store.getSnapshot()?.reminders.map((item) => item.id)).toEqual(['first']);
+  await act(() => f.service.store.refresh());
+  await removeFromDetails();
+  await waitFor(() => expect(f.service.store.getSnapshot()?.reminders).toEqual([]));
+  expect(vi.mocked(f.client.deleteSidebarEntry).mock.calls).toEqual([
+    [{ assistantId: 'owner', kind: 'reminder', entryId: 'first' }],
+    [{ assistantId: 'owner', kind: 'reminder', entryId: 'first' }],
+  ]);
+  expect(f.service.store.getSnapshot()?.tasks.map((item) => item.id)).toEqual(['first', 'second']);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(f.openTask).not.toHaveBeenCalled();
+  expect(f.openReminder).not.toHaveBeenCalled();
+});
+
 async function menu(title: string, action: string) {
   const target = await screen.findByRole('button', { name: title });
   await waitFor(() => expect(target.hasAttribute('disabled')).toBe(false));
@@ -64,7 +88,7 @@ async function menu(title: string, action: string) {
 }
 
 async function confirm(label: string) {
-  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: label }));
+  fireEvent.click(within(await screen.findByRole('dialog', { name: /删除/ })).getByRole('button', { name: label }));
 }
 
 function mountPanel() {
@@ -75,7 +99,10 @@ function mountPanel() {
     tasks: ['first', 'second'].map((id, index) => ({ id, title: `任务 ${id}`, assistantId: 'owner', origin: { threadId: 'local' },
       projectId: 'project', workThreadId: 'work', workspaceKey: 'project', instructions: '完成工作', status: 'completed',
       requests: [], turnId: `turn-${id}`, createdAt: at, updatedAt: index ? '2026-10-01T01:00:00Z' : at })),
-    peers: [], reminders: [], connectors: [], projects: [], models: [],
+    reminders: [{ id: 'first', assistantId: 'owner', title: '早安提醒', instructions: '早安',
+      schedule: { kind: 'daily', time: '09:00', timeZone: 'Asia/Shanghai' },
+      status: 'active', nextRunAt: '2026-10-02T01:00:00Z', createdAt: at, updatedAt: at }],
+    peers: [], connectors: [], projects: [], models: [],
   };
   const client: AssistantsClient = {
     snapshot: vi.fn(async () => structuredClone(snapshot)),
@@ -84,7 +111,9 @@ function mountPanel() {
       return { ok: true };
     }),
     deleteSidebarEntry: vi.fn(async (target) => {
-      snapshot = { ...snapshot, tasks: snapshot.tasks.filter((item) => item.id !== target.entryId) };
+      snapshot = target.kind === 'reminder'
+        ? { ...snapshot, reminders: snapshot.reminders.filter((item) => item.id !== target.entryId) }
+        : { ...snapshot, tasks: snapshot.tasks.filter((item) => item.id !== target.entryId) };
       return { ok: true };
     }),
     delete: vi.fn(async (id) => {
@@ -97,12 +126,13 @@ function mountPanel() {
   const service = { client, store: createAssistantsStore(client) };
   service.store.publish(structuredClone(snapshot));
   const openTask = vi.fn();
+  const openReminder = vi.fn();
   function App() {
     const current = useAssistantsSnapshot(service.store)!;
     return <AssistantInfoPanel service={service} snapshot={current} assistant={current.assistants[0]!}
       ui={{ Avatar: () => null, AvatarField: () => null, ModelPicker: () => null, ProjectIcon: () => null }}
-      onOpenTask={openTask} onOpenReminder={vi.fn()} translate={t} />;
+      onOpenTask={openTask} onOpenReminder={openReminder} translate={t} />;
   }
   render(<StrictMode><ConfirmationProvider><App /></ConfirmationProvider></StrictMode>);
-  return { client, service, openTask };
+  return { client, service, openTask, openReminder };
 }

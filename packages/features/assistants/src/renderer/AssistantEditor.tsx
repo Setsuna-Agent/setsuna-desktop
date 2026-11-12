@@ -1,13 +1,14 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Trash2, UserRound } from 'lucide-react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { Button, ConfirmDialog, Dialog, MultiSelectField, SelectField, TextArea, TextField, ToastNotice } from '@setsuna-desktop/renderer-ui';
-import { ASSISTANT_PERSONALITY_LIMIT, type Assistant, type AssistantsSnapshot } from '../contracts/index.js';
+import { Button, ConfirmDialog, Dialog, Tabs, TabsList, TabsTrigger, TextField, ToastNotice } from '@setsuna-desktop/renderer-ui';
+import type { Assistant, AssistantsSnapshot } from '../contracts/index.js';
 import type { AssistantsRendererService } from './client.js';
 import { assistantForm, draftFromForm, type AssistantForm } from './form.js';
 import type { AssistantsHostUi } from './host.js';
 import { AssistantQqSection } from './AssistantQqSection.js';
 import { AssistantQqGuide } from './AssistantQqGuide.js';
+import { AssistantProfileSection } from './AssistantProfileSection.js';
 import { errorMessage } from './errors.js';
 import { useAssistantDeletion } from './useAssistantDeletion.js';
 
@@ -21,6 +22,7 @@ export function AssistantEditor({ assistant, snapshot, service, ui, translate: t
   const [saving, setSaving] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [qqGuideOpen, setQqGuideOpen] = useState(false);
+  const [section, setSection] = useState('profile');
   const formPage = useRef<HTMLDivElement>(null);
   const guideTrigger = useRef<HTMLButtonElement | null>(null);
   const formScrollTop = useRef(0);
@@ -31,7 +33,8 @@ export function AssistantEditor({ assistant, snapshot, service, ui, translate: t
   const busy = saving || deletion.busy;
   const formId = useId();
   const nameId = `${formId}-name`;
-  const projectsId = `${formId}-projects`;
+  const profileTabId = `${formId}-profile-tab`;
+  const qqTabId = `${formId}-qq-tab`;
   const openQqGuide = (trigger: HTMLButtonElement) => {
     guideTrigger.current = trigger;
     formScrollTop.current = formPage.current?.parentElement?.scrollTop ?? 0;
@@ -44,7 +47,6 @@ export function AssistantEditor({ assistant, snapshot, service, ui, translate: t
     if (!qqGuideOpen) guideTrigger.current?.focus({ preventScroll: true });
   }, [qqGuideOpen]);
   const update = <K extends keyof AssistantForm>(key: K, value: AssistantForm[K]) => setForm((current) => ({ ...current, [key]: value }));
-  const model = snapshot.models.find((item) => item.providerId === form.modelSelection?.providerId && item.modelId === form.modelSelection?.modelId);
   const run = async (action: () => Promise<void>) => {
     if (pending.current) return;
     pending.current = true;
@@ -65,60 +67,44 @@ export function AssistantEditor({ assistant, snapshot, service, ui, translate: t
     if (form.qqSecret.trim()) await service.client.setQqSecret(saved.id, form.qqSecret.trim());
     onSaved(saved);
   });
-  const allProjectsSelected = snapshot.projects.length > 0 && snapshot.projects.every((project) => form.projectIds.includes(project.id));
-
-  return <><Dialog title={t(qqGuideOpen ? 'feature.assistants.qqGuide.title' : assistant ? 'feature.assistants.edit' : 'feature.assistants.create')} width={qqGuideOpen ? 600 : 900} className="assistant-editor"
+  return <><Dialog title={t(qqGuideOpen ? 'feature.assistants.qqGuide.title' : assistant ? 'feature.assistants.edit' : 'feature.assistants.create')} width={600} className="assistant-editor"
     onClose={qqGuideOpen ? () => setQqGuideOpen(false) : requestClose} dismissible={!busy && !confirmDiscard}
     footer={qqGuideOpen ? <Button autoFocus icon={<ArrowLeft size={14} aria-hidden="true" />} onClick={() => setQqGuideOpen(false)}>{t('feature.assistants.back')}</Button> : <>
-      {assistant ? <Button variant="danger" className="assistant-editor__delete" disabled={busy} onClick={() => void deletion.remove(assistant.id)}>{t('feature.assistants.delete')}</Button> : null}
+      {assistant ? <Button variant="ghost" icon={<Trash2 size={14} aria-hidden="true" />} className="assistant-editor__delete" disabled={busy} onClick={() => void deletion.remove(assistant.id)}>{t('feature.assistants.delete')}</Button> : null}
       <Button onClick={requestClose} disabled={busy}>{t('feature.assistants.cancel')}</Button>
       <Button variant="primary" type="submit" form={formId} disabled={avatarBusy} loading={busy}>{t('feature.assistants.save')}</Button>
     </>}>
     {/* Keep transient field state mounted while the guide is shown. */}
     <div ref={formPage} hidden={qqGuideOpen}>
       <form id={formId} className="assistant-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-        <div className="sd-form-stack">
-          <div className="sd-form-field">
-            <label className="sd-form-label" htmlFor={nameId}>{t('feature.assistants.name')}</label>
-            <TextField id={nameId} disabled={busy} required maxLength={40} value={form.name}
-              onChange={(event) => update('name', event.target.value)}
-              leadingControl={<ui.AvatarField label={t('feature.assistants.avatar')} seed={assistant?.id} disabled={busy}
-                onBusyChange={setAvatarBusy} value={{ avatar: form.avatar, avatarColor: form.avatarColor }}
-                onChange={(value) => setForm((current) => ({ ...current, avatar: value.avatar, avatarColor: value.avatarColor }))} />} />
-          </div>
-          <label className="sd-form-field">
-            <span className="sd-form-label">{t('feature.assistants.personality')}</span>
-            <TextArea disabled={busy} rows={3} maxLength={ASSISTANT_PERSONALITY_LIMIT} value={form.personality}
-              onChange={(event) => update('personality', event.target.value)} />
-          </label>
-          <div className="sd-form-field"><span className="sd-form-label">{t('feature.assistants.model')}</span>
-            <ui.ModelPicker models={snapshot.models} value={form.modelSelection} disabled={busy} translate={t}
-              onChange={(value) => setForm((current) => ({ ...current, modelSelection: value, thinkingEffort: '' }))} />
-          </div>
-          <label className="sd-form-field"><span className="sd-form-label">{t('feature.assistants.effort')}</span>
-            <SelectField disabled={busy} aria-label={t('feature.assistants.effort')} value={form.thinkingEffort} onValueChange={(effort) => update('thinkingEffort', effort)}>
-              <option value="">{t('feature.assistants.noEffort')}</option>
-              {(model?.thinkingEfforts ?? []).map((effort) => <option key={effort} value={effort}>{effort}</option>)}
-            </SelectField>
-          </label>
-          <div className="sd-form-field">
-            <div className="sd-form-field-heading">
-              <label className="sd-form-label" htmlFor={projectsId}>{t('feature.assistants.projects')}</label>
-              {snapshot.projects.length ? <Button variant="ghost" size="small" type="button" disabled={busy}
-                onClick={() => update('projectIds', allProjectsSelected ? [] : snapshot.projects.map((project) => project.id))}>
-                {t(allProjectsSelected ? 'feature.assistants.projectsDeselectAll' : 'feature.assistants.projectsSelectAll')}
-              </Button> : null}
-            </div>
-            <MultiSelectField id={projectsId} aria-label={t('feature.assistants.projects')} disabled={busy}
-              value={form.projectIds} onValueChange={(value) => update('projectIds', value)}
-              placeholder={t('feature.assistants.selectProjects')} searchPlaceholder={t('feature.assistants.searchProjects')}
-              emptyLabel={t(snapshot.projects.length ? 'feature.assistants.noMatchingProjects' : 'feature.assistants.noProjects')}
-              options={snapshot.projects.map((project) => ({ value: project.id, label: project.name, searchText: project.path,
-                icon: <ui.ProjectIcon icon={project.icon} size={16} /> }))} />
+        <div className="assistant-profile-identity">
+          <ui.AvatarField label={t('feature.assistants.avatar')} seed={assistant?.id} disabled={busy}
+            onBusyChange={setAvatarBusy} value={{ avatar: form.avatar, avatarColor: form.avatarColor }}
+            onChange={(value) => setForm((current) => ({ ...current, avatar: value.avatar, avatarColor: value.avatarColor }))} />
+          <div className="sd-form-field assistant-profile-identity__name">
+            <label className="sd-visually-hidden" htmlFor={nameId}>{t('feature.assistants.name')}</label>
+            <TextField id={nameId} className="assistant-profile-name" disabled={busy} required maxLength={40} value={form.name}
+              onChange={(event) => update('name', event.target.value)} />
           </div>
         </div>
-        <AssistantQqSection assistant={assistant} snapshot={snapshot} form={form} busy={busy} service={service} translate={t}
-          onChange={update} onError={setError} onOpenGuide={openQqGuide} />
+        <Tabs value={section} onValueChange={setSection} variant="segment" className="assistant-editor__tabs">
+          <TabsList aria-label={t('feature.assistants.info')}>
+            <TabsTrigger id={profileTabId} value="profile" aria-controls={`${formId}-profile`} disabled={busy}>
+              <UserRound size={14} aria-hidden="true" />{t('feature.assistants.title')}
+            </TabsTrigger>
+            <TabsTrigger id={qqTabId} value="qq" aria-controls={`${formId}-qq`} disabled={busy}>
+              <MessageCircle size={14} aria-hidden="true" />{t('feature.assistants.qq')}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {/* Switching sections keeps field drafts, uploaded avatars and revealed secrets in this editor. */}
+        <div id={`${formId}-profile`} role="tabpanel" aria-labelledby={profileTabId} hidden={section !== 'profile'} className="assistant-editor__panel">
+          <AssistantProfileSection form={form} snapshot={snapshot} ui={ui} busy={busy} translate={t} onChange={update} />
+        </div>
+        <div id={`${formId}-qq`} role="tabpanel" aria-labelledby={qqTabId} hidden={section !== 'qq'} className="assistant-editor__panel">
+          <AssistantQqSection assistant={assistant} snapshot={snapshot} form={form} busy={busy} service={service} translate={t}
+            onChange={update} onError={setError} onOpenGuide={openQqGuide} />
+        </div>
       </form>
       {error ? <ToastNotice message={error} /> : null}
     </div>
