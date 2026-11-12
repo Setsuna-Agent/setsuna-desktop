@@ -20,6 +20,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   document.getSelection()?.removeAllRanges();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -41,6 +42,51 @@ it.each([
   fireEvent.click(item);
   await waitFor(() => expect(executeTextEdit).toHaveBeenCalledExactlyOnceWith(command));
   expect(applied).toHaveBeenCalledExactlyOnceWith(input, 2, 6, 'backward');
+});
+
+it.each([
+  ['cut', '剪切'], ['copy', '复制'], ['paste', '粘贴'],
+] as const)('restores the selected code inside a shadow root before native %s', async (command, label) => {
+  const view = render(<AppTextContextMenu />);
+  const host = document.createElement('div');
+  view.container.append(host);
+  const root = host.attachShadow({ mode: 'open' });
+  const editor = document.createElement('div');
+  editor.contentEditable = 'true';
+  editor.textContent = 'before alpha\nbeta after';
+  root.append(editor);
+  editor.focus();
+  const range = document.createRange();
+  range.setStart(editor.firstChild!, 7);
+  range.setEnd(editor.firstChild!, 17);
+  const selection = document.getSelection()!;
+  selection.addRange(range);
+  const readRange = selection.getRangeAt.bind(selection);
+  const outsideRange = document.createRange();
+  outsideRange.setStartBefore(host);
+  outsideRange.collapse(true);
+  // Model Chromium's shadow boundary: getRangeAt is rescoped to the host,
+  // while getComposedRanges exposes the selection only for an allowed root.
+  vi.spyOn(selection, 'getRangeAt').mockReturnValue(outsideRange);
+  Object.defineProperty(selection, 'getComposedRanges', {
+    configurable: true,
+    value: ({ shadowRoots }: GetComposedRangesOptions) => shadowRoots?.includes(root) ? [readRange(0)] : [outsideRange],
+  });
+  try {
+    const applied = vi.fn();
+    executeTextEdit.mockImplementation(async () => {
+      applied(root.activeElement, readRange(0).toString());
+      return true;
+    });
+    fireEvent.contextMenu(editor, { composed: true });
+    const item = await screen.findByRole('menuitem', { name: label });
+    selection.removeAllRanges();
+    fireEvent.click(item);
+    await waitFor(() => expect(executeTextEdit).toHaveBeenCalledExactlyOnceWith(command));
+    expect(applied).toHaveBeenCalledExactlyOnceWith(editor, 'alpha\nbeta');
+  } finally {
+    Reflect.deleteProperty(selection, 'getComposedRanges');
+  }
 });
 
 it('preserves structured references through context-menu cut and paste into the empty composer', async () => {

@@ -81,6 +81,7 @@ export type ReviewRendererHost = Readonly<{
   buildPatch(file: DesktopDiffFile): string;
   loadFileChangePreview(reference: DesktopFileChangeReference, signal: AbortSignal): Promise<DesktopDiffFile>;
   copyText(value: string): Promise<void>;
+  hasTextContextMenuTarget(event: MouseEvent): boolean;
   openExternal(url: string): Promise<boolean>;
   locale: string;
   notifySuccess(message: string): void;

@@ -18,7 +18,7 @@ export function captureTextContextMenuTarget(event: MouseEvent): TextContextMenu
   if (!editor && target.closest('[role="menu"]')) return null;
   const editable = Boolean(editor && !editor.closest('[aria-disabled="true"]'));
   const selection = target.ownerDocument.getSelection();
-  const ranges = selection ? Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index).cloneRange()) : [];
+  const ranges = captureSelectionRanges(target, selection);
   const ownRanges = ranges.filter((range) => editor
     ? editor.contains(range.startContainer) && editor.contains(range.endContainer)
     : range.intersectsNode(target));
@@ -50,6 +50,22 @@ export function captureTextContextMenuTarget(event: MouseEvent): TextContextMenu
       return true;
     },
   };
+}
+
+function captureSelectionRanges(target: HTMLElement, selection: Selection | null): Range[] {
+  if (!selection) return [];
+  const root = target.getRootNode();
+  if (root instanceof ShadowRoot) {
+    // Chromium rescopes getRangeAt() to the host, hiding the code editor's selection.
+    // Copy the composed endpoints into live ranges for validation and native editing.
+    return selection.getComposedRanges({ shadowRoots: [root] }).map((selected) => {
+      const range = target.ownerDocument.createRange();
+      range.setStart(selected.startContainer, selected.startOffset);
+      range.setEnd(selected.endContainer, selected.endOffset);
+      return range;
+    });
+  }
+  return Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index).cloneRange());
 }
 
 function captureTextControl(control: HTMLInputElement | HTMLTextAreaElement): TextContextMenuTarget | null {

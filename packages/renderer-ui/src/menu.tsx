@@ -152,6 +152,7 @@ export function PointMenu({ x, y, menu, modal = false, onClose, onCloseAutoFocus
   onCloseAutoFocus?(event: Event): void;
 }) {
   const returnFocus = useRef(document.activeElement as HTMLElement | null);
+  const interactedOutside = useRef(false);
   useEffect(() => {
     window.addEventListener('resize', onClose);
     return () => window.removeEventListener('resize', onClose);
@@ -165,7 +166,14 @@ export function PointMenu({ x, y, menu, modal = false, onClose, onCloseAutoFocus
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal container={container}>
         <DropdownMenu.Content asChild className="sd-menu" align="start" sideOffset={2} collisionPadding={8}
+          onInteractOutside={() => { interactedOutside.current = true; }}
           onCloseAutoFocus={(event) => {
+            // FocusScope closes asynchronously. A new right-click target or menu
+            // already owns focus, so restoring the old target would dismiss it.
+            if (interactedOutside.current || document.activeElement?.closest('[role="menu"]')) {
+              event.preventDefault();
+              return;
+            }
             onCloseAutoFocus?.(event);
             if (event.defaultPrevented) return;
             event.preventDefault();
