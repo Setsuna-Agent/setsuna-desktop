@@ -4,31 +4,38 @@ import { describe, expect, it, vi } from 'vitest';
 import { observeWindowControlsState, registerWindowsTitlebarDoubleClick, toggleWindowMaximized } from '../../../src/window/frame.js';
 
 describe('window frame interactions', () => {
-  it('publishes zoom and fullscreen independently and releases each window subscription', () => {
+  it('publishes native window state and releases each window subscription', () => {
     let maximized = false;
     let fullScreen = false;
+    let focused = false;
     let destroyed = false;
     const send = vi.fn();
     const window = Object.assign(new EventEmitter(), {
-      isMaximized: () => maximized, isFullScreen: () => fullScreen, isDestroyed: () => destroyed,
+      isMaximized: () => maximized, isFullScreen: () => fullScreen, isFocused: () => focused, isDestroyed: () => destroyed,
       webContents: { send, isDestroyed: () => false },
     }) as unknown as BrowserWindow;
     const stop = observeWindowControlsState(window);
     maximized = true;
     window.emit('maximize');
-    expect(send).toHaveBeenLastCalledWith('window-control:state-change', { maximized: true, fullScreen: false });
+    expect(send).toHaveBeenLastCalledWith('window-control:state-change', { maximized: true, fullScreen: false, focused: false });
     maximized = false;
     fullScreen = true;
     window.emit('enter-full-screen');
-    expect(send).toHaveBeenLastCalledWith('window-control:state-change', { maximized: false, fullScreen: true });
+    expect(send).toHaveBeenLastCalledWith('window-control:state-change', { maximized: false, fullScreen: true, focused: false });
     fullScreen = false;
     window.emit('leave-full-screen');
-    expect(send).toHaveBeenLastCalledWith('window-control:state-change', { maximized: false, fullScreen: false });
+    expect(send).toHaveBeenLastCalledWith('window-control:state-change', { maximized: false, fullScreen: false, focused: false });
+    focused = true;
+    window.emit('focus');
+    expect(send).toHaveBeenLastCalledWith('window-control:state-change', { maximized: false, fullScreen: false, focused: true });
+    focused = false;
+    window.emit('blur');
+    expect(send).toHaveBeenLastCalledWith('window-control:state-change', { maximized: false, fullScreen: false, focused: false });
     destroyed = true;
     window.emit('maximize');
-    expect(send).toHaveBeenCalledTimes(3);
+    expect(send).toHaveBeenCalledTimes(5);
     stop();
-    for (const event of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
+    for (const event of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen', 'focus', 'blur']) {
       expect(window.listenerCount(event)).toBe(0);
     }
   });

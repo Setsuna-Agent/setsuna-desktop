@@ -3,17 +3,15 @@ export interface MainWindowSurfaceOptions {
   backgroundColor: string;
 }
 
-const windowsMainWindowBackgroundColor = '#f7f6fa';
-
 export function resolveMainWindowSurfaceOptions(
   platform: NodeJS.Platform = process.platform,
+  dark = false,
 ): MainWindowSurfaceOptions {
   if (platform === 'win32') {
-    // The renderer already paints an opaque full-window shell. Keeping the HWND
-    // transparent only opts Chromium into a less stable Windows composition path.
+    // Keep the HWND opaque and match its backing color to the renderer's translucent shell.
     return {
       transparent: false,
-      backgroundColor: windowsMainWindowBackgroundColor,
+      backgroundColor: dark ? '#1b1b1b' : '#f7f6fa',
     };
   }
 

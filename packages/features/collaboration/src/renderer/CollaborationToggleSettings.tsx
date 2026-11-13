@@ -30,7 +30,7 @@ export function CollaborationToggleSettings({ features, onSave, translate: t, ui
     <ui.Group>
       <ui.Toggle
         label={t('feature.collaboration.settings.enabled')}
-        description={null}
+        description={t('feature.collaboration.settings.enabledDescription')}
         checked={collaborationEnabledForConfig({ features })}
         disabled={saving}
         onChange={(enabled) => void saveEnabled(enabled)}

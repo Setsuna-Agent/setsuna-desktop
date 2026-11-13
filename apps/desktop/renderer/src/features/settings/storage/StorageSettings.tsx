@@ -25,12 +25,12 @@ function StorageSettingsContent({ dataRoot }: { dataRoot?: string }) {
     <StorageUsageOverview usage={usage} loading={loading} disabled={working}
       dataRoot={dataRoot} onRefresh={refresh} />
     {/* Both entries open a review dialog before anything is deleted, so they read as navigation rows. */}
-    <SettingsGroup className="storage-cleanup">
+    <SettingsGroup>
       <SettingsNavigationRow label={t('storage.cleanHistory')}
-        icon={<span className="storage-entry-icon"><MessagesSquare size={18} aria-hidden="true" /></span>}
+        icon={<MessagesSquare size={14} aria-hidden="true" />}
         disabled={!threadsReady || working} onClick={() => setDialog('history')} />
       <SettingsNavigationRow label={t('storage.cachesAndLogs')}
-        icon={<span className="storage-entry-icon"><Brush size={18} aria-hidden="true" /></span>}
+        icon={<Brush size={14} aria-hidden="true" />}
         disabled={working || !usage} onClick={() => setDialog('caches')} />
     </SettingsGroup>
     {error && !dialog ? <ToastNotice message={error} /> : null}

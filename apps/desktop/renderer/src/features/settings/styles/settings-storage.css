@@ -19,13 +19,12 @@
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--app-border);
-  border-radius: 20px;
+  border-radius: var(--app-radius-container);
   background: var(--app-surface);
-  box-shadow: var(--app-shadow-workbench);
 }
 
 .storage-overview__body {
-  padding: 22px 24px 24px;
+  padding: 16px;
 }
 
 .storage-overview h2 {
@@ -170,7 +169,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 13px 24px;
+  padding: 13px 16px;
   border-top: 1px solid var(--app-border);
   background: var(--app-surface-subtle);
   color: var(--app-text-muted);
@@ -188,38 +187,7 @@
   white-space: nowrap;
 }
 
-.desktop-settings-panel .storage-cleanup .sd-settings-group {
-  border-radius: 18px;
-  box-shadow: var(--app-shadow-workbench);
-}
-
-.desktop-settings-panel .storage-cleanup .sd-settings-navigation-row {
-  --settings-row-padding-inline: 20px;
-  min-height: 66px;
-}
-
-.desktop-settings-panel .storage-cleanup .sd-settings-row__label {
-  gap: 12px;
-}
-
-.storage-entry-icon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
-  place-items: center;
-  border-radius: 11px;
-  background: var(--app-surface-muted);
-}
-
-.desktop-settings-panel .storage-entry-icon svg {
-  width: 18px;
-  color: var(--app-text-muted);
-}
-
 @container (max-width: 560px) {
-  .storage-overview__body { padding: 18px; }
-  .storage-overview__path { padding-inline: 18px; }
   .storage-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

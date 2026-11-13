@@ -59,19 +59,20 @@
 .subagent-task-card {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   width: fit-content;
   max-width: 100%;
   min-width: 0;
-  min-height: 30px;
-  padding: 4px 9px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
-  border-radius: var(--app-radius-full);
-  background: color-mix(in srgb, var(--app-surface) 72%, transparent);
+  min-height: var(--chat-tool-run-row-min-height, 24px);
+  /* 与工具摘要共用内容起点，向左扩展点击范围而不额外缩进头像。 */
+  margin-left: -6px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
   color: var(--app-text);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
 .chat-persistent-tool-result-grid:has(.subagent-task-card) {
@@ -89,9 +90,8 @@
   min-width: 0;
 }
 
-.subagent-task-card:not(:disabled):hover {
-  border-color: color-mix(in srgb, var(--app-text-muted) 42%, var(--app-border));
-  background: var(--desktop-agent-control-hover-bg);
+.subagent-task-card.sd-button:not(:disabled):hover {
+  background: transparent;
 }
 
 .subagent-task-card:focus-visible {
@@ -113,17 +113,11 @@
   min-width: 0;
   overflow: hidden;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: var(--chat-tool-run-font-size, 13px);
   font-weight: 500;
-  line-height: 18px;
+  line-height: var(--chat-tool-run-line-height, 20px);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .subagent-task-card {
-    transition: none;
-  }
 }
 
 .subagent-panel-header {
@@ -304,10 +298,10 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
+  min-width: 0;
   min-height: 0;
-  /* 8px list gutter + 4px item padding align with the panel header's 12px inset. */
-  padding: 6px 8px;
+  padding: 16px 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -316,56 +310,88 @@
   display: flex;
   flex-shrink: 0;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  width: min(720px, 100%);
   min-width: 0;
+  margin-inline: auto;
 }
 
 .collaboration-task-directory__group-title {
   margin: 0;
-  padding: 2px 4px;
+  padding: 0 10px;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 16px;
+  line-height: 20px;
 }
 
-.collaboration-task-row {
+.collaboration-task-directory__rows {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.collaboration-task-row.sd-button {
+  position: relative;
   display: grid;
   flex-shrink: 0;
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr) 14px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
   min-width: 0;
-  padding: 5px 4px;
+  min-height: 56px;
+  padding: 8px 10px;
   border: 0;
   border-radius: var(--app-radius-sm);
   background: transparent;
   color: var(--app-text);
   cursor: pointer;
   text-align: left;
+  transition: background 160ms ease;
 }
 
-.collaboration-task-row:hover {
-  background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
+.collaboration-task-row.sd-button:is(:hover, :focus-visible):not(:disabled) {
+  background: var(--app-surface-subtle);
 }
 
-.collaboration-task-row:focus-visible {
-  outline-offset: -2px;
+.collaboration-task-row:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 52px;
+  height: 1px;
+  background: var(--app-border);
+  pointer-events: none;
+}
+
+.collaboration-task-row.sd-button:focus-visible {
+  outline-offset: 2px;
+}
+
+.collaboration-task-row__avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-muted);
 }
 
 .collaboration-task-row__text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 
 .collaboration-task-row strong {
   overflow: hidden;
-  font-size: 12px;
+  color: var(--app-text);
+  font-size: 13px;
   font-weight: 500;
-  line-height: 18px;
+  line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -373,8 +399,25 @@
 .collaboration-task-row__title {
   overflow: hidden;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.collaboration-task-row__chevron {
+  color: var(--app-text-subtle);
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.collaboration-task-row:is(:hover, :focus-visible):not(:disabled) .collaboration-task-row__chevron {
+  opacity: 0.65;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collaboration-task-row.sd-button,
+  .collaboration-task-row__chevron {
+    transition: none;
+  }
 }

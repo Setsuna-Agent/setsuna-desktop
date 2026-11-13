@@ -35,14 +35,14 @@ function register(sender: ReturnType<typeof createSender>) {
 it('returns separate window states only for a registered desktop main frame', () => {
   const sender = createSender(1);
   const guest = createSender(2);
-  const window = Object.assign(register(sender), { isMaximized: () => true, isFullScreen: () => false });
+  const window = Object.assign(register(sender), { isMaximized: () => true, isFullScreen: () => false, isFocused: () => true });
   fromWebContents.mockReturnValue(window);
   const read = handlers.get('window-control:get-state')!;
-  expect(read({ sender, senderFrame: sender.mainFrame })).toEqual({ maximized: true, fullScreen: false });
+  expect(read({ sender, senderFrame: sender.mainFrame })).toEqual({ maximized: true, fullScreen: false, focused: true });
   expect(fromWebContents).toHaveBeenCalledWith(sender);
   fromWebContents.mockClear();
-  expect(read({ sender: guest, senderFrame: guest.mainFrame })).toEqual({ maximized: false, fullScreen: false });
-  expect(read({ sender, senderFrame: {} })).toEqual({ maximized: false, fullScreen: false });
+  expect(read({ sender: guest, senderFrame: guest.mainFrame })).toEqual({ maximized: false, fullScreen: false, focused: false });
+  expect(read({ sender, senderFrame: {} })).toEqual({ maximized: false, fullScreen: false, focused: false });
   expect(fromWebContents).not.toHaveBeenCalled();
 });
 

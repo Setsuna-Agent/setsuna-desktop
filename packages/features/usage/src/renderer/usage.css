@@ -14,7 +14,6 @@
   --settings-usage-tone-5: color-mix(in srgb, var(--app-text) 14%, var(--app-surface));
   --settings-usage-track: color-mix(in srgb, var(--app-text) 6%, transparent);
   --settings-usage-hairline: color-mix(in srgb, var(--app-text) 8%, transparent);
-  --settings-usage-radius: 14px;
   --settings-usage-pad: 24px;
 }
 
@@ -97,10 +96,9 @@
 .desktop-settings-panel .settings-usage-hero,
 .desktop-settings-panel .settings-usage-card {
   min-width: 0;
-  border: 1px solid var(--settings-usage-hairline);
-  border-radius: var(--settings-usage-radius);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-container);
   background: var(--app-surface);
-  box-shadow: 0 1px 2px color-mix(in srgb, #000000 3%, transparent);
   overflow: hidden;
 }
 

@@ -115,18 +115,6 @@ export function toolDisplayName(name: string, t: Translate = defaultTranslate): 
   return name.replace(/^mcp\s+\S+\s+/iu, '').replace(/_/g, ' ').trim() || t('toolRun.tool');
 }
 
-export function toolRunDisplayName(run: RuntimeToolRun, t: Translate): string {
-  const pluginName = run.plugin?.name.trim();
-  if (!pluginName && run.name === 'request_permissions') return t('toolRun.permission.name');
-  if (!pluginName) return toolDisplayName(run.name, t);
-  const extensionPrefix = 'extension__';
-  const separatorIndex = run.name.indexOf('__', extensionPrefix.length);
-  const localName = run.name.startsWith(extensionPrefix) && separatorIndex >= 0
-    ? run.name.slice(separatorIndex + 2).trim()
-    : run.name.trim();
-  return localName ? `${pluginName} / ${localName}` : pluginName;
-}
-
 export function automaticApprovalReviewTitle(
   run: RuntimeToolRun,
   action: string,

@@ -10,7 +10,7 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
-  /* 外壳基底保持不透明，避免侧边栏和标题栏内容与桌面背景混合。 */
+  /* 无导航栏时沿用不透明的侧栏基底。 */
   background: var(--app-sidebar-bg);
   font-weight: var(--app-font-weight);
 }
@@ -18,14 +18,32 @@
 .app-shell--with-navigation {
   --app-navigation-width: 48px;
   --app-workbench-inset: 4px;
+  --app-navigation-surface-opacity: 100%;
 
-  background: var(--app-shell-bg);
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+}
+
+:root[data-theme='light'] .app-shell--with-navigation.app-shell--window-focused {
+  --app-navigation-surface-opacity: 80%;
+}
+
+.app-shell--with-navigation::before {
+  /* 外框只绘制在工作台外，避免背景重叠后不透明度升高；圆角与工作台共用。 */
+  position: absolute;
+  z-index: -1;
+  inset: var(--app-topbar-height) var(--app-workbench-inset) var(--app-workbench-inset) var(--app-navigation-width);
+  border-radius: var(--app-radius-container);
+  box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--app-shell-bg) var(--app-navigation-surface-opacity), transparent);
+  content: '';
+  pointer-events: none;
 }
 
 .app-shell--with-navigation > .app-workbench {
   margin: 0 var(--app-workbench-inset) var(--app-workbench-inset) 0;
   border-radius: var(--app-radius-container);
-  background: var(--app-sidebar-bg);
+  background: color-mix(in srgb, var(--app-sidebar-bg) var(--app-navigation-surface-opacity), transparent);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--desktop-agent-sidebar-edge) 50%, transparent),
     var(--app-shadow-workbench);

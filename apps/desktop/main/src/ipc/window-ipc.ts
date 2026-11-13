@@ -1,7 +1,8 @@
-import type { DesktopActivityPreferences, DesktopWindowCloseBehavior } from '@setsuna-desktop/contracts';
-import { BrowserWindow, ipcMain } from 'electron';
+import type { DesktopActivityPreferences, DesktopWindowCloseBehavior, DesktopWindowControlsState } from '@setsuna-desktop/contracts';
+import { BrowserWindow, ipcMain, nativeTheme } from 'electron';
 import { readWindowControlsState, toggleWindowMaximized } from '../window/frame.js';
 import { showApplicationMenu } from '../window/application-menu.js';
+import { resolveMainWindowSurfaceOptions } from '../window/surface.js';
 import { isDesktopRendererSender } from './sender.js';
 
 type WindowIpcOptions = {
@@ -27,6 +28,7 @@ export function registerWindowIpc({
     'window-control:close',
     'window-control:get-close-behavior',
     'window-control:set-close-behavior',
+    'window-control:set-theme-mode',
     'window-control:get-state',
     'window-control:set-titlebar-scale',
   ];
@@ -75,11 +77,24 @@ export function registerWindowIpc({
     if (!isDesktopWindowCloseBehavior(value)) throw new Error('Unsupported window close behavior.');
     return setCloseBehavior(value);
   });
-  ipcMain.handle('window-control:get-state', (event) => {
+  ipcMain.handle('window-control:get-state', (event): DesktopWindowControlsState => {
     const window = isDesktopRendererSender(event.sender) && event.senderFrame === event.sender.mainFrame
       ? BrowserWindow.fromWebContents(event.sender) : null;
     return window && !window.isDestroyed()
-      ? readWindowControlsState(window) : { maximized: false, fullScreen: false };
+      ? readWindowControlsState(window) : { maximized: false, fullScreen: false, focused: false };
+  });
+  ipcMain.handle('window-control:set-theme-mode', (event, mode: unknown) => {
+    if (!isDesktopRendererSender(event.sender) || event.sender.isDestroyed()
+      || event.senderFrame !== event.sender.mainFrame) return null;
+    if (mode !== 'light' && mode !== 'dark' && mode !== 'system') return null;
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window || window.isDestroyed()) return null;
+    // macOS vibrancy follows native appearance; a CSS-only theme leaves a pale backing layer.
+    if (nativeTheme.themeSource !== mode) nativeTheme.themeSource = mode;
+    if (process.platform === 'win32') {
+      window.setBackgroundColor(resolveMainWindowSurfaceOptions('win32', nativeTheme.shouldUseDarkColors).backgroundColor);
+    }
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
   });
   ipcMain.handle('window-control:set-titlebar-scale', (event, input) => {
     if (process.platform !== 'darwin') return false;

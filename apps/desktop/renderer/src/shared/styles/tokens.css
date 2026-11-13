@@ -24,8 +24,8 @@
   --app-surface-muted: #f1f1f1;
   --app-border: rgb(0 0 0 / 8%);
   --app-border-strong: #d4d4d4;
-  /* The chat prompt keeps a persistent shadow; compact fields stay flat. */
-  --chat-prompt-shadow: var(--app-shadow-low);
+  /* 输入框用淡接触阴影与宽扩散阴影，避免底部形成厚重的阴影条。 */
+  --chat-prompt-shadow: 0 2px 8px rgb(0 0 0 / 3%), 0 8px 32px rgb(0 0 0 / 3%);
   --app-text: #242424;
   --app-text-muted: #666666;
   --app-text-secondary: var(--app-text-muted);
@@ -112,7 +112,7 @@
   /* 按用途区分控件、容器与聊天表面圆角；普通表单字段使用 8px。 */
   --app-radius-control: 12px;
   --app-radius-container: 16px;
-  --app-radius-chat: 18px;
+  --app-radius-chat: 24px;
   --app-radius-xs: 8px;
   --app-radius-sm: 8px;
   --app-radius-md: var(--app-radius-control);
@@ -218,7 +218,7 @@
   --chat-code-bg: var(--app-surface-subtle);
   --chat-content-max-width: 750px;
   --chat-content-inline-padding: 28px;
-  --chat-prompt-inline-padding: 20px;
+  --chat-prompt-inline-padding: 12px;
   --chat-composer-bottom-inset: 12px;
   --chat-message-footer-gap: 3px;
   --chat-scrollbar-width: 6px;
@@ -296,12 +296,15 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
+  --chat-prompt-shadow: var(--app-shadow-low);
   --app-bg: #1b1b1b;
   --app-toolbar-tab-active-bg: var(--desktop-agent-sidebar-hover-bg);
-  --app-sidebar-bg: #262626;
-  --app-shell-bg: #1b1b1b;
-  --app-sidebar-text: #e2e2e2;
-  --app-sidebar-text-secondary: #9e9e9e;
+  --app-sidebar-bg: #272725;
+  --app-shell-bg: #222220;
+  --app-sidebar-text: #d4d4d0;
+  --app-sidebar-text-secondary: #a3a29c;
+  /* 暖灰侧栏保持不透明，悬停与选中只轻微提亮底色。 */
+  --desktop-agent-sidebar-hover-bg: color-mix(in srgb, #ffffff 4.5%, var(--app-sidebar-bg));
   --app-surface: #262626;
   --app-surface-overlay: #1b1b1b;
   --app-surface-subtle: #222222;
@@ -374,24 +377,31 @@
 }
 
 :root[data-theme='light'][data-sidebar-background-style='contrast'] {
-  --app-sidebar-bg: #e8ecef;
-  --app-shell-bg: #e1e5e8;
-  --app-sidebar-text: #434c54;
-  --app-sidebar-text-secondary: #707c85;
+  /* 浅灰蓝外框衬托近白侧栏，列表高亮保持轻盈的中性灰。 */
+  --app-sidebar-bg: #fbfbfb;
+  --app-shell-bg: #edf2f4;
+  --app-sidebar-text: #3c3e40;
+  --app-sidebar-text-secondary: #70777c;
+  --desktop-agent-sidebar-hover-bg: #eeefef;
+}
+
+:root[data-theme='light'][data-sidebar-background-style='contrast']:has(.app-shell--with-navigation:not(.app-shell--window-focused)) {
+  --app-sidebar-bg: #fcfcfc;
+  --app-shell-bg: #f6f6f6;
 }
 
 :root[data-theme='dark'][data-sidebar-background-style='plain'] {
-  --app-sidebar-bg: #222222;
-  --app-shell-bg: #1c1c1c;
-  --app-sidebar-text: #d4d4d4;
-  --app-sidebar-text-secondary: #a1a1a1;
+  --app-sidebar-bg: #232321;
+  --app-shell-bg: #1f1f1d;
+  --app-sidebar-text: #d0d0cc;
+  --app-sidebar-text-secondary: #9c9b95;
 }
 
 :root[data-theme='dark'][data-sidebar-background-style='contrast'] {
-  --app-sidebar-bg: #2a2e31;
-  --app-shell-bg: #24282b;
-  --app-sidebar-text: #cfd5d9;
-  --app-sidebar-text-secondary: #9ba6ae;
+  --app-sidebar-bg: #292927;
+  --app-shell-bg: #232321;
+  --app-sidebar-text: #d4d4d0;
+  --app-sidebar-text-secondary: #a3a29c;
 }
 
 /* 强调色预设仅用于主要操作、链接、焦点环和显式强调。

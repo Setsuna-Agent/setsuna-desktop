@@ -1,15 +1,19 @@
+import type { DesktopThemeMode } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { readBrowserStorageValue, writeBrowserStorageValue } from './browserStorage.js';
 
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode = DesktopThemeMode;
 export type ResolvedThemeMode = 'light' | 'dark';
 
 const storageKey = 'setusna-theme-mode';
 export const THEME_CHANGE_EVENT_NAME = 'setsuna-theme-change';
+let nativeThemeSync: { key: string; result: Promise<ResolvedThemeMode | null> } | undefined;
+// matchMedia reflects explicit native overrides; keep the last actual system result separately.
+let systemTheme: ResolvedThemeMode | undefined;
 
 type AnimatedDocument = Document & {
-  startViewTransition?: (callback: () => void) => { finished: Promise<void> };
+  startViewTransition?: (callback: () => void | Promise<void>) => { finished: Promise<void> };
 };
 
 export function useThemeTransition() {
@@ -33,6 +37,7 @@ export function useThemeTransition() {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const handleSystemThemeChange = () => {
       if (getInitialThemeMode() === 'system') {
+        systemTheme = media.matches ? 'dark' : 'light';
         applyThemeModePreference('system');
       }
     };
@@ -41,9 +46,20 @@ export function useThemeTransition() {
   }, []);
 
   const setThemeMode = useCallback((nextMode: ThemeMode) => {
-    setMode(nextMode);
-    applyThemeModePreference(nextMode);
-    window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT_NAME));
+    const apply = () => {
+      setMode(nextMode);
+      applyThemeModePreference(nextMode);
+      window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT_NAME));
+    };
+    if (nextMode === 'system') {
+      // Resolve after releasing Electron's override; a newer choice must win over this reply.
+      writeBrowserStorageValue(storageKey, nextMode);
+      void syncNativeTheme(nextMode, readResolvedThemeMode()).then(() => {
+        if (getInitialThemeMode() === nextMode) apply();
+      });
+      return;
+    }
+    apply();
   }, []);
 
   const setThemeModeWithTransition = useCallback((nextMode: ThemeMode, event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) => {
@@ -55,7 +71,9 @@ export function useThemeTransition() {
     const animatedDocument = document as AnimatedDocument;
     const apply = () => setThemeMode(nextMode);
 
-    if (!animatedDocument.startViewTransition || prefersReducedMotion) {
+    // System appearance resolves asynchronously; avoid blending snapshots over a changing native backing.
+    if (nextMode === 'system' || resolveThemeMode(nextMode) === readResolvedThemeMode()
+      || !animatedDocument.startViewTransition || prefersReducedMotion) {
       apply();
       return;
     }
@@ -64,12 +82,16 @@ export function useThemeTransition() {
     // Button coordinates also give keyboard activation the correct reveal origin.
     root.style.setProperty('--desktop-theme-transition-origin', `${rect.left + rect.width / 2}px ${rect.top + rect.height / 2}px`);
     root.dataset.themeTransition = 'circle';
-    const transition = animatedDocument.startViewTransition(() => {
+    const transition = animatedDocument.startViewTransition(async () => {
       flushSync(apply);
+      // The opaque old dark snapshot covers the native backing change before light is revealed.
+      if (readResolvedThemeMode() === 'light') await syncNativeTheme(nextMode, 'light');
     });
     const cleanup = () => {
       delete root.dataset.themeTransition;
       root.style.removeProperty('--desktop-theme-transition-origin');
+      // Entering dark mode updates the backing only after the opaque new view covers it.
+      applyThemeModePreference(getInitialThemeMode());
     };
     // A skipped transition can reject; both outcomes must release the shared guard.
     void transition.finished.then(cleanup, cleanup);
@@ -98,7 +120,10 @@ export function useResolvedThemeMode(): ResolvedThemeMode {
     };
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const syncFromSystem = () => {
-      if (getInitialThemeMode() === 'system') syncFromPreference();
+      if (getInitialThemeMode() === 'system') {
+        systemTheme = media.matches ? 'dark' : 'light';
+        syncFromPreference();
+      }
     };
     window.addEventListener(THEME_CHANGE_EVENT_NAME, syncFromPreference);
     window.addEventListener('storage', syncFromPreference);
@@ -120,14 +145,43 @@ function getInitialThemeMode(): ThemeMode {
 }
 
 function applyThemeModePreference(mode: ThemeMode): void {
-  document.documentElement.dataset.theme = resolveThemeMode(mode);
+  const resolved = resolveThemeMode(mode);
+  document.documentElement.dataset.theme = resolved;
   document.documentElement.dataset.themePreference = mode;
   writeBrowserStorageValue(storageKey, mode);
+
+  if (document.documentElement.dataset.themeTransition && resolved === 'dark') return;
+  // Initialization stays non-blocking; user-triggered synchronization is awaited by its caller.
+  void syncNativeTheme(mode, resolved);
+}
+
+function syncNativeTheme(mode: ThemeMode, resolved: ResolvedThemeMode): Promise<ResolvedThemeMode | null> {
+  const controls = window.setsunaDesktop?.windowControls;
+  if (!controls?.setThemeMode) return Promise.resolve(null);
+  const key = `${mode}:${resolved}`;
+  if (nativeThemeSync?.key === key) return nativeThemeSync.result;
+  // Preserve "system" instead of locking native appearance to the current resolved color.
+  const result = controls.setThemeMode(mode).then((nativeResolved) => {
+    if (mode === 'system' && nativeResolved && nativeThemeSync?.key === key) {
+      nativeThemeSync.key = `${mode}:${nativeResolved}`;
+      systemTheme = nativeResolved;
+      if (getInitialThemeMode() === 'system' && readResolvedThemeMode() !== nativeResolved) {
+        applyThemeModePreference('system');
+        window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT_NAME));
+      }
+    }
+    return nativeResolved;
+  }).catch(() => {
+    if (nativeThemeSync?.key === key) nativeThemeSync = undefined;
+    return null;
+  });
+  nativeThemeSync = { key, result };
+  return result;
 }
 
 function resolveThemeMode(mode: ThemeMode): ResolvedThemeMode {
   if (mode === 'system') {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return systemTheme ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   }
   return mode;
 }

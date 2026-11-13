@@ -11,21 +11,14 @@
   gap: 0;
   margin-top: 8px;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: var(--app-radius-lg);
-  background: color-mix(in srgb, var(--app-surface) 96%, var(--app-bg));
+  border-radius: var(--app-radius-container);
+  background: var(--app-surface);
   overflow: hidden;
-  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
-}
-
-.desktop-settings-panel .chat-user-settings__advanced-disclosure:hover {
-  border-color: color-mix(in srgb, var(--app-text-muted) 32%, var(--chat-settings-divider));
-  box-shadow: var(--app-shadow-raised);
 }
 
 .desktop-settings-panel .chat-user-settings__advanced-disclosure[open] {
   gap: 10px;
   padding-bottom: 10px;
-  background: color-mix(in srgb, var(--app-surface) 92%, var(--app-bg));
 }
 
 .desktop-settings-panel .chat-user-settings__advanced-summary {
@@ -34,14 +27,14 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 13px 14px;
+  padding: 13px 16px;
   cursor: pointer;
   list-style: none;
   transition: background 160ms ease;
 }
 
 .desktop-settings-panel .chat-user-settings__advanced-summary:hover {
-  background: color-mix(in srgb, var(--app-surface-muted) 52%, transparent);
+  background: var(--desktop-agent-control-hover-bg);
 }
 
 .desktop-settings-panel .chat-user-settings__advanced-summary::-webkit-details-marker {

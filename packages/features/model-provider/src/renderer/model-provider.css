@@ -382,10 +382,9 @@
 .model-provider-settings__card {
   flex: 0 0 auto;
   min-width: 0;
-  border: 1px solid var(--model-provider-divider);
-  border-radius: var(--app-radius-lg);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-container);
   background: var(--app-surface);
-  box-shadow: var(--app-shadow-card);
   overflow: hidden;
 }
 
