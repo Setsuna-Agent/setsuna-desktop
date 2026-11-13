@@ -26,7 +26,6 @@
 
 .chat-conversation-git--compact { max-width: 40%; }
 
-.chat-git-branch-menu__create-form input,
 .chat-git-commit-popover__message {
   box-shadow: none;
   min-width: 0;
@@ -37,7 +36,6 @@
   font: inherit;
 }
 
-.chat-git-branch-menu__create-form input::placeholder,
 .chat-git-commit-popover__message::placeholder {
   color: color-mix(in srgb, var(--app-text-muted) 78%, transparent);
 }
@@ -126,52 +124,6 @@
 .chat-git-commit-popover__divider {
   height: 1px;
   background: var(--app-border);
-}
-
-.chat-git-branch-menu__create-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px 44px;
-  align-items: center;
-  gap: 6px;
-}
-
-.chat-git-branch-menu__create-form--compact {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: stretch;
-  padding: 4px 2px 2px;
-}
-
-.chat-git-branch-menu__create-form input {
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-xs);
-  background: var(--app-surface);
-}
-
-.chat-git-branch-menu__create-form--compact input {
-  grid-column: 1 / -1;
-  height: 32px;
-}
-
-.chat-git-branch-menu__create-form button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 30px;
-  min-height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-xs);
-  color: var(--app-text);
-  background: var(--app-surface);
-  font: inherit;
-  font-size: 12px;
-}
-
-.chat-git-branch-menu__create-form--compact button {
-  width: 100%;
-  height: 30px;
 }
 
 .git-commit-message-editor { display: grid; flex: 1; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; background: var(--desktop-agent-main-bg); color: var(--app-text); }
