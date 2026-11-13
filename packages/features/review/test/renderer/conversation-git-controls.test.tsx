@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DesktopReviewBridge, DesktopReviewState } from '../../src/contracts/index.js';
 import { ConversationGitControls } from '../../src/renderer/ConversationGitControls.js';
@@ -75,8 +76,11 @@ it('does not refresh the previous repository when checkout finishes after a proj
   expect(refreshNew).toHaveBeenCalledOnce();
 });
 
-it('allows creation with working changes and requests auto-staging through the native branch operation', async () => {
-  const createBranch = vi.fn().mockResolvedValue({ ...state, currentBranch: 'feature/new' });
+it('keeps failed branch drafts for retry and blocks duplicate creation while auto-staging', async () => {
+  const user = userEvent.setup();
+  let finish!: (value: DesktopReviewState) => void;
+  const createBranch = vi.fn().mockRejectedValueOnce(new Error('Git could not lock the new branch'))
+    .mockImplementationOnce(() => new Promise<DesktopReviewState>((resolve) => { finish = resolve; }));
   const refresh = vi.fn();
   render(<ReviewRendererTestHost bridge={{ createBranch } as unknown as DesktopReviewBridge}>
     <ConversationGitControls variant="compact"
@@ -87,10 +91,21 @@ it('allows creation with working changes and requests auto-staging through the n
       reviewLoading={false} reviewError={null} onReviewRefresh={refresh}
     />
   </ReviewRendererTestHost>);
-  fireEvent.click(screen.getByRole('button', { name: '分支: main' }));
-  fireEvent.click(await screen.findByRole('button', { name: '创建并检出新分支' }));
-  fireEvent.change(screen.getByPlaceholderText('新分支名称'), { target: { value: ' feature/new ' } });
-  fireEvent.click(screen.getByRole('button', { name: '创建分支' }));
-  await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+  await user.click(screen.getByRole('button', { name: '分支: main' }));
+  await user.click(await screen.findByRole('button', { name: '创建并检出新分支' }));
+  const input = await screen.findByRole('textbox', { name: '分支名称' }) as HTMLInputElement;
+  await waitFor(() => expect(document.activeElement).toBe(input));
+  await user.keyboard(' feature/new {Enter}');
+  expect((await screen.findByRole('alert')).textContent).toContain('Git could not lock the new branch');
   expect(createBranch).toHaveBeenCalledExactlyOnceWith('/repo', 'feature/new', { stageUnstaged: true });
+  expect(input.value).toBe(' feature/new ');
+  expect(refresh).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole('button', { name: '创建并检出', exact: true }));
+  expect(createBranch).toHaveBeenCalledTimes(2);
+  fireEvent.submit(input.form!);
+  expect(createBranch).toHaveBeenCalledTimes(2);
+  await act(async () => finish({ ...state, currentBranch: 'feature/new' }));
+  await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+  expect(screen.queryByRole('dialog', { name: '创建并检出新分支' })).toBeNull();
 });

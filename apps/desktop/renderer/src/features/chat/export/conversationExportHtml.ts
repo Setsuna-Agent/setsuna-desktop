@@ -10,7 +10,7 @@ import { splitOpenUiContent, type OpenUiContentPart } from '../generative-ui/ope
 import { separateOpenUiDisplayScopes, type OpenUiMarkdownRoot } from '../generative-ui/openUiMarkdownScopes.js';
 import styles from './conversationExport.css?inline';
 
-export async function conversationExportHtml(content: ConversationExportDocument, locale: AppLocale): Promise<string> {
+export async function conversationExportHtml(content: ConversationExportDocument, locale: AppLocale, format: 'html' | 'png' = 'html'): Promise<string> {
   const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
   const signal = new AbortController().signal;
   const sections: string[] = [];
@@ -20,11 +20,11 @@ export async function conversationExportHtml(content: ConversationExportDocument
     if (rendered.openUiStyles) openUiStyles.add(rendered.openUiStyles);
     sections.push(`<section class="message message--${entry.role}">
 <h2 class="message__role">${escapeHtml(entry.heading)}</h2>
-<div class="message__body">${rendered.html}</div>
+<div class="message__body chat-markdown">${rendered.html}</div>
 </section>`);
   }
   return `<!doctype html>
-<html lang="${locale}" data-theme="${theme}">
+<html lang="${locale}" data-theme="${theme}" data-export-format="${format}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

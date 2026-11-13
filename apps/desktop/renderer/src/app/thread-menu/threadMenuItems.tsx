@@ -28,6 +28,7 @@ export function threadMenuItems({ thread, pinned, running, actions, onRename, on
     { key: 'export', label: t('sidebar.exportChat'), icon: <Download size={14} />, disabled: !thread, children: [
       { key: 'export-markdown', label: 'Markdown', onClick: () => { if (thread) void actions.exportThread(thread.id, 'markdown'); } },
       { key: 'export-html', label: 'HTML', onClick: () => { if (thread) void actions.exportThread(thread.id, 'html'); } },
+      { key: 'export-png', label: t('chat.export.image'), onClick: () => { if (thread) void actions.exportThread(thread.id, 'png'); } },
     ] },
     { key: 'archive', label: t('sidebar.archiveChat'), icon: <Archive size={14} />, disabled: !thread || running,
       onClick: () => { if (thread) onArchive(thread); } },

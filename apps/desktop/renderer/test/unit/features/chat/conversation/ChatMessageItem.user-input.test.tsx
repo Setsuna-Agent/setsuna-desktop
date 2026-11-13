@@ -34,7 +34,7 @@ it('preserves and submits an answer while work history is collapsed and other to
     }];
     const item = createChatDisplayItems(messages)[0]!;
     return <MessageItem item={item} activeTurnId="turn_input" activeAssistantItemId={item.id}
-      deleteMode={false} selectedForDelete={false} pluginUses={[]}
+      selectionMode={false} selected={false} pluginUses={[]}
       onAnswerApproval={onAnswerApproval} onWorkHistoryExpandedChange={() => undefined} />;
   };
   const view = render(panel(question, true), { wrapper: RendererPluginTestHost });

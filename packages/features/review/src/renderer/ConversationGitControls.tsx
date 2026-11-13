@@ -1,13 +1,13 @@
 import { ToastNotice, TextField, Button, Popover } from '@setsuna-desktop/renderer-ui';
 
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import { Check, GitBranch, Search } from 'lucide-react';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Check, GitBranch, Plus, Search } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   DesktopReviewBridge,
   DesktopReviewState,
 } from '../contracts/index.js';
-import { WorkspaceGitBranchCreateControl } from './git/WorkspaceGitBranchCreateControl.js';
+import { WorkspaceGitBranchCreateDialog } from './git/WorkspaceGitBranchCreateDialog.js';
 import { useReviewRendererHost } from './host.js';
 import type { ReviewTranslate } from './messages.js';
 import { useReviewRequestGuard } from './request-guard.js';
@@ -31,6 +31,7 @@ export function ConversationGitControls({
 }) {
   const { bridge, translate: t } = useReviewRendererHost();
   const branchRequests = useReviewRequestGuard();
+  const branchTriggerRef = useRef<HTMLButtonElement>(null);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [branchQuery, setBranchQuery] = useState('');
   const [creatingBranch, setCreatingBranch] = useState(false);
@@ -72,13 +73,13 @@ export function ConversationGitControls({
   const closeBranchCreate = () => {
     setCreatingBranch(false);
     setBranchDraft('');
+    setError(null);
   };
 
   const closeBranchMenu = () => {
     setBranchMenuOpen(false);
     setBranchQuery('');
     setError(null);
-    closeBranchCreate();
   };
 
   const runBranchAction = async (
@@ -99,6 +100,7 @@ export function ConversationGitControls({
       // The user may select another project while native Git is still running.
       if (!isLatest()) return;
       closeBranchMenu();
+      closeBranchCreate();
       await onReviewRefresh?.();
     } catch (unknownError) {
       if (isLatest()) setError(gitControlErrorMessage(unknownError, t));
@@ -111,8 +113,7 @@ export function ConversationGitControls({
     void runBranchAction('checkout', (api) => api.checkoutBranch(workspaceRoot, branchName));
   };
 
-  const createBranch = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const createBranch = () => {
     const branchName = branchDraft.trim();
     if (!branchName) {
       setError(t('feature.review.git.branchRequired'));
@@ -131,24 +132,21 @@ export function ConversationGitControls({
             setError(null);
           } else closeBranchMenu();
         }}
+        onCloseAutoFocus={(event) => { if (creatingBranch) event.preventDefault(); }}
         placement={variant === 'compact' ? 'topLeft' : 'leftTop'}
         className="sd-menu-surface sd-picker"
         content={(
           <BranchMenu
-            branchDraft={branchDraft}
             busyAction={busyAction}
-            creatingBranch={creatingBranch}
             currentBranch={currentBranch}
-            error={error}
             filteredBranches={filteredBranches}
             query={branchQuery}
-            onBranchDraftChange={setBranchDraft}
-            onCancelCreate={closeBranchCreate}
             onCheckout={checkoutBranch}
-            onCreate={createBranch}
             onCreateStart={() => {
+              // The dialog must return focus to the surviving trigger, not the removed menu item.
+              branchTriggerRef.current?.focus({ preventScroll: true });
+              closeBranchMenu();
               setCreatingBranch(true);
-              setError(null);
             }}
             onQueryChange={setBranchQuery}
             t={t}
@@ -156,6 +154,7 @@ export function ConversationGitControls({
         )}
       >
         <Button variant="ghost"
+          ref={branchTriggerRef}
           type="button"
           className={variant === 'compact'
             ? 'sd-picker-trigger'
@@ -176,37 +175,37 @@ export function ConversationGitControls({
           </>}
         </Button>
       </Popover>
+      {creatingBranch && !branchLocked ? (
+        <WorkspaceGitBranchCreateDialog
+          branchDraft={branchDraft}
+          busy={Boolean(busyAction)}
+          error={error}
+          onBranchDraftChange={setBranchDraft}
+          onClose={closeBranchCreate}
+          onCreate={createBranch}
+          t={t}
+        />
+      ) : null}
+      {error && !creatingBranch ? <ToastNotice message={error} /> : null}
     </div>
   );
 }
 
 function BranchMenu({
-  branchDraft,
   busyAction,
-  creatingBranch,
   currentBranch,
-  error,
   filteredBranches,
   query,
-  onBranchDraftChange,
-  onCancelCreate,
   onCheckout,
-  onCreate,
   onCreateStart,
   onQueryChange,
   t,
 }: {
-  branchDraft: string;
   busyAction: BranchBusyAction;
-  creatingBranch: boolean;
   currentBranch: string;
-  error: string | null;
   filteredBranches: DesktopReviewState['branches'];
   query: string;
-  onBranchDraftChange: (value: string) => void;
-  onCancelCreate: () => void;
   onCheckout: (branchName: string) => void;
-  onCreate: (event: FormEvent<HTMLFormElement>) => void;
   onCreateStart: () => void;
   onQueryChange: (value: string) => void;
   t: ReviewTranslate;
@@ -241,19 +240,11 @@ function BranchMenu({
         )}
       </div>
       <div className="sd-picker__actions">
-        <WorkspaceGitBranchCreateControl
-          branchDraft={branchDraft}
-          busy={Boolean(busyAction)}
-          creatingBranch={creatingBranch}
-          submitting={busyAction === 'create'}
-          onBranchDraftChange={onBranchDraftChange}
-          onCancelCreate={onCancelCreate}
-          onCreate={onCreate}
-          onCreateStart={onCreateStart}
-          t={t}
-        />
+        <Button variant="ghost" className="sd-picker__item" disabled={Boolean(busyAction)} onClick={onCreateStart}>
+          <Plus size={14} aria-hidden="true" />
+          <span>{t('feature.review.git.createAndCheckout')}</span>
+        </Button>
       </div>
-      {error ? <ToastNotice message={error} /> : null}
     </>
   );
 }

@@ -9,7 +9,7 @@ import type { DesktopStorageCleanupCategory, DesktopStorageCleanupResult, Deskto
 import type { SandboxDialogSession } from './desktop/sandbox-dialogs.js';
 import type { PluginUiDocument, PluginUiDocumentInput } from './desktop/plugin-ui-documents.js';
 import type { DocumentPreviewReadResult } from './workspace/document-preview.js';
-import type { DesktopConversationExportInput, DesktopConversationExportResult } from './desktop/conversation-export.js';
+import type { DesktopConversationExportInput, DesktopConversationExportPreviewResult, DesktopConversationExportResult } from './desktop/conversation-export.js';
 export * from './desktop/conversation-export.js';
 import type {
   DesktopDataMigrationPlan,
@@ -171,6 +171,8 @@ export type SetsunaDesktopBridge = {
     revealImageInFolder(input: DesktopImageInput): Promise<DesktopImageActionResult>;
     saveImageAs(input: DesktopImageInput): Promise<DesktopImageActionResult>;
     saveConversationExport(input: DesktopConversationExportInput): Promise<DesktopConversationExportResult>;
+    prepareConversationExport(input: DesktopConversationExportInput): Promise<DesktopConversationExportPreviewResult>;
+    savePreparedConversationExport(exportId: string): Promise<DesktopConversationExportResult>;
     openPath(targetPath: string): Promise<DesktopOpenPathResult>;
     revealPath(targetPath: string): Promise<DesktopOpenPathResult>;
     openWorkspaceDirectory(workspaceRoot: string, directoryPath: string): Promise<DesktopOpenPathResult>;

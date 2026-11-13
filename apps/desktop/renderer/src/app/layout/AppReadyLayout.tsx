@@ -45,6 +45,7 @@ import { AppThreadHistoryNavigation } from './AppThreadHistoryNavigation.js';
 import { AppWorkspaceToolbar } from './AppWorkspaceToolbar.js';
 import { RuntimeErrorNotice, runtimeErrorNoticeMessage } from './RuntimeErrorNotice.js';
 import { MissingWorktreeDialog } from '../../features/workspace/MissingWorktreeDialog.js';
+import { ConversationExportOverlay } from '../../features/chat/export/ConversationExportOverlay.js';
 import { ShellFrame } from './ShellFrame.js';
 import { AppMenuBar } from './AppMenuBar.js';
 import { useSecondaryRoutePrefetch } from './useSecondaryRoutePrefetch.js';
@@ -712,6 +713,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         />
       ) : null}
 
+      <ConversationExportOverlay state={threadMenu.exportPreview.state} onClose={threadMenu.exportPreview.close} />
       <RendererOwnedSingleSlot
         slot={shellOverlaySlot}
         props={{

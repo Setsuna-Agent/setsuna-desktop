@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { ToastNotice } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Tooltip } from '@setsuna-desktop/renderer-ui';
 import type { Assistant, AssistantReminder, AssistantTask, AssistantsSnapshot } from '../contracts/index.js';
 import type { AssistantsRendererService } from './client.js';
 import type { AssistantsHostUi } from './host.js';
+import { AssistantConnectionDot } from './AssistantConnectionDot.js';
 import { AssistantTaskList } from './AssistantTaskList.js';
 import { AssistantEntryRenameDialog } from './AssistantEntryRenameDialog.js';
 import { AssistantReminderDialog } from './AssistantReminderDialog.js';
@@ -25,17 +26,16 @@ export function AssistantInfoPanel({ assistant, snapshot, service, ui, scheduled
   } });
   const connector = snapshot.connectors.find((item) => item.assistantId === assistant.id);
   const connectionState = connector?.state ?? 'disabled';
+  const connectionLabel = `QQ · ${t(`feature.assistants.connector.${connectionState}`)}`;
   return <section className="assistant-info" aria-label={t('feature.assistants.info')}>
     <header className="assistant-info__identity">
-      <ui.Avatar assistant={assistant} size="menu" className="assistant-info__avatar" />
-      <div className="assistant-info__profile">
-        <h2 title={assistant.name}>{assistant.name}</h2>
-        <span className="assistant-info__connection" data-state={connectionState} title={connector?.error}>
-          <span>QQ</span>
-          <span className="assistant-info__connection-dot" aria-hidden="true" />
-          <span className="assistant-info__connection-label">{t(`feature.assistants.connector.${connectionState}`)}</span>
+      <Tooltip title={connector?.error ? `${connectionLabel} · ${connector.error}` : connectionLabel}>
+        <span className="assistant-info__presence" role="img" aria-label={connectionLabel} tabIndex={0}>
+          <ui.Avatar assistant={assistant} size="menu" className="assistant-info__avatar" />
+          <AssistantConnectionDot state={connectionState} />
         </span>
-      </div>
+      </Tooltip>
+      <h2 className="assistant-info__name" title={assistant.name}>{assistant.name}</h2>
     </header>
     <AssistantTaskList snapshot={snapshot} assistantId={assistant.id} scheduledThreadIds={scheduledThreadIds} busy={actions.busy} translate={t} actions={actions}
       onSelect={({ kind, entryId }) => {

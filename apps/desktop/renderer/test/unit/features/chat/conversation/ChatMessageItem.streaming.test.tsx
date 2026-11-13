@@ -29,11 +29,11 @@ describe('assistant transcript streaming', () => {
         activeTurnId="turn_1"
         activeAssistantItemId={item.id}
         contextCompactionRunning={compacting}
-        deleteMode={false}
+        selectionMode={false}
         onAnswerApproval={vi.fn()}
         onWorkHistoryExpandedChange={onExpandedChange}
         pluginUses={[]}
-        selectedForDelete={false}
+        selected={false}
       />);
     };
     const view = render(panel(history));

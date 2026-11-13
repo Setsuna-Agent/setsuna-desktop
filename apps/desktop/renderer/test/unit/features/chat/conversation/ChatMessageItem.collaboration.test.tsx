@@ -101,12 +101,12 @@ function messageItem(toolRuns: RuntimeToolRun[], completed = false) {
     <MessageItem
       activeAssistantItemId={item.id}
       activeTurnId={completed ? null : segment.turnId ?? null}
-      deleteMode={false}
+      selectionMode={false}
       item={item}
       onAnswerApproval={async () => undefined}
       onWorkHistoryExpandedChange={() => undefined}
       pluginUses={[]}
-      selectedForDelete={false}
+      selected={false}
     />
   );
 }

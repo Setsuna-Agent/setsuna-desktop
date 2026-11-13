@@ -16,6 +16,7 @@ import {
   GitCommitHorizontal,
   GitPullRequestArrow,
   Loader2,
+  Plus,
   UploadCloud,
 } from 'lucide-react';
 import {
@@ -26,7 +27,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type FormEvent,
   type PropsWithChildren,
   type ReactNode,
 } from 'react';
@@ -34,7 +34,7 @@ import { useReviewRendererHost } from '../host.js';
 import type { ReviewTranslate } from '../messages.js';
 import { ReviewChangeCounts } from '../ReviewChangeCounts.js';
 import { localReviewChangeStats } from '../reviewChanges.js';
-import { WorkspaceGitBranchCreateControl } from './WorkspaceGitBranchCreateControl.js';
+import { WorkspaceGitBranchCreateDialog } from './WorkspaceGitBranchCreateDialog.js';
 import { useCommitMessageEditor, type CommitMessageEditorLauncher } from './useCommitMessageEditor.js';
 import { useAutoResolveGitConflicts } from './useAutoResolveGitConflicts.js';
 import { commitBlockedMessage, commitPrerequisiteMessage } from './commitBlockedMessage.js';
@@ -117,6 +117,7 @@ export function WorkspaceGitCommitProvider({
   const [includeUnstaged, setIncludeUnstaged] = useState(false);
   const [creatingBranch, setCreatingBranch] = useState(false);
   const [branchDraft, setBranchDraft] = useState('');
+  const branchTriggerRef = useRef<HTMLButtonElement>(null);
   const [busyAction, setBusyAction] = useState<CommitBusyAction>(null);
   const [commitPhase, setCommitPhase] = useState<CommitPhase>(null);
   const [error, setError] = useState<string | null>(null);
@@ -230,10 +231,10 @@ export function WorkspaceGitCommitProvider({
   const closeBranchCreate = () => {
     setCreatingBranch(false);
     setBranchDraft('');
+    setError(null);
   };
 
-  const createBranch = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const createBranch = () => {
     if (branchLocked) return;
     const branchName = branchDraft.trim();
     if (!branchName) {
@@ -370,7 +371,7 @@ export function WorkspaceGitCommitProvider({
       generateBlockedReason,
       generating: busyAction === 'generate-message' || commitPhase === 'generating',
       committing: commitPhase === 'committing',
-      error,
+      error: creatingBranch ? null : error,
       dismissError,
       generateMessage: () => {
         if (generateBlockedReason) {
@@ -395,6 +396,7 @@ export function WorkspaceGitCommitProvider({
         <div className="chat-git-commit-popover__head">
           <div className="chat-git-commit-popover__branch-wrap">
             <Button variant="ghost"
+              ref={branchTriggerRef}
               type="button"
               className="chat-git-commit-popover__branch"
               aria-expanded={branchMenuVisible}
@@ -411,16 +413,13 @@ export function WorkspaceGitCommitProvider({
             </Button>
             {branchMenuVisible ? (
               <CommitBranchMenu
-                branchDraft={branchDraft}
                 busyAction={busyAction}
-                creatingBranch={creatingBranch}
                 currentBranch={currentBranch}
                 error={error}
                 onDismissError={dismissError}
-                onBranchDraftChange={setBranchDraft}
-                onCancelCreate={closeBranchCreate}
-                onCreate={createBranch}
                 onCreateStart={() => {
+                  branchTriggerRef.current?.focus({ preventScroll: true });
+                  setBranchMenuOpen(false);
                   setCreatingBranch(true);
                   setError(null);
                 }}
@@ -474,8 +473,19 @@ export function WorkspaceGitCommitProvider({
             onClick={pushBranch}
           />
         </div>
-        {error && !branchMenuVisible ? (
+        {error && !branchMenuVisible && !creatingBranch ? (
           <GitOperationError message={error} onDismiss={dismissError} />
+        ) : null}
+        {creatingBranch && !branchLocked ? (
+          <WorkspaceGitBranchCreateDialog
+            branchDraft={branchDraft}
+            busy={Boolean(busyAction)}
+            error={error}
+            onBranchDraftChange={setBranchDraft}
+            onClose={closeBranchCreate}
+            onCreate={createBranch}
+            t={t}
+          />
         ) : null}
     </Dialog>
   ) : null;
@@ -489,27 +499,17 @@ export function WorkspaceGitCommitProvider({
 }
 
 function CommitBranchMenu({
-  branchDraft,
   busyAction,
-  creatingBranch,
   currentBranch,
   error,
   onDismissError,
-  onBranchDraftChange,
-  onCancelCreate,
-  onCreate,
   onCreateStart,
   t,
 }: {
-  branchDraft: string;
   busyAction: CommitBusyAction;
-  creatingBranch: boolean;
   currentBranch: string;
   error: string | null;
   onDismissError: () => void;
-  onBranchDraftChange: (value: string) => void;
-  onCancelCreate: () => void;
-  onCreate: (event: FormEvent<HTMLFormElement>) => void;
   onCreateStart: () => void;
   t: ReviewTranslate;
 }) {
@@ -521,18 +521,10 @@ function CommitBranchMenu({
         <span>{currentBranch}</span>
         <Check size={13} />
       </div>
-      <WorkspaceGitBranchCreateControl
-        branchDraft={branchDraft}
-        busy={Boolean(busyAction)}
-        compact
-        creatingBranch={creatingBranch}
-        submitting={busyAction === 'create'}
-        onBranchDraftChange={onBranchDraftChange}
-        onCancelCreate={onCancelCreate}
-        onCreate={onCreate}
-        onCreateStart={onCreateStart}
-        t={t}
-      />
+      <Button variant="ghost" className="sd-picker__item" disabled={Boolean(busyAction)} onClick={onCreateStart}>
+        <Plus size={14} aria-hidden="true" />
+        <span>{t('feature.review.git.newBranch')}</span>
+      </Button>
       {error ? <GitOperationError message={error} onDismiss={onDismissError} /> : null}
     </div>
   );

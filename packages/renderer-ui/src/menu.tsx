@@ -110,7 +110,8 @@ function MenuItems({ menu, context }: { menu: MenuProps; context: boolean }) {
     if (item.children) return <ui.Sub key={key}>
       <ui.SubTrigger disabled={item.disabled} className={cn('sd-menu__item', item.className)}>{content}<ChevronRight size={13} /></ui.SubTrigger>
       <ui.Portal container={overlayContainer()}>
-        <ui.SubContent asChild className={cn('sd-menu', item.submenuClassName)} sideOffset={4} collisionPadding={8}
+        {/* Align the first row with its trigger, accounting for the surface's 8px padding and 1px border. */}
+        <ui.SubContent asChild className={cn('sd-menu', item.submenuClassName)} sideOffset={4} alignOffset={-9} collisionPadding={8}
           onFocus={(event) => {
             const initialFocus = item.submenuInitialFocusRef?.current;
             if (event.target !== event.currentTarget || !initialFocus) return;

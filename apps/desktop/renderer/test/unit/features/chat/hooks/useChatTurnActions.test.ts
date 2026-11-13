@@ -37,7 +37,7 @@ it.each(['turn', undefined])('requests complete turn deletion from a tail-only a
     });
   });
   act(() => view.result.current.startDeleteSelection(displayItems[0].id));
-  await act(async () => { await view.result.current.confirmDeleteSelection(); });
+  await act(async () => { await view.result.current.selection.confirm(); });
   expect(deleteMessages).toHaveBeenCalledExactlyOnceWith(currentThread.id, { messageIds: currentThread.messages.map((message) => message.id), scope: 'turns' });
   expect(setCurrentThread).toHaveBeenCalledTimes(1);
 });

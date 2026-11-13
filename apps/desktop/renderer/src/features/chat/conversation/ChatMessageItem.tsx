@@ -67,14 +67,14 @@ import { ChatThinkingDisclosure } from './ChatThinkingDisclosure.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 
 export { ActiveWorkPlaceholder } from './ChatWorkHistory.js';
-export { DeleteSelectionBar } from './ChatDeleteSelectionBar.js';
 
 export const MessageItem = memo(function MessageItem({
   presentation = 'workspace',
   activeAssistantItemId,
   activeTurnId,
   contextCompactionRunning = false,
-  deleteMode,
+  selectionMode,
+  selectionDisabled = false,
   editor,
   item,
   pending = false,
@@ -83,11 +83,12 @@ export const MessageItem = memo(function MessageItem({
   onOpenFileReview,
   onStartEdit,
   onStartDelete,
-  onToggleDelete,
+  onStartExport,
+  onToggleSelection,
   onWorkHistoryExpandedChange,
   hookUses,
   pluginUses,
-  selectedForDelete,
+  selected,
   showThinkingInTranscript = false,
   workHistoryExpanded = false,
 }: {
@@ -95,7 +96,8 @@ export const MessageItem = memo(function MessageItem({
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
   contextCompactionRunning?: boolean;
-  deleteMode: boolean;
+  selectionMode: boolean;
+  selectionDisabled?: boolean;
   editor?: ReactNode;
   item: ChatDisplayItem;
   pending?: boolean;
@@ -104,11 +106,12 @@ export const MessageItem = memo(function MessageItem({
   onOpenFileReview?: DesktopReviewOpenHandler;
   onStartEdit?: (message: RuntimeMessage) => void;
   onStartDelete?: (itemId: string) => void;
-  onToggleDelete?: (itemId: string, checked: boolean) => void;
+  onStartExport?: (itemId: string) => void;
+  onToggleSelection?: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   hookUses?: RuntimeHookUse[];
   pluginUses: RuntimePluginUse[];
-  selectedForDelete: boolean;
+  selected: boolean;
   showThinkingInTranscript?: boolean;
   /**
    * 用户消息对应的回复是否展开了工作记录。按条传布尔值，切换展开时只有受影响的消息重新渲染，
@@ -124,17 +127,19 @@ export const MessageItem = memo(function MessageItem({
         activeTurnId={activeTurnId}
         activeAssistantItemId={activeAssistantItemId}
         contextCompactionActive={contextCompactionRunning && item.id === activeAssistantItemId}
-        deleteMode={deleteMode}
+        selectionMode={selectionMode}
+        selectionDisabled={selectionDisabled}
         item={item}
         onAnswerApproval={onAnswerApproval}
         onFileChangesAction={onFileChangesAction}
         onOpenFileReview={onOpenFileReview}
         onStartDelete={onStartDelete}
-        onToggleDelete={onToggleDelete}
+        onStartExport={onStartExport}
+        onToggleSelection={onToggleSelection}
         onWorkHistoryExpandedChange={onWorkHistoryExpandedChange}
         hookUses={hookUses}
         pluginUses={pluginUses}
-        selectedForDelete={selectedForDelete}
+        selected={selected}
         showThinkingInTranscript={showThinkingInTranscript}
       />
     );
@@ -162,13 +167,13 @@ export const MessageItem = memo(function MessageItem({
   if (editor) return editor;
   const hasAttachments = Boolean(message.attachments?.length);
   return (
-    <article data-message-id={chatDisplayItemRenderKey(item)} className={['chat-bubble-item', 'chat-bubble-item--user', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
-      {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectMessage')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
+    <article data-message-id={chatDisplayItemRenderKey(item)} className={['chat-bubble-item', 'chat-bubble-item--user', selectionMode ? 'chat-bubble-item--selecting' : '', selected ? 'is-selected' : ''].filter(Boolean).join(' ')}>
+      {selectionMode && onToggleSelection ? <MessageSelectionControl disabled={selectionDisabled} checked={selected} label={t('chat.selection.selectMessage')} onChange={(checked) => onToggleSelection(item.id, checked)} /> : null}
       <div className="chat-user-turn">
         <MessageBubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
-          footer={pending ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} forkMessageId={presentation === 'messenger' || steered ? null : message.id} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={presentation === 'messenger' || steered ? 'none' : 'before-actions'} />}
+          footer={pending ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || selectionMode} align="end" message={message} forkMessageId={presentation === 'messenger' || steered ? null : message.id} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onExport={onStartExport ? () => onStartExport(item.id) : undefined} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={presentation === 'messenger' || steered ? 'none' : 'before-actions'} />}
           align="end"
           variant="soft"
         />
@@ -183,34 +188,38 @@ function AssistantRunItem({
   activeAssistantItemId,
   activeTurnId,
   contextCompactionActive,
-  deleteMode,
+  selectionMode,
+  selectionDisabled = false,
   item,
   onAnswerApproval,
   onFileChangesAction,
   onOpenFileReview,
   onStartDelete,
-  onToggleDelete,
+  onStartExport,
+  onToggleSelection,
   onWorkHistoryExpandedChange,
   hookUses,
   pluginUses,
-  selectedForDelete,
+  selected,
   showThinkingInTranscript,
 }: {
   presentation: ChatPresentation;
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
   contextCompactionActive: boolean;
-  deleteMode: boolean;
+  selectionMode: boolean;
+  selectionDisabled?: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
   onFileChangesAction?: (toolCallIds: string[], action: WorkspaceFileChangeAction) => void | Promise<void | ThreadFileChangesResult>;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onStartDelete?: (itemId: string) => void;
-  onToggleDelete?: (itemId: string, checked: boolean) => void;
+  onStartExport?: (itemId: string) => void;
+  onToggleSelection?: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   hookUses?: RuntimeHookUse[];
   pluginUses: RuntimePluginUse[];
-  selectedForDelete: boolean;
+  selected: boolean;
   showThinkingInTranscript: boolean;
 }) {
   const { locale, t } = useI18n();
@@ -225,12 +234,12 @@ function AssistantRunItem({
     content: messenger ? messengerReplySegments(item).map(messengerReplyContent).join('\n\n') : assistantRunCopyText(item, t, locale),
   } as RuntimeMessage;
   return (
-    <article data-message-id={chatDisplayItemRenderKey(item)} className={['chat-bubble-item', 'chat-bubble-item--assistant', streaming ? 'chat-bubble-item--active' : '', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
-      {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
+    <article data-message-id={chatDisplayItemRenderKey(item)} className={['chat-bubble-item', 'chat-bubble-item--assistant', streaming ? 'chat-bubble-item--active' : '', selectionMode ? 'chat-bubble-item--selecting' : '', selected ? 'is-selected' : ''].filter(Boolean).join(' ')}>
+      {selectionMode && onToggleSelection ? <MessageSelectionControl disabled={selectionDisabled} checked={selected} label={t('chat.selection.selectReply')} onChange={(checked) => onToggleSelection(item.id, checked)} /> : null}
       <MessageBubble
         className="chat-ai-bubble"
         content={messenger ? <ChatMessengerReply item={item} /> : <AssistantRunContent active={active} contextCompactionActive={contextCompactionActive} item={item} onAnswerApproval={onAnswerApproval} onFileChangesAction={onFileChangesAction} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} hookUses={hookUses} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
-        footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} forkMessageId={messenger ? null : item.messageIds.at(-1)} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} timePosition={messenger ? 'none' : 'after-actions'} />}
+        footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || selectionMode} message={footerMessage} forkMessageId={messenger ? null : item.messageIds.at(-1)} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} onExport={onStartExport ? () => onStartExport(item.id) : undefined} timePosition={messenger ? 'none' : 'after-actions'} />}
         align="start"
         variant="ghost"
       />
@@ -238,11 +247,12 @@ function AssistantRunItem({
   );
 }
 
-function MessageSelectionControl({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
+function MessageSelectionControl({ checked, disabled, label, onChange }: { checked: boolean; disabled: boolean; label: string; onChange: (checked: boolean) => void }) {
   return (
     <Checkbox
       aria-label={label}
       checked={checked}
+      disabled={disabled}
       className="chat-message-select"
       onChange={onChange}
       onClick={(event) => event.stopPropagation()}

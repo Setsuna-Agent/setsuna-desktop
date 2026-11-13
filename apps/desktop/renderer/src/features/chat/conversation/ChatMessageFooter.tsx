@@ -1,6 +1,6 @@
 import { Button, IconSwap, useToast } from '@setsuna-desktop/renderer-ui';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
-import { Check, Copy, Trash2 } from 'lucide-react';
+import { Check, Copy, Download, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useI18n, type AppLocale } from '../../../shared/i18n/I18nProvider.js';
 import { copyTextToClipboard } from '../../../shared/lib/clipboard.js';
@@ -16,6 +16,7 @@ export function ChatMessageFooter({
   message,
   onDelete,
   onEdit,
+  onExport,
   timePosition = 'before-actions',
   forkMessageId = message.id,
 }: {
@@ -24,6 +25,7 @@ export function ChatMessageFooter({
   message: RuntimeMessage;
   onDelete?: () => void;
   onEdit?: () => void;
+  onExport?: () => void;
   timePosition?: 'before-actions' | 'after-actions' | 'none';
   forkMessageId?: string | null;
 }) {
@@ -70,6 +72,11 @@ export function ChatMessageFooter({
       {onDelete ? (
         <MessageFooterAction disabled={actionsDisabled} label={t('common.delete')} onClick={onDelete}>
           <Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />
+        </MessageFooterAction>
+      ) : null}
+      {onExport ? (
+        <MessageFooterAction disabled={actionsDisabled} label={t('chat.export.action')} onClick={onExport}>
+          <Download size={14} strokeWidth={1.8} aria-hidden="true" />
         </MessageFooterAction>
       ) : null}
       {onEdit ? (

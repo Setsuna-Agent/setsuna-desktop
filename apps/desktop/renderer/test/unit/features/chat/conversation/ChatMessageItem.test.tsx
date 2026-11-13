@@ -14,7 +14,7 @@ function renderAssistantMessage(
       <MessageItem
         activeAssistantItemId={active ? 'assistant_item' : null}
         activeTurnId={active ? turnId : null}
-        deleteMode={false}
+        selectionMode={false}
         item={{
           type: 'assistant',
           id: 'assistant_item',
@@ -27,10 +27,10 @@ function renderAssistantMessage(
         onAnswerApproval={async () => undefined}
         onStartEdit={() => undefined}
         onStartDelete={() => undefined}
-        onToggleDelete={() => undefined}
+        onToggleSelection={() => undefined}
         onWorkHistoryExpandedChange={() => undefined}
         pluginUses={[]}
-        selectedForDelete={false}
+        selected={false}
       />
     </RendererPluginTestHost>,
   );

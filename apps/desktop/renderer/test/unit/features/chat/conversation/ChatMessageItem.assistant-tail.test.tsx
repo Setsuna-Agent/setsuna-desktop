@@ -150,12 +150,12 @@ function timelineMessageItem(completed = true, followupSegments: RuntimeMessage[
     <MessageItem
       activeAssistantItemId={completed ? null : item.id}
       activeTurnId={completed ? null : toolSegment.turnId ?? null}
-      deleteMode={false}
+      selectionMode={false}
       item={item}
       onAnswerApproval={async () => undefined}
       onWorkHistoryExpandedChange={() => undefined}
       pluginUses={[]}
-      selectedForDelete={false}
+      selected={false}
     />
   );
 }
@@ -193,12 +193,12 @@ function messageItem(completed: boolean, runs = [artifactRun()]) {
     <MessageItem
       activeAssistantItemId={completed ? null : item.id}
       activeTurnId={completed ? null : toolSegment.turnId ?? null}
-      deleteMode={false}
+      selectionMode={false}
       item={item}
       onAnswerApproval={async () => undefined}
       onWorkHistoryExpandedChange={() => undefined}
       pluginUses={[]}
-      selectedForDelete={false}
+      selected={false}
     />
   );
 }

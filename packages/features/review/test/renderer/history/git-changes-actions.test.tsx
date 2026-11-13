@@ -146,6 +146,37 @@ it.each([
   expect(input.disabled).toBe(false);
 });
 
+it('returns from branch creation to the commit draft and preserves the unstaged-change policy', async () => {
+  const createBranch = vi.fn().mockResolvedValue({ ...state, currentBranch: 'feature/commit' });
+  const onRefresh = vi.fn();
+  render(surface(createBridge({ createBranch }), { onRefresh }));
+  fireEvent.change(screen.getByRole('textbox', { name: '提交消息' }), { target: { value: 'Keep the commit draft' } });
+  fireEvent.pointerDown(screen.getByRole('button', { name: '更多 Git 操作' }), { button: 0, pointerType: 'mouse' });
+  fireEvent.click(await screen.findByRole('menuitem', { name: '提交或推送…' }));
+
+  const openBranchDialog = async () => {
+    const dialog = within(await screen.findByRole('dialog', { name: '提交或推送' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'main' }));
+    fireEvent.click(dialog.getByRole('button', { name: '新分支' }));
+    return await screen.findByRole('textbox', { name: '分支名称' }) as HTMLInputElement;
+  };
+  const cancelledInput = await openBranchDialog();
+  fireEvent.change(cancelledInput, { target: { value: 'feature/cancelled' } });
+  fireEvent.keyDown(cancelledInput, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: '创建并检出新分支' })).toBeNull());
+  expect(createBranch).not.toHaveBeenCalled();
+  const commitDialog = within(screen.getByRole('dialog', { name: '提交或推送' }));
+  expect((commitDialog.getByRole('textbox') as HTMLTextAreaElement).value).toBe('Keep the commit draft');
+
+  const input = await openBranchDialog();
+  expect(input.value).toBe('');
+  fireEvent.change(input, { target: { value: 'feature/commit' } });
+  fireEvent.click(screen.getByRole('button', { name: '创建并检出', exact: true }));
+  await waitFor(() => expect(onRefresh).toHaveBeenCalledOnce());
+  expect(createBranch).toHaveBeenCalledExactlyOnceWith('/repo', 'feature/commit', { allowUnstaged: true });
+  expect((commitDialog.getByRole('textbox') as HTMLTextAreaElement).value).toBe('Keep the commit draft');
+});
+
 it('keeps including unstaged changes an explicit dialog action and resets it when the dialog closes', async () => {
   const commit = vi.fn().mockResolvedValue({ ok: true, commitHash: 'abc123', pushed: false, state });
   render(surface(createBridge({ commit })));

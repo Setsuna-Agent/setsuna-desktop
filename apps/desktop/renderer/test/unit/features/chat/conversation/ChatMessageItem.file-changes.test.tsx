@@ -206,7 +206,7 @@ function TestConversation({ threadId, toolCallIds = ['edit_title', 'edit_body'],
     <ChatThreadProvider key={threadId} threadId={threadId} fileChangeStates={fileChangeStates} fileChangeGroups={fileChangeGroups}>
       <MessageItem
         activeAssistantItemId={null} activeTurnId={null}
-        deleteMode={false} selectedForDelete={false} pluginUses={[]}
+        selectionMode={false} selected={false} pluginUses={[]}
         item={createChatRenderWindow([item], { enabled: windowed }).items[0]}
         onAnswerApproval={async () => undefined} onWorkHistoryExpandedChange={() => undefined}
         onFileChangesAction={(ids, action) => onApplyChanges(threadId, ids, action)}

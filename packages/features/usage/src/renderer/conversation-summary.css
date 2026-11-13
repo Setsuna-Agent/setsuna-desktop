@@ -1,7 +1,6 @@
 .chat-conversation-overview-usage-tooltip {
   display: grid;
   gap: 8px;
-  min-width: 220px;
   padding: 2px 0;
 }
 

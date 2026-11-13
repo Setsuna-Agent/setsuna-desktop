@@ -51,7 +51,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .chat-content-frame,
-  .chat-delete-bar__inner,
+  .chat-selection-bar__inner,
   .chat-scroll-bottom,
   .chat-sender:not(.chat-sender--starter) > .chat-composer-stack,
   .chat-sender:not(.chat-sender--starter) .chat-prompt,
