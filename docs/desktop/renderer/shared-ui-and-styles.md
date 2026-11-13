@@ -49,7 +49,7 @@ OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`
 
 文件与变更的路径导航复用 `FilePathBreadcrumb` 和 `file-path-breadcrumb.css`，统一分段按钮、目录弹层和长路径裁剪；目录数据与选择动作由各自 owner 提供，关闭时卸载弹层内容。
 
-归档设置中的普通对话与 Review 冲突记录复用 `ArchiveSection`、`ArchiveRow` 和 `archive-list.css`，统一分组标题、轻量列表卡片、行内操作及空状态。容器只负责展示，数据读取、恢复、删除确认和失败通知仍由各业务 owner 维护；窄容器将操作换到下一行，长标题与路径保留完整 tooltip。
+归档设置中的普通对话与 Review 冲突记录复用 `ArchiveSection`、`ArchiveRow` 和 `archive-list.css`，统一分组标题、列表容器、行内操作及空状态。容器沿用普通设置组的 16px 圆角、主题细边框与无阴影表面；分隔线和内容使用相同的 16px 左右内缩。容器只负责展示，数据读取、恢复、删除确认和失败通知仍由各业务 owner 维护；窄容器将操作换到下一行，长标题与路径保留完整 tooltip。
 
 `MermaidDiagram` 为聊天、工作区文件预览和 `DocumentMarkdown` 的 `mermaid` 代码块提供图表。Mermaid 按需加载，流式更新合并后串行布局，卸载或源码变化会取消尚未开始的任务并丢弃迟到结果；加载或语法失败保留各入口的源码视图。渲染使用 strict 安全模式，生成的 SVG 作为图片展示，不绑定图表中的链接或脚本。`mermaid-theme.ts` 将宿主字体与颜色 token 转成图片内可用的主题，使用无渐变、无阴影的扁平节点；主题和字体改变时重新渲染。图表在正文中按可用宽度完整展示，点击复用 `ImagePreview` 放大查看。
 
@@ -75,6 +75,7 @@ OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`
 - `AppTextContextMenu` 使用 `PointMenu` 为输入框提供剪切、复制、粘贴，为正文选区提供复制；已处理的专用右键菜单优先。选择菜单项或按 Escape 关闭后恢复原焦点与选区，通过 preload 的 `windowControls.executeTextEdit` 调用当前宿主窗口的原生编辑命令，复用编辑器已有的结构化剪贴板、附件粘贴和撤销链路。`PointMenu` 在外部操作或新菜单获得焦点后跳过旧菜单的延迟焦点恢复，支持菜单尚未关闭时再次右键切换目标。
 - `ui/primitives.tsx` / `SelectField.tsx` 保留宿主导出；`SettingsViewUi.tsx` 将同一实现注入 Feature 的 Settings UI contract。
 - 设置页横向配置行的下拉触发器由 `settings-base.css` 统一为 28px 高、8px 圆角和细边框，按当前选项内容收缩并靠右排列；带图标的选项与模型选择器沿用同一规则，长名称按可用宽度省略。上下排列的编辑表单通过 `--settings-select-width`、`--settings-select-height` 定义字段尺寸：模型服务表单铺满各自列，并与文本框保持 34px 等高。菜单交互由原控件负责。
+- 任务模型与存储清理入口直接复用宿主的设置分组和行样式，不添加独立卡片阴影、圆角或行内边距。存储概览、模型服务、用量和更新内容容器也沿用 `--app-radius-container`、主题边框与内容表面；各 owner 只维护自身的图表、表单和进度布局。
 - 设置子页复用 `SettingsViewUi.PageLayout` 的返回按钮、面包屑和内容宽度；表单自带标题时使用 `showHeading={false}` 保留导航，避免重复标题。
 - `shared/ui/model-picker/` 持有聊天、自动任务和设置页共用的模型搜索、服务分组、品牌图标与悬停详情。Feature 通过 `SettingsViewUi.ModelPicker` 传入可用模型和引用，宿主 `composition/ModelProviderFeatureBoundary.tsx` 只补充模型服务投影中的元数据；候选范围仍由各任务的可用列表决定，缺少元数据不隐藏候选。
 - 插件配置表单复用 `settings-form.css` 的 `sd-settings-form`：内容表面、细边界、16px 容器圆角、24px 分组留白、图标底板和中性分隔线。图片生成、视觉识别与声明式插件设置共用这层外观；各 Feature 只维护字段排布、业务状态和结果展示，不再各自绘制外框。
@@ -95,7 +96,7 @@ OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`
 
 ## Chat prompt
 
-`features/chat/composer/editor/ChatPromptInput.tsx` 保留 beUI Prompt Input 的发送操作与本项目的富文本引用，表面使用 18px 的 chat 圆角和常驻 low 阴影。`composerDocument.ts` 持有 DOM 与 slot 文档转换；引用标签通过 portal 渲染，发送值使用 slot 的序列化文本，避免文件显示名代替完整路径。
+`features/chat/composer/editor/ChatPromptInput.tsx` 保留 beUI Prompt Input 的发送操作与本项目的富文本引用，表面使用 24px 的 chat 圆角；浅色使用淡接触与宽扩散的常驻阴影，深色沿用 low 阴影。主对话的两行空输入框默认高 100px，正文顶部与左右内边距为 12px，底部操作区内边距为 8px。`composerDocument.ts` 持有 DOM 与 slot 文档转换；引用标签通过 portal 渲染，发送值使用 slot 的序列化文本，避免文件显示名代替完整路径。
 
 编辑器支持 IME、Shift+Enter、选区插入、技能和文件引用、结构化剪贴板与本机撤销事务。队列、附件、模型、命令菜单和提交逻辑仍由 ChatComposer 及已有 hook 管理。不要在编辑器里访问 runtime。
 
@@ -136,7 +137,7 @@ OpenUI 的聊天展示块与独立应用共用 `renderer-ui/src/openui-theme.ts`
 
 这些偏好不应进入 runtime config，除非需要跨设备/进程或影响 Agent 行为。Hook 负责 default、normalize、DOM side effect 和 storage event。
 
-主题切换沿用 beUI Theme Toggle 的 circle 动画，从触发按钮中心展开，持续 700ms；`theme-transition.css` 持有 View Transition 样式，`useThemeTransition` 负责偏好保存和切换生命周期。侧栏与设置共用这条链路，减少动态效果或不支持 View Transition 时直接应用主题。
+显式切换日间与夜间沿用 beUI Theme Toggle 的 circle 动画，持续 700ms：进入夜间时深色画面从触发按钮中心展开，回到日间时深色画面收回按钮中心。始终让不透明的深色快照位于上层，避免日间半透明快照与旧画面叠色、转场结束后亮度跳变。显式切到日间时先同步原生底色再揭示浅色画面，切到夜间则等深色完全覆盖后同步。切回系统时先解除原生主题覆盖，用原生返回的实际主题直接更新，不做快照叠加；真实系统变化再通过媒体事件更新。`theme-transition.css` 持有 View Transition 样式，`useThemeTransition` 负责偏好保存和切换生命周期，初始化不等待原生同步。侧栏与设置共用这条链路，主题未改变、减少动态效果或不支持 View Transition 时直接应用主题。
 
 ## Branding
 

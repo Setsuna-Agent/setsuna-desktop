@@ -2,7 +2,7 @@ import type { DesktopWindowControlsState } from '@setsuna-desktop/contracts';
 import { useEffect, useState } from 'react';
 
 export function useDesktopWindowState(): DesktopWindowControlsState {
-  const [state, setState] = useState<DesktopWindowControlsState>({ maximized: false, fullScreen: false });
+  const [state, setState] = useState<DesktopWindowControlsState>({ maximized: false, fullScreen: false, focused: false });
 
   useEffect(() => {
     const controls = window.setsunaDesktop?.windowControls;

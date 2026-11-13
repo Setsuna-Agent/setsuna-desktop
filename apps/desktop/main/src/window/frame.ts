@@ -63,11 +63,11 @@ export function toggleWindowMaximized(window: MaximizableWindow): boolean {
   return window.isMaximized();
 }
 
-export function readWindowControlsState(window: Pick<BrowserWindow, 'isMaximized' | 'isFullScreen'>): DesktopWindowControlsState {
-  return { maximized: window.isMaximized(), fullScreen: window.isFullScreen() };
+export function readWindowControlsState(window: Pick<BrowserWindow, 'isMaximized' | 'isFullScreen' | 'isFocused'>): DesktopWindowControlsState {
+  return { maximized: window.isMaximized(), fullScreen: window.isFullScreen(), focused: window.isFocused() };
 }
 
-/** Native fullscreen and zoom have different titlebar geometry, especially on macOS. */
+/** Native focus remains active when focus moves into an embedded WebContents. */
 export function observeWindowControlsState(window: BrowserWindow): () => void {
   const publish = () => {
     if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
@@ -78,11 +78,15 @@ export function observeWindowControlsState(window: BrowserWindow): () => void {
   window.on('unmaximize', publish);
   window.on('enter-full-screen', publish);
   window.on('leave-full-screen', publish);
+  window.on('focus', publish);
+  window.on('blur', publish);
   return () => {
     window.off('maximize', publish);
     window.off('unmaximize', publish);
     window.off('enter-full-screen', publish);
     window.off('leave-full-screen', publish);
+    window.off('focus', publish);
+    window.off('blur', publish);
   };
 }
 

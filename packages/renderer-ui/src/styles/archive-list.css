@@ -6,14 +6,14 @@
   justify-content: space-between;
   gap: 12px;
   min-height: 32px;
-  margin: 0 4px 8px;
+  margin: 0 0 8px;
 }
 
 .sd-archive__header h2 {
   margin: 0;
-  color: var(--app-text-secondary);
+  color: var(--app-text);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 20px;
 }
 
@@ -22,7 +22,6 @@
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-container);
   background: var(--app-surface);
-  box-shadow: var(--app-shadow-workbench);
   container: archive-list / inline-size;
 }
 
@@ -41,7 +40,7 @@
   position: absolute;
   top: 0;
   right: 16px;
-  left: 64px;
+  left: 16px;
   border-top: 1px solid var(--app-border);
   content: '';
 }
@@ -120,7 +119,6 @@
 .sd-archive__surface--empty {
   border-color: transparent;
   background: var(--app-surface-subtle);
-  box-shadow: none;
 }
 
 .sd-archive__empty,

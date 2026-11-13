@@ -22,18 +22,18 @@ function setup() {
 
 it('reads a window already in fullscreen without blocking rendering and accepts native restoration', async () => {
   const view = setup();
-  expect(view.result.current).toEqual({ maximized: false, fullScreen: false });
-  await act(async () => { view.resolve({ maximized: false, fullScreen: true }); await view.snapshot; });
-  expect(view.result.current).toEqual({ maximized: false, fullScreen: true });
-  act(() => view.publish({ maximized: true, fullScreen: false }));
-  expect(view.result.current).toEqual({ maximized: true, fullScreen: false });
+  expect(view.result.current).toEqual({ maximized: false, fullScreen: false, focused: false });
+  await act(async () => { view.resolve({ maximized: false, fullScreen: true, focused: true }); await view.snapshot; });
+  expect(view.result.current).toEqual({ maximized: false, fullScreen: true, focused: true });
+  act(() => view.publish({ maximized: true, fullScreen: false, focused: false }));
+  expect(view.result.current).toEqual({ maximized: true, fullScreen: false, focused: false });
 });
 
 it('keeps a newer native transition when the initial snapshot arrives late and unsubscribes on unmount', async () => {
   const view = setup();
-  act(() => view.publish({ maximized: false, fullScreen: true }));
-  await act(async () => { view.resolve({ maximized: true, fullScreen: false }); await view.snapshot; });
-  expect(view.result.current).toEqual({ maximized: false, fullScreen: true });
+  act(() => view.publish({ maximized: false, fullScreen: true, focused: false }));
+  await act(async () => { view.resolve({ maximized: true, fullScreen: false, focused: true }); await view.snapshot; });
+  expect(view.result.current).toEqual({ maximized: false, fullScreen: true, focused: false });
   view.unmount();
   expect(view.unsubscribe).toHaveBeenCalledOnce();
 });

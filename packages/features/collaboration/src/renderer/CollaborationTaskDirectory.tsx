@@ -23,9 +23,11 @@ export function CollaborationTaskDirectory({ parentThreadId, translate }: Readon
       {groups.map((group) => (
         <section className="collaboration-task-directory__group" key={group.status}>
           <h3 className="collaboration-task-directory__group-title">{collaborationTaskStatusLabel(group.status, translate)}</h3>
-          {group.tasks.map((task) => (
-            <CollaborationTaskRow key={task.id} parentThreadId={parentThreadId} task={task} translate={translate} />
-          ))}
+          <div className="collaboration-task-directory__rows">
+            {group.tasks.map((task) => (
+              <CollaborationTaskRow key={task.id} parentThreadId={parentThreadId} task={task} translate={translate} />
+            ))}
+          </div>
         </section>
       ))}
     </div>

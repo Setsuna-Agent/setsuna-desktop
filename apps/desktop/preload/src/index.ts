@@ -157,6 +157,7 @@ const windowControls: SetsunaDesktopBridge['windowControls'] = {
   },
   getCloseBehavior: () => ipcRenderer.invoke('window-control:get-close-behavior'),
   setCloseBehavior: (behavior) => ipcRenderer.invoke('window-control:set-close-behavior', behavior),
+  setThemeMode: (mode) => ipcRenderer.invoke('window-control:set-theme-mode', mode),
   getState: () => ipcRenderer.invoke('window-control:get-state'),
   onStateChange(callback): () => void {
     const listener = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]) => callback(state);

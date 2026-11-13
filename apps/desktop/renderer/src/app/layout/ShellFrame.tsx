@@ -54,6 +54,7 @@ export function ShellFrame({
     'desktop-agent-page',
     windowMaximized ? 'app-shell--window-maximized' : '',
     windowState.fullScreen ? 'app-shell--window-fullscreen' : '',
+    windowState.focused ? 'app-shell--window-focused' : '',
     inspectorOpen ? 'app-shell--inspector-open' : '',
     navigationRail ? 'app-shell--with-navigation' : '',
     insetHeaders ? 'app-shell--inset-headers' : '',

@@ -26,7 +26,7 @@
   line-height: 18px;
 }
 
-/* The update card owns its surface independently of the host's compact settings groups. */
+/* Keep the update layout local while matching the shared settings group surface. */
 [data-feature-id='updater'] .updater-settings__update-group {
   display: grid;
   min-width: 0;
@@ -45,11 +45,10 @@
   align-items: center;
   gap: 20px;
   min-height: 96px;
-  padding: 20px;
-  border: 1px solid color-mix(in srgb, var(--sd-color-border, GrayText) 60%, transparent);
-  border-radius: var(--app-radius-xl);
-  background: color-mix(in srgb, var(--sd-color-surface-muted, Canvas) 72%, var(--sd-color-surface, Canvas));
-  box-shadow: var(--sd-shadow-card, none);
+  padding: 16px;
+  border: 1px solid var(--sd-color-border, GrayText);
+  border-radius: var(--app-radius-container);
+  background: var(--sd-color-surface, Canvas);
 }
 
 [data-feature-id='updater'] .updater-settings__update-main {
@@ -68,8 +67,7 @@
   height: 44px;
   border-radius: var(--app-radius-xl);
   color: var(--sd-color-text-muted, GrayText);
-  background: var(--sd-color-surface, Canvas);
-  box-shadow: var(--sd-shadow-card, none);
+  background: var(--sd-color-surface-muted, Canvas);
 }
 
 [data-feature-id='updater'] .updater-settings__update-progress {

@@ -19,7 +19,9 @@
 
 ### `frame.ts`
 
-处理 Windows 自定义标题栏双击等原生交互。`readWindowControlsState` 和 `observeWindowControlsState` 将最大化、全屏作为独立字段读取与广播，监听四个原生状态事件；订阅由窗口 registry 在关闭或注销时清理。Renderer 只负责按钮展示，最终窗口状态由 main 决定并广播。
+处理 Windows 自定义标题栏双击等原生交互。`readWindowControlsState` 和 `observeWindowControlsState` 将最大化、全屏和焦点作为独立字段读取与广播，监听对应的原生状态事件；订阅由窗口 registry 在关闭或注销时清理。Renderer 根据状态展示窗口控件；日间外框与左侧栏底色在聚焦时设为 80% 不透明度、失焦时恢复为 100%，夜间始终为 100%。浅色「层次」预设失焦时，外框底色为 `#f6f6f6`，内侧栏底色为 `#fcfcfc`。焦点以原生窗口为准，切换到内嵌浏览器等 WebContents 不会触发失焦外观；初始状态读取不阻塞首帧，迟到快照不能覆盖较新的原生事件。
+
+主题偏好通过 `windowControls.setThemeMode` 异步同步给原生窗口，只接受已注册桌面窗口的主 frame，并返回原生侧实际解析后的浅色或深色，拒绝请求时返回 null。macOS 的 vibrancy 随 `nativeTheme.themeSource` 使用应用选择的浅色、深色或系统外观；Windows 保持 HWND 不透明，底衬随主题切换，支撑日间的半透明外框与侧栏。首次绘制不等待此同步；切回系统时先解除原生主题覆盖，再直接应用返回的实际主题，避免用仍被覆盖的 `matchMedia` 误判系统主题。迟到结果不能覆盖后续选择，系统模式的颜色变化也会刷新底衬。
 
 ### `splash/`
 

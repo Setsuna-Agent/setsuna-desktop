@@ -6,7 +6,7 @@
   position: relative;
   width: min(var(--chat-content-max-width), 100%);
   overflow: visible;
-  border: 1px solid var(--app-border);
+  border: 1px solid color-mix(in srgb, var(--app-border) 75%, transparent);
   border-radius: var(--app-radius-chat);
   background: var(--app-surface);
   box-shadow: var(--chat-prompt-shadow);
@@ -31,10 +31,10 @@
 .chat-prompt__input {
   display: block;
   min-width: 0;
-  min-height: calc(var(--prompt-min-rows, 2) * 24px + 16px);
-  max-height: calc(var(--prompt-max-rows, 6) * 24px + 16px);
+  min-height: calc(var(--prompt-min-rows, 2) * 24px + 12px);
+  max-height: calc(var(--prompt-max-rows, 6) * 24px + 12px);
   margin-right: 6px;
-  padding: 10px calc(var(--chat-prompt-inline-padding) - 6px) 6px var(--chat-prompt-inline-padding);
+  padding: 12px calc(var(--chat-prompt-inline-padding) - 6px) 0 var(--chat-prompt-inline-padding);
   overflow-y: auto;
   overflow-x: hidden;
   white-space: pre-wrap;
