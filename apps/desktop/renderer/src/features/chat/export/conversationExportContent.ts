@@ -7,7 +7,7 @@ export type ConversationExportEntry = { role: 'user' | 'assistant'; heading: str
 export type ConversationExportDocument = { title: string; entries: ConversationExportEntry[] };
 
 /** Export the visible transcript, never the runtime snapshot or provider metadata. */
-export function conversationExportContent(thread: RuntimeThread, t: Translate, locale: AppLocale): ConversationExportDocument {
+export function conversationExportContent(thread: RuntimeThread, t: Translate, locale: AppLocale, selectedMessageIds?: ReadonlySet<string>): ConversationExportDocument {
   const entries: ConversationExportEntry[] = [];
   const exportedUserIds = new Set<string>();
   const userEntry = (message: RuntimeMessage): ConversationExportEntry => ({
@@ -16,6 +16,7 @@ export function conversationExportContent(thread: RuntimeThread, t: Translate, l
     content: [message.content.trim(), attachmentMarkdown(message.attachments ?? [])].filter(Boolean).join('\n\n'),
   });
   const appendUser = (message: RuntimeMessage) => {
+    if (selectedMessageIds && !selectedMessageIds.has(message.id)) return;
     if (exportedUserIds.has(message.id)) return;
     exportedUserIds.add(message.id);
     entries.push(userEntry(message));
@@ -26,6 +27,9 @@ export function conversationExportContent(thread: RuntimeThread, t: Translate, l
       item.steerMessages.forEach(appendUser);
     } else if (item.type === 'assistant') {
       item.steerMessages.forEach(appendUser);
+      // Resolve the selection after grouping the full snapshot: a loaded page may
+      // contain only the end of a reply, and omitted questions must not merge replies.
+      if (selectedMessageIds && !item.segments.some((segment) => selectedMessageIds.has(segment.id))) continue;
       // Keep final answers, including legacy messages without a phase; omit execution feedback.
       const segments = item.segments.filter((segment) => segment.phase !== 'commentary').map((segment) => ({
         ...segment, phase: segment.phase ?? 'final_answer', toolRuns: undefined, error: undefined,
@@ -36,6 +40,7 @@ export function conversationExportContent(thread: RuntimeThread, t: Translate, l
         .filter(Boolean).join('\n\n');
       if (content) entries.push({ role: 'assistant', heading: t('chat.navigation.assistant'), content });
     } else if (item.type === 'review' && item.message.reviewMode?.kind === 'exited') {
+      if (selectedMessageIds && !selectedMessageIds.has(item.message.id)) continue;
       const review = item.message.reviewMode;
       entries.push({ role: 'assistant', heading: t('chat.navigation.assistant'), content: review.reasoningSeparated ? review.review : visibleMarkdownContent(review.review) });
     }

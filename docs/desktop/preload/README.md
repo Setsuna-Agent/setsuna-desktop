@@ -32,7 +32,13 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 
 `desktop.revealPath` 用于在系统文件管理器中定位 Skill 等工作区外的应用文档。Main 限制调用来自登记的宿主窗口主 frame，校验绝对路径和目标存在后调用 `shell.showItemInFolder`；它不读取文件内容，也不执行文件。工作区引用仍通过 `revealWorkspaceFile` 的 root + 相对路径边界校验。
 
-`desktop.saveConversationExport` 只接收对话标题、`markdown | html` 格式和生成的文本，不接收目标路径。`ipc/conversation-export-ipc.ts` 校验登记的宿主主 frame，再由系统保存对话框授权写入位置；文件写入按需加载，取消正常返回，失败由调用方显示 Toast。
+对话导出桥由 `ipc/conversation-export-ipc.ts` 校验登记的宿主主 frame，所有生成与文件操作按需执行：
+
+- `desktop.saveConversationExport` 接收标题、`markdown | html | png` 格式与内容，系统保存对话框授权目标位置，沿用整段对话菜单的直接保存流程。
+- `desktop.prepareConversationExport` 接收相同内容，在系统临时目录生成可立即打开的文件，返回文件名、路径、预览 ID 和 PNG 图片数据，不弹保存对话框。成功文件保留给外部查看器，关闭预览不删除；失败清理未完成的临时文件。
+- `desktop.savePreparedConversationExport` 只接受预览 ID，主进程按来源 renderer 查找文件，再经系统对话框复制原文件；不接受来源路径，也不重新生成内容。返回保存后的文件名与路径，供预览切换打开和定位目标。
+
+PNG 输入沿用静态 HTML，按需创建隔离的隐藏渲染窗口，禁用脚本、preload 与本机能力，仅允许网络图片资源。生成完整 PNG 后才写文件；渲染限制为 30 秒和 32,000 像素高度，超限返回失败而不截断内容，所有结束路径销毁渲染窗口。取消保存正常返回，失败由调用方显示 Toast。
 
 `diagnostics.getLogDirectory` 和 `diagnostics.openLogDirectory` 不接受路径参数，仅向登记的宿主主 frame 返回或打开 main 选定的 bootstrap 日志目录。读取位置不触发磁盘访问，打开时才按需创建目录；调用不依赖 runtime，也不向 renderer 暴露日志写入或任意文件读取能力。
 

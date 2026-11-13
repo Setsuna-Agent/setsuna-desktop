@@ -3,9 +3,12 @@ import type {
   DesktopConversationExportInput, DesktopConversationExportResult, RuntimeMessage, RuntimeRequestInput, RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { afterEach, expect, it, vi } from 'vitest';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import * as rendererUi from '@setsuna-desktop/renderer-ui';
 import { exportConversation } from '../../../../../src/features/chat/export/exportConversation.js';
 import { conversationExportHtml } from '../../../../../src/features/chat/export/conversationExportHtml.js';
+import { createChatDisplayItems } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
+import { useChatMessageOperations } from '../../../../../src/features/chat/hooks/useChatMessageOperations.js';
 import { createDesktopRuntimeClient } from '../../../../../src/services/runtime-client/client.js';
 import { translate, type Translate } from '../../../../../src/shared/i18n/I18nProvider.js';
 
@@ -24,7 +27,52 @@ function install(snapshot: RuntimeThread) {
   return { client: createDesktopRuntimeClient(), save, request };
 }
 
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it('exports only chosen bubbles in transcript order, retaining full replies across pagination and retrying cancelled or failed saves', async () => {
+  const messages: RuntimeMessage[] = [
+    { id: 'u1', role: 'user', turnId: 't1', content: 'private-question-one', createdAt: '' },
+    { id: 'a1-start', role: 'assistant', turnId: 't1', content: 'reply-one-start', createdAt: '' },
+    { id: 'a1-end', role: 'assistant', turnId: 't1', phase: 'final_answer', content: 'reply-one-end', createdAt: '' },
+    { id: 'u2', role: 'user', turnId: 't2', content: 'selected-question-two', createdAt: '' },
+    { id: 'a2', role: 'assistant', turnId: 't2', content: 'private-reply-two', createdAt: '' },
+    { id: 'u3', role: 'user', turnId: 't3', content: 'private-question-three', createdAt: '' },
+    { id: 'a3', role: 'assistant', turnId: 't3', content: 'selected-reply-three', createdAt: '' },
+  ];
+  const { client, save } = install({ ...thread, messages });
+  const onDeleteMessages = vi.fn();
+  const view = renderHook(({ loaded }) => useChatMessageOperations({
+    activeTurnId: null, composerKey: 'chat', currentThreadId: thread.id,
+    displayItems: createChatDisplayItems(loaded), onDeleteMessages,
+    onExportMessages: (ids, format) => exportConversation(client, thread.id, format, t, 'zh-CN', ids),
+  }), { initialProps: { loaded: messages.slice(2) } });
+  act(() => view.result.current.startExportSelection('a1-end'));
+  save.mockResolvedValueOnce({ ok: true, cancelled: true });
+  await act(() => view.result.current.selection.confirm('markdown'));
+  expect(save.mock.calls[0][0].content).toContain('reply-one-start');
+  expect(save.mock.calls[0][0].content).toContain('reply-one-end');
+  expect(save.mock.calls[0][0].content).not.toMatch(/private-|selected-/u);
+
+  view.rerender({ loaded: messages });
+  act(() => {
+    view.result.current.selection.toggle('a3', true);
+    view.result.current.selection.toggle('u2', true);
+  });
+  save.mockResolvedValueOnce({ ok: false, error: 'Disk full' });
+  await act(() => view.result.current.selection.confirm('html'));
+  expect(view.result.current.actionError).toBe('Disk full');
+  expect(view.result.current.selection.selectedCount).toBe(3);
+  await act(() => view.result.current.selection.confirm('png'));
+  const output = save.mock.calls[2][0];
+  expect(output.format).toBe('png');
+  expect(output.content).toContain('reply-one-start');
+  expect(output.content).not.toContain('private-');
+  expect(output.content.indexOf('selected-question-two')).toBeGreaterThan(output.content.indexOf('reply-one-end'));
+  expect(output.content.indexOf('selected-reply-three')).toBeGreaterThan(output.content.indexOf('selected-question-two'));
+  expect(view.result.current.selection.mode).toBe('export');
+  expect(view.result.current.selection.messageIds).toEqual(['a1-end', 'u2', 'a3']);
+  expect(onDeleteMessages).not.toHaveBeenCalled();
+});
 
 it.each(['markdown', 'html'] as const)('exports both ends of long histories and excludes model-only content and metadata: %s', async (format) => {
   const messages: RuntimeMessage[] = Array.from({ length: 110 }, (_, index) => [
@@ -116,7 +164,7 @@ it('exports HTML as inert content even when titles, links, attachments and messa
 it('treats save cancellation as normal and propagates write failures to the caller', async () => {
   const { client, save } = install(thread);
   save.mockResolvedValueOnce({ ok: true, cancelled: true });
-  await expect(exportConversation(client, thread.id, 'markdown', t, 'zh-CN')).resolves.toBeUndefined();
+  await expect(exportConversation(client, thread.id, 'markdown', t, 'zh-CN')).resolves.toEqual({ ok: true, cancelled: true });
   save.mockResolvedValueOnce({ ok: false, error: 'Disk is full' });
   await expect(exportConversation(client, thread.id, 'markdown', t, 'zh-CN')).rejects.toThrow('Disk is full');
 });

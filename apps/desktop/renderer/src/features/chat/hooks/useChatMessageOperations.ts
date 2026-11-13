@@ -1,8 +1,8 @@
-import type { MessagePatch, RuntimeMessage } from '@setsuna-desktop/contracts';
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import type { DesktopConversationExportFormat, MessagePatch, RuntimeMessage } from '@setsuna-desktop/contracts';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
-import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { ChatDisplayItem } from '../conversation/chatMessageDisplay.js';
+import { useChatMessageSelection } from './useChatMessageSelection.js';
 import { commitChatWorkspaceOperation } from '../conversation/chatWorkspaceOperationScope.js';
 
 type ChatMessageOperationsOptions = {
@@ -11,6 +11,7 @@ type ChatMessageOperationsOptions = {
   currentThreadId?: string;
   displayItems: ChatDisplayItem[];
   onDeleteMessages?: (messageIds: string[]) => void | Promise<void>;
+  onExportMessages?: (messageIds: string[], format: DesktopConversationExportFormat) => Promise<{ cancelled?: boolean }>;
   onEditUserMessage?: (messageId: string, input: MessagePatch) => void | Promise<void>;
   readOnly?: boolean;
 };
@@ -21,148 +22,90 @@ export function useChatMessageOperations({
   currentThreadId,
   displayItems,
   onDeleteMessages,
+  onExportMessages,
   onEditUserMessage,
   readOnly = false,
 }: ChatMessageOperationsOptions) {
-  const { t } = useI18n();
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingSubmitting, setEditingSubmitting] = useState(false);
-  const [deleteMode, setDeleteMode] = useState(false);
-  const [deletingMessages, setDeletingMessages] = useState(false);
-  const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<Set<string>>(() => new Set());
+  const selection = useChatMessageSelection(displayItems);
+  const { clear: clearSelection } = selection;
+  const [selectionSubmitting, setSelectionSubmitting] = useState(false);
+  const pendingSelection = useRef<symbol | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const operationRequests = useIdentityRequestGuard(`${composerKey}:${currentThreadId ?? ''}:${readOnly}`);
 
   useLayoutEffect(() => {
     setEditingMessageId(null);
     setEditingSubmitting(false);
-    setDeleteMode(false);
-    setDeletingMessages(false);
-    setSelectedDeleteItemIds(new Set());
+    clearSelection();
+    setSelectionSubmitting(false);
+    pendingSelection.current = null;
     setActionError(null);
-  }, [composerKey, currentThreadId, readOnly]);
+  }, [clearSelection, composerKey, currentThreadId, readOnly]);
 
-  const selectableDeleteItems = useMemo(
-    () => displayItems
-      .filter((item): item is Extract<ChatDisplayItem, { type: 'user' | 'assistant' }> => (
-        item.type === 'user' || item.type === 'assistant'
-      ))
-      .map((item) => ({
-        id: item.id,
-        messageIds: item.messageIds,
-        type: item.type,
-      })),
-    [displayItems],
-  );
-  const selectedDeleteMessageIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const item of selectableDeleteItems) {
-      if (!selectedDeleteItemIds.has(item.id)) continue;
-      item.messageIds.forEach((id) => ids.add(id));
-    }
-    return [...ids];
-  }, [selectableDeleteItems, selectedDeleteItemIds]);
-  const selectedDeleteCount = selectedDeleteItemIds.size;
-  const allDeleteSelected = selectableDeleteItems.length > 0
-    && selectedDeleteCount === selectableDeleteItems.length;
-  const someDeleteSelected = selectedDeleteCount > 0
-    && selectedDeleteCount < selectableDeleteItems.length;
-
-  useLayoutEffect(() => {
-    const validIds = new Set(selectableDeleteItems.map((item) => item.id));
-    setSelectedDeleteItemIds((current) => {
-      const next = new Set([...current].filter((id) => validIds.has(id)));
-      return next.size === current.size ? current : next;
-    });
-  }, [selectableDeleteItems]);
-
-  const deleteGroupItemIds = useCallback((itemId: string) => {
-    const index = selectableDeleteItems.findIndex((item) => item.id === itemId);
-    if (index < 0) return [itemId];
-    const item = selectableDeleteItems[index];
-    const ids = [item.id];
-    // Keep question/answer turns together so deleting one side does not orphan the other.
-    if (item.type === 'assistant') {
-      const previousUser = [...selectableDeleteItems.slice(0, index)]
-        .reverse()
-        .find((candidate) => candidate.type === 'user');
-      if (previousUser) ids.push(previousUser.id);
-    }
-    if (item.type === 'user') {
-      const nextItem = selectableDeleteItems[index + 1];
-      if (nextItem?.type === 'assistant') ids.push(nextItem.id);
-    }
-    return ids;
-  }, [selectableDeleteItems]);
-
-  const startDeleteSelection = useCallback((itemId: string) => {
-    if (readOnly || activeTurnId) return;
+  const startSelection = useCallback((itemId: string, mode: 'delete' | 'export') => {
+    if (readOnly || activeTurnId || editingSubmitting || pendingSelection.current) return;
+    operationRequests.invalidate();
     setActionError(null);
     setEditingMessageId(null);
-    setEditingSubmitting(false);
-    setDeleteMode(true);
-    setSelectedDeleteItemIds(new Set(deleteGroupItemIds(itemId)));
-  }, [activeTurnId, deleteGroupItemIds, readOnly]);
+    selection.start(itemId, mode);
+  }, [activeTurnId, editingSubmitting, operationRequests, readOnly, selection.start]);
+  const startDeleteSelection = useCallback((itemId: string) => startSelection(itemId, 'delete'), [startSelection]);
+  const startExportSelection = useCallback((itemId: string) => startSelection(itemId, 'export'), [startSelection]);
 
-  const toggleDeleteSelection = useCallback((itemId: string, checked: boolean) => {
-    if (readOnly) return;
-    const groupIds = deleteGroupItemIds(itemId);
-    setSelectedDeleteItemIds((current) => {
-      const next = new Set(current);
-      groupIds.forEach((id) => {
-        if (checked) next.add(id);
-        else next.delete(id);
-      });
-      return next;
-    });
-  }, [deleteGroupItemIds, readOnly]);
-
-  const toggleAllDeleteSelection = useCallback((checked: boolean) => {
-    if (readOnly) return;
-    setSelectedDeleteItemIds(checked
-      ? new Set(selectableDeleteItems.map((item) => item.id))
-      : new Set());
-  }, [readOnly, selectableDeleteItems]);
-
-  const cancelDeleteSelection = useCallback(() => {
-    setDeleteMode(false);
-    setDeletingMessages(false);
-    setSelectedDeleteItemIds(new Set());
+  const cancelSelection = useCallback(() => {
+    if (pendingSelection.current) return;
+    operationRequests.invalidate();
+    clearSelection();
     setActionError(null);
-  }, []);
+  }, [clearSelection, operationRequests]);
 
-  const confirmDeleteSelection = useCallback(async () => {
-    if (readOnly || !onDeleteMessages) return;
+  const confirmSelection = useCallback(async (format?: DesktopConversationExportFormat) => {
+    if (readOnly || pendingSelection.current || !selection.messageIds.length) return;
+    if (selection.mode === 'delete' && (!onDeleteMessages || activeTurnId)) return;
+    if (selection.mode === 'export' && (!onExportMessages || !format)) return;
+    if (!selection.mode) return;
     const isCurrentOperation = operationRequests.begin();
-    if (!selectedDeleteMessageIds.length) {
-      setActionError(t('chat.delete.selectFirst'));
-      return;
-    }
-    setDeletingMessages(true);
+    const request = Symbol();
+    pendingSelection.current = request;
+    setSelectionSubmitting(true);
     setActionError(null);
     try {
-      // Visible IDs identify selected turns; the chat action asks runtime to resolve
-      // their complete persisted scope, including any messages outside this page.
-      await onDeleteMessages(selectedDeleteMessageIds);
-      commitChatWorkspaceOperation(isCurrentOperation, cancelDeleteSelection);
+      if (selection.mode === 'export') {
+        await onExportMessages!(selection.messageIds, format!);
+        // Keep the share scope and layout intact while previewing or choosing another format.
+        return;
+      }
+      // Runtime resolves the full persisted deletion scope, including older pages.
+      await onDeleteMessages!(selection.messageIds);
+      commitChatWorkspaceOperation(isCurrentOperation, clearSelection);
     } catch (unknownError) {
       commitChatWorkspaceOperation(isCurrentOperation, () => {
         setActionError(unknownError instanceof Error ? unknownError.message : String(unknownError));
       });
     } finally {
-      commitChatWorkspaceOperation(isCurrentOperation, () => setDeletingMessages(false));
+      if (pendingSelection.current === request) pendingSelection.current = null;
+      commitChatWorkspaceOperation(isCurrentOperation, () => setSelectionSubmitting(false));
     }
-  }, [cancelDeleteSelection, onDeleteMessages, operationRequests, readOnly, selectedDeleteMessageIds, t]);
+  }, [activeTurnId, clearSelection, onDeleteMessages, onExportMessages, operationRequests, readOnly, selection.messageIds, selection.mode]);
+
+  const toggleSelection = useCallback((itemId: string, checked: boolean) => {
+    if (!readOnly && !pendingSelection.current) selection.toggle(itemId, checked);
+  }, [readOnly, selection.toggle]);
+  const toggleAllSelection = useCallback((checked: boolean) => {
+    if (!readOnly && !pendingSelection.current) selection.toggleAll(checked);
+  }, [readOnly, selection.toggleAll]);
 
   const startEditingMessage = useCallback((message: RuntimeMessage) => {
-    if (readOnly || activeTurnId || editingSubmitting) return;
+    if (readOnly || activeTurnId || editingSubmitting || pendingSelection.current) return;
     operationRequests.invalidate();
     setActionError(null);
-    setDeleteMode(false);
-    setDeletingMessages(false);
-    setSelectedDeleteItemIds(new Set());
+    clearSelection();
+    setSelectionSubmitting(false);
+    pendingSelection.current = null;
     setEditingMessageId(message.id);
-  }, [activeTurnId, editingSubmitting, operationRequests, readOnly]);
+  }, [activeTurnId, clearSelection, editingSubmitting, operationRequests, readOnly]);
 
   const cancelEditingMessage = useCallback(() => {
     setEditingMessageId(null);
@@ -192,23 +135,20 @@ export function useChatMessageOperations({
 
   return {
     actionError,
-    allDeleteSelected,
-    cancelDeleteSelection,
     cancelEditingMessage,
-    confirmDeleteSelection,
-    deleteMode,
-    deletingMessages,
     editingMessageId,
     editingSubmitting,
-    selectedDeleteCount,
-    selectableDeleteCount: selectableDeleteItems.length,
-    selectedDeleteItemIds,
-    selectedDeleteMessageIds,
-    someDeleteSelected,
     startDeleteSelection,
+    startExportSelection,
     startEditingMessage,
     submitEditingMessage,
-    toggleAllDeleteSelection,
-    toggleDeleteSelection,
+    selection: {
+      ...selection,
+      loading: selectionSubmitting,
+      cancel: cancelSelection,
+      confirm: confirmSelection,
+      toggle: toggleSelection,
+      toggleAll: toggleAllSelection,
+    },
   };
 }

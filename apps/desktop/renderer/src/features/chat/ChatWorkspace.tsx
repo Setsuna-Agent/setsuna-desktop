@@ -53,6 +53,8 @@ import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js
 import { useModelSetupNotice } from './hooks/useModelSetupNotice.js';
 import { useChatStarterTransition } from './hooks/useChatStarterTransition.js';
 import { useChatSendPresentation } from './hooks/useChatSendPresentation.js';
+import { useConversationExportPreview } from './export/useConversationExportPreview.js';
+import { ConversationExportOverlay } from './export/ConversationExportOverlay.js';
 import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { RendererOwnedSingleSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 
@@ -190,7 +192,8 @@ export function ChatWorkspace({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [contentNode, setContentNode] = useState<HTMLDivElement | null>(null);
   const scrollToBottomRef = useRef<(() => void) | null>(null);
-  const [deleteModeActive, setDeleteModeActive] = useState(false);
+  const [selectionModeActive, setSelectionModeActive] = useState(false);
+  const exportPreview = useConversationExportPreview(client, currentThread?.id);
   const showThinkingInTranscript = config?.desktopSettings?.showThinkingInTranscript === true;
   const contextUsage = useMemo(() => contextTokenUsageFromThread(
     historyThread,
@@ -231,7 +234,7 @@ export function ChatWorkspace({
   const conversationClassName = [
     'chat-main-conversation',
     showEmptyStarter ? '' : 'chat-main-conversation--with-transcript',
-    (showEmptyStarter && !messenger) || deleteModeActive ? '' : 'chat-main-conversation--with-bottom-sender',
+    (showEmptyStarter && !messenger) || selectionModeActive ? '' : 'chat-main-conversation--with-bottom-sender',
     hasOverview && overviewShiftsContent ? 'chat-main-conversation--overview-shifted' : '',
   ].filter(Boolean).join(' ');
   useEffect(() => {
@@ -367,7 +370,8 @@ export function ChatWorkspace({
               skills={skills}
               onAnswerApproval={onAnswerApproval}
               onDeleteMessages={onDeleteMessages}
-              onDeleteModeChange={setDeleteModeActive}
+              onExportMessages={currentThread ? (ids, format) => exportPreview.prepare(currentThread.id, format, ids) : undefined}
+              onSelectionModeChange={setSelectionModeActive}
               onFileChangesAction={onFileChangesAction}
               onEditUserMessage={onEditUserMessage}
               renderMessageEditor={(props) => <UserMessageEditor key={props.message.id} {...props} client={client}
@@ -398,9 +402,10 @@ export function ChatWorkspace({
               />
             </div>
           ) : null}
-          {(showEmptyStarter && !messenger) || deleteModeActive ? null : composer()}
+          {(showEmptyStarter && !messenger) || selectionModeActive ? null : composer()}
         </div>
       </div>
+      <ConversationExportOverlay state={exportPreview.state} onClose={exportPreview.close} />
     </main>
   );
 }

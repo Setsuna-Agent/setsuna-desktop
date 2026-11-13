@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { DeleteSelectionBar } from '../../../../../src/features/chat/conversation/ChatDeleteSelectionBar.js';
+import { ChatSelectionBar } from '../../../../../src/features/chat/conversation/ChatSelectionBar.js';
 
 afterEach(cleanup);
 
 it('cancels selection on Escape while respecting IME, nested controls, other panels and pending deletion', () => {
   const onCancel = vi.fn();
-  const contents = (loading = false) => <main><DeleteSelectionBar allChecked={false} disabled={false}
+  const contents = (loading = false) => <main><ChatSelectionBar mode="delete" allChecked={false} disabled={false}
     indeterminate={false} loading={loading} onCancel={onCancel} onConfirm={vi.fn()} onToggleAll={vi.fn()}
     selectedCount={1} totalCount={2} /></main>;
   const view = render(contents());

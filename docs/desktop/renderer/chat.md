@@ -69,6 +69,10 @@ Renderer Slot 的实例身份沿用这套 session 语义：Conversation/Details 
 - Review turn。
 - Goal mode。
 
+消息操作栏的导出入口复用删除的勾选交互，由 `useChatMessageSelection` 持有选择、`useChatMessageOperations` 编排提交与编辑互斥。删除仍联动整轮问答；导出默认只选点击的消息，可逐条增减或全选，在底部选择 Markdown、HTML 或 PNG。选择以回复末段的持久消息 ID 保持身份，加载更早分页不会丢失已选回复。导出从完整快照恢复所选回复的全部片段，按原对话顺序输出，不因省略提问而合并不同回复。
+
+选定格式后由 `useConversationExportPreview` 打开按需加载的预览弹窗，先生成真实临时文件，不先询问保存位置。准备与预览共用同一个弹窗实例，生成完成、失败或关闭预览都保留分享选择，可继续切换格式；关闭、切换会话和重复提交都有请求身份保护，迟到结果不能重新打开或覆盖新预览。`ConversationExportDialog` 组合内容预览、文件卡片与图标操作；图片沿用共享放大查看器，HTML 放在无脚本、无同源权限的 sandbox iframe，Markdown 使用共享阅读组件。`useConversationExportActions` 持有复制与另存为状态：PNG 复制图片，Markdown 复制源文本，HTML 复制富文本并提供 Markdown 纯文本回退。另存为只复制已生成文件，取消或失败保留预览；保存后文件卡片和打开/定位操作使用新路径。
+
 历史用户消息的编辑由 `conversation/messages/UserMessageEditor` 与 `useUserMessageEditor` 拥有临时草稿和上传资源，复用底部 Composer 的 `ChatPromptInput`、引用槽位、附件 tray、剪贴板和命令控制器。进入编辑时恢复消息中的应用/插件、Skill、文件、网页、对话引用及附件；`@` 继续选择引用，`/` 提供 Skill、插件和上传附件，`$` 直接筛选 Skill。提交把裁剪后的文字、Skill ID/范围与完整附件列表交给 regenerate；附件字段省略表示保留，空数组表示移除，允许仅附件消息。Runtime 先验证附件能力与归属，再更新消息、截断后续回复，`message.updated` 同步持久化附件变化。取消只回收未发送资源，提交期间离开页面的上传受发送租约保护；异步结果以当前对话身份隔离。
 
 审查消息也使用这个编辑入口，保留原消息 ID 与审查类型。“审查模式”以灰色小字常显在气泡下方操作行的最右侧；时间与操作按钮由独立容器沿用悬停、焦点和操作反馈时的显示规则。重发由 runtime 恢复审查策略和专用模型，仍按只读审查执行；具体所有权见 [Review](../../features/desktop-workbench.md#review)。

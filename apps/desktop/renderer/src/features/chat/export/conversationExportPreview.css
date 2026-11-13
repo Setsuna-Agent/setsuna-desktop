@@ -1,0 +1,52 @@
+.conversation-export-dialog > .sd-dialog__header {
+  padding-top: 16px;
+}
+
+.conversation-export-dialog .sd-dialog__header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.conversation-export-dialog > .sd-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 0;
+}
+
+.conversation-export-preview {
+  display: grid;
+  place-items: center;
+  flex: 1 1 auto;
+  min-height: 160px;
+  height: min(52vh, 480px);
+  overflow: auto;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.conversation-export-dialog--expanded .conversation-export-preview { height: 68vh; }
+.conversation-export-preview--image { padding: 20px; background: var(--app-surface-muted); }
+.conversation-export-preview > iframe { width: 100%; height: 100%; border: 0; }
+.conversation-export-preview > .sd-image { max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: var(--app-shadow-popover); }
+.conversation-export-preview .sd-image__content { display: block; max-width: 100%; max-height: min(46vh, 420px); object-fit: contain; }
+.conversation-export-dialog--expanded .conversation-export-preview .sd-image__content { max-height: 62vh; }
+.conversation-export-preview__markdown { align-self: start; width: 100%; min-width: 0; padding: 24px; }
+
+.conversation-export-file {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.conversation-export-file__icon { flex: 0 0 32px; width: 32px; height: 32px; margin-right: 4px; }
+.conversation-export-file__name { flex: 1; min-width: 0; padding: 4px 0; overflow: hidden; border: 0; background: none; color: var(--app-text); text-align: left; text-overflow: ellipsis; white-space: nowrap; font: inherit; cursor: pointer; }
+.conversation-export-file__name:hover { color: var(--app-primary); }
+.conversation-export-file__name:focus-visible { outline: 2px solid var(--app-focus-outline); outline-offset: 2px; border-radius: 4px; }

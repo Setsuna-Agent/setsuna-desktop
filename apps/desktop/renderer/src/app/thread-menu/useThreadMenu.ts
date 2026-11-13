@@ -3,6 +3,7 @@ import { useConfirm } from '@setsuna-desktop/renderer-ui';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { useConversationExportPreview } from '../../features/chat/export/useConversationExportPreview.js';
 
 type MenuContext = {
   threadId: string;
@@ -20,8 +21,9 @@ export function useThreadMenu({ client, threadId, onClose, onFork, onDelete, onE
   onDelete: (thread: RuntimeThreadSummary) => Promise<void>;
   onError: (message: string) => unknown;
 }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const confirm = useConfirm();
+  const exportPreview = useConversationExportPreview(client);
   const [loaded, setLoaded] = useState<MenuContext | null>(null);
   const pending = useRef(new Set<string>());
   const pendingDeletions = useRef(new Set<string>());
@@ -111,8 +113,7 @@ export function useThreadMenu({ client, threadId, onClose, onFork, onDelete, onE
     if (pendingExports.current.has(id)) return;
     pendingExports.current.add(id);
     try {
-      const { exportConversation } = await import('../../features/chat/export/exportConversation.js');
-      await exportConversation(client, id, format, t, locale);
+      await exportPreview.prepare(id, format);
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -120,7 +121,7 @@ export function useThreadMenu({ client, threadId, onClose, onFork, onDelete, onE
     }
   };
 
-  return { canFork, canCreateWorktree, apps: context?.apps ?? [], fork, openWith, deleteThread, exportThread, close: onClose };
+  return { canFork, canCreateWorktree, apps: context?.apps ?? [], fork, openWith, deleteThread, exportThread, exportPreview, close: onClose };
 }
 
-export type ThreadMenuState = ReturnType<typeof useThreadMenu>;
+export type ThreadMenuState = Omit<ReturnType<typeof useThreadMenu>, 'exportPreview'>;

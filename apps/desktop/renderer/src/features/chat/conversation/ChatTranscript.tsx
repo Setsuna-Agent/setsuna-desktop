@@ -1,6 +1,7 @@
 import { ToastNotice, Button } from '@setsuna-desktop/renderer-ui';
 import type { ChatTurnNavigationRequest } from '@setsuna-desktop/renderer-contracts/chat';
 import type {
+  DesktopConversationExportFormat,
   MessagePatch,
   RuntimeMessage,
   WorkspaceFileChangeAction,
@@ -35,9 +36,9 @@ import { MarkdownViewportProvider } from '../markdown/MarkdownViewportProvider.j
 import { SkillReferenceCatalogProvider } from '../skills/SkillReference.js';
 import { PluginReferenceCatalogProvider } from '../references/PluginReference.js';
 import {
-  DeleteSelectionBar,
   MessageItem,
 } from './ChatMessageItem.js';
+import { ChatSelectionBar } from './ChatSelectionBar.js';
 import { ChatTurnStartWork } from './activity/ChatTurnStartWork.js';
 import { runtimeHookUsesByTurn, type RuntimeHookUse } from './activity/runtimeHookUsage.js';
 import { TranscriptWindowDivider } from './TranscriptWindowDivider.js';
@@ -73,14 +74,16 @@ type ChatTranscriptMutationProps =
   | {
       readOnly: true;
       onDeleteMessages?: never;
-      onDeleteModeChange?: never;
+      onSelectionModeChange?: never;
+      onExportMessages?: never;
       onEditUserMessage?: never;
       renderMessageEditor?: never;
     }
   | {
       readOnly?: false;
       onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
-      onDeleteModeChange?: (active: boolean) => void;
+      onSelectionModeChange?: (active: boolean) => void;
+      onExportMessages?: (messageIds: string[], format: DesktopConversationExportFormat) => Promise<{ cancelled?: boolean }>;
       onEditUserMessage: (messageId: string, input: MessagePatch) => void | Promise<void>;
       renderMessageEditor: (props: UserMessageEditorStateProps) => ReactNode;
     };
@@ -131,7 +134,8 @@ export function ChatTranscript({
   pendingMessages = emptyPendingMessages,
   onAnswerApproval,
   onDeleteMessages,
-  onDeleteModeChange,
+  onExportMessages,
+  onSelectionModeChange,
   onFileChangesAction,
   onEditUserMessage,
   onOpenFileReview,
@@ -191,33 +195,25 @@ export function ChatTranscript({
   }, [historyThread, messenger]);
   const {
     actionError,
-    allDeleteSelected,
-    cancelDeleteSelection,
     cancelEditingMessage,
-    confirmDeleteSelection,
-    deleteMode,
-    deletingMessages,
     editingMessageId,
     editingSubmitting,
-    selectableDeleteCount,
-    selectedDeleteCount,
-    selectedDeleteItemIds,
-    selectedDeleteMessageIds,
-    someDeleteSelected,
+    selection,
     startDeleteSelection,
+    startExportSelection,
     startEditingMessage,
     submitEditingMessage,
-    toggleAllDeleteSelection,
-    toggleDeleteSelection,
   } = useChatMessageOperations({
     activeTurnId,
     composerKey: readOnly ? `subagent-readonly:${currentThread?.id ?? 'none'}` : 'chat-transcript',
     currentThreadId: currentThread?.id,
     displayItems: mutableDisplayItems,
     onDeleteMessages,
+    onExportMessages,
     onEditUserMessage,
     readOnly,
   });
+  const selectingMessages = selection.mode !== null;
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [findThreadId, setFindThreadId] = useState<string | null>(null);
   const findOpen = findThreadId !== null && findThreadId === currentThread?.id;
@@ -234,8 +230,10 @@ export function ChatTranscript({
     setExpandedWorkHistoryItemIds(new Set());
   }, [currentThread?.id]);
   useEffect(() => {
-    onDeleteModeChange?.(readOnly ? false : deleteMode);
-  }, [deleteMode, onDeleteModeChange, readOnly]);
+    onSelectionModeChange?.(readOnly ? false : selectingMessages);
+    // A new empty chat can unmount this transcript while selection is still active.
+    return () => onSelectionModeChange?.(false);
+  }, [selectingMessages, onSelectionModeChange, readOnly]);
   const assistantItemIdByTurnIdRef = useRef(new Map<string, string>());
   const assistantItemIdByTurnId = useMemo(() => {
     const itemIdByTurnId = new Map<string, string>();
@@ -266,10 +264,11 @@ export function ChatTranscript({
     : {
         onStartEdit: startEditingMessage,
         onStartDelete: startDeleteSelection,
-        onToggleDelete: toggleDeleteSelection,
+        onStartExport: onExportMessages ? startExportSelection : undefined,
+        onToggleSelection: selection.toggle,
       };
   const navigatingToTurn = Boolean(turnNavigationRequest && turnNavigationRequest.threadId === currentThread?.id);
-  const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode && !showFullHistory && !findOpen && !navigatingToTurn }), [activeTurnId, deleteMode, displayItems, findOpen, navigatingToTurn, showFullHistory]);
+  const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !selectingMessages && !showFullHistory && !findOpen && !navigatingToTurn }), [activeTurnId, selectingMessages, displayItems, findOpen, navigatingToTurn, showFullHistory]);
   const renderedDisplayItems = renderWindow.items;
   const navigationItems = useMemo(() => createChatMessageNavigation(renderedDisplayItems), [renderedDisplayItems]);
   const activeAssistantItemId = useMemo(() => activeAssistantRunItemId(renderedDisplayItems, activeTurnId), [activeTurnId, renderedDisplayItems]);
@@ -387,7 +386,8 @@ export function ChatTranscript({
                           activeAssistantItemId={activeAssistantItemId}
                           activeTurnId={activeTurnId}
                           contextCompactionRunning={contextCompactionRunning}
-                          deleteMode={!readOnly && deleteMode && !pendingMessageIds.has(item.id)}
+                          selectionMode={!readOnly && selectingMessages && !pendingMessageIds.has(item.id)}
+                          selectionDisabled={selection.loading}
                           editor={!readOnly && item.type === 'user' && editingMessageId === item.message.id ? renderMessageEditor?.({
                             message: item.message, disabled: Boolean(activeTurnId), submitting: editingSubmitting,
                             onCancel: cancelEditingMessage, onSubmit: (input) => submitEditingMessage(item.message.id, input),
@@ -400,7 +400,7 @@ export function ChatTranscript({
                           onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
                           pluginUses={item.type === 'assistant' && item.turnId ? (pluginUsesByTurnId.get(item.turnId) ?? emptyRuntimePluginUses) : emptyRuntimePluginUses}
                           hookUses={item.type === 'assistant' && item.turnId ? (hookUsesByTurnId.get(item.turnId) ?? emptyRuntimeHookUses) : emptyRuntimeHookUses}
-                          selectedForDelete={!readOnly && selectedDeleteItemIds.has(item.id)}
+                          selected={!readOnly && selection.selectedItemIds.has(item.id)}
                           showThinkingInTranscript={showThinkingInTranscript}
                           workHistoryExpanded={userTurnWorkHistoryExpanded(item, assistantItemIdByTurnId, expandedWorkHistoryItemIds)}
                         />
@@ -446,7 +446,7 @@ export function ChatTranscript({
           onScrollToOffset={scrollToReadingOffset}
         />
       ) : null}
-      {!messenger && !showEmptyStarter && !deleteMode && !editingMessageId ? (
+      {!messenger && !showEmptyStarter && !selectingMessages && !editingMessageId ? (
         <ChatMessageRail
           key={currentThread?.id ?? 'no-thread'}
           items={navigationItems}
@@ -467,17 +467,18 @@ export function ChatTranscript({
       {actionError || messageHistory.error ? (
         <ToastNotice message={actionError ?? messageHistory.error} />
       ) : null}
-      {showEmptyStarter || readOnly ? null : deleteMode ? (
-        <DeleteSelectionBar
-          allChecked={allDeleteSelected}
-          disabled={!selectedDeleteMessageIds.length || deletingMessages}
-          indeterminate={someDeleteSelected}
-          loading={deletingMessages}
-          selectedCount={selectedDeleteCount}
-          totalCount={selectableDeleteCount}
-          onCancel={cancelDeleteSelection}
-          onConfirm={() => void confirmDeleteSelection()}
-          onToggleAll={toggleAllDeleteSelection}
+      {!showEmptyStarter && !readOnly && selection.mode ? (
+        <ChatSelectionBar
+          mode={selection.mode}
+          allChecked={selection.allChecked}
+          disabled={!selection.messageIds.length || selection.loading || (selection.mode === 'delete' && Boolean(activeTurnId))}
+          indeterminate={selection.indeterminate}
+          loading={selection.loading}
+          selectedCount={selection.selectedCount}
+          totalCount={selection.totalCount}
+          onCancel={selection.cancel}
+          onConfirm={(format) => void selection.confirm(format)}
+          onToggleAll={selection.toggleAll}
         />
       ) : null}
     </UserMessageDisclosureContext.Provider>

@@ -136,7 +136,7 @@
 }
 
 .chat-content-frame,
-.chat-delete-bar__inner,
+.chat-selection-bar__inner,
 .chat-scroll-bottom,
 .chat-sender:not(.chat-sender--starter) > .chat-composer-stack,
 .chat-sender:not(.chat-sender--starter) .chat-prompt {
@@ -150,7 +150,7 @@
 }
 
 .chat-main-conversation--overview-shifted .chat-content-frame,
-.chat-main-conversation--overview-shifted .chat-delete-bar__inner,
+.chat-main-conversation--overview-shifted .chat-selection-bar__inner,
 .chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) > .chat-composer-stack,
 .chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) .chat-prompt {
   transform: translateX(calc(0px - var(--chat-overview-expanded-shift)));
@@ -185,10 +185,12 @@
 }
 
 .chat-bubble-item {
+  --chat-message-padding-block: 0px;
   min-width: 0;
 }
 
 .chat-bubble-item--user {
+  --chat-message-padding-block: 10px;
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
@@ -261,7 +263,7 @@
     background 0.16s ease;
 }
 
-.chat-bubble-item--selecting.is-selected-for-delete {
+.chat-bubble-item--selecting.is-selected {
   border-color: var(--desktop-agent-button-hover-border);
   background: var(--desktop-agent-control-active-bg);
 }
@@ -570,13 +572,15 @@
   justify-content: center;
   align-self: flex-start;
   width: 24px;
-  height: 20px;
-  margin-top: 1px;
+  /* Match the first text line, independently of the message's total height. */
+  height: 1lh;
+  margin-top: var(--chat-message-padding-block);
+  font: inherit;
   color: var(--app-text-muted);
 }
 
-.chat-bubble-item--selecting.chat-bubble-item--user .chat-message-select {
-  margin-top: 14px;
+.chat-bubble-item--assistant .chat-message-select {
+  line-height: 1.72;
 }
 
 .chat-ai-bubble .sd-message__content {
@@ -584,6 +588,7 @@
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  padding-block: var(--chat-message-padding-block);
   padding-inline: 0;
   color: var(--app-text);
   background: transparent;
@@ -603,6 +608,7 @@
   width: fit-content;
   min-width: 0;
   max-width: min(680px, 100%);
+  padding-block: var(--chat-message-padding-block);
   border: 0;
   border-radius: var(--chat-message-radius);
   color: var(--app-text);
@@ -700,14 +706,14 @@
   opacity: var(--app-disabled-opacity);
 }
 
-.chat-delete-bar {
+.chat-selection-bar {
   flex: 0 0 auto;
   width: 100%;
   padding: 8px var(--chat-content-inline-padding) 10px;
   background: var(--desktop-agent-main-bg);
 }
 
-.chat-delete-bar__inner {
+.chat-selection-bar__inner {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -721,7 +727,7 @@
   box-shadow: var(--app-shadow-popover);
 }
 
-.chat-delete-bar__select-all {
+.chat-selection-bar__select-all {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -730,7 +736,7 @@
   font-size: 13px;
 }
 
-.chat-delete-bar__count {
+.chat-selection-bar__count {
   flex: 1 1 auto;
   min-width: 0;
   color: var(--app-text-muted);
