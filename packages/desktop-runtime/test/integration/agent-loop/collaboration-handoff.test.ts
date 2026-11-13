@@ -94,7 +94,8 @@ describe('collaboration configuration and handoff through SQLite and AgentLoop',
     });
     const control = bindTestCollaborationFeature(loop, store, async () => {
       const settings = defaultCollaborationAgentSettings();
-      return { ...settings, roles: settings.roles.map((role) => role.name === 'worker' ? { ...role, instructions: roleInstructions } : role) };
+      return { ...settings, roles: settings.roles.map((role) => role.name === 'worker'
+        ? { ...role, instructions: roleInstructions, model: { providerId: 'provider', modelId: 'child' } } : role) };
     });
     try {
       await loop.sendTurn(parent.id, { input: 'Inspect the attached plan. Do not publish.', attachments: [asset], skillIds: ['skill_step'], thinking: true, thinkingEffort: 'high' });

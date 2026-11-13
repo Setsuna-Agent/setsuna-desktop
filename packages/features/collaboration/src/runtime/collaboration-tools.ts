@@ -8,7 +8,7 @@ export function collaborationToolDefinitions(language?: RuntimeInterfaceLanguage
   return [
     {
       name: 'list_agent_profiles',
-      description: text('List configured agent roles and available model IDs and reasoning efforts. Use these exact IDs for spawn_agent overrides. Settings never change inherited permissions or approval policy.', '列出代理角色和可用模型 ID、思考强度。spawn_agent 覆盖配置时使用这些确切 ID；角色不能更改继承的权限和审批策略。'),
+      description: text('List configured agent roles, their allowed models, and supported reasoning efforts. Each role uses its user-configured model, then global agent settings, then the current parent conversation model. Other configured provider models are not authorized for agents. Settings never change inherited permissions or approval policy.', '列出代理角色、各角色允许使用的模型和支持的思考强度。模型由用户的角色设置、全局子代理设置、当前主对话依次确定；供应商中配置的其他模型不代表获准用于子代理。角色不能更改继承的权限和审批策略。'),
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     },
     {
@@ -19,7 +19,7 @@ export function collaborationToolDefinitions(language?: RuntimeInterfaceLanguage
         properties: {
           context_mode: { type: 'string', enum: ['fresh', 'snapshot'], description: text('Both modes inherit user constraints, selected skills, and current input attachment references. fresh omits assistant history; snapshot adds a bounded conversation excerpt. Tool calls and private reasoning are never copied.', '两种模式均继承用户约束、所选技能和当前输入的附件引用。fresh 不带助手历史；snapshot 增加有长度上限的对话摘录，不复制工具调用或私有推理。') },
           role: { type: 'string', description: text('Configured role name; defaults to default. Discover roles with list_agent_profiles.', '已配置的角色名称，默认 default；通过 list_agent_profiles 查询。') },
-          model: { type: 'object', properties: { providerId: { type: 'string' }, modelId: { type: 'string' } }, required: ['providerId', 'modelId'], additionalProperties: false },
+          model: { type: 'object', description: text('Usually omit. If supplied, must exactly match this role\'s model from list_agent_profiles; it cannot override user model settings or select another provider model.', '通常省略。如填写，必须与 list_agent_profiles 中该角色的模型完全一致；不能覆盖用户模型设置或选择其他供应商模型。'), properties: { providerId: { type: 'string' }, modelId: { type: 'string' } }, required: ['providerId', 'modelId'], additionalProperties: false },
           reasoning_effort: { type: 'string', description: text('Optional supported effort from list_agent_profiles, or none to disable thinking.', '可选的模型支持的思考强度，none 表示关闭思考。') },
           prompt: { type: 'string', description: text('Task prompt for the child agent.', "交给子代理的任务提示词。") },
           title: { type: 'string', description: text('Optional child thread title.', "可选子任务标题。") },
@@ -42,7 +42,7 @@ export function collaborationToolDefinitions(language?: RuntimeInterfaceLanguage
     },
     {
       name: 'resume_agent',
-      description: text('Deliver a mailbox message and start the receiver agent if it is idle.', "发送邮箱消息，若接收方代理空闲则启动它。"),
+      description: text('Deliver a mailbox message and start the receiver agent if it is idle. An idle child whose model is no longer allowed by current agent settings or the parent conversation cannot be resumed; spawn a new child instead.', '发送邮箱消息，若接收方代理空闲则启动它。旧子代理的模型若已不符合当前子代理设置或主对话模型限制，不能恢复，应创建新子代理。'),
       inputSchema: {
         type: 'object',
         properties: {

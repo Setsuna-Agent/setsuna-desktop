@@ -6,8 +6,7 @@ import {
   type CollaborationStateSnapshot, type CollaborationTask, type CollaborationToolExecutionContext,
   type CollaborationToolExecutionResult,
   type CollaborationAgentSettings, type CollaborationUserAction, type CollaborationActionResult,
-  type CollaborationSubagentTurnInput, defaultCollaborationAgentSettings, collaborationModelSelectionCodec, agentReasoningEffort,
-  resolveCollaborationRoleText, collaborationAgentAvatarCodec,
+  type CollaborationSubagentTurnInput, defaultCollaborationAgentSettings, collaborationAgentAvatarCodec,
 } from '../contracts/index.js';
 import { CollaborationThreadNotFoundError } from './runtime-collaboration-errors.js';
 import {
@@ -18,6 +17,7 @@ import { CollaborationLedger } from './collaboration-ledger.js';
 import { childAgentOutput, executionOutput, resultPage, resultSummary, COLLABORATION_RESULT_PAGE_CHARS } from './collaboration-results.js';
 import { buildCollaborationHandoff, parentTurnContext } from './collaboration-handoff.js';
 import { collaborationToolDefinitions, collaborationToolsEnabled, isCollaborationToolName } from './collaboration-tools.js';
+import { listCollaborationAgentProfiles, resolveCollaborationAgentConfiguration } from './collaboration-agent-configuration.js';
 import { waitForCollaborationActivity, waitForTaskSettlement } from './collaboration-wait.js';
 
 export { collaborationToolDefinitions, collaborationToolsEnabled, isCollaborationToolName, COLLABORATION_TOOL_DEFINITIONS } from './collaboration-tools.js';
@@ -172,14 +172,10 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
     if (name === 'wait') return this.waitForAgent(input, context);
     if (name === 'read_agent_result') return this.readAgentResult(input, context);
     if (name === 'list_agent_profiles') {
-      await this.requireRoot(context.threadId);
-      const settings = await this.agentSettings();
-      return toolResult('list_agent_profiles', context.threadId, context.threadId, {
-        defaults: { model: settings.model, reasoningEffort: settings.reasoningEffort },
-        roles: settings.roles.map((role) => ({ name: role.name, model: role.model, reasoningEffort: role.reasoningEffort,
-          description: resolveCollaborationRoleText(role, context.interfaceLanguage ?? 'zh-CN').description })),
-        availableModels: await this.options.host.listModels(), status: 'completed',
-      });
+      const parent = await this.requireRoot(context.threadId);
+      return toolResult('list_agent_profiles', parent.id, parent.id, await listCollaborationAgentProfiles(
+        this.options.host, parent, await this.agentSettings(), context.interfaceLanguage ?? 'zh-CN',
+      ));
     }
     throw new Error(`Unknown collaboration tool: ${name}`);
   }
@@ -223,19 +219,9 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
     const contextMode = input.context_mode ?? 'fresh';
     if (contextMode !== 'fresh' && contextMode !== 'snapshot') throw new Error('context_mode must be fresh or snapshot.');
     const parent = await this.requireRoot(context.threadId);
-    const settings = await this.agentSettings();
-    const roleName = optionalString(input, ['role']) || 'default';
-    const role = settings.roles.find((role) => role.name === roleName);
-    if (!role) throw new Error(`Unknown agent role: ${roleName}. Use list_agent_profiles.`);
-    const roleText = resolveCollaborationRoleText(role, context.interfaceLanguage ?? 'zh-CN');
-    const configuration = {
-      ...await this.options.host.resolveAgentConfiguration(parent, {
-        role: role.name, instructions: roleText.instructions,
-        model: input.model !== undefined ? collaborationModelSelectionCodec.parse(input.model) : role.model ?? settings.model,
-        reasoningEffort: input.reasoning_effort !== undefined ? agentReasoningEffort(input.reasoning_effort) : role.reasoningEffort ?? settings.reasoningEffort,
-      }),
-      description: roleText.description,
-    };
+    const { role, configuration } = await resolveCollaborationAgentConfiguration(
+      this.options.host, parent, await this.agentSettings(), input, context.interfaceLanguage ?? 'zh-CN',
+    );
     const { state } = await this.readState(context.threadId);
     this.assertRunning(context);
     const child = await this.options.host.createThread({
@@ -287,6 +273,14 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
     if (!task) throw new Error('Child has no collaboration task.');
     const execution = this.newExecution(task.id, this.options.host.id('turn'), context.turnId);
     const parent = await this.requireRoot(context.threadId);
+    // Reusing an old child must not bypass the current model authorization after a
+    // parent selection or agent setting changes. Explicit user resumes use act().
+    const current = await this.options.host.resolveAgentConfiguration(receiver, {
+      role: task.configuration?.role ?? 'default', instructions: '', model: null, reasoningEffort: null,
+    });
+    await resolveCollaborationAgentConfiguration(this.options.host, parent, await this.agentSettings(), {
+      role: task.configuration?.role, model: current.modelBinding,
+    }, context.interfaceLanguage ?? 'zh-CN');
     const handoff = buildCollaborationHandoff(parent, context.turnId, execution.turnId, this.options.host.now().toISOString(), 'fresh');
     await this.options.host.retainAttachments(parent.id, receiver.id, handoff.attachments);
     await this.startExecution(task, execution, content, context, false, handoff);

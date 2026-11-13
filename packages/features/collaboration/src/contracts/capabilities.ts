@@ -60,6 +60,7 @@ export interface CollaborationRuntimeHost {
   id(prefix: string): string;
   getThread(threadId: string): Promise<RuntimeThread | null>;
   listModels(): Promise<readonly CollaborationModelOption[]>;
+  /** model comes only from trusted agent settings; the Feature validates model-authored selections separately. */
   resolveAgentConfiguration(parent: RuntimeThread, input: Readonly<{
     role: string; instructions: string; model: RuntimeConfiguredModelReference | null; reasoningEffort: string | null;
   }>): Promise<CollaborationAgentConfiguration>;

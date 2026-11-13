@@ -103,13 +103,13 @@ describe('user intervention and delegated context', () => {
     expect(snapshot.userInitiated).toBeUndefined();
   });
 
-  it('uses explicit model choices before role defaults and snapshots the role for later user resumes', async () => {
+  it('uses user role and global model settings and snapshots the role for later user resumes', async () => {
     const settings = defaultCollaborationAgentSettings();
     const role = { ...settings.roles[1]!, description: 'Implementation checks', instructions: 'Verify changes', model: { providerId: 'role', modelId: 'worker' }, reasoningEffort: 'high' };
     const h = createHarness(async () => ({ ...settings, model: { providerId: 'global', modelId: 'default' }, roles: [settings.roles[0]!, role] }));
-    await h.coordinator.execute('spawn_agent', { prompt: 'Work', role: 'worker', model: { providerId: 'explicit', modelId: 'fast' }, reasoning_effort: 'low' }, context());
+    await h.coordinator.execute('spawn_agent', { prompt: 'Work', role: 'worker', reasoning_effort: 'low' }, context());
     expect(h.host.resolveAgentConfiguration).toHaveBeenLastCalledWith(expect.anything(), {
-      role: 'worker', instructions: 'Verify changes', model: { providerId: 'explicit', modelId: 'fast' }, reasoningEffort: 'low',
+      role: 'worker', instructions: 'Verify changes', model: role.model, reasoningEffort: 'low',
     });
     const childId = vi.mocked(h.host.startTurn).mock.calls[0]![0];
     await h.finish(childId, 'completed', 'Initial work');
