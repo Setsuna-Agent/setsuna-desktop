@@ -20,7 +20,6 @@ import {
   isWebContentRun,
   recordFromJson,
   stringField,
-  toolRunDisplayName,
   toolRunTarget,
 } from './runtimeToolRunPresentationUtils.js';
 import {
@@ -36,6 +35,7 @@ import {
 } from './runtimeToolRunGrouping.js';
 import { shellCommand } from './RuntimeShellToolRun.js';
 import { shellCountSummary, shellGroupSummary, shellRunSummary } from './runtimeShellSummary.js';
+import { genericToolRunSummary } from './runtimeGenericToolRunSummary.js';
 import {
   fileChangeFromToolRun,
   fileChangesFromToolRun,
@@ -250,13 +250,7 @@ export function mixedToolRunBucketSummary(
   if (kind === 'shell') return shellCountSummary(runs, t);
   if (kind === 'search') return searchCountSummary(runs, status, t);
   if (kind === 'webContent') return webContentGroupSummary(runs, t)?.title ?? '';
-  const name = runs[0]
-    ? toolRunDisplayName(runs[0], t)
-    : t('toolRun.tool');
-  if (status === 'running' || status === 'pending_approval') return t('toolRun.generic.running', { name });
-  if (status === 'cancelled') return t('toolRun.generic.cancelled', { name });
-  if (status === 'rejected') return t('toolRun.generic.rejected', { name });
-  return t('toolRun.generic.used', { count: runs.length, name });
+  return genericToolRunSummary(runs, t).title;
 }
 
 export function mixedToolRunGroupPart(group: ToolRunGroup, t: Translate = defaultTranslate): string {
@@ -269,13 +263,7 @@ export function mixedToolRunGroupPart(group: ToolRunGroup, t: Translate = defaul
   if (kind === 'search') return searchCountSummary(runs, status, t);
   const webContentSummary = webContentGroupSummary(runs, t);
   if (webContentSummary) return webContentSummary.title;
-  const name = runs[0]
-    ? toolRunDisplayName(runs[0], t)
-    : t('toolRun.tool');
-  if (status === 'running' || status === 'pending_approval') return t('toolRun.generic.running', { name });
-  if (status === 'cancelled') return t('toolRun.generic.cancelled', { name });
-  if (status === 'rejected') return t('toolRun.generic.rejected', { name });
-  return t('toolRun.generic.used', { count: runs.length, name });
+  return genericToolRunSummary(runs, t).title;
 }
 
 export function searchCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRun['status'], t: Translate = defaultTranslate): string {
@@ -320,14 +308,7 @@ export function toolRunGroupSummary(
   if (group.kind === 'fileMutation') return fileOperationGroupSummary(group.runs, t);
   const webContentSummary = webContentGroupSummary(group.runs, t);
   if (webContentSummary) return webContentSummary;
-  const status = toolRunGroupStatus(group.runs);
-  const name = group.runs[0]
-    ? toolRunDisplayName(group.runs[0], t)
-    : t('toolRun.tool');
-  if (status === 'running' || status === 'pending_approval') return { title: t('toolRun.generic.running', { name }) };
-  if (status === 'cancelled') return { title: t('toolRun.generic.cancelled', { name }) };
-  if (status === 'rejected') return { title: t('toolRun.generic.rejected', { name }) };
-  return { title: t('toolRun.generic.used', { count: group.runs.length, name }) };
+  return genericToolRunSummary(group.runs, t);
 }
 
 export function inspectionGroupSummary(runs: RuntimeToolRun[], t: Translate = defaultTranslate): { title: string; target?: string } {
@@ -759,12 +740,11 @@ export function toolRunSummary(run: RuntimeToolRun, t: Translate = defaultTransl
   if (name === 'read_shell_process') return { title: runningAware(run, t('toolRun.action.readShell'), t('toolRun.action.readShellDone'), t), target: shellCommand(run) };
   if (name === 'remember_memory') return { title: runningAware(run, t('toolRun.action.saveMemory'), t('toolRun.action.saveMemoryDone'), t) };
   if (name === 'recall_memory') return { title: runningAware(run, t('toolRun.action.recallMemory'), t('toolRun.action.recallMemoryDone'), t), target: query };
-  const displayName = toolRunDisplayName(run, t);
-  const title = runningAware(run, displayName, t('toolRun.action.used', { name: displayName }), t);
+  const summary = genericToolRunSummary([run], t);
   if (name === 'read_plugin_resource') {
-    return { title, target: [stringField(args.pluginId), stringField(args.resourceId)].filter(Boolean).join('/') };
+    return { ...summary, target: [stringField(args.pluginId), stringField(args.resourceId)].filter(Boolean).join('/') };
   }
-  return { title };
+  return summary;
 }
 
 export function searchRunSummary(
