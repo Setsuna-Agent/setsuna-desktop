@@ -96,6 +96,18 @@
   border-radius: 5px;
 }
 
+.desktop-agent-command__assistant-avatar {
+  --assistant-connection-dot-size: 8px;
+  --assistant-connection-dot-surface: var(--app-sidebar-bg);
+  position: relative;
+  display: inline-flex;
+}
+
+.desktop-agent-command:is(:hover, :active, [data-overlay-open]):not(:disabled) .desktop-agent-command__assistant-avatar,
+.desktop-agent-command.is-active .desktop-agent-command__assistant-avatar {
+  --assistant-connection-dot-surface: var(--desktop-agent-sidebar-hover-bg);
+}
+
 .desktop-agent-command__label {
   flex: 1 1 auto;
   min-width: 0;

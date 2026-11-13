@@ -1,32 +1,40 @@
 .assistant-info {
   --assistant-info-text: #202631;
-  --assistant-info-muted: #647183;
   --assistant-info-icon: #7d8a9a;
   --assistant-info-arrow: #a6afba;
-  --assistant-info-connected: #208452;
-  --assistant-info-connected-dot: #22a263;
   display: grid;
   min-width: 0;
 }
 
 :root[data-theme='dark'] .assistant-info {
   --assistant-info-text: var(--app-text);
-  --assistant-info-muted: var(--app-text-muted);
   --assistant-info-icon: var(--app-text-muted);
   --assistant-info-arrow: var(--app-text-subtle);
-  --assistant-info-connected: var(--app-success);
-  --assistant-info-connected-dot: var(--app-success);
 }
 
 .assistant-info__identity {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
-  padding: 0 6px 7px;
+  padding: 0 6px;
 }
 
-.assistant-info__identity > .assistant-info__avatar {
+.assistant-info__presence {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--app-radius-sm);
+}
+
+.assistant-info__presence:focus-visible {
+  outline: 2px solid var(--app-focus-outline);
+  outline-offset: 3px;
+}
+
+.assistant-info__presence > .assistant-info__avatar {
   width: 24px;
   height: 24px;
   background: transparent;
@@ -37,14 +45,8 @@
   height: 100%;
 }
 
-.assistant-info__profile {
-  display: grid;
+.assistant-info__name {
   flex: 1;
-  gap: 2px;
-  min-width: 0;
-}
-
-.assistant-info__profile h2 {
   min-width: 0;
   margin: 0;
   overflow: hidden;
@@ -56,39 +58,10 @@
   white-space: nowrap;
 }
 
-.assistant-info__connection {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: var(--assistant-info-muted);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.assistant-info__connection-dot {
-  flex: 0 0 auto;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.assistant-info__connection[data-state='connected'] .assistant-info__connection-dot {
-  background: var(--assistant-info-connected-dot);
-}
-
-.assistant-info__connection[data-state='connected'] .assistant-info__connection-label {
-  color: var(--assistant-info-connected);
-}
-
-.assistant-info__connection[data-state='error'] .assistant-info__connection-dot {
-  background: var(--app-danger);
-}
-
 .assistant-info__tasks {
   display: grid;
   min-width: 0;
+  margin-top: 4px;
 }
 
 .assistant-info__tasks h3 {
