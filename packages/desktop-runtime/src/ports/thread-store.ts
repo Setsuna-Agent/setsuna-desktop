@@ -40,8 +40,6 @@ export type ThreadStoreCreateInput = Omit<CreateThreadInput, 'workspaceMode'> & 
 export type ThreadStoreQuery = ThreadQuery & {
   /** Internal recovery paths include transient side conversations; user-facing lists do not. */
   includeSide?: boolean;
-  /** Feature navigation and runtime recovery can include feature-owned conversations. */
-  includeFeatures?: boolean;
 };
 
 export type RuntimeEventReplay = {

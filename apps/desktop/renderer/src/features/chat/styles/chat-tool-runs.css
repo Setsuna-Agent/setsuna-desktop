@@ -14,9 +14,10 @@
 
 .chat-tool-run {
   /* 工具汇总与子项统一使用中性色，图标与文字不按执行结果染色。 */
-  --chat-tool-run-title-color: color-mix(in srgb, var(--app-text-muted) 76%, transparent);
-  /* 每层工具记录重置图标颜色，避免分组状态染色子项。 */
-  --chat-tool-run-icon-color: var(--chat-tool-run-title-color);
+  --chat-tool-run-color: color-mix(in srgb, var(--app-text-muted) 76%, transparent);
+  --chat-tool-run-title-color: var(--chat-tool-run-color);
+  /* 图标独立于标题颜色，悬停时保持中性；每层记录重置，避免染色子项。 */
+  --chat-tool-run-icon-color: var(--chat-tool-run-color);
   /* 根节点保持确定宽度，避免 fit-content 与子项百分比上限形成内在尺寸循环，
      导致文件名和工具名在仍有可用空间时就按 min-content 提前省略。 */
   width: 100%;
@@ -62,16 +63,6 @@
 .chat-tool-run__group-title,
 .chat-tool-run__inspection-item {
   user-select: none;
-}
-
-details.chat-tool-run[open] > .chat-tool-run__summary {
-  --chat-tool-run-title-color: var(--app-text);
-  color: var(--app-text);
-  background: transparent;
-}
-
-details.chat-tool-run[open] > .chat-tool-run__summary > .chat-tool-run__icon {
-  color: var(--app-text);
 }
 
 /* 原生 details 的展开收起动画（参考 beUI Collapsible）：只过渡内容槽高度和透明度，
@@ -120,7 +111,7 @@ details.chat-thinking-disclosure[open]::details-content {
 .chat-tool-run__chevron {
   flex: 0 0 auto;
   justify-self: start;
-  color: color-mix(in srgb, currentColor 76%, transparent);
+  color: color-mix(in srgb, var(--chat-tool-run-icon-color) 76%, transparent);
   opacity: 0;
   transform: rotate(-90deg);
   transition: opacity 0.14s ease, transform 0.16s ease;
@@ -172,6 +163,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
+  color: var(--chat-tool-run-icon-color);
   filter: grayscale(1);
   vertical-align: 0;
 }
@@ -774,40 +766,21 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-tool-run__action-label {
   flex: 0 0 auto;
-  color: color-mix(in srgb, var(--app-text-muted) 76%, transparent);
+  color: var(--chat-tool-run-title-color);
   white-space: nowrap;
 }
 
-/* Reset each row so highlighting a group heading cannot color its descendants.
- * Change-count colors outside the tool history keep their semantic defaults. */
+/* 工具行的增删统计保持中性，文件变更汇总卡片仍使用语义色。 */
 .chat-tool-run__summary,
 .chat-tool-run__inspection-item {
-  --chat-change-count-add-color: var(--chat-tool-run-title-color);
-  --chat-change-count-del-color: var(--chat-tool-run-title-color);
+  --chat-change-count-add-color: var(--chat-tool-run-color);
+  --chat-change-count-del-color: var(--chat-tool-run-color);
 }
 
-.chat-tool-run__summary:is(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])),
-.chat-tool-run__inspection-item:is(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])) {
+/* 只有悬停强调当前行标题；展开、焦点与右键菜单不保留文字高亮。 */
+.chat-tool-run__summary:hover,
+.chat-tool-run__inspection-item:hover {
   --chat-tool-run-title-color: var(--app-text);
-  --chat-tool-run-icon-color: var(--app-text);
-  --chat-change-count-add-color: var(--app-success);
-  --chat-change-count-del-color: var(--app-danger);
-  color: var(--app-text);
-}
-
-:is(.chat-tool-run__summary, .chat-tool-run__inspection-item):is(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])) :is(
-  .chat-tool-run__target,
-  .chat-tool-run__action-label
-) {
-  color: var(--app-text);
-  text-decoration: none;
-}
-
-:is(.chat-tool-run__summary, .chat-tool-run__inspection-item):is(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])) :is(
-  .chat-tool-run__file-target,
-  .chat-tool-run__file-list-target
-) .chat-markdown__file-icon {
-  filter: none;
 }
 
 .chat-tool-run__inspection-item .chat-tool-run__file-list-target .chat-markdown__file-icon {

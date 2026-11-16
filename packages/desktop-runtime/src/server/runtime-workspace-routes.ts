@@ -9,6 +9,8 @@ import {
   type WorkspaceEntryRenameInput,
   type WorkspaceEntryMoveInput,
   type WorkspaceSearchResponse,
+  type WorkspaceSearchOptions,
+  normalizeWorkspaceSearchExtensions,
 } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
@@ -31,10 +33,12 @@ export async function searchWorkspaceProjectForRest(
   workspaceProjects: Pick<WorkspaceProjectStore, 'search'>,
   projectId: WorkspaceProjectTarget,
   query: string,
+  options: WorkspaceSearchOptions = {},
 ): Promise<WorkspaceSearchResponse> {
   try {
     return await workspaceProjects.search(projectId, query, {
       supersedeKey: PROJECT_CONTENT_SEARCH_SUPERSEDE_KEY,
+      ...options,
     });
   } catch (error) {
     if (!(error instanceof WorkspaceSearchCancelledError)) throw error;
@@ -166,6 +170,7 @@ export async function handleRuntimeWorkspaceRequest(
         workspaceTarget(decodeURIComponent(projectEntriesSearchMatch[1]), url.searchParams.get('rootId')),
         url.searchParams.get('q') ?? '',
         url.searchParams.has('parent') ? url.searchParams.get('parent') : undefined,
+        { filesOnly: url.searchParams.get('filesOnly') === 'true' },
       ),
     );
     return true;
@@ -206,6 +211,12 @@ export async function handleRuntimeWorkspaceRequest(
   const projectSearchMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/search$/u);
   if (projectSearchMatch && request.method === 'GET') {
     const query = url.searchParams.get('q') ?? '';
+    let fileExtensions: string[];
+    try {
+      fileExtensions = normalizeWorkspaceSearchExtensions(url.searchParams.getAll('extension'));
+    } catch {
+      throw new RuntimeHttpError(400, 'Invalid file extension.', 'invalid_file_extension');
+    }
     sendJson(
       response,
       200,
@@ -213,6 +224,7 @@ export async function handleRuntimeWorkspaceRequest(
         runtime.workspaceProjects,
         workspaceTarget(decodeURIComponent(projectSearchMatch[1]), url.searchParams.get('rootId')),
         query,
+        { fileExtensions },
       ),
     );
     return true;

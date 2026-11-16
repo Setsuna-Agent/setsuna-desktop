@@ -44,3 +44,4 @@ export { PageSessionProvider, usePageSessionState, usePageScrollRestoration } fr
 export { SettingsPageNavigationProvider, useSettingsPageNavigation, type SettingsPageNavigation } from './navigation/settings-navigation.js';
 
 export { Disclosure } from './disclosure/disclosure.js';
+export { HtmlFilePreview, type HtmlFilePreviewResource } from './html-file-preview/html-file-preview.js';

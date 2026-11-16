@@ -17,6 +17,7 @@ import { usePanelTabCloseTransition } from './hooks/usePanelTabCloseTransition.j
 import { usePanelTabScroll } from './hooks/usePanelTabScroll.js';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
 import { PanelPlacementIcon } from './PanelPlacementIcon.js';
+import { PanelTabContextMenu } from './PanelTabContextMenu.js';
 import {
   canMoveDesktopPanelAcrossSlots,
   type DesktopPanelDropPlacement,
@@ -73,6 +74,7 @@ export function DesktopPanelHeader({
   bottomBarActive = false,
   onClose,
   onClosePanel,
+  onClosePanels,
   onMovePanel,
   onAddPanel,
   onReorderPanels,
@@ -89,6 +91,7 @@ export function DesktopPanelHeader({
   bottomBarActive?: boolean;
   onClose: () => void;
   onClosePanel?: (panelId: string) => void;
+  onClosePanels?: (panelIds: readonly string[]) => void;
   onMovePanel?: (
     panelId: string,
     targetPlacement: DesktopPanelPlacement,
@@ -230,7 +233,7 @@ export function DesktopPanelHeader({
   }, []);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLSpanElement>, panel: DesktopPanelTab) => {
-    if (!canDragPanel(panel) || event.button !== 0) return;
+    if (!canDragPanel(panel) || event.button !== 0 || event.ctrlKey) return;
     if ((event.target as Element).closest('.chat-file-review-panel__tab-close')) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const captureTarget = headerRef.current;
@@ -373,7 +376,7 @@ export function DesktopPanelHeader({
               const tabStyle = closing
                 ? { '--desktop-panel-tab-exit-width': `${closingWidth}px` } as CSSProperties
                 : undefined;
-              return (
+              const tab = (
                 <span
                   className={[
                     'chat-file-review-panel__title',
@@ -426,6 +429,12 @@ export function DesktopPanelHeader({
                   ) : null}
                 </span>
               );
+              return onClosePanels ? (
+                <PanelTabContextMenu key={panel.id} panel={panel} panels={tabPanels} disabled={closing}
+                  onClosePanels={onClosePanels} onOpenChange={(open) => { if (open) clearDragState(false); }}>
+                  {tab}
+                </PanelTabContextMenu>
+              ) : tab;
             })}
             {onAddPanel ? (
               <span className="desktop-panel-launcher">

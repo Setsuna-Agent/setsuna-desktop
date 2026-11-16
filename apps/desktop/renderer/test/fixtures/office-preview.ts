@@ -115,15 +115,21 @@ async function checkContinuousDocxSections() {
   return modes;
 }
 
-async function openPdfPreview() {
+async function openPdfPreview(versions?: number[][]) {
   const factory = await loadDocumentPreviewFactory('pdf');
-  const viewer = factory(document.getElementById('document')!, () => undefined);
-  const data = await (await fetch('./office/sample.pdf')).arrayBuffer();
-  await viewer.load(data);
-  const pdfUrl = document.querySelector<HTMLIFrameElement>('#document iframe')!.src;
+  const documents = versions
+    ? versions.map((bytes) => new Uint8Array(bytes).buffer)
+    : [await (await fetch('./office/sample.pdf')).arrayBuffer()];
+  const container = document.getElementById('document')!;
+  const viewers = documents.map(() => factory(container, () => undefined));
+  await Promise.all(viewers.map((viewer, index) => viewer.load(documents[index])));
+  const urls = [...container.querySelectorAll<HTMLIFrameElement>('iframe')].map((frame) => frame.src);
   Object.assign(window, { closePdfPreview: async () => {
-    viewer.destroy();
-    try { await fetch(pdfUrl); return false; } catch { return true; }
+    viewers.forEach((viewer) => viewer.destroy());
+    const released = await Promise.all(urls.map(async (url) => {
+      try { await fetch(url); return false; } catch { return true; }
+    }));
+    return released.every(Boolean);
   } });
 }
 

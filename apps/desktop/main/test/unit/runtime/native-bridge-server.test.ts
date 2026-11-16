@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, open, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,13 +9,16 @@ import {
   DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
   defaultDesktopNetworkProxyRouting,
+  WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   type DesktopSystemProxyFetchRequest,
   type DesktopThreadDeletionResult,
 } from '@setsuna-desktop/contracts';
 import { DesktopNativeBridgeServer } from '../../../src/runtime/native-bridge-server.js';
+import { createWorkspaceFilePreviewUrl } from '../../../src/workspace/file-opening.js';
 import type { CredentialVault } from '../../../src/security/credential-vault.js';
 
 const servers: DesktopNativeBridgeServer[] = [];
+const previewRoots: string[] = [];
 
 vi.mock('node:fs', async (importOriginal) => {
   const fs = await importOriginal<typeof import('node:fs')>();
@@ -24,6 +27,7 @@ vi.mock('node:fs', async (importOriginal) => {
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
+  await Promise.all(previewRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 describe('DesktopNativeBridgeServer', () => {
@@ -261,6 +265,7 @@ describe('DesktopNativeBridgeServer', () => {
   it('serves HTML preview resources without allowing workspace escapes', async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-native-preview-workspace-'));
     const outsideRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-native-preview-outside-'));
+    previewRoots.push(workspaceRoot, outsideRoot);
     const siteDirectory = path.join(workspaceRoot, 'site');
     await mkdir(siteDirectory);
     await writeFile(path.join(siteDirectory, 'index.html'), '<link rel="stylesheet" href="./style.css">');
@@ -275,21 +280,23 @@ describe('DesktopNativeBridgeServer', () => {
 
     const server = createFilePreviewServer();
     await server.start();
-    const previewUrl = server.registerFilePreview({
-      mimeType: 'text/html',
-      name: 'index.html',
-      targetPath: await realpath(path.join(siteDirectory, 'index.html')),
-      workspaceRoot: await realpath(workspaceRoot),
-    });
+    const draft = '<link rel="stylesheet" href="./style.css"><h1>Unsaved draft</h1>';
+    const preview = await createWorkspaceFilePreviewUrl(workspaceRoot, 'site/index.html',
+      (input) => server.registerManagedFilePreview(input), { htmlContent: draft, sandbox: true });
+    if (!preview.ok) throw new Error(preview.error);
+    const previewUrl = preview.url;
 
     expect(decodeURIComponent(new URL(previewUrl).pathname)).toMatch(/\/site\/index\.html$/u);
     const htmlResponse = await fetch(previewUrl);
     expect(htmlResponse.headers.get('content-type')).toBe('text/html');
-    expect(await htmlResponse.text()).toContain('./style.css');
+    expect(htmlResponse.headers.get('content-security-policy')).toBe('sandbox allow-scripts');
+    expect(await htmlResponse.text()).toBe(draft);
+    expect(await readFile(path.join(siteDirectory, 'index.html'), 'utf8')).not.toContain('Unsaved draft');
 
     const stylesheetResponse = await fetch(new URL('./style.css', previewUrl));
     expect(stylesheetResponse.status).toBe(200);
     expect(stylesheetResponse.headers.get('content-type')).toBe('text/css');
+    expect(stylesheetResponse.headers.get('access-control-allow-origin')).toBe('*');
     expect(await stylesheetResponse.text()).toBe('body { color: tomato; }');
 
     const parentResourceResponse = await fetch(new URL('../manifest.json', previewUrl));
@@ -299,6 +306,39 @@ describe('DesktopNativeBridgeServer', () => {
 
     const escapedResourceResponse = await fetch(new URL('../linked-outside/secret.txt', previewUrl));
     expect(escapedResourceResponse.status).toBe(404);
+    await expect(createWorkspaceFilePreviewUrl(workspaceRoot, 'manifest.json',
+      (input) => server.registerManagedFilePreview(input), { htmlContent: '<script>bad()</script>' })).resolves.toMatchObject({ ok: false });
+    await expect(createWorkspaceFilePreviewUrl(workspaceRoot, 'site/index.html',
+      (input) => server.registerManagedFilePreview(input), { htmlContent: 'é'.repeat(WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES / 2 + 1) })).resolves.toMatchObject({ ok: false });
+    server.releaseFilePreview(preview.previewId);
+    expect((await fetch(new URL('./style.css', previewUrl))).status).toBe(404);
+    const browserPreview = await createWorkspaceFilePreviewUrl(workspaceRoot, 'site/index.html',
+      (input) => server.registerManagedFilePreview(input));
+    if (!browserPreview.ok) throw new Error(browserPreview.error);
+    const browserResponse = await fetch(browserPreview.url);
+    expect(browserResponse.headers.get('content-security-policy')).toBeNull();
+    expect(await browserResponse.text()).not.toContain('Unsaved draft');
+    server.releaseFilePreview(browserPreview.previewId);
+  });
+
+  it('serves versioned HTML resources only inside the registered namespace', async () => {
+    const server = createFilePreviewServer();
+    const connection = await server.start();
+    const readResource = vi.fn(async (resourcePath: string) => resourcePath === path.join('site', 'app.js') ? Buffer.from('export const version = 1;') : null);
+    const preview = server.registerManagedFilePreview({
+      name: 'index.html', resourcePath: path.join('site', 'index.html'), mimeType: 'text/html',
+      content: Buffer.from('<script type="module" src="./app.js"></script>'), readResource,
+    });
+    const script = await fetch(new URL('./app.js', preview.url));
+    expect(script.status).toBe(200);
+    expect(script.headers.get('content-type')).toBe('text/javascript');
+    expect(await script.text()).toBe('export const version = 1;');
+    expect((await fetch(`${connection.url}/v1/file-previews/${preview.previewId}/%2e%2e%2fsecret.txt`)).status).toBe(404);
+    expect(readResource).toHaveBeenCalledExactlyOnceWith(path.join('site', 'app.js'));
+    server.releaseFilePreview(preview.previewId);
+    expect((await fetch(preview.url)).status).toBe(404);
+    expect((await fetch(new URL('./app.js', preview.url))).status).toBe(404);
+    expect(readResource).toHaveBeenCalledOnce();
   });
 
   it('streams ranges of a large video and stops disk reads when the player disconnects', async () => {

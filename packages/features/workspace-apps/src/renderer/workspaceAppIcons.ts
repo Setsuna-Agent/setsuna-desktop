@@ -18,6 +18,10 @@ import webstormIconUrl from './assets/webstorm.svg';
 import windsurfIconUrl from './assets/windsurf.svg';
 import xcodeIconUrl from './assets/xcode.svg';
 import zedIconUrl from './assets/zed.svg';
+import chromeIconUrl from './assets/chrome.svg';
+import edgeIconUrl from './assets/edge.svg';
+import firefoxIconUrl from './assets/firefox.svg';
+import safariIconUrl from './assets/safari.svg';
 
 export type WorkspaceAppIconAsset = {
   src: string;
@@ -29,6 +33,10 @@ function monochromeIcon(src: string): WorkspaceAppIconAsset {
 }
 
 export const workspaceAppIconAssets: Readonly<Record<string, WorkspaceAppIconAsset>> = {
+  'google-chrome': { src: chromeIconUrl },
+  'microsoft-edge': { src: edgeIconUrl },
+  firefox: { src: firefoxIconUrl },
+  safari: { src: safariIconUrl },
   vscode: { src: vscodeIconUrl },
   'vscode-insiders': { src: vscodeIconUrl },
   cursor: monochromeIcon(cursorIconUrl),

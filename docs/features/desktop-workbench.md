@@ -167,13 +167,17 @@ Windows Sandbox 横跨 runtime/main/preload/renderer，并拥有 Rust sidecar、
 
 Workspace Apps 拥有 IDE/系统应用检测、结构化启动参数、preload bridge、launcher、图标和偏好。它支持 VS Code/Cursor、JetBrains、Finder/Explorer、Terminal 等平台应用，但 renderer 只传稳定 app ID、workspace root、相对文件路径和可选行号。
 
+HTML/HTM 文件的打开方式还会显示已安装的 Microsoft Edge、Safari（macOS）、Google Chrome 和 Firefox。浏览器使用规范化文件 URL，不拼接代码行号；浏览器偏好只适用于 HTML，项目和其他文件回退到可用的普通应用。浏览器检测沿用按项目加载应用列表的链路，不加入启动就绪等待。
+
 关键规则：
 
 - Main 根据平台重新检测 app，并规范化 workspace/file path。
-- 命令使用结构化参数，不通过 shell 字符串拼接。
+- Renderer 只传结构化参数；终端打开文件由 Main 构造固定编辑命令，路径必须按目标 shell 转义，不接收任意命令。
 - 应用不存在、已移动、路径无效或启动失败要返回明确结果。
 - Renderer Feature 拥有图标、文案和 launcher；宿主 Workspace 只提供当前 project/panel 接缝。
 - Main/preload/renderer 都是 required，因为 workspace launcher 是基础工作台能力；该 Feature 不需要 runtime entry。
+
+Terminal 打开文件时启动 Vim 并传入绝对文件路径和可选行号，项目级入口仍打开项目目录。macOS 用固定 AppleScript 向新 Terminal 会话发送已转义的命令；Windows 使用 PATH 中的 `vim.exe`，通过 Windows Terminal 或独立 PowerShell 窗口运行，路径放入 UTF-16LE 编码的 PowerShell 命令以避开 cmd 展开和 Terminal 分号解析。Windows 未找到 Vim 时返回现有操作错误反馈，不降级为仅打开目录。启动命令只在用户点击时构造。
 
 ## 修改原生 Feature 的检查表
 

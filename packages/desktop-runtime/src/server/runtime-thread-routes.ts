@@ -50,6 +50,7 @@ export async function handleRuntimeThreadRequest(
     const query: ThreadQuery = {
       search: url.searchParams.get('search') ?? undefined,
       includeArchived: url.searchParams.get('includeArchived') === 'true',
+      includeFeatures: url.searchParams.get('includeFeatures') === 'true',
       ancestorThreadId: url.searchParams.get('ancestorThreadId') ?? undefined,
       parentThreadId: url.searchParams.get('parentThreadId') ?? undefined,
       scope: threadScope(url.searchParams.get('scope')),

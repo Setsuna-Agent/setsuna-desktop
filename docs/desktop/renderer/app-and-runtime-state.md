@@ -132,7 +132,7 @@ Layout 只组合已经定义清楚的状态和 callback，不在 render 中发�
 - `SidebarThreadHoverCard.tsx`：展示完整标题、项目名与最近更新时间，只使用列表 summary 和父级项目名称，不额外加载消息。
 - `SidebarProjectHoverCard.tsx`：展示项目名、侧栏对话数量和绑定目录，提供编辑项目入口；鼠标可移入卡片操作。
 - `useThreadGroups.ts`：按时间/状态分组的纯投影。
-- `SidebarSearchOverlay.tsx`：本地线程查找。
+- `SidebarSearchOverlay.tsx`：统一搜索入口，按全部、操作、对话、文件和文本分栏；操作目录复用 settings contribution 与侧栏应用名称，文件和文本可切换项目，文本支持多个文件后缀。文件侧栏工具栏的搜索按钮直接打开当前项目的文本分栏。
 - `SidebarUserMenu.tsx` / `SidebarFloatingMenu.tsx`：入口菜单。
 
 侧栏顶部命令、项目与设置入口共享 `sidebar.css` 的前导中心和文字起点变量。macOS 下前导中心使用页面缩放倒数锁定到原生关闭按钮的视觉圆心，避免 CSS zoom 改变后图标横向漂移。
@@ -140,6 +140,10 @@ Layout 只组合已经定义清楚的状态和 callback，不在 render 中发�
 聊天侧栏的命令、项目、会话和展开入口共用 14px / 20px，字体族与页面缩放沿用用户偏好；会话名称字重跟随设置中的 `--app-font-weight`，其余导航文字使用 500 字重。列表行高为 30px、行间距为 1px；展开的项目内容末尾保留 8px 分组间隔，随折叠内容一起收起。项目名、会话标题和展开入口共用文字起点，分组标题与展开入口使用同一档次要文字色。
 
 线程 summary 来自 runtime list API；当前 thread 的完整消息不应复制到 sidebar state。
+
+搜索面板挂载后才发起请求，输入防抖并按查询、分类、项目及后缀隔离迟到结果。对话搜索跨项目并包含归档及 Feature 主对话；子会话不进入列表。项目搜索对绑定目录限制并发，一个目录失败保留其他目录的结果，失败沿用 Toast。文件结果携带项目和目录身份，文本结果再携带行号；跨项目先完成导航及未保存确认，再由目标工作区打开文件，切目录保留匹配行。
+
+文件名查询通过 `searchProjectEntries(..., { filesOnly: true })` 在结果限额前排除目录；正文通过 `searchProject(..., { fileExtensions })` 由 runtime 的 ripgrep / JavaScript 引擎在扫描和结果限额前筛选后缀。后缀按字面量处理，不允许用任意 glob 绕过工作区忽略规则。
 
 ## Runtime client
 

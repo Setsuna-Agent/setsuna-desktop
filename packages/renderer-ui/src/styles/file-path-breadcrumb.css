@@ -1,28 +1,38 @@
-.sd-file-breadcrumb,
-.sd-file-breadcrumb__parents,
-.sd-file-breadcrumb__segments {
+.sd-file-breadcrumb {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.sd-file-breadcrumb__content,
+.sd-file-breadcrumb__measure {
+  grid-area: 1 / 1;
   display: inline-flex;
   align-items: center;
   min-width: 0;
 }
 
-.sd-file-breadcrumb {
-  flex: 0 1 auto;
-  gap: 2px;
+.sd-file-breadcrumb__measure {
+  position: relative;
+  width: max-content;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
-/* Clip the oldest directories first while keeping the filename at the trailing edge. */
-.sd-file-breadcrumb__parents {
-  flex: 0 1 auto;
-  justify-content: flex-end;
-  overflow: hidden;
+.sd-file-breadcrumb__ellipsis-measure {
+  position: absolute;
 }
 
-.sd-file-breadcrumb__segments {
+.sd-file-breadcrumb__parent {
+  display: inline-flex;
   flex: 0 0 auto;
+  align-items: center;
+  padding-right: 2px;
 }
 
-.sd-file-breadcrumb__segments > svg {
+.sd-file-breadcrumb__parent > svg {
   flex: 0 0 auto;
   color: var(--app-text-subtle);
 }
@@ -36,8 +46,14 @@
   font-size: 12px;
 }
 
+.sd-file-breadcrumb__segment.sd-button:is(:hover, :active, [data-overlay-open]):not(:disabled) {
+  color: var(--app-text);
+  background: transparent;
+}
+
 .sd-file-breadcrumb__segment.is-current {
   flex: 0 1 auto;
+  max-width: 100%;
   color: var(--app-text);
 }
 
@@ -45,6 +61,19 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ancestors yield first; an oversized filename wraps instead of losing its suffix. */
+.sd-file-breadcrumb__segment.is-current > span {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.sd-file-breadcrumb__measure .sd-file-breadcrumb__segment > span {
   white-space: nowrap;
 }
 

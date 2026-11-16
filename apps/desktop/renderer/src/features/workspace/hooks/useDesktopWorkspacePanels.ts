@@ -616,13 +616,19 @@ export function useDesktopWorkspacePanels({
     resetPanelSession(chatComposerTargetIdentity(threadId, null));
   }, [resetPanelSession]);
 
-  const closeDesktopPanelItem = useCallback(
-    (slot: DesktopPanelSlot, panelId: string) => {
+  const closeDesktopPanelItems = useCallback(
+    (slot: DesktopPanelSlot, panelIds: readonly string[]) => {
       const slotState = slot === 'side' ? sidePanelSlot : bottomPanelSlot;
-      const panel = slotState.panels.find((item) => item.id === panelId);
-      if (panel?.type === 'commit-message') closeCommitMessageEditor(panelId);
-      if (panel?.type === 'terminal') closeTerminalSessionsForPanel(panel.id);
-      const updater = (current: DesktopPanelSlotState) => removePanelFromSlotState(current, panelId);
+      const ids = new Set(panelIds);
+      const closing = slotState.panels.filter((panel) => ids.has(panel.id));
+      if (!closing.length) return;
+      for (const panel of closing) {
+        if (panel.type === 'commit-message') closeCommitMessageEditor(panel.id);
+        if (panel.type === 'terminal') closeTerminalSessionsForPanel(panel.id);
+      }
+      const updater = (current: DesktopPanelSlotState) => closing.reduce(
+        (remaining, panel) => removePanelFromSlotState(remaining, panel.id), current,
+      );
       if (slot === 'side') {
         setSidePanelSlot(updater);
         return;
@@ -631,6 +637,10 @@ export function useDesktopWorkspacePanels({
     },
     [bottomPanelSlot, closeCommitMessageEditor, closeTerminalSessionsForPanel, setBottomPanelSlot, setSidePanelSlot, sidePanelSlot],
   );
+
+  const closeDesktopPanelItem = useCallback((slot: DesktopPanelSlot, panelId: string) => {
+    closeDesktopPanelItems(slot, [panelId]);
+  }, [closeDesktopPanelItems]);
 
   const closeActiveSidePanel = useCallback(() => {
     if (!sidePanelVisible || !sideActivePanel) return;
@@ -718,6 +728,7 @@ export function useDesktopWorkspacePanels({
       claimForThread,
       closeActiveSidePanel,
       closeDesktopPanelItem,
+      closeDesktopPanelItems,
       closeDesktopPanelSlot,
       closeWorkspaceMenus,
       copyWorkspaceFilePath,
@@ -776,6 +787,7 @@ export function useDesktopWorkspacePanels({
       claimForThread,
       closeActiveSidePanel,
       closeDesktopPanelItem,
+      closeDesktopPanelItems,
       closeDesktopPanelSlot,
       closeWorkspaceMenus,
       copyWorkspaceFilePath,

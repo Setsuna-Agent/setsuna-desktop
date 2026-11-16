@@ -29,6 +29,8 @@ export type WorkspaceTextSearchRequest = {
   includeIgnored?: boolean;
   excludeRoots?: readonly string[];
   excludeGlobs?: readonly string[];
+  /** Normalized literal suffixes, applied before scanning and the result limit. */
+  fileExtensions?: readonly string[];
   signal?: AbortSignal;
 };
 

@@ -286,6 +286,7 @@ describe('desktop review state actions', () => {
     const registeredFiles: string[] = [];
     const registeredContent: Buffer[] = [];
     const previews: ReviewFilePreviewRegistry = {
+      registerHtmlPreview: () => { throw new Error('Expected an image preview.'); },
       createWorkspacePreview: async (_workspaceRoot, filePath) => {
         const targetPath = await realpath(path.join(repo, filePath));
         registeredFiles.push(targetPath);
@@ -369,6 +370,7 @@ describe('desktop review state actions', () => {
         registeredContent.push(Buffer.from(input.content));
         return { previewId: 'content-preview', url: 'content:preview' };
       },
+      registerHtmlPreview: () => { throw new Error('Expected an image preview.'); },
       release: () => false,
     });
     expect(preview).toEqual({

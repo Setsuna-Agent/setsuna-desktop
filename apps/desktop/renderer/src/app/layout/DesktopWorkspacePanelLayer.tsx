@@ -185,6 +185,7 @@ export type DesktopWorkspacePanelModel = Readonly<{
     onReviewSourceChange(source: DesktopReviewSource): void;
     onRevealFile(filePath: string): void;
     onSearchProjectEntries(query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
+    onSearchProjectText(): void;
     onSelectModel: ChatModelSelectionHandler;
     onSideChatError: Dispatch<SetStateAction<string | null>>;
     onStartThreadReview(target: ReviewTarget, modelSelection?: RuntimeConfiguredModelReference): Promise<unknown>;
@@ -280,6 +281,7 @@ export function DesktopWorkspacePanelLayer({
     onOpenConversationDebug: panels.conversationDebugEnabled ? actions.onOpenConversationDebug : undefined,
     onOpenEntry: actions.onOpenEntry,
     onSearchProjectEntries: actions.onSearchProjectEntries,
+    onSearchProjectText: actions.onSearchProjectText,
     onOpenFilesPanel: actions.onOpenFilesPanel,
     onOpenFileWithApp: actions.onOpenFileWithApp,
     onOpenProjectFile: actions.onOpenProjectFile,

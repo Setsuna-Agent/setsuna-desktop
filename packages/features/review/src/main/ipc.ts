@@ -12,6 +12,7 @@ import {
 import { DesktopReviewChangeMonitor } from './change-monitor.js';
 import { createGitHubCommitAvatarLoader } from './github-commit-avatar.js';
 import { createReviewImagePreviewUrl } from './image-preview.js';
+import { createReviewHtmlPreviewUrl } from './html-preview.js';
 import { readReviewTextFile } from './text-file.js';
 import { readReviewDocumentFile } from './document-file.js';
 import { getDesktopGitCommitDetails, getDesktopGitCommitFileDiff, getDesktopGitHistory } from './history.js';
@@ -44,7 +45,8 @@ const handlerChannels = [
   REVIEW_IPC_CHANNELS.readTextFile,
   REVIEW_IPC_CHANNELS.readDocumentFile,
   REVIEW_IPC_CHANNELS.createImagePreview,
-  REVIEW_IPC_CHANNELS.releaseImagePreview,
+  REVIEW_IPC_CHANNELS.createHtmlPreview,
+  REVIEW_IPC_CHANNELS.releaseFilePreview,
   REVIEW_IPC_CHANNELS.subscribeChanges,
   REVIEW_IPC_CHANNELS.unsubscribeChanges,
   REVIEW_IPC_CHANNELS.discardUnstaged,
@@ -134,6 +136,13 @@ export function registerReviewIpc(scope: FeatureScope, dependencies: ReviewIpcDe
     const input = inputRecord(value);
     return readReviewDocumentFile(input.workspaceRoot, input.version);
   });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.createHtmlPreview, (event, value) => {
+    if (!dependencies.rendererSender.isAllowed(event.sender.id) || event.senderFrame !== event.sender.mainFrame) {
+      return { ok: false, error: 'Desktop renderer is unavailable.' };
+    }
+    const input = inputRecord(value);
+    return createReviewHtmlPreviewUrl(input.workspaceRoot, input.version, dependencies.previews);
+  });
   registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.createImagePreview, (event, value) => {
     const input = inputRecord(value);
     if (!dependencies.rendererSender.isAllowed(event.sender.id)) {
@@ -145,7 +154,7 @@ export function registerReviewIpc(scope: FeatureScope, dependencies: ReviewIpcDe
       dependencies.previews,
     );
   });
-  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.releaseImagePreview, (event, rawPreviewId) => {
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.releaseFilePreview, (event, rawPreviewId) => {
     if (!dependencies.rendererSender.isAllowed(event.sender.id)) return false;
     const previewId = String(rawPreviewId ?? '');
     return /^[a-f0-9]{48}$/u.test(previewId) && dependencies.previews.release(previewId);

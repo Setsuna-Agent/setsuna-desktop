@@ -190,7 +190,20 @@ const shellRegionsPlugin = defineRendererPlugin({
       ),
     });
     registerDefaultSingle(ui, shellWorkspaceToolbarSlot, 'shell.workspace-toolbar.default');
-    registerDefaultSingle(ui, shellOverlaySlot, 'shell.overlay.default');
+    ui.single(shellOverlaySlot, {
+      id: 'shell.overlay.default',
+      priority: 0,
+      // Global search reads navigation metadata from the same contributions as the routes.
+      children: [
+        declareRendererChildSlot(settingsPageSlot),
+        declareRendererChildSlot(shellPluginPageSlot),
+      ],
+      render: ({ renderDefault }, slots) => (
+        <RendererOwnedSlotsProvider slots={slots}>
+          {renderDefault()}
+        </RendererOwnedSlotsProvider>
+      ),
+    });
   },
 });
 

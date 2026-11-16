@@ -151,12 +151,13 @@ describe('RipgrepWorkspaceSearchEngine', () => {
       await Promise.all([
         writeFile(path.join(root, '.gitignore'), 'ignored.txt\n'),
         writeFile(path.join(root, '.rgignore'), 'rg-only-ignore.txt\n'),
-        writeFile(path.join(root, '.setsunaignore'), 'custom-ignored.txt\n'),
+        writeFile(path.join(root, '.setsunaignore'), 'custom-ignored.txt\ncustom-ignored.ts\n'),
         writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
         writeFile(path.join(root, '.github', 'workflow.yml'), 'name: NEEDLE hidden source\n'),
         writeFile(path.join(root, 'ignored.txt'), 'NEEDLE ignored\n'),
         writeFile(path.join(root, 'rg-only-ignore.txt'), 'NEEDLE must remain searchable\n'),
         writeFile(path.join(root, 'custom-ignored.txt'), 'NEEDLE ignored custom\n'),
+        writeFile(path.join(root, 'custom-ignored.ts'), 'NEEDLE ignored source\n'),
         writeFile(path.join(root, 'src', '你好.ts'), 'NEEDLE one\nNEEDLE two\n'),
         writeFile(outside, 'NEEDLE outside\n'),
       ]);
@@ -176,6 +177,9 @@ describe('RipgrepWorkspaceSearchEngine', () => {
       expect(all.matches.filter((match) => match.path === 'src/你好.ts')).toHaveLength(2);
       expect(limited.matches).toHaveLength(1);
       expect(limited.truncated).toBe(true);
+      const typed = await engine.search(request(root, { fileExtensions: ['*.TS'], maxResults: 1, regex: false }));
+      expect(typed.matches).toMatchObject([{ path: 'src/你好.ts', lineNumber: 1 }]);
+      expect(typed.truncated).toBe(true);
     },
   );
 

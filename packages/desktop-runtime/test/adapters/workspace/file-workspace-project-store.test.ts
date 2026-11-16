@@ -4,7 +4,7 @@ import {
   resolveWorkspaceConversationDefaults,
   type WorkspaceProjectIcon,
 } from '@setsuna-desktop/contracts';
-import { access, lstat, mkdir, mkdtemp, readFile, realpath, rename, symlink, truncate, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -21,6 +21,23 @@ const ONE_PIXEL_PNG = Buffer.from(
 );
 
 describe('file workspace project store', () => {
+  it('keeps directory matches from exhausting a files-only search', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-files-only-'));
+    const projectDir = path.join(root, 'project');
+    try {
+      await mkdir(projectDir);
+      await Promise.all(Array.from({ length: 85 }, (_, index) => mkdir(path.join(projectDir, `match-${index}`))));
+      await writeFile(path.join(projectDir, 'match-file.ts'), 'needle');
+      const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock);
+      const project = await store.addProject({ path: projectDir });
+      const result = await store.searchEntries(project.id, 'match', undefined, { filesOnly: true });
+      expect(result.entries.map((entry) => entry.path)).toEqual(['match-file.ts']);
+      expect(result.truncated).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('persists live project following and rejects missing sources and cycles without changing saved defaults', async () => {
     const fixture = await createWorkspaceFixture();
     const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);

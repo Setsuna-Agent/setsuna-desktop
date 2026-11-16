@@ -1,7 +1,7 @@
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
 import type {
   DesktopCommitMessageGenerationSource,
-  DesktopReviewImagePreviewResult,
+  DesktopReviewFilePreviewResult,
 } from './bridge.js';
 
 export interface ReviewCommitMessageGenerator {
@@ -12,11 +12,16 @@ export interface ReviewCommitMessageGenerator {
 }
 
 export interface ReviewFilePreviewRegistry {
-  createWorkspacePreview(workspaceRoot: string, filePath: string): Promise<DesktopReviewImagePreviewResult>;
+  createWorkspacePreview(workspaceRoot: string, filePath: string): Promise<DesktopReviewFilePreviewResult>;
   registerContentPreview(input: Readonly<{
     content: Uint8Array;
     mimeType: string;
     name: string;
+  }>): Readonly<{ previewId: string; url: string }>;
+  registerHtmlPreview(input: Readonly<{
+    filePath: string;
+    content: string;
+    readResource(filePath: string): Promise<Uint8Array | null>;
   }>): Readonly<{ previewId: string; url: string }>;
   release(previewId: string): boolean;
 }
@@ -32,7 +37,7 @@ export const reviewCommitMessageCapability: CapabilityToken<ReviewCommitMessageG
 
 export const reviewFilePreviewCapability: CapabilityToken<ReviewFilePreviewRegistry> = defineCapability({
   id: 'desktop-review.file-previews',
-  description: 'Host-owned authenticated file preview registrations for review images',
+  description: 'Host-owned file preview registrations for review images and HTML documents',
 });
 
 export const reviewRendererSenderCapability: CapabilityToken<ReviewRendererSenderPolicy> = defineCapability({

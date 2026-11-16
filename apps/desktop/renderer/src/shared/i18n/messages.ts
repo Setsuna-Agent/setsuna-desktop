@@ -11,6 +11,7 @@ import { taskModelEnUS, taskModelZhCN } from './taskModelMessages.js';
 import { networkProxyEnUS, networkProxyZhCN } from './networkProxyMessages.js';
 import { projectEnUS, projectZhCN } from './projectMessages.js';
 import { toolRunEnUS, toolRunZhCN } from './toolRunMessages.js';
+import { searchEnUS, searchZhCN } from './searchMessages.js';
 import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
 
 const zhCN = {
@@ -529,14 +530,9 @@ const zhCN = {
   'sidebar.deleteChatTitle': '彻底删除“{title}”？',
   'sidebar.showMoreLabel': '再显示 {count} 个对话',
   'sidebar.showMore': '显示更多',
-  'sidebar.searchDialog': '搜索对话',
+  ...searchZhCN,
   'sidebar.projectFallback': '项目',
   'sidebar.searchResults': '搜索结果',
-  'sidebar.recentChats': '近期对话',
-  'sidebar.indexing': '索引中',
-  'sidebar.indexingContent': '正在索引会话内容',
-  'sidebar.noResults': '未找到对话',
-  'sidebar.noRecentChats': '暂无近期对话',
   'sidebar.moreActions': '更多操作',
   'sidebar.openSettings': '打开设置',
   'sidebar.switchToLightTheme': '切换到浅色模式',
@@ -1090,14 +1086,9 @@ const enUS = {
   'sidebar.deleteChatTitle': 'Permanently delete “{title}”?',
   'sidebar.showMoreLabel': 'Show {count} more chats',
   'sidebar.showMore': 'Show more',
-  'sidebar.searchDialog': 'Search chats',
+  ...searchEnUS,
   'sidebar.projectFallback': 'Project',
   'sidebar.searchResults': 'Search results',
-  'sidebar.recentChats': 'Recent chats',
-  'sidebar.indexing': 'Indexing',
-  'sidebar.indexingContent': 'Indexing chat content',
-  'sidebar.noResults': 'No chats found',
-  'sidebar.noRecentChats': 'No recent chats',
   'sidebar.moreActions': 'More actions',
   'sidebar.openSettings': 'Open settings',
   'sidebar.switchToLightTheme': 'Switch to light mode',

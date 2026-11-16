@@ -1,5 +1,6 @@
 import { resolveWorkspaceFileReference, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { useCallback } from 'react';
+import { resolveWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { DesktopWorkspaceApp } from '../model.js';
 
@@ -34,10 +35,11 @@ export function useWorkspaceFileActions(
 
   const openFileInWorkspaceApp = useCallback(
     async (filePath?: string | null, line?: number) => {
-      if (!selectedWorkspaceApp) return;
-      await openFileWithWorkspaceApp(selectedWorkspaceApp.id, filePath, line);
+      const app = resolveWorkspaceApp(workspaceApps, selectedWorkspaceApp, filePath);
+      if (!app) return;
+      await openFileWithWorkspaceApp(app.id, filePath, line);
     },
-    [openFileWithWorkspaceApp, selectedWorkspaceApp],
+    [openFileWithWorkspaceApp, selectedWorkspaceApp, workspaceApps],
   );
 
   const copyWorkspaceFilePath = useCallback(async (filePath: string) => {

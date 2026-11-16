@@ -1,9 +1,12 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import type { DesktopWorkspaceApp } from '../contracts/index.js';
+import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
+import { workspaceAppSupportsTarget, type DesktopWorkspaceApp } from '../contracts/index.js';
+import { macTerminalFileLaunchSpec, windowsTerminalFileLaunchSpec } from './terminal-file-launch.js';
 
 type WorkspaceAppDefinition = DesktopWorkspaceApp & {
   macAppName?: string;
@@ -25,6 +28,8 @@ type WorkspaceAppOpenInput = {
 
 type WorkspaceAppLaunchSpec = { program: string; args: string[]; windowsHide?: boolean };
 type WorkspaceAppSpawnSpec = WorkspaceAppLaunchSpec & { windowsVerbatimArguments?: boolean };
+
+const execFileAsync = promisify(execFile);
 
 const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
   {
@@ -125,11 +130,50 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     macPaths: ['/Applications/WebStorm.app', '${HOME}/Applications/WebStorm.app'],
     windowsCommands: ['webstorm64.exe', 'webstorm.bat'],
   },
+  {
+    id: 'microsoft-edge', label: 'Microsoft Edge', icon: 'microsoft-edge', kind: 'browser',
+    macAppName: 'Microsoft Edge',
+    macPaths: ['/Applications/Microsoft Edge.app', '${HOME}/Applications/Microsoft Edge.app'],
+    windowsCommands: ['msedge.exe'],
+    windowsPaths: [
+      ['ProgramFiles', 'Microsoft\\Edge\\Application\\msedge.exe'],
+      ['ProgramFiles(x86)', 'Microsoft\\Edge\\Application\\msedge.exe'],
+      ['LOCALAPPDATA', 'Microsoft\\Edge\\Application\\msedge.exe'],
+    ],
+  },
+  {
+    id: 'safari', label: 'Safari', icon: 'safari', kind: 'browser',
+    macAppName: 'Safari',
+    macPaths: ['/Applications/Safari.app', '/System/Applications/Safari.app'],
+  },
+  {
+    id: 'google-chrome', label: 'Google Chrome', icon: 'google-chrome', kind: 'browser',
+    macAppName: 'Google Chrome',
+    macPaths: ['/Applications/Google Chrome.app', '${HOME}/Applications/Google Chrome.app'],
+    windowsCommands: ['chrome.exe'],
+    windowsPaths: [
+      ['ProgramFiles', 'Google\\Chrome\\Application\\chrome.exe'],
+      ['ProgramFiles(x86)', 'Google\\Chrome\\Application\\chrome.exe'],
+      ['LOCALAPPDATA', 'Google\\Chrome\\Application\\chrome.exe'],
+    ],
+  },
+  {
+    id: 'firefox', label: 'Firefox', icon: 'firefox', kind: 'browser',
+    macAppName: 'Firefox',
+    macPaths: ['/Applications/Firefox.app', '${HOME}/Applications/Firefox.app'],
+    windowsCommands: ['firefox.exe'],
+    windowsPaths: [
+      ['ProgramFiles', 'Mozilla Firefox\\firefox.exe'],
+      ['ProgramFiles(x86)', 'Mozilla Firefox\\firefox.exe'],
+      ['LOCALAPPDATA', 'Mozilla Firefox\\firefox.exe'],
+    ],
+  },
 ];
 
 export async function listWorkspaceApps(workspaceRoot: string): Promise<DesktopWorkspaceApp[]> {
   await resolveWorkspaceDirectory(workspaceRoot);
-  return WORKSPACE_APPS.filter((definition) => workspaceAppIsAvailable(definition)).map(({ id, label, icon }) => ({ id, label, icon }));
+  return WORKSPACE_APPS.filter((definition) => workspaceAppIsAvailable(definition))
+    .map(({ id, label, icon, kind }) => ({ id, label, icon, ...(kind ? { kind } : {}) }));
 }
 
 export async function openWorkspaceApp(input: WorkspaceAppOpenInput): Promise<boolean> {
@@ -139,13 +183,20 @@ export async function openWorkspaceApp(input: WorkspaceAppOpenInput): Promise<bo
   if (!definition) throw new Error('应用不存在。');
 
   const target = await workspaceAppFileTarget(workspaceRoot, input.filePath);
+  if (!workspaceAppSupportsTarget(definition, target)) throw new Error('请选择 HTML 文件后再使用浏览器打开。');
   if (process.platform === 'win32' && definition.id === 'explorer') {
     await openWindowsExplorer(workspaceRoot, target);
     return true;
   }
 
   const spec = workspaceAppLaunchSpec(definition, workspaceRoot, target, input.line ?? undefined);
-  spawnWorkspaceApp(spec);
+  if (definition.id === 'terminal' && target) {
+    // These short-lived launchers return after creating the terminal session.
+    // Surface native launch errors through the existing IPC/Toast path.
+    await execFileAsync(spec.program, spec.args, { windowsHide: true });
+  } else {
+    spawnWorkspaceApp(spec);
+  }
   return true;
 }
 
@@ -221,6 +272,8 @@ function macWorkspaceAppLaunchSpec(
 ): WorkspaceAppLaunchSpec {
   const appName = installedMacWorkspaceAppName(definition);
   if (filePath) {
+    if (definition.kind === 'browser' && appName) return { program: 'open', args: ['-a', appName, pathToFileURL(filePath).href] };
+    if (definition.id === 'terminal') return macTerminalFileLaunchSpec(workspaceRoot, filePath, line);
     const scheme = workspaceAppFileUriScheme(definition.id);
     if (scheme) return { program: 'open', args: [workspaceAppFileUri(scheme, filePath, line)] };
     const lineAwareEditorSpec = macLineAwareWorkspaceAppLaunchSpec(
@@ -290,10 +343,14 @@ function windowsWorkspaceAppLaunchSpec(
       : { program: 'explorer.exe', args: [workspaceRoot] };
   }
   if (definition.id === 'terminal') {
+    if (filePath) return windowsTerminalFileLaunchSpec(workspaceRoot, filePath, {
+      line, terminalPath: findCommandInPath('wt.exe'), editorPath: findCommandInPath('vim.exe'),
+    });
     return windowsTerminalLaunchSpec(workspaceRoot, findCommandInPath('wt.exe'));
   }
   const program = resolveWindowsWorkspaceAppProgram(definition);
   if (!program) throw new Error('当前系统不支持此应用。');
+  if (definition.kind === 'browser' && filePath) return { program, args: [pathToFileURL(filePath).href] };
   return { program, args: filePath ? workspaceAppFileArgs(definition.id, filePath, line) : [workspaceRoot] };
 }
 

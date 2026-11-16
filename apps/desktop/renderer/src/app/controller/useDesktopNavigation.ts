@@ -13,6 +13,7 @@ import type { MainView } from '../types.js';
 import { isFeatureConversationView } from '../mainViews.js';
 import { isThreadDeletionCancelled, runtimeClientErrorMessage, RuntimeClientError } from '../../services/runtime-client/runtimeClientErrors.js';
 import { isHomeConversationThread } from '../../services/runtime-client/runtimeThreadRelations.js';
+import type { SidebarSearchCategory } from '../sidebar/sidebarSearchTypes.js';
 
 type DesktopNavigationOptions = {
   activeProjectId: string | null;
@@ -59,7 +60,10 @@ export function useDesktopNavigation({
   setProjects,
   threadsByProjectId,
 }: DesktopNavigationOptions) {
-  const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
+  const [sidebarSearchTarget, setSidebarSearchTarget] = useState<{
+    category: SidebarSearchCategory;
+    projectId: string | null;
+  } | null>(null);
   const [sidebarSearchValue, setSidebarSearchValue] = useState('');
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
@@ -73,6 +77,11 @@ export function useDesktopNavigation({
   const navigationRequests = useLatestRequestGuard();
   const currentProjectId = currentThread ? currentThread.projectId ?? null : activeProjectId;
   const currentWorkspaceId = currentThread?.workspaceId ?? currentThread?.projectId ?? currentThread?.id ?? activeProjectId;
+  const openSidebarSearch = useCallback((category: SidebarSearchCategory = 'all') => {
+    setSidebarSearchValue('');
+    setSidebarSearchTarget({ category, projectId: currentProjectId });
+  }, [currentProjectId]);
+  const closeSidebarSearch = useCallback(() => setSidebarSearchTarget(null), []);
   const activeViewRef = useRef(activeView);
   activeViewRef.current = activeView;
   const chatBeforeFeatureView = useRef<{ threadId: string | null; projectId: string | null } | null>(null);
@@ -180,8 +189,8 @@ export function useDesktopNavigation({
 
   const startProjectThread = useCallback(
     async (projectId: string, draftId: string | null = null) => {
-      if (!await confirmDiscardProjectFile()) return;
-      navigationRequests.invalidate();
+      const isLatest = navigationRequests.begin();
+      if (!await confirmDiscardProjectFile() || !isLatest()) return false;
       setActiveView('chat');
       setThreadActionMenuId(null);
       setProjectActionMenuId(null);
@@ -190,6 +199,7 @@ export function useDesktopNavigation({
       setNewThreadDraftId?.(draftId);
       expandProject(projectId);
       setCurrentThread(null);
+      return true;
     },
     [confirmDiscardProjectFile, currentWorkspaceId, expandProject, navigationRequests, resetProjectWorkspaceState, setActiveProjectId, setActiveView, setCurrentThread, setNewThreadDraftId],
   );
@@ -468,12 +478,14 @@ export function useDesktopNavigation({
     changeView,
     deleteThread,
     closeNavigationMenus,
+    closeSidebarSearch,
     closeRenameThread,
     collapsedProjectIds,
     expandProject,
     editProject,
     forceExpandedProjectIds,
     openRenameThread,
+    openSidebarSearch,
     closeProjectEditor,
     openCreateProject,
     projectEditor,
@@ -494,10 +506,10 @@ export function useDesktopNavigation({
     setProjectsCollapsed,
     setRenameThreadTitle,
     setSessionsCollapsed,
-    setSidebarSearchOpen,
     setSidebarSearchValue,
     setThreadActionMenuId,
-    sidebarSearchOpen,
+    sidebarSearchOpen: sidebarSearchTarget !== null,
+    sidebarSearchTarget,
     sidebarSearchValue,
     startCurrentThread,
     startGlobalThread,

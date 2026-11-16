@@ -70,6 +70,7 @@ export type AppRouteContentProps = Readonly<{
   onFocusComposerRequestConsumed(requestId: number): void;
   onOpenPlugin(pluginId: string): void;
   onOpenModelSettings(): void;
+  onSearchProjectText(): void;
   onForkThread(input: ForkThreadInput): Promise<void>;
   onSelectedCapabilitiesPluginIdChange(pluginId: string | null): void;
   onCapabilitySelectionRequestConsumed(requestId: number): void;

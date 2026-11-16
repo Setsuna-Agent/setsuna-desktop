@@ -58,6 +58,7 @@ export function AppWorkspaceToolbar({
       isFileDirty={projectWorkspace.isFileDirty}
       bottomPanelOpen={workspacePanels.bottomPanelVisible}
       onClosePanel={(panelId) => workspacePanels.closeDesktopPanelItem('side', panelId)}
+      onClosePanels={(panelIds) => workspacePanels.closeDesktopPanelItems('side', panelIds)}
       onOpenOverview={() => workspacePanels.openDesktopPanel('side', 'overview')}
       onMovePanel={(panelId, targetPlacement, targetPanelId, placement) => {
         workspacePanels.moveDesktopPanel('side', panelId, targetPlacement, targetPanelId, placement);

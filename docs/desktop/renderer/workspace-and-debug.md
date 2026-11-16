@@ -75,7 +75,7 @@ Runtime 的 `workspace-file-preview-reader.ts` 先通过文件句柄读取最多
 
 图片预览和文件树中图片文件的右键菜单支持“复制图片”，经已有 preload 图片接口写入系统剪贴板。预览固定使用右键时的内容；文件树按扩展名显示入口，在点击复制时通过 runtime client 读取右键时绑定的项目、目录和路径，并确认内容为可预览图片，不切换当前文件。PNG/JPEG 直接复制，其他预览格式仅在点击复制时转为保留原尺寸与透明度的 PNG；读取或解码失败沿用图片操作错误反馈，不写入剪贴板。
 
-文件预览中的文字选区和可编辑控件优先交给共享 `AppTextContextMenu`，在菜单关闭后恢复选区并执行原生复制或编辑命令。Pierre 编辑器的选区位于 Shadow DOM 内，通过 `getComposedRanges` 读取真实端点，避免普通文档选区被重映射到宿主后误禁用复制、剪切或丢失粘贴替换范围。Review diff 同样通过宿主注入的 `hasTextContextMenuTarget` 判断文字选区，让选中的只读代码使用复制菜单；未命中文字选区时沿用文件操作菜单。文件树仍按右键命中的条目操作，已处理事件的链接等专用菜单不会被文件菜单覆盖。
+文件、变更和审查的文本内容区通过 `data-text-context-menu` 声明文本操作，即使没有选区，也在原文件菜单中保留剪切、复制、粘贴。共用的 `TextEditingPointMenu` 统一决定可用状态：没有选区时禁用剪切和复制，只读区域禁用剪切和粘贴，可编辑区域的粘贴作用于原光标；文件打开、路径复制、定位和加入对话等操作始终保留。文件菜单与全局 `AppTextContextMenu` 共用选区恢复逻辑，在菜单关闭后执行原生复制或编辑命令，空选区的只读菜单和文件操作不会抢回其他输入框、新对话或弹窗的焦点。Pierre 编辑器的选区位于 Shadow DOM 内，通过 `getComposedRanges` 读取真实端点，避免普通文档选区被重映射到宿主后误禁用复制、剪切或丢失粘贴替换范围。变更和审查共用的 Review diff 通过宿主注入的 `captureTextContextMenuTarget` 捕获文本目标并传给文件菜单，同时保留右键命中的文件路径和行号；选区恢复契约由 `renderer-contracts/workspace` 共享。文件树仍按右键命中的条目操作，已处理事件的链接等专用菜单不会被文件菜单覆盖。
 
 Markdown 文件在路径栏的目录按钮旁提供“查看源码 / 查看预览”。默认打开预览；预览使用当前编辑草稿，切换时保留编辑器实例、尺寸和撤销记录。带行号的定位请求自动回到源码。`WorkspaceMarkdownPreview` 复用 Markdown 排版和代码块，支持 GFM、标题锚点和经过清理的 HTML；相对链接按当前文档目录解析，本地图片经 runtime client 的工作区文件读取接口加载。脚本、事件属性及越界路径不会进入预览。
 
@@ -146,6 +146,8 @@ Renderer：
 
 Workspace file context menu 的“打开、复制路径、Reveal、预览”走 preload/main；runtime 的文件读取与 Agent 工具走 runtime workspace store，两条链路都要独立校验 workspace。
 
+HTML/HTM 沿用文件工具栏的预览/源码切换，默认预览；编辑草稿只覆盖预览入口，不写入磁盘。共享 `HtmlFilePreview` 在 `sandbox="allow-scripts"` 的 iframe 中展示原生桥注册的临时 URL，不开放同源身份、宿主权限或顶层导航。相对样式、脚本、图片和字体在该 URL 的工作区范围内解析；Main 检查真实路径及符号链接，HTML 响应也附带 sandbox CSP。切换文件、版本或关闭时撤销注册，迟到的注册结果直接释放。
+
 ## Review
 
 Review presentation 与 Workspace 级 Git 状态由 `packages/features/review/src/renderer/` 拥有，主要文件：
@@ -166,13 +168,13 @@ Review preference 按 workspace 持久化在 localStorage。Main 才执行 Git �
 
 审查面板 header 将来源与增删统计、分支比较和操作图标组放在同一行，使用统一的胶囊轮廓与宿主字体；分支名按可用宽度省略，窄面板允许工具栏换行，保留原有来源选择、比较基准和显示操作。
 
-变更的整页工具栏、提交消息编辑头，文件的路径与操作头，以及浏览器的导航、地址栏和操作组，均复用同一套 `sd-panel-toolbar` 样式。主头部留出与审查相同的高度和上下间距；文件路径与标题允许收缩省略，浏览器地址保持弹性宽度。
+变更的整页工具栏、提交消息编辑头，文件的路径与操作头，以及浏览器的导航、地址栏和操作组，均复用同一套 `sd-panel-toolbar` 样式。主头部留出与审查相同的高度和上下间距；文件与变更面包屑按实际宽度整级收起前面的目录，以可打开目录导航的省略号代替，不裁切半个目录名。审查文件标题优先省略目录；这些路径均完整保留末级文件名，文件名自身过长时换行。浏览器地址保持弹性宽度。
 
 审查的文件侧栏复用文件、变更面板的侧栏动画时长与曲线，通过外层宽度过渡裁切固定宽度的导航内容。收起时保留筛选、目录状态与滚动位置，立即退出焦点和辅助技术导航；拖动调宽及减少动态效果模式下不执行过渡。树行布局动画只跟随内容变化，不重复响应整个侧栏的显隐。
 
 审查使用单文件浏览时，顶部的预览切换只对当前文件提供；不支持预览的文件隐藏切换。多文件列表仍按当前列表中的可预览文件提供面板级切换。
 
-审查和变更在面板顶部提供统一的“预览 / 源码”切换，作用于面板中的所有 Markdown 和 CSV，默认使用源码，切换文件和分组后保持选择。源码模式保留原有增删对照和行级批注；行号或审查发现定位会将整个面板切回源码。`ReviewFileDocument` 经 preload 的 `readTextFile` 读取完整 Markdown 预览内容，不从 diff 片段拼接文档；Main 的 `file-version.ts` 与图片预览共用工作区、暂存区和固定提交版本的选择。删除文件读取删除前版本，最近改动中没有删除前快照的文件仍展示源码对照。读取限制在 workspace 内，拒绝越界链接、二进制及超过 2 MiB 的文本。宿主通过 `composition/review/ReviewFileDocument.tsx` 注入已有 Markdown 预览；相对图片读取相同版本，并在切换或关闭预览时释放临时资源。
+审查和变更在面板顶部提供统一的“预览 / 源码”切换，作用于面板中的所有 Markdown、CSV 和 HTML，默认使用源码，切换文件和分组后保持选择。源码模式保留原有增删对照和行级批注；行号或审查发现定位会将整个面板切回源码。`ReviewFileDocument` 经 preload 的 `readTextFile` 读取完整 Markdown 预览内容，不从 diff 片段拼接文档；Main 的 `file-version.ts` 与图片预览共用工作区、暂存区和固定提交版本的选择。删除文件读取删除前版本，最近改动中没有删除前快照的文件仍展示源码对照。读取限制在 workspace 内，拒绝越界链接、二进制及超过 2 MiB 的文本。宿主通过 `composition/review/ReviewFileDocument.tsx` 注入已有 Markdown 预览；相对图片读取相同版本，并在切换或关闭预览时释放临时资源。HTML 通过 `createHtmlPreview` 按相同规则注册完整文档及资源读取器，历史 CSS/JS/图片也读取所选 Git 版本；工作区 HTML 复用宿主的路径受限预览。图片与 HTML 共用 `releaseFilePreview` 释放接口。
 
 Office/PDF 变更，以及切到预览模式的 CSV，由 `ReviewDocumentDiff` 在文件展开后加载，复用宿主文档预览并排展示修改前后内容，不做单元格或文字差异标注。`readDocumentFile` 与现有 `file-version.ts` 共用 Git 版本选择，重命名的旧侧使用旧路径，新增/删除只读取存在的一侧；没有旧快照的最近改动只展示当前版本。两侧分别限制在 32 MiB，折叠文件或切回源码会释放解析 Worker 或 PDF Blob URL。
 
@@ -249,7 +251,7 @@ Browser Renderer Feature 通过 `BrowserWorkspacePanel.tsx` 注册 `renderer.wor
 
 ## 外部 Workspace apps
 
-`packages/features/workspace-apps/src/renderer/` 拥有「打开方式」子菜单、glyph、应用图标、用户偏好和作用域样式。对话标题旁的三个点菜单、文件右键菜单与变更 Dock 通过 `composition/workspace-apps-feature-adapter.ts` 共用该子菜单；顶部不再单独显示应用打开按钮。Workspace hook 继续拥有 project/panel 状态和打开动作编排；从任一「打开方式」菜单选择应用，都会同步更新并保存应用偏好，再打开对应工作区或文件，后续默认打开操作沿用该选择。
+`packages/features/workspace-apps/src/renderer/` 拥有「打开方式」子菜单、glyph、应用图标、用户偏好和作用域样式。对话标题旁的三个点菜单、文件右键菜单与变更 Dock 通过 `composition/workspace-apps-feature-adapter.ts` 共用该子菜单。文件顶部的 `WorkspaceFileOpenWith` 是独立的圆角分段按钮，放在搜索与文件树按钮之间：左侧显示当前应用图标并直接打开当前文件，右侧箭头展开同一应用列表，两侧点击区域和分隔线独立；按钮尺寸和菜单沿用共享样式，切换文件时关闭旧文件的下拉菜单。Workspace hook 继续拥有 project/panel 状态和打开动作编排；从任一「打开方式」菜单选择应用，都会同步更新并保存应用偏好，再打开对应工作区或文件，后续默认打开操作沿用该选择。
 
 打开 workspace/file 时只传结构化 app ID、workspace root、relative path 和可选 line；平台命令由 main 构造。`useWorkspaceFileActions` 将 UI 中的绝对引用拆成所属目录和相对路径，供外部打开、复制路径和在文件夹中显示等本机操作使用。
 

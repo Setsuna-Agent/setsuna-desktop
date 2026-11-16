@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -12,6 +13,29 @@ afterEach(() => {
   cleanup();
   document.body.replaceChildren();
   vi.restoreAllMocks();
+});
+
+describe('DesktopPanelHeader tab context menu', () => {
+  it.each([
+    ['关闭', ['file:b.ts']],
+    ['关闭其他标签页', ['file:a.ts', 'file:c.ts']],
+    ['关闭右侧标签页', ['file:c.ts']],
+    ['关闭所有标签页', ['file:a.ts', 'file:b.ts', 'file:c.ts']],
+  ])('targets the right-clicked tab when choosing %s', async (label, expected) => {
+    const user = userEvent.setup();
+    const onClosePanels = vi.fn();
+    const onSelectPanel = vi.fn();
+    const view = render(createElement(DesktopPanelHeader, {
+      activePanel: 'file', activePanelId: 'file:c.ts', placement: 'side',
+      panels: ['a.ts', 'b.ts', 'c.ts'].map((filePath) => ({ id: `file:${filePath}`, type: 'file' as const, filePath })),
+      onClose: vi.fn(), onClosePanel: vi.fn(), onClosePanels, onSelectPanel,
+    }));
+    fireEvent.contextMenu(view.getByRole('button', { name: 'b.ts' }));
+    await user.click(await screen.findByRole('menuitem', { name: label }));
+    expect(onClosePanels).toHaveBeenCalledExactlyOnceWith(expected);
+    expect(onSelectPanel).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
 });
 
 describe('DesktopPanelHeader tab dragging', () => {

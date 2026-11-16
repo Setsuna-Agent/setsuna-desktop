@@ -196,6 +196,12 @@ describe('runtime server REST runtime state', () => {
       expect(savedFile.revision).not.toBe(file.revision);
       expect(await readFile(path.join(projectDir, 'src', 'note.txt'), 'utf8')).toBe('saved from the file editor\n');
       expect(search.results).toMatchObject([{ path: 'src/note.txt', line: 1 }]);
+      const filteredSearch = await harness.runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/search?q=saved&extension=*.ts`);
+      expect(filteredSearch.results).toEqual([]);
+      const includedSearch = await harness.runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/search?q=saved&extension=.TXT`);
+      expect(includedSearch.results).toMatchObject([{ path: 'src/note.txt', line: 1 }]);
+      const filesOnly = await harness.runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/entries/search?q=src&filesOnly=true`);
+      expect(filesOnly.entries.map((entry: { path: string }) => entry.path)).toEqual(['src/note.txt']);
 
       const largePath = path.join(projectDir, 'src', 'generated.html');
       const largeContent = `<style>src:url(data:font/woff2;base64,${'A'.repeat(WORKSPACE_TEXT_FILE_MAX_BYTES)})</style>`;

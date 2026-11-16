@@ -2,6 +2,7 @@ import type { BrowserWindow } from 'electron';
 import { PLUGIN_UI_DOCUMENT_SCHEME } from '@setsuna-desktop/contracts';
 
 type OpenExternal = (url: string) => Promise<unknown>;
+const BUILTIN_PDF_VIEWER_EXTENSION_ID = 'mhjfbmdgcfjbbpaeojofohoefgiehjai';
 
 /** Keeps the privileged renderer in its BrowserWindow and delegates safe links to the OS. */
 export function registerMainWindowNavigationGuards(
@@ -30,6 +31,9 @@ export function registerMainWindowNavigationGuards(
       return;
     }
     if (isSupportedFrameNavigationUrl(event.url)) return;
+    // The built-in reader loads PDF bytes in an internal extension frame after its shell mounts.
+    // Only that reader can initiate this navigation; ordinary content cannot enter extension pages.
+    if (isBuiltinPdfViewerUrl(event.url) && isBuiltinPdfViewerUrl(event.initiator?.url)) return;
     // Plugin forms may navigate their own isolated frame to an HTTP(S) response.
     // Keep local privileged documents out of that frame and the main renderer in place.
     event.preventDefault();
@@ -67,6 +71,16 @@ function isSupportedFrameNavigationUrl(url: string): boolean {
     const protocol = new URL(url).protocol;
     return protocol === 'http:' || protocol === 'https:' || protocol === `${PLUGIN_UI_DOCUMENT_SCHEME}:`
       || protocol === 'blob:' || protocol === 'data:';
+  } catch {
+    return false;
+  }
+}
+
+function isBuiltinPdfViewerUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'chrome-extension:' && url.host === BUILTIN_PDF_VIEWER_EXTENSION_ID;
   } catch {
     return false;
   }

@@ -61,9 +61,15 @@ type DesktopNativeBridgeOptions = {
 type DesktopFilePreview = {
   mimeType: string;
   name: string;
+  sandbox?: boolean;
 } & (
-  | { content: Buffer; targetPath?: never }
-  | { content?: never; targetPath: string; workspaceRoot?: string }
+  | {
+    content: Buffer;
+    targetPath?: never;
+    resourcePath?: string;
+    readResource?: (resourcePath: string) => Promise<Buffer | null>;
+  }
+  | { content?: Buffer; targetPath: string; workspaceRoot?: string; resourcePath?: never; readResource?: never }
 );
 
 type DesktopFilePreviewRequest = {
@@ -345,6 +351,9 @@ export class DesktopNativeBridgeServer {
       'Content-Length': contentLength,
       'Content-Type': resource.mimeType,
       'X-Content-Type-Options': 'nosniff',
+      // Sandboxed HTML has an opaque origin; modules, fonts and fetch still need its scoped resources.
+      'Access-Control-Allow-Origin': '*',
+      ...(preview.sandbox && resource.mimeType === 'text/html' ? { 'Content-Security-Policy': 'sandbox allow-scripts' } : {}),
       ...(range ? { 'Content-Range': `bytes ${start}-${end}/${fileSize}` } : {}),
     });
     if (request.method === 'HEAD' || fileSize === 0) {
@@ -355,6 +364,7 @@ export class DesktopNativeBridgeServer {
       response.end(resource.content.subarray(start, end + 1));
       return;
     }
+    if (!resource.targetPath) { response.end(); return; }
     const stream = createReadStream(resource.targetPath, { start, end });
     // Seeking or closing a media preview aborts the old HTTP request. Stop disk I/O too.
     const stopReading = () => { stream.destroy(); };
@@ -392,10 +402,9 @@ function filePreviewRequest(requestUrl: string | undefined): DesktopFilePreviewR
 }
 
 function filePreviewUrlPath(preview: DesktopFilePreview): string {
-  if (preview.content !== undefined || !preview.workspaceRoot) {
-    return encodeURIComponent(preview.name);
-  }
-  const relativePath = path.relative(preview.workspaceRoot, preview.targetPath);
+  const relativePath = preview.targetPath && preview.workspaceRoot
+    ? path.relative(preview.workspaceRoot, preview.targetPath)
+    : preview.resourcePath ?? preview.name;
   if (!isRelativePathInside(relativePath)) {
     throw new Error('File preview target must stay inside the workspace.');
   }
@@ -406,20 +415,22 @@ async function resolveFilePreviewResource(
   preview: DesktopFilePreview,
   resourcePath: string,
 ): Promise<DesktopFilePreview | null> {
-  if (preview.content !== undefined) {
-    return resourcePath === preview.name ? preview : null;
-  }
-  if (!preview.workspaceRoot) {
-    return resourcePath === preview.name ? preview : null;
-  }
-  if (path.isAbsolute(resourcePath)) return null;
+  if (!isRelativePathInside(resourcePath) || resourcePath.split(path.sep).includes('..')) return null;
   try {
+    if (!preview.targetPath) {
+      if (resourcePath === (preview.resourcePath ?? preview.name)) return preview;
+      const content = await preview.readResource?.(resourcePath);
+      return content ? { content, mimeType: workspaceFilePreviewMimeType(resourcePath), name: path.basename(resourcePath) } : null;
+    }
+    if (!preview.workspaceRoot) return resourcePath === preview.name ? preview : null;
     const canonicalRoot = await realpath(preview.workspaceRoot);
     const canonicalTarget = await realpath(path.resolve(canonicalRoot, resourcePath));
     const relativePath = path.relative(canonicalRoot, canonicalTarget);
     if (!isRelativePathInside(relativePath)) return null;
     const targetStats = await stat(canonicalTarget);
     if (!targetStats.isFile()) return null;
+    // Draft HTML replaces only the entry document; relative assets still use the constrained workspace.
+    if (canonicalTarget === preview.targetPath && preview.content !== undefined) return preview;
     return {
       mimeType: workspaceFilePreviewMimeType(canonicalTarget),
       name: path.basename(canonicalTarget),

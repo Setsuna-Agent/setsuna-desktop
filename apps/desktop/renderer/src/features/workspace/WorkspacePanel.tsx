@@ -1,5 +1,5 @@
 import { WorkspaceOverviewPanel } from './WorkspaceOverviewPanel.js';
-import { FileTreeToggle, FileTreeSurface, FileTreeRow, ResizeHandle, TextField, Button } from '@setsuna-desktop/renderer-ui';
+import { FileTreeToggle, FileTreeSurface, FileTreeRow, ResizeHandle, TextField, Button, IconButton } from '@setsuna-desktop/renderer-ui';
 
 import {
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
@@ -65,6 +65,7 @@ import {
 } from './WorkspaceFileContextMenu.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
 import { WorkspaceFileBreadcrumb } from './WorkspaceFileBreadcrumb.js';
+import { WorkspaceFileOpenWith } from './WorkspaceFileOpenWith.js';
 import { WorkspaceEntryDialog, type WorkspaceEntryDialogRequest } from './WorkspaceEntryDialog.js';
 import { WorkspaceDocumentPreview } from './documents/WorkspaceDocumentPreview.js';
 import {
@@ -83,6 +84,11 @@ const LazyWorkspaceMarkdownPreview = lazy(async () => {
 });
 
 const LazyWorkspaceVideoPreview = lazy(() => import('./media/WorkspaceVideoPreview.js'));
+
+const LazyWorkspaceHtmlPreview = lazy(async () => {
+  const module = await import('./html/WorkspaceHtmlPreview.js');
+  return { default: module.WorkspaceHtmlPreview };
+});
 
 export function WorkspacePanel({
   activePanel,
@@ -112,6 +118,7 @@ export function WorkspacePanel({
   onOpenFileWithApp,
   onOpenEntry,
   onSearchProjectEntries,
+  onSearchProjectText,
   onOpenProjectFile,
   onOpenFilesPanel,
   onOpenBrowser,
@@ -152,6 +159,7 @@ export function WorkspacePanel({
   onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onSearchProjectEntries: SearchWorkspaceEntries;
+  onSearchProjectText: () => void;
   onOpenProjectFile: (filePath: string, line?: number) => void;
   onOpenFilesPanel: () => void;
   onOpenBrowser: (url?: string) => void;
@@ -272,22 +280,34 @@ export function WorkspacePanel({
           rootLabel={activeProjectLabel} path={activePanel.type === 'file' ? activePanel.filePath ?? '' : ''}
           disabled={!activeProject || entryOperationPending} searchEntries={onSearchProjectEntries} onOpenEntry={onOpenEntry} />
       </div>
-      <span className="desktop-editor__crumb-actions sd-panel-toolbar__surface sd-panel-toolbar__actions">
-        {fileView.canPreview ? (
-          <span className="sd-panel-toolbar__group">
-            <Button variant="ghost" size="small" type="button" className="sd-panel-toolbar__text-button"
-              onClick={() => fileView.setMode(fileView.mode === 'source' ? 'preview' : 'source')}>
-              {t(fileView.mode === 'source' ? 'workspace.files.viewPreview' : 'workspace.files.viewSource')}
-            </Button>
+      <span className="desktop-editor__crumb-actions sd-panel-toolbar__actions">
+        <span className="desktop-editor__file-actions sd-panel-toolbar__group">
+          <span className="sd-panel-toolbar__surface">
+            {fileView.canPreview ? (
+              <Button variant="ghost" size="small" type="button" className="sd-panel-toolbar__text-button"
+                onClick={() => fileView.setMode(fileView.mode === 'source' ? 'preview' : 'source')}>
+                {t(fileView.mode === 'source' ? 'workspace.files.viewPreview' : 'workspace.files.viewSource')}
+              </Button>
+            ) : null}
+            <IconButton className="app-shell-icon-control" label={t('workspace.files.searchText')}
+              disabled={!activeProject} onClick={onSearchProjectText}>
+              <Search size={16} />
+            </IconButton>
           </span>
-        ) : null}
+          {filePreview ? (
+            <WorkspaceFileOpenWith key={workspaceFileKey(filePreview)} filePath={filePreview.path}
+              selectedApp={selectedWorkspaceApp} apps={workspaceApps} onOpen={onOpenFileWithApp} />
+          ) : null}
+        </span>
         <span className="sd-panel-toolbar__group">
-          <FileTreeToggle
-            className="app-shell-icon-control"
-            label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
-            expanded={treeVisible}
-            onToggle={toggleTreeVisible}
-          />
+          <span className="sd-panel-toolbar__surface">
+            <FileTreeToggle
+              className="app-shell-icon-control"
+              label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
+              expanded={treeVisible}
+              onToggle={toggleTreeVisible}
+            />
+          </span>
         </span>
       </span>
     </header>
@@ -351,13 +371,16 @@ export function WorkspacePanel({
     ) : (
       <section
         className={`desktop-editor ${filePreview && fileDraft.errorMessage ? 'has-save-error' : ''}`}
+        data-text-context-menu={filePreview && (!filePreview.preview || filePreview.preview.kind === 'text'
+          || filePreview.preview.kind === 'document') ? '' : undefined}
         onContextMenu={filePreview ? (event) => {
-          // Let selected text and editors reach the shared text menu before the file fallback.
-          if (event.defaultPrevented || captureTextContextMenuTarget(event.nativeEvent)) return;
+          if (event.defaultPrevented) return;
           event.preventDefault();
           const line = workspaceFileLineNumberFromEvent(event);
           setContextMenu({
             filePath: filePreview.path,
+            textTarget: window.setsunaDesktop?.windowControls?.executeTextEdit
+              ? captureTextContextMenuTarget(event.nativeEvent) : null,
             image: filePreview.preview?.kind === 'image'
               ? { filePath: filePreview.path, dataUrl: `data:${filePreview.preview.mimeType};base64,${filePreview.preview.base64}` } : undefined,
             line,
@@ -587,7 +610,10 @@ export function WorkspaceFilePreviewContent({
       </div>
       {previewing ? (
         <Suspense fallback={<div className="desktop-markdown-preview" role="status">{t('workspace.files.loadingPreview')}</div>}>
-          {documentFormat === 'csv' ? <div className="desktop-file-document__preview">
+          {/\.html?$/i.test(file.path) ? <div className="desktop-file-document__preview">
+            <LazyWorkspaceHtmlPreview file={file} workspaceRoot={workspaceRoot}
+              content={fileDraft?.editing ? fileDraft.content : undefined} />
+          </div> : documentFormat === 'csv' ? <div className="desktop-file-document__preview">
             <WorkspaceDocumentPreview file={file} workspaceRoot={workspaceRoot}
               content={fileDraft?.editing ? fileDraft.content : !file.truncated ? file.content : undefined} />
           </div> : <LazyWorkspaceMarkdownPreview key={workspaceFileKey(file)} file={file}

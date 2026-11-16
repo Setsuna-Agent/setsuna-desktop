@@ -1,7 +1,11 @@
-import { PointMenu, type MenuItem } from '@setsuna-desktop/renderer-ui';
+import type { MenuItem } from '@setsuna-desktop/renderer-ui';
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
+import { resolveWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { Code2, Copy, FilePlus2, FolderOpen, FolderPlus, MessageSquare, PanelRightOpen, Pencil, Trash2 } from 'lucide-react';
+import { useRef } from 'react';
 import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
+import type { TextContextMenuTarget } from '../../shared/lib/textContextMenu.js';
+import { TextEditingPointMenu } from '../../shared/ui/TextEditingPointMenu.js';
 import { WorkspaceAppGlyph, workspaceOpenWithMenu } from '../../composition/workspace-apps-feature-adapter.js';
 import type { DesktopWorkspaceApp } from './model.js';
 import { workspaceEntryParent } from './workspaceEntryPaths.js';
@@ -14,6 +18,7 @@ export type WorkspaceFileContextTarget = {
   image?: WorkspaceImageSource;
   line?: number;
   type?: WorkspaceEntry['type'];
+  textTarget?: TextContextMenuTarget | null;
   x: number;
   y: number;
 };
@@ -22,7 +27,7 @@ const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, par
 
 export function WorkspaceFileContextMenu({
   openOnly = false,
-  selectedWorkspaceApp,
+  selectedWorkspaceApp: preferredApp,
   target,
   workspaceApps,
   onAddToConversation,
@@ -54,8 +59,12 @@ export function WorkspaceFileContextMenu({
   onReveal: (filePath: string) => void;
 }) {
   const { t } = useI18n();
+  const latestTarget = useRef(target);
+  // Keep the closing request until another right-click invalidates its focus callback.
+  if (target) latestTarget.current = target;
   if (!target) return null;
   const directory = target.type === 'directory';
+  const selectedWorkspaceApp = resolveWorkspaceApp(workspaceApps, preferredApp, directory ? null : target.filePath);
   const workspaceRoot = directory && !target.filePath;
   const image = target.image;
   const openItems: MenuItem[] = directory ? [] : [
@@ -75,7 +84,7 @@ export function WorkspaceFileContextMenu({
       },
     }] : []),
     workspaceOpenWithMenu({
-      label: t('workspace.fileMenu.openWith'), apps: workspaceApps,
+      label: t('workspace.fileMenu.openWith'), apps: workspaceApps, filePath: target.filePath,
       onOpen: (appId) => onOpenWithApp(appId, target.filePath, target.line),
     }),
   ];
@@ -112,8 +121,9 @@ export function WorkspaceFileContextMenu({
         disabled: entryActionsDisabled, onClick: () => onDeleteEntry(target.filePath) },
     ] : []),
   ];
-  return <PointMenu key={`${target.filePath}:${target.x}:${target.y}`} x={target.x} y={target.y}
-    menu={{ items, selectedKeys: selectedWorkspaceApp ? [selectedWorkspaceApp.id] : [], onClick: onClose }} onClose={onClose} />;
+  return <TextEditingPointMenu key={`${target.filePath}:${target.x}:${target.y}`} x={target.x} y={target.y}
+    textTarget={target.textTarget} isCurrent={() => latestTarget.current === target}
+    menu={{ items, selectedKeys: selectedWorkspaceApp ? [selectedWorkspaceApp.id] : [] }} onClose={onClose} />;
 }
 
 export function workspaceFileRevealLabel(platform?: string, t: Translate = defaultTranslate): string {

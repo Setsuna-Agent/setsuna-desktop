@@ -16,6 +16,10 @@
   background: var(--app-surface-overlay);
 }
 
+:where(:root[data-theme='dark']) .browser-start-search__surface {
+  background: var(--app-surface);
+}
+
 .browser-start-search:focus-within .browser-start-search__surface { border-color: var(--app-field-focus-border); }
 .browser-start-search.is-open { z-index: 10; }
 .browser-start-search.is-open .browser-start-search__surface { box-shadow: var(--app-shadow-toolbar); }

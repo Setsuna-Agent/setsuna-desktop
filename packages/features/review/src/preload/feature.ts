@@ -32,8 +32,11 @@ export const reviewPreloadFeature = definePreloadFeature<ReviewPreloadBridgeCont
         REVIEW_IPC_CHANNELS.createImagePreview,
         { workspaceRoot, preview: input },
       ),
-      releaseImagePreview: (previewId) => ipcRenderer.invoke(
-        REVIEW_IPC_CHANNELS.releaseImagePreview,
+      createHtmlPreview: (workspaceRoot, input) => ipcRenderer.invoke(
+        REVIEW_IPC_CHANNELS.createHtmlPreview, { workspaceRoot, version: input },
+      ),
+      releaseFilePreview: (previewId) => ipcRenderer.invoke(
+        REVIEW_IPC_CHANNELS.releaseFilePreview,
         previewId,
       ),
       watchChanges(workspaceRoot, callback) {

@@ -18,14 +18,6 @@
   display: none;
 }
 
-.chat-file-diff__summary:hover {
-  color: var(--app-text);
-}
-
-.chat-file-diff__summary:hover .chat-tool-run__detail-icon {
-  color: var(--app-text);
-}
-
 .chat-file-diff__chevron {
   flex: 0 0 auto;
   color: color-mix(in srgb, var(--app-text-muted) 76%, transparent);

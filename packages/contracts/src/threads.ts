@@ -703,6 +703,8 @@ export type RuntimeMessagePage = RuntimeThreadMessagePageInfo & {
 export type ThreadQuery = {
   search?: string;
   includeArchived?: boolean;
+  /** Include feature-owned conversations in global search. */
+  includeFeatures?: boolean;
   ancestorThreadId?: string;
   parentThreadId?: string;
   scope?: 'all' | 'global' | 'project';

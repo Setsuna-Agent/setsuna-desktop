@@ -136,8 +136,9 @@ it('copies only the selected reading text without targeting a previously focused
   expect(screen.queryByRole('menu')).toBeNull();
   fireEvent.contextMenu(text);
   const copy = await screen.findByRole('menuitem', { name: '复制' });
-  expect(screen.queryByRole('menuitem', { name: '剪切' })).toBeNull();
-  expect(screen.queryByRole('menuitem', { name: '粘贴' })).toBeNull();
+  fireEvent.click(screen.getByRole('menuitem', { name: '剪切' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: '粘贴' }));
+  expect(executeTextEdit).not.toHaveBeenCalled();
   executeTextEdit.mockImplementation(async () => {
     applied(document.activeElement?.tagName, document.getSelection()?.toString());
     return true;
@@ -148,20 +149,30 @@ it('copies only the selected reading text without targeting a previously focused
   expect(applied).toHaveBeenCalledExactlyOnceWith('BODY', 'reading');
 });
 
-it('offers only copy for readonly text and leaves specialized menus in control', async () => {
+it('disables unavailable commands in readonly fields and leaves specialized menus in control', async () => {
   render(<><AppTextContextMenu /><textarea readOnly defaultValue="read only" />
     <input aria-label="specialized" onContextMenu={(event) => event.preventDefault()} /></>);
   fireEvent.contextMenu(screen.getByRole('textbox', { name: 'specialized' }));
   expect(screen.queryByRole('menu')).toBeNull();
   const input = screen.getByDisplayValue('read only') as HTMLTextAreaElement;
-  input.setSelectionRange(0, 4);
+  input.setSelectionRange(0, 0);
   fireEvent.contextMenu(input);
-  expect(await screen.findByRole('menuitem', { name: '复制' })).toBeTruthy();
-  expect(screen.queryByRole('menuitem', { name: '剪切' })).toBeNull();
-  expect(screen.queryByRole('menuitem', { name: '粘贴' })).toBeNull();
+  fireEvent.click(await screen.findByRole('menuitem', { name: '复制' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: '剪切' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: '粘贴' }));
   fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
   expect(executeTextEdit).not.toHaveBeenCalled();
+
+  input.setSelectionRange(0, 4);
+  fireEvent.contextMenu(input);
+  const copy = await screen.findByRole('menuitem', { name: '复制' });
+  fireEvent.click(screen.getByRole('menuitem', { name: '剪切' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: '粘贴' }));
+  input.setSelectionRange(0, 0);
+  fireEvent.click(copy);
+  await waitFor(() => expect(executeTextEdit).toHaveBeenCalledExactlyOnceWith('copy'));
+  expect(input.value.slice(input.selectionStart, input.selectionEnd)).toBe('read');
 });
 
 it('does not execute a pending edit after the original field becomes disabled', async () => {

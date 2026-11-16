@@ -51,10 +51,11 @@ export function useWorkspaceFilePanelLifecycle({ panels, workspace, projectId, w
     refresh: workspace.refreshFilePreview,
   });
 
-  const closePanels = useCallback(async (slot: DesktopPanelSlot, panelId?: string) => {
+  const closePanels = useCallback(async (slot: DesktopPanelSlot, panelIds?: readonly string[]) => {
     const current = latest.current;
     const slotState = slot === 'side' ? current.panels.sidePanelSlot : current.panels.bottomPanelSlot;
-    const closing = panelId ? slotState.panels.filter((panel) => panel.id === panelId) : slotState.panels;
+    const ids = panelIds ? new Set(panelIds) : null;
+    const closing = ids ? slotState.panels.filter((panel) => ids.has(panel.id)) : slotState.panels;
     if (!closing.length) return;
     for (const panel of closing) {
       if (panel.type !== 'file' || !panel.filePath || !current.projectId) continue;
@@ -63,16 +64,18 @@ export function useWorkspaceFilePanelLifecycle({ panels, workspace, projectId, w
       })) return;
       if (latest.current.targetIdentity !== current.targetIdentity || latest.current.projectId !== current.projectId) return;
     }
-    if (panelId) current.panels.closeDesktopPanelItem(slot, panelId);
+    // Finish every discard confirmation before removing tabs or releasing their resources.
+    if (panelIds) current.panels.closeDesktopPanelItems(slot, closing.map((panel) => panel.id));
     else current.panels.closeDesktopPanelSlot(slot);
   }, []);
 
-  const closeDesktopPanelItem = useCallback((slot: DesktopPanelSlot, panelId: string) => closePanels(slot, panelId), [closePanels]);
+  const closeDesktopPanelItem = useCallback((slot: DesktopPanelSlot, panelId: string) => closePanels(slot, [panelId]), [closePanels]);
+  const closeDesktopPanelItems = useCallback((slot: DesktopPanelSlot, panelIds: readonly string[]) => closePanels(slot, panelIds), [closePanels]);
   const closeDesktopPanelSlot = useCallback((slot: DesktopPanelSlot) => closePanels(slot), [closePanels]);
   const closeActiveSidePanel = useCallback(() => {
     const current = latest.current.panels;
-    if (current.sidePanelVisible && current.sideActivePanel) return closePanels('side', current.sideActivePanel.id);
+    if (current.sidePanelVisible && current.sideActivePanel) return closePanels('side', [current.sideActivePanel.id]);
   }, [closePanels]);
 
-  return { closeDesktopPanelItem, closeDesktopPanelSlot, closeActiveSidePanel };
+  return { closeDesktopPanelItem, closeDesktopPanelItems, closeDesktopPanelSlot, closeActiveSidePanel };
 }

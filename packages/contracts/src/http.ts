@@ -52,6 +52,8 @@ import type {
   WorkspaceProjectTarget,
   WorkspaceProjectList,
   WorkspaceSearchResponse,
+  WorkspaceSearchOptions,
+  WorkspaceEntrySearchOptions,
   WorkspaceStatus,
   WorkspaceStatusQuery,
 } from './workspace.js';
@@ -132,12 +134,12 @@ export type DesktopRuntimeClient = {
   renameProjectEntry(projectId: WorkspaceProjectTarget, path: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry>;
   moveProjectEntry(projectId: WorkspaceProjectTarget, path: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry>;
   deleteProjectEntry(projectId: WorkspaceProjectTarget, path: string): Promise<void>;
-  searchProjectEntries(projectId: WorkspaceProjectTarget, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
+  searchProjectEntries(projectId: WorkspaceProjectTarget, query?: string, parent?: string | null, options?: WorkspaceEntrySearchOptions): Promise<WorkspaceEntrySearchResponse>;
   readProjectFile(projectId: WorkspaceProjectTarget, path: string): Promise<WorkspaceFileRead>;
   readProjectFileForEdit(projectId: WorkspaceProjectTarget, path: string): Promise<WorkspaceFileRead>;
   saveProjectFile(projectId: WorkspaceProjectTarget, path: string, input: WorkspaceFileSaveInput): Promise<WorkspaceFileRead>;
   applyThreadFileChanges(threadId: string, input: ThreadFileChangesInput, action: WorkspaceFileChangeAction): Promise<ThreadFileChangesResult>;
-  searchProject(projectId: WorkspaceProjectTarget, query: string): Promise<WorkspaceSearchResponse>;
+  searchProject(projectId: WorkspaceProjectTarget, query: string, options?: WorkspaceSearchOptions): Promise<WorkspaceSearchResponse>;
   listApprovals(): Promise<RuntimeApprovalList>;
   answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<void>;
 };

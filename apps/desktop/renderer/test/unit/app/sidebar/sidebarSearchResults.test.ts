@@ -33,12 +33,13 @@ describe('buildSidebarSearchResults', () => {
       query: 'needle',
       threads: [
         summary({ id: 'primary', title: 'Needle planning' }),
+        summary({ id: 'assistant', featureId: 'assistants', title: 'Needle assistant' }),
         summary({ id: 'child', parentThreadId: 'primary', title: 'Needle scout' }),
         summary({ id: 'side', kind: 'side', parentThreadId: 'primary', title: 'Needle side chat' }),
       ],
     });
 
-    expect(results.map((result) => result.thread.id)).toEqual(['primary']);
+    expect(results.map((result) => result.thread.id)).toEqual(['primary', 'assistant']);
   });
 });
 

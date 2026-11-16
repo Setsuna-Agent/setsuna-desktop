@@ -111,7 +111,7 @@ export function AppSidebarSurface({
       onSelectThread={(threadId) => void navigation.selectThread(threadId)}
       onToggleProjectActions={(projectId) => navigation.setProjectActionMenuId((current) => (current === projectId ? null : projectId))}
       onToggleProjectsCollapsed={() => navigation.setProjectsCollapsed((value) => !value)}
-      onToggleSearch={() => navigation.setSidebarSearchOpen((value) => !value)}
+      onToggleSearch={() => navigation.sidebarSearchOpen ? navigation.closeSidebarSearch() : navigation.openSidebarSearch()}
       onToggleSessionsCollapsed={() => navigation.setSessionsCollapsed((value) => !value)}
       onToggleThreadActions={(threadId) => navigation.setThreadActionMenuId((current) => (current === threadId ? null : threadId))}
       onOpenThreadInNewWindow={onOpenThreadInNewWindow}

@@ -71,7 +71,7 @@ describe('review IPC lifecycle', () => {
     reviewIpcMocks.getCommitMessageGenerationSource.mockResolvedValue({ branch: 'main', status: 'M  file.txt', diff: '+updated' });
     scope.scope.add(registerReviewIpc(scope.scope, {
       commitMessages: { generate },
-      previews: { createWorkspacePreview: vi.fn(), registerContentPreview: vi.fn(), release: vi.fn() },
+      previews: { createWorkspacePreview: vi.fn(), registerContentPreview: vi.fn(), registerHtmlPreview: vi.fn(), release: vi.fn() },
       rendererSender: { isAllowed: (id) => id === sender.id },
     }));
     scope.activate();
@@ -95,7 +95,7 @@ describe('review IPC lifecycle', () => {
     reviewIpcMocks.getCommitMessageGenerationSource.mockResolvedValue(source);
     scope.scope.add(registerReviewIpc(scope.scope, {
       commitMessages: { generate },
-      previews: { createWorkspacePreview: vi.fn(), registerContentPreview: vi.fn(), release: vi.fn() },
+      previews: { createWorkspacePreview: vi.fn(), registerContentPreview: vi.fn(), registerHtmlPreview: vi.fn(), release: vi.fn() },
       rendererSender: { isAllowed: (id) => id === 1 },
     }));
     scope.activate();
@@ -158,7 +158,7 @@ describe('review IPC lifecycle', () => {
       commitMessages: { generate: vi.fn() },
       previews: {
         createWorkspacePreview: vi.fn(),
-        registerContentPreview: vi.fn(),
+        registerContentPreview: vi.fn(), registerHtmlPreview: vi.fn(),
         release: vi.fn(),
       },
       rendererSender: { isAllowed: () => true },
@@ -198,7 +198,7 @@ describe('review IPC lifecycle', () => {
       commitMessages: { generate: vi.fn() },
       previews: {
         createWorkspacePreview: vi.fn(),
-        registerContentPreview: vi.fn(),
+        registerContentPreview: vi.fn(), registerHtmlPreview: vi.fn(),
         release: vi.fn(),
       },
       rendererSender: { isAllowed: () => true },

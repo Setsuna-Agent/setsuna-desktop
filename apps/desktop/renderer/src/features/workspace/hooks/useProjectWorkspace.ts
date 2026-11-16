@@ -82,11 +82,16 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
     if (previousScopeRef.current.key === scopeKey) return;
     const current = filePreviewRef.current;
     if (current) previewsByScope.current.set(JSON.stringify([current.projectId, current.rootId]), current);
+    // Opening a search match can select its directory after the file read completes.
+    // Preserve that file's line request across the resulting directory switch.
+    const preserveFocus = previousScopeRef.current.projectId === activeProjectId
+      && current?.projectId === activeProjectId && current?.rootId === rootId && current?.path === fileFocusRequest?.path;
     if (previousScopeRef.current.projectId === activeProjectId) resetFileWorkspaceState();
     else resetProjectWorkspaceState();
     previousScopeRef.current = { key: scopeKey, projectId: activeProjectId };
     setFilePreview(previewsByScope.current.get(scopeKey) ?? null);
-  }, [scopeKey, activeProjectId, resetFileWorkspaceState, resetProjectWorkspaceState]);
+    if (preserveFocus) setFileFocusRequest(fileFocusRequest);
+  }, [scopeKey, activeProjectId, rootId, fileFocusRequest, resetFileWorkspaceState, resetProjectWorkspaceState]);
 
   useEffect(() => {
     if (filePreview) previewsByScope.current.set(JSON.stringify([filePreview.projectId, filePreview.rootId]), filePreview);

@@ -65,6 +65,7 @@
   display: none;
 }
 
+/* Navigation must not collapse mounted tabs to zero width before displaying them. */
 .desktop-panel-chrome .chat-file-review-panel__title {
   position: relative;
   flex: 0 1 200px;
@@ -80,7 +81,6 @@
   font-weight: var(--app-font-weight);
   line-height: 20px;
   transform-origin: left center;
-  animation: desktop-panel-tab-enter 180ms var(--app-sidebar-motion-easing) both;
 }
 
 .desktop-panel-chrome .chat-file-review-panel__title:not(:last-child) {
@@ -94,24 +94,6 @@
   max-width: none;
   pointer-events: none;
   animation: desktop-panel-tab-exit 160ms var(--app-sidebar-motion-easing) forwards;
-}
-
-@keyframes desktop-panel-tab-enter {
-  from {
-    min-width: 0;
-    max-width: 0;
-    margin-inline-end: var(--desktop-panel-tab-adjacent-gap, 0);
-    opacity: 0;
-    transform: translateX(-4px) scale(0.96);
-  }
-
-  to {
-    min-width: 88px;
-    max-width: 200px;
-    margin-inline-end: 0;
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
 }
 
 @keyframes desktop-panel-tab-exit {
