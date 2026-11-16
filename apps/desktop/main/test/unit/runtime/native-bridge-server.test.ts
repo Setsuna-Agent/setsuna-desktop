@@ -333,7 +333,9 @@ describe('DesktopNativeBridgeServer', () => {
     expect(script.status).toBe(200);
     expect(script.headers.get('content-type')).toBe('text/javascript');
     expect(await script.text()).toBe('export const version = 1;');
-    expect((await fetch(`${connection.url}/v1/file-previews/${preview.previewId}/%2e%2e%2fsecret.txt`)).status).toBe(404);
+    for (const resourcePath of ['%2e%2e%2fsecret.txt', '%2e%2e%5csecret.txt', 'site%2f..%2f..%2fsecret.txt']) {
+      expect((await fetch(`${connection.url}/v1/file-previews/${preview.previewId}/${resourcePath}`)).status).toBe(404);
+    }
     expect(readResource).toHaveBeenCalledExactlyOnceWith(path.join('site', 'app.js'));
     server.releaseFilePreview(preview.previewId);
     expect((await fetch(preview.url)).status).toBe(404);

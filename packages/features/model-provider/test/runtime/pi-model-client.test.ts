@@ -308,18 +308,23 @@ describe('Pi model client protocol integration', () => {
     }
   });
 
-  it('preserves the Go session when a compatibility retry changes the request payload', async () => {
+  it.each([
+    'https://opencode.ai/zen/go/v1',
+    'https://opencode.ai/inference/go/v1',
+  ])('preserves the Go session during compatibility retries at the saved endpoint %s', async (baseUrl) => {
     const headers: Headers[] = [];
-    const fetch: typeof globalThis.fetch = async (_input, init) => {
+    const urls: string[] = [];
+    const fetch: typeof globalThis.fetch = async (input, init) => {
       headers.push(new Headers(init?.headers));
+      urls.push(input instanceof Request ? input.url : String(input));
       return headers.length === 1
         ? providerValidationError('response_format json_schema is not supported')
         : new Response(openAiCompletionsSse(), { headers: { 'Content-Type': 'text/event-stream' } });
     };
     const client = new PiModelClient(host({
       ...providerFixture('openai-compatible'),
-      // Legacy configs recover identity through their exact catalog endpoint.
-      baseUrl: 'https://opencode.ai/zen/go/v1',
+      // Legacy configs recover identity from their saved endpoint.
+      baseUrl,
     }, fetch));
 
     await collect(client.stream(requestFixture({
@@ -328,6 +333,7 @@ describe('Pi model client protocol integration', () => {
     })));
 
     expect(headers).toHaveLength(2);
+    expect(urls).toEqual([`${baseUrl}/chat/completions`, `${baseUrl}/chat/completions`]);
     expect(headers.map((item) => item.get('x-opencode-session'))).toEqual(['retry-thread', 'retry-thread']);
     expect(headers.every((item) => item.get('user-agent') === 'setsuna-desktop/1.2.3')).toBe(true);
   });

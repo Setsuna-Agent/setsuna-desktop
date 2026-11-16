@@ -415,7 +415,8 @@ async function resolveFilePreviewResource(
   preview: DesktopFilePreview,
   resourcePath: string,
 ): Promise<DesktopFilePreview | null> {
-  if (!isRelativePathInside(resourcePath) || resourcePath.split(path.sep).includes('..')) return null;
+  // Decoded URL segments may still contain either separator, including '/' on Windows.
+  if (!isRelativePathInside(resourcePath) || resourcePath.split(/[\\/]/u).includes('..')) return null;
   try {
     if (!preview.targetPath) {
       if (resourcePath === (preview.resourcePath ?? preview.name)) return preview;

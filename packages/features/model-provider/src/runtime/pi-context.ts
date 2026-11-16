@@ -11,7 +11,6 @@ import {
   type RuntimeProviderMetadataSource,
 } from '@setsuna-desktop/contracts';
 import {
-  Type,
   type AssistantMessage,
   type Context,
   type ImageContent,
@@ -229,7 +228,7 @@ export function toPiContext(
           tools: request.tools.map((tool): Tool => ({
             name: tool.name,
             description: tool.description,
-            parameters: Type.Unsafe(tool.inputSchema as never),
+            parameters: tool.inputSchema,
           })),
         }
       : {}),

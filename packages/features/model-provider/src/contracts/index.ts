@@ -1,5 +1,6 @@
 export { modelProviderFeature } from './definition.js';
 export { defaultProviderRequestHeaders } from './request-headers.js';
+export { normalizeCatalogEndpoint } from './catalog-endpoint.js';
 export {
   modelProviderRuntimeHostCapability,
   modelProviderSamplingCapability,
