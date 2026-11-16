@@ -43,6 +43,7 @@ export function SubagentConversationPanel({
   onOpenFileReview,
   onOpenMarkdownWebLink,
   onOpenInAppBrowser,
+  onOpenWorkspaceFile,
   onSearchWorkspaceEntries,
 }: {
   childThreadId: string;
@@ -59,6 +60,7 @@ export function SubagentConversationPanel({
   onOpenFileReview?: DesktopReviewOpenHandler;
   onOpenMarkdownWebLink: (url: string) => void;
   onOpenInAppBrowser: (url: string) => void;
+  onOpenWorkspaceFile: (filePath: string, line?: number) => void;
   onSearchWorkspaceEntries?: SearchMarkdownWorkspaceEntries;
 }) {
   const { t } = useI18n();
@@ -85,9 +87,7 @@ export function SubagentConversationPanel({
       onOpenWebLink={onOpenMarkdownWebLink}
       workspaceRoot={workspaceRoot}
       onSearchWorkspaceEntries={onSearchWorkspaceEntries}
-      onOpenWorkspaceFile={(filePath, line) => {
-        onOpenFileReview?.(filePath, line);
-      }}
+      onOpenWorkspaceFile={onOpenWorkspaceFile}
     >
       <SubagentHeader
         task={task}
