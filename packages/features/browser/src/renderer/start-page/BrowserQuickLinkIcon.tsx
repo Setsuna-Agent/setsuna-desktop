@@ -34,6 +34,6 @@ export function BrowserQuickLinkIcon({ url, loader }: { url: string; loader: Web
   return <span ref={element} className="browser-quick-links__icon" aria-hidden="true">
     {icon && icon !== failedIcon
       ? <img src={icon} alt="" draggable={false} onError={() => setFailedIcon(icon)} />
-      : <Globe size={16} />}
+      : <Globe size={20} />}
   </span>;
 }

@@ -1,5 +1,5 @@
 import { Button, IconButton, Tooltip } from '@setsuna-desktop/renderer-ui';
-import { ChevronDown, ChevronRight, Pin, PinOff } from 'lucide-react';
+import { ChevronDown, ChevronUp, Pin, PinOff } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import type { BrowserDesktopBridge } from '../../contracts/index.js';
 import type { BrowserTranslate } from '../messages.js';
@@ -12,6 +12,7 @@ import type { WebsiteFaviconLoader } from './websiteFaviconLoader.js';
 import './quick-links.css';
 
 const maxRecentHistoryEntries = 20;
+const collapsedPageCount = 6;
 
 export function BrowserQuickLinks({ onNavigate, onError, getWebsiteFavicon, translate: t }: {
   onNavigate(url: string): void;
@@ -55,16 +56,16 @@ function PageSection({ title, pages, pinnedUrls, faviconLoader, onNavigate, onTo
 }) {
   const id = useId();
   const [expanded, setExpanded] = useState(false);
-  const visiblePages = expanded ? pages : pages.slice(0, 8);
+  const visiblePages = expanded ? pages : pages.slice(0, collapsedPageCount);
   const toggleLabel = t(expanded ? 'feature.browser.shortcuts.collapse' : 'feature.browser.shortcuts.more');
   return <section className="browser-quick-links__section" aria-labelledby={id}>
     <div className="browser-quick-links__header">
       <h2 id={id}>{title}</h2>
-      {pages.length > 8 ? <Button variant="ghost" className="browser-quick-links__more"
+      {pages.length > collapsedPageCount ? <Button variant="ghost" className="browser-quick-links__more"
         aria-label={`${toggleLabel} · ${title}`} aria-expanded={expanded} aria-controls={`${id}-pages`}
         onClick={() => setExpanded((value) => !value)}>
         {toggleLabel}
-        {expanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+        {expanded ? <ChevronUp size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
       </Button> : null}
     </div>
     <ul id={`${id}-pages`} className="browser-quick-links__grid">

@@ -9,32 +9,35 @@ export type BrowserAddressSuggestion = Readonly<{
   title: string;
   url: string;
 }>;
+export type BrowserAddressPage = Pick<BrowserBookmarkEntry, 'title' | 'url'>;
 
 const maximumSuggestions = 8;
 
 export function browserAddressSuggestions(
   value: string,
   history: readonly BrowserHistoryEntry[],
-  bookmarks: readonly BrowserBookmarkEntry[] = [],
+  bookmarks: readonly BrowserAddressPage[] = [],
   searchEngine: BrowserSearchEngine = 'bing',
+  pinnedPages: readonly BrowserAddressPage[] = [],
 ): BrowserAddressSuggestion[] {
   const query = value.trim();
   const terms = searchableText(query).split(/\s+/).filter(Boolean);
-  const matchesQuery = (entry: BrowserHistoryEntry | BrowserBookmarkEntry) => {
+  const matchesQuery = (entry: BrowserAddressPage) => {
     const text = `${entry.title.toLowerCase()} ${searchableText(entry.url)}`;
     return terms.every((term) => text.includes(term));
   };
-  const bookmarksByUrl = new Map<string, BrowserBookmarkEntry>();
-  for (const entry of bookmarks) {
+  const savedPages = [...pinnedPages, ...bookmarks];
+  const bookmarksByUrl = new Map<string, BrowserAddressPage>();
+  for (const entry of savedPages) {
     if (!bookmarksByUrl.has(entry.url)) bookmarksByUrl.set(entry.url, entry);
   }
   // Match each source before merging so custom bookmark names and visited titles remain searchable.
-  const bookmarkMatches = bookmarks.filter(matchesQuery).map(bookmarkSuggestion);
+  const bookmarkMatches = savedPages.filter(matchesQuery).map(bookmarkSuggestion);
   const historyMatches = history.filter(matchesQuery).map((entry) => {
     const bookmark = bookmarksByUrl.get(entry.url);
     return bookmark ? bookmarkSuggestion(bookmark) : historySuggestion(entry);
   });
-  if (!query) return uniqueSuggestions([...historyMatches, ...bookmarkMatches]);
+  if (!query) return uniqueSuggestions([...pinnedPages.map(bookmarkSuggestion), ...historyMatches, ...bookmarkMatches]);
 
   const searchUrl = browserSearchUrl(query, searchEngine);
   const destination = normalizeBrowserInput(query, searchEngine);
@@ -52,7 +55,7 @@ export function browserAddressSuggestions(
   return uniqueSuggestions([...suggestions, ...bookmarkMatches, ...historyMatches]);
 }
 
-function bookmarkSuggestion(entry: BrowserBookmarkEntry): BrowserAddressSuggestion {
+function bookmarkSuggestion(entry: BrowserAddressPage): BrowserAddressSuggestion {
   return { kind: 'bookmark', id: `bookmark:${entry.url}`, title: entry.title, url: entry.url };
 }
 
