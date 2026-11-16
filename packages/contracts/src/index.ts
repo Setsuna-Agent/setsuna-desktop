@@ -49,6 +49,7 @@ export * from './usage.js';
 export * from './desktop/diagnostics.js';
 export * from './workspace.js';
 export * from './workspace/roots.js';
+export * from './workspace/search.js';
 export * from './workspace/project-icon.js';
 export * from './workspace/document-preview.js';
 export * from './workspace/file-diff-preview.js';

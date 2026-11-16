@@ -1,16 +1,12 @@
-import type { DesktopTextEditCommand } from '@setsuna-desktop/contracts';
-
-export type TextContextMenuTarget = {
-  canCopy: boolean;
-  editable: boolean;
-  restore(command?: DesktopTextEditCommand): boolean;
-};
+import type { TextContextMenuTarget } from '@setsuna-desktop/renderer-contracts/workspace';
+export type { TextContextMenuTarget } from '@setsuna-desktop/renderer-contracts/workspace';
 
 const textInputTypes = new Set(['text', 'search', 'url', 'tel', 'email', 'password', 'number']);
 
 /** Capture before the menu takes focus; native editing needs the original selection. */
 export function captureTextContextMenuTarget(event: MouseEvent): TextContextMenuTarget | null {
-  const target = event.composedPath().find((node): node is HTMLElement => node instanceof HTMLElement);
+  const path = event.composedPath();
+  const target = path.find((node): node is HTMLElement => node instanceof HTMLElement);
   if (!target) return null;
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return captureTextControl(target);
 
@@ -23,7 +19,10 @@ export function captureTextContextMenuTarget(event: MouseEvent): TextContextMenu
     ? editor.contains(range.startContainer) && editor.contains(range.endContainer)
     : range.intersectsNode(target));
   const canCopy = ownRanges.some((range) => range.toString().length > 0);
-  if (!editable && !canCopy) return null;
+  // Declared text surfaces keep the same commands even without a selection.
+  // Use the composed path so this also covers readonly code inside a shadow root.
+  const textSurface = path.some((node) => node instanceof HTMLElement && node.hasAttribute('data-text-context-menu'));
+  if (!editable && !canCopy && !textSurface) return null;
   // An empty editor may be right-clicked before Chromium has installed a caret.
   if (editor && ownRanges.length === 0) {
     const range = target.ownerDocument.createRange();
@@ -36,6 +35,8 @@ export function captureTextContextMenuTarget(event: MouseEvent): TextContextMenu
     canCopy,
     editable,
     restore(command) {
+      // An empty readonly target must not clear a selection or focus elsewhere.
+      if (!editable && !canCopy) return false;
       if (!target.isConnected || ownRanges.some((range) => !range.startContainer.isConnected || !range.endContainer.isConnected)
         || ownRanges.map((range) => range.toString()).join('') !== selectedText) return false;
       if (command && command !== 'copy' && (!editor?.isContentEditable || editor.closest('[aria-disabled="true"]'))) return false;
@@ -77,11 +78,11 @@ function captureTextControl(control: HTMLInputElement | HTMLTextAreaElement): Te
   const password = control instanceof HTMLInputElement && control.type === 'password';
   const canCopy = !password && start !== null && end !== null && end > start;
   const editable = !control.readOnly && !control.closest('[aria-disabled="true"]');
-  if (!editable && !canCopy) return null;
   return {
     canCopy,
     editable,
     restore(command) {
+      if (!editable && !canCopy) return false;
       if (!control.isConnected || control.matches(':disabled') || control.value !== value) return false;
       if (command && command !== 'copy' && (control.readOnly || control.closest('[aria-disabled="true"]'))) return false;
       control.focus({ preventScroll: true });

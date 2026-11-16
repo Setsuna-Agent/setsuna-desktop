@@ -1,5 +1,6 @@
 .desktop-agent-search-popover {
-  height: min(520px, calc(100vh - 64px));
+  height: min(508px, calc(100vh - 64px));
+  border-radius: 22px;
 }
 
 /* Keep spacing inside the search controls so the list scrollbar reaches the dialog edge. */
@@ -13,22 +14,14 @@
 
 .desktop-agent-search-popover__input {
   display: flex;
-  flex: 0 0 36px;
+  flex: 0 0 52px;
   align-items: center;
   gap: 8px;
-  height: 36px;
-  min-height: 36px;
-  margin: 12px 12px 0;
-  padding: 0 10px;
-  border-radius: var(--app-radius-md);
+  min-height: 52px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--app-border);
   color: var(--app-text-muted);
   background: transparent;
-}
-
-.desktop-agent-search-popover__input:focus-within,
-.desktop-agent-search-popover__input:hover {
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 4%, transparent);
 }
 
 .desktop-agent-search-popover__input input {
@@ -40,7 +33,7 @@
   outline: 0;
   color: var(--app-text);
   background: transparent;
-  font: inherit;
+  font-size: 15px;
 }
 
 .desktop-agent-search-popover__input input::placeholder {
@@ -49,31 +42,19 @@
 
 .desktop-agent-search-popover__heading {
   display: flex;
-  flex: 0 0 28px;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
   height: 28px;
-  padding: 0 22px;
+  padding: 0 12px;
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 16px;
   font-weight: 500;
 }
 
-.desktop-agent-search-popover__loading {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  color: var(--app-text-muted);
-}
-
 .desktop-agent-search-popover__list {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 0 12px 12px;
+  padding: 4px 5px 6px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -94,8 +75,8 @@
   gap: 8px;
   width: 100%;
   min-width: 0;
-  min-height: 32px;
-  padding: 6px 10px;
+  min-height: 35px;
+  padding: 7px 12px;
   border: 0;
   border-radius: var(--app-radius-md);
   color: var(--app-text);
@@ -117,13 +98,18 @@
   box-shadow: var(--app-focus-ring);
 }
 
-.desktop-agent-search-result__status {
+.desktop-agent-search-result__icon {
   display: inline-flex;
-  flex: 0 0 13px;
+  flex: 0 0 16px;
   align-items: center;
   justify-content: center;
   height: 16px;
   color: var(--app-text-muted);
+}
+
+.desktop-agent-search-result__icon > * {
+  width: 16px;
+  height: 16px;
 }
 
 .desktop-agent-search-result__main {
@@ -148,7 +134,7 @@
   color: currentColor;
   font-size: 13px;
   line-height: 18px;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .desktop-agent-search-result__match {
@@ -159,8 +145,102 @@
 
 .desktop-agent-search-result__source {
   flex: 0 0 auto;
-  max-width: 160px;
+  max-width: 35%;
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 16px;
+}
+
+.desktop-agent-search-result--files .desktop-agent-search-result__main {
+  flex: 0 1 auto;
+}
+
+.desktop-agent-search-result--files .desktop-agent-search-result__source {
+  flex: 1 1 auto;
+  max-width: none;
+}
+
+.desktop-agent-search-result--text .desktop-agent-search-result__title {
+  font-family: var(--app-code-font-family);
+  font-size: 12px;
+}
+
+.desktop-agent-search-result kbd {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 8px;
+  color: var(--app-text-muted);
+  background: var(--desktop-agent-control-hover-bg);
+  font: inherit;
+  font-size: 11px;
+}
+
+.desktop-agent-search-popover__footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0 5px;
+  padding: 5px 0;
+  border-top: 1px solid var(--app-border);
+}
+
+.desktop-agent-search-popover__categories,
+.desktop-agent-search-popover__filters {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desktop-agent-search-popover__category,
+.desktop-agent-search-popover__project {
+  min-height: 30px;
+  padding: 5px 12px;
+  border-radius: 18px;
+  color: var(--app-text-muted);
+}
+
+.desktop-agent-search-popover__category {
+  font-size: 13px;
+}
+
+.desktop-agent-search-popover__category.is-active {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-active-bg);
+}
+
+.desktop-agent-search-popover__filters {
+  gap: 8px;
+  margin-left: auto;
+  padding-right: 8px;
+}
+
+.desktop-agent-search-popover__project {
+  width: auto;
+  max-width: 190px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px;
+}
+
+/* Radix restores focus after selection; focus alone should not keep the control highlighted. */
+.desktop-agent-search-popover__project:focus {
+  border-color: transparent;
+}
+
+.desktop-agent-search-popover__project:is(:hover, .is-open):not(:disabled) {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-active-bg);
+}
+
+.desktop-agent-search-popover__extensions {
+  width: 138px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 12px;
 }

@@ -401,6 +401,16 @@ export type WorkspaceSearchResult = {
   preview: string;
 };
 
+export type WorkspaceSearchOptions = {
+  /** Literal file suffixes, e.g. ts, .tsx or *.d.ts; empty means all file types. */
+  fileExtensions?: string[];
+};
+
+export type WorkspaceEntrySearchOptions = {
+  /** Exclude directories before applying the result limit. */
+  filesOnly?: boolean;
+};
+
 export type WorkspaceSearchResponse = {
   query: string;
   results: WorkspaceSearchResult[];

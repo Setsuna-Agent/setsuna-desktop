@@ -135,6 +135,7 @@ Factory 接受 data root、builtin Skill/Plugin 和 bundled ripgrep 等 options�
 - Policy 统一排除 VCS/generated、secret 文件和 sandbox deny path。
 - Ripgrep 使用固定参数，不读取机器全局 config。
 - Supersession 只取消相同 workspace + `supersedeKey` 的旧搜索。
+- 全局搜索的 `fileExtensions` 在两个引擎中都按大小写不敏感的字面后缀筛选，先筛选再累计结果限额，继续遵守忽略和路径限制。文件名搜索的 `filesOnly` 同样在限额前排除目录。
 
 Project panel 可以 latest-wins；Agent 并行 `search_text` 不应互相取消。
 

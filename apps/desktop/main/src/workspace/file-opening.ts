@@ -1,14 +1,9 @@
-import type { DesktopOpenPathResult, DesktopWorkspaceFilePreviewResult } from '@setsuna-desktop/contracts';
+import { WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES, type DesktopOpenPathResult, type DesktopWorkspaceFilePreviewResult } from '@setsuna-desktop/contracts';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 type OpenPath = (targetPath: string) => Promise<string>;
-type RegisterPreview = (input: {
-  mimeType: string;
-  name: string;
-  targetPath: string;
-  workspaceRoot: string;
-}) => { url: string; previewId: string };
+type RegisterPreview = (input: WorkspaceFilePreview) => { url: string; previewId: string };
 type WorkspacePathAction = (targetPath: string) => void | Promise<void>;
 
 type WorkspacePathKind = 'directory' | 'entry' | 'file';
@@ -18,6 +13,8 @@ type WorkspacePathResolution =
   | { ok: false; error: string };
 
 export type WorkspaceFilePreview = {
+  content?: Buffer;
+  sandbox?: boolean;
   mimeType: string;
   name: string;
   targetPath: string;
@@ -113,11 +110,21 @@ export async function createWorkspaceFilePreviewUrl(
   workspaceRootValue: unknown,
   filePathValue: unknown,
   registerPreview: RegisterPreview,
+  options: { htmlContent?: unknown; sandbox?: unknown } = {},
 ): Promise<DesktopWorkspaceFilePreviewResult> {
   const resolved = await resolveWorkspaceFilePreview(workspaceRootValue, filePathValue);
   if (!resolved.ok) return resolved;
 
   try {
+    const contentValue = options.htmlContent;
+    if (contentValue !== undefined) {
+      if (resolved.preview.mimeType !== 'text/html' || typeof contentValue !== 'string'
+        || Buffer.byteLength(contentValue, 'utf8') > WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES) {
+        throw new Error(`Only HTML drafts up to ${WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES / (1024 * 1024)} MiB can be previewed.`);
+      }
+      resolved.preview.content = Buffer.from(contentValue, 'utf8');
+    }
+    if (options.sandbox === true) resolved.preview.sandbox = true;
     return {
       ok: true,
       ...registerPreview(resolved.preview),
@@ -233,17 +240,21 @@ const workspaceFilePreviewMimeTypes: Readonly<Record<string, string>> = {
   '.mp3': 'audio/mpeg',
   '.mp4': 'video/mp4',
   '.ogg': 'audio/ogg',
+  '.otf': 'font/otf',
   '.pdf': 'application/pdf',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.tif': 'image/tiff',
   '.tiff': 'image/tiff',
   '.ts': 'text/plain',
+  '.ttf': 'font/ttf',
   '.txt': 'text/plain',
   '.wasm': 'application/wasm',
   '.wav': 'audio/wav',
   '.webm': 'video/webm',
   '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
   '.xml': 'application/xml',
   '.yaml': 'text/yaml',
   '.yml': 'text/yaml',

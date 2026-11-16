@@ -15,6 +15,8 @@ import type {
   WorkspaceProjectTarget,
   WorkspaceProjectList,
   WorkspaceSearchResponse,
+  WorkspaceSearchOptions,
+  WorkspaceEntrySearchOptions,
   WorkspaceStatus,
 } from '@setsuna-desktop/contracts';
 import type { SafeImageMimeType } from '../utils/safe-image.js';
@@ -42,7 +44,7 @@ export type TemporaryWorkspaceInput = {
   createdAt?: string;
 };
 
-export type WorkspaceProjectSearchOptions = {
+export type WorkspaceProjectSearchOptions = WorkspaceSearchOptions & {
   /** Optional latest-wins group selected by the concrete caller. */
   supersedeKey?: string;
   signal?: AbortSignal;
@@ -67,7 +69,7 @@ export type WorkspaceProjectStore = {
   renameEntry(projectId: WorkspaceProjectTarget, relativePath: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry>;
   moveEntry(projectId: WorkspaceProjectTarget, relativePath: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry>;
   deleteEntry(projectId: WorkspaceProjectTarget, relativePath: string): Promise<void>;
-  searchEntries(projectId: WorkspaceProjectTarget, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
+  searchEntries(projectId: WorkspaceProjectTarget, query?: string, parent?: string | null, options?: WorkspaceEntrySearchOptions): Promise<WorkspaceEntrySearchResponse>;
   inspectFile(projectId: WorkspaceProjectTarget, relativePath: string): Promise<WorkspaceFileMetadata>;
   readFile(
     projectId: WorkspaceProjectTarget,

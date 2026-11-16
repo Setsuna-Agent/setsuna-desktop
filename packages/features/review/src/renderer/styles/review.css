@@ -352,6 +352,19 @@
   flex-shrink: 0;
 }
 
+.desktop-review-html-preview {
+  height: min(640px, 70vh);
+  min-height: 240px;
+  min-width: 0;
+}
+
+/* The HTML document owns scrolling; a selected file uses the available panel height. */
+.desktop-review-section--single-file .desktop-review-html-preview {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+}
+
 .desktop-review-unanchored-findings {
   display: grid;
   gap: 8px;
@@ -591,8 +604,8 @@
   box-sizing: border-box;
   width: 100%;
   max-width: none;
-  height: var(--desktop-review-file-row-height);
-  padding: 0 calc((100% - var(--desktop-review-file-content-max-width)) + var(--desktop-review-file-action-edge)) 0 12px;
+  min-height: var(--desktop-review-file-row-height);
+  padding: 6px calc((100% - var(--desktop-review-file-content-max-width)) + var(--desktop-review-file-action-edge)) 6px 12px;
   border: 0;
   border-radius: 0;
   color: var(--app-text-muted);

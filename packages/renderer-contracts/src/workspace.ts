@@ -1,6 +1,14 @@
 import { defineKeyedRendererSlot } from '@setsuna-desktop/feature-core/renderer';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import type { DesktopTextEditCommand } from '@setsuna-desktop/contracts';
 import type { ReactNode } from 'react';
+
+/** Captured before a surface menu takes focus; restoration remains host-owned. */
+export type TextContextMenuTarget = {
+  canCopy: boolean;
+  editable: boolean;
+  restore(command?: DesktopTextEditCommand): boolean;
+};
 
 /** The host supplies bytes; document surfaces never receive filesystem or runtime access. */
 export type DocumentPreviewProps = Readonly<{

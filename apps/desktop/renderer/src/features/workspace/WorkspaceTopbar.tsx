@@ -10,6 +10,7 @@ export function WorkspaceTopbar({
   isFileDirty,
   bottomPanelOpen,
   onClosePanel,
+  onClosePanels,
   onOpenOverview,
   onMovePanel,
   onSelectPanel,
@@ -24,6 +25,7 @@ export function WorkspaceTopbar({
   isFileDirty?: (path: string, rootId?: string) => boolean;
   bottomPanelOpen: boolean;
   onClosePanel: (panelId: string) => void;
+  onClosePanels: (panelIds: readonly string[]) => void;
   onOpenOverview: () => void;
   onMovePanel: (
     panelId: string,
@@ -49,6 +51,7 @@ export function WorkspaceTopbar({
         bottomBarActive={bottomPanelOpen}
         onClose={onToggleWorkspace}
         onClosePanel={onClosePanel}
+        onClosePanels={onClosePanels}
         onMovePanel={onMovePanel}
         onAddPanel={onOpenOverview}
         onReorderPanels={onReorderPanels}

@@ -46,7 +46,7 @@ export function SubagentPanel({
           onBack={() => navigation?.openList(conversation.parentThreadId)}
         />
       ) : (
-        <CollaborationFeatureTaskDirectory parentThreadId={conversation.parentThreadId} translate={t} />
+        <CollaborationFeatureTaskDirectory parentThreadId={conversation.parentThreadId} translate={t} active={!hidden} />
       )}
     </aside>
   );

@@ -2,6 +2,7 @@ export type DesktopWorkspaceApp = Readonly<{
   icon: string;
   id: string;
   label: string;
+  kind?: 'browser';
 }>;
 
 export const WORKSPACE_APPS_IPC_CHANNELS = Object.freeze({

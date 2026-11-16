@@ -2,7 +2,7 @@ import type { DocumentPreviewReadResult, RuntimeConfiguredModelReference } from 
 import type { DesktopDiffFile, DesktopDiffSummary } from './diff.js';
 import type { DesktopGitCommitDetails, DesktopGitCommitFileInput, DesktopGitHistoryOptions, DesktopGitHistoryPage } from './history.js';
 
-export type DesktopReviewImagePreviewResult =
+export type DesktopReviewFilePreviewResult =
   | { ok: true; previewId: string; url: string }
   | { ok: false; error: string };
 
@@ -131,8 +131,9 @@ export interface DesktopReviewBridge {
   getState(workspaceRoot: string, options?: DesktopReviewStateOptions): Promise<DesktopReviewState>;
   readTextFile(workspaceRoot: string, input: DesktopReviewFileVersionInput): Promise<DesktopReviewTextFileResult>;
   readDocumentFile(workspaceRoot: string, input: DesktopReviewFileVersionInput): Promise<DocumentPreviewReadResult>;
-  createImagePreview(workspaceRoot: string, input: DesktopReviewImagePreviewInput): Promise<DesktopReviewImagePreviewResult>;
-  releaseImagePreview(previewId: string): Promise<boolean>;
+  createImagePreview(workspaceRoot: string, input: DesktopReviewImagePreviewInput): Promise<DesktopReviewFilePreviewResult>;
+  createHtmlPreview(workspaceRoot: string, input: DesktopReviewFileVersionInput): Promise<DesktopReviewFilePreviewResult>;
+  releaseFilePreview(previewId: string): Promise<boolean>;
   watchChanges(workspaceRoot: string, callback: () => void): () => void;
   discardUnstaged(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
   stageFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
@@ -159,7 +160,8 @@ export const REVIEW_IPC_CHANNELS = Object.freeze({
   readTextFile: 'desktop-review:read-text-file',
   readDocumentFile: 'desktop-review:read-document-file',
   createImagePreview: 'desktop-review:create-image-preview',
-  releaseImagePreview: 'desktop-review:release-image-preview',
+  createHtmlPreview: 'desktop-review:create-html-preview',
+  releaseFilePreview: 'desktop-review:release-file-preview',
   subscribeChanges: 'desktop-review:subscribe-changes',
   unsubscribeChanges: 'desktop-review:unsubscribe-changes',
   discardUnstaged: 'desktop-review:discard-unstaged',

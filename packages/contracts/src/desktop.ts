@@ -182,7 +182,7 @@ export type SetsunaDesktopBridge = {
     resolveWorkspaceFileDrop(workspaceRoot: string, file: File): Promise<string | null>;
     copyWorkspaceFilePath(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
     revealWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
-    createWorkspaceFilePreview(workspaceRoot: string, filePath: string): Promise<DesktopWorkspaceFilePreviewResult>;
+  createWorkspaceFilePreview(workspaceRoot: string, filePath: string, options?: { htmlContent?: string; sandbox?: boolean }): Promise<DesktopWorkspaceFilePreviewResult>;
     releaseWorkspaceFilePreview(previewId: string): Promise<boolean>;
     readWorkspaceDocument(workspaceRoot: string, filePath: string): Promise<DocumentPreviewReadResult>;
     watchWorkspaceEntries(workspaceRoot: string, directoryPaths: string[], callback: () => void): () => void;

@@ -1,7 +1,7 @@
 import type { FileDiff, PostRenderPhase } from '@pierre/diffs';
 import type { DiffLineAnnotation } from '@pierre/diffs/react';
 import type { CheckboxProps, SettingsDialogProps, SettingsModelPickerProps, SettingsToggleProps } from '@setsuna-desktop/renderer-contracts/settings';
-import type { DocumentPreviewProps } from '@setsuna-desktop/renderer-contracts/workspace';
+import type { DocumentPreviewProps, TextContextMenuTarget } from '@setsuna-desktop/renderer-contracts/workspace';
 import type { DropdownProps } from '@setsuna-desktop/renderer-ui';
 import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { createContext, useContext, type ComponentType, type ReactNode, type RefObject } from 'react';
@@ -16,6 +16,7 @@ export type ReviewFileContextTarget = {
   filePath: string;
   triggerId?: string;
   line?: number;
+  textTarget?: TextContextMenuTarget | null;
   x: number;
   y: number;
 };
@@ -81,7 +82,7 @@ export type ReviewRendererHost = Readonly<{
   buildPatch(file: DesktopDiffFile): string;
   loadFileChangePreview(reference: DesktopFileChangeReference, signal: AbortSignal): Promise<DesktopDiffFile>;
   copyText(value: string): Promise<void>;
-  hasTextContextMenuTarget(event: MouseEvent): boolean;
+  captureTextContextMenuTarget(event: MouseEvent): TextContextMenuTarget | null;
   openExternal(url: string): Promise<boolean>;
   locale: string;
   notifySuccess(message: string): void;

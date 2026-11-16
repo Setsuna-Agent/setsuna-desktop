@@ -1,4 +1,5 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
+import { normalizeWorkspaceSearchExtensions } from '@setsuna-desktop/contracts';
 import path from 'node:path';
 import { createContext, Script } from 'node:vm';
 import type {
@@ -26,6 +27,7 @@ export class JavaScriptWorkspaceSearchEngine implements WorkspaceSearchEngine {
   private readonly supersession = new WorkspaceSearchSupersessionCoordinator();
 
   async search(request: WorkspaceTextSearchRequest): Promise<WorkspaceTextSearchResponse> {
+    request = { ...request, fileExtensions: normalizeWorkspaceSearchExtensions(request.fileExtensions) };
     const lease = this.supersession.start(request);
     const timeout = setTimeout(
       () => lease.controller.abort(new Error(`Workspace search timed out after ${DEFAULT_SEARCH_TIMEOUT_MS}ms.`)),
@@ -58,6 +60,7 @@ async function runJavaScriptSearch(request: WorkspaceTextSearchRequest): Promise
     throwIfAborted(request.signal);
     if (isWorkspaceSearchPathExcluded(scope.root, filePath, request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) return true;
     const relativePath = workspaceRelativeSearchPath(scope.root, filePath);
+    if (request.fileExtensions?.length && !request.fileExtensions.some((extension) => relativePath.toLowerCase().endsWith(`.${extension}`))) return true;
     if (ignoreMatcher?.ignores(relativePath)) return true;
     const fileStat = await stat(filePath).catch(() => null);
     throwIfAborted(request.signal);

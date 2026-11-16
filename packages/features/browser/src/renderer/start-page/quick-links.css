@@ -54,6 +54,14 @@
   box-sizing: border-box;
 }
 
+:where(:root[data-theme='dark']) .browser-quick-links__grid li {
+  background: var(--app-surface);
+}
+
+:where(:root[data-theme='dark']) .browser-quick-links__page.sd-button {
+  box-shadow: inset 0 0 0 1px var(--app-border);
+}
+
 .browser-quick-links__icon {
   display: grid;
   flex: 0 0 20px;

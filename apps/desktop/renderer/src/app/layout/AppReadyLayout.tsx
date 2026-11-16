@@ -32,6 +32,7 @@ import { useSidebarThreadNavigation } from '../controller/useSidebarThreadNaviga
 import { useToast } from '../providers/ToastProvider.js';
 import { usePinnedThreads } from '../sidebar/usePinnedThreads.js';
 import { usePinnedProjects } from '../sidebar/usePinnedProjects.js';
+import { useSidebarSearchFileNavigation } from '../sidebar/useSidebarSearchFileNavigation.js';
 import { useThreadMenu } from '../thread-menu/useThreadMenu.js';
 import { AppOverlays } from './AppOverlays.js';
 import { AppChatToolbarTitle } from './AppChatToolbarTitle.js';
@@ -128,6 +129,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const runtimeActivityTriggerRef = useRef<HTMLButtonElement | null>(null);
   const themeToggleTriggerRef = useRef<HTMLButtonElement | null>(null);
   const currentThread = runtime.currentThread;
+  const openSearchFile = useSidebarSearchFileNavigation({
+    activeProjectId, activeView, currentThreadId: currentThread?.id, workspaceId: activeWorkspace?.id,
+    navigation, openProjectFile: projectWorkspace.openProjectFile,
+  });
   const assistantChat = activeView === 'chat' && currentThread?.featureId === 'assistants';
   const toast = useToast();
   const assistantService = useAssistantsFeature();
@@ -280,10 +285,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       execute: startNewChat,
     },
     'app.searchChats': {
-      execute: () => {
-        setActiveView('chat');
-        navigation.setSidebarSearchOpen(true);
-      },
+      execute: () => navigation.openSidebarSearch(),
     },
     'navigation.goBack': {
       enabled: appHistory.canGoBack,
@@ -682,6 +684,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
             onConversationOverviewRenderedChange={setConversationOverviewRendered}
             onFocusComposerRequestConsumed={consumeFocusComposerRequest}
             onOpenModelSettings={openModelSettings}
+            onSearchProjectText={() => navigation.openSidebarSearch('text')}
             onCapabilitySelectionRequestConsumed={clearCapabilitySelectionRequest}
             onTerminalResizeStart={handleTerminalResizeStart}
             onTerminalResizeStep={handleTerminalResizeStep}
@@ -719,12 +722,18 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         props={{
           renderDefault: () => (
             <AppOverlays
+              onOpenSearchFile={openSearchFile}
+              searchActions={{
+                onNewChat: startNewChat, onAddProject: navigation.openCreateProject, onOpenChat: openChat,
+                onOpenAssistant: assistantEntry.available ? assistantEntry.open : undefined,
+                onOpenAutomation: openAutomation, onOpenCapabilities: openCapabilities, onOpenPullRequests: openPullRequests,
+                onOpenPlugin: openPluginView, onOpenSettings: browserSettingsNavigation.openSettings,
+              }}
               client={runtime.client}
               navigation={navigation}
               projects={runtime.projects}
               runtimeActivityOpen={runtimeActivityOpen}
               runtimeActivityTriggerRef={runtimeActivityTriggerRef}
-              searchTriggerRef={searchTriggerRef}
               threads={runtime.threads}
               onActivitiesChanged={runtime.reloadThreads}
               onCloseRuntimeActivity={() => setRuntimeActivityOpen(false)}

@@ -1,7 +1,7 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
 import { Virtualizer, type DiffLineAnnotation } from '@pierre/diffs/react';
 import { getDocumentPreviewFormat, type RuntimeReviewFinding } from '@setsuna-desktop/contracts';
-import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
+import { resolveWorkspaceApp, type DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { Code2, FileDiff, PanelRightOpen } from 'lucide-react';
 import {
   useCallback,
@@ -237,7 +237,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
   scrollBody,
   showFileActions,
   showHeader,
-  workspaceApp,
+  workspaceApp: preferredWorkspaceApp,
   workspaceApps,
   onAddFileToConversation,
   onCopyFilePath,
@@ -280,13 +280,14 @@ const ReviewFileCard = memo(function ReviewFileCard({
 }) {
   const {
     buildPatch,
-    hasTextContextMenuTarget,
+    captureTextContextMenuTarget,
     translate: t,
     ui: { CodePatchView, FileContextMenu },
   } = useReviewRendererHost();
   const imagePreview = file.contentKind === 'image';
   const documentFormat = getDocumentPreviewFormat(file.path);
   const textFilePreview = fileView === 'preview' && canPreviewReviewTextFile(file, pathContext);
+  const htmlPreview = textFilePreview && /\.html?$/i.test(file.path);
   // CSV keeps its source diff so annotations and line navigation use the same path as Markdown.
   const documentDiffPreview = Boolean(documentFormat) && (documentFormat !== 'csv' || textFilePreview);
   const unsupportedPreview = file.contentKind === 'binary';
@@ -296,7 +297,8 @@ const ReviewFileCard = memo(function ReviewFileCard({
     ReviewFileContextTarget | null
   >(null);
   const workspaceFilePath = reviewWorkspaceFilePath(file.path, pathContext);
-  const markdownPreview = !documentFormat && textFilePreview;
+  const workspaceApp = resolveWorkspaceApp(workspaceApps, preferredWorkspaceApp, workspaceFilePath);
+  const textDocumentPreview = !documentFormat && textFilePreview;
   const canOpenFile = Boolean(workspaceFilePath);
   const focusedByRequest = Boolean(
     focusRequest
@@ -373,12 +375,12 @@ const ReviewFileCard = memo(function ReviewFileCard({
   }, [focusedByRequest, focusRequest?.version]);
 
   const openDiffLineContextMenu = (event: MouseEvent) => {
-    // Selected code belongs to the host's text menu; file actions are the fallback.
-    if (event.defaultPrevented || hasTextContextMenuTarget(event.nativeEvent) || !workspaceFilePath) return;
+    if (event.defaultPrevented || !workspaceFilePath) return;
     event.preventDefault();
     event.stopPropagation();
     setLineContextMenu({
       filePath: workspaceFilePath,
+      textTarget: captureTextContextMenuTarget(event.nativeEvent),
       line: pierreLineNumberFromEvent(event),
       x: event.clientX,
       y: event.clientY,
@@ -474,14 +476,14 @@ const ReviewFileCard = memo(function ReviewFileCard({
             </ActionTooltip>
           </div> : null}
         </header> : null}
-        <ReviewFileContent scrollable={scrollBody}>
+        <ReviewFileContent scrollable={scrollBody && !htmlPreview}>
           {preview.loading || preview.error ? (
             <div className="desktop-review-document-status" role={preview.error ? 'alert' : 'status'}>
               {preview.error ?? t('feature.review.workspace.file.documentLoading')}
             </div>
           ) : expanded && documentDiffPreview ? (
             <ReviewDocumentDiff file={file} pathContext={pathContext} />
-          ) : expanded && markdownPreview && workspaceFilePath ? (
+          ) : expanded && textDocumentPreview && workspaceFilePath ? (
             <ReviewFileDocument file={file} filePath={workspaceFilePath} pathContext={pathContext}
               onOpenFile={onOpenProjectFile} />
           ) : imagePreview ? (
@@ -500,6 +502,7 @@ const ReviewFileCard = memo(function ReviewFileCard({
           ) : expanded && visibleLines.length ? (
             <div
               className="desktop-review-diff-shell"
+              data-text-context-menu=""
               onContextMenu={openDiffLineContextMenu}
             >
               <CodePatchView
@@ -630,7 +633,7 @@ function ReviewImageVersion({
       return undefined;
     }
     const createPreview = bridge?.createImagePreview.bind(bridge);
-    const releasePreview = bridge?.releaseImagePreview.bind(bridge);
+    const releasePreview = bridge?.releaseFilePreview.bind(bridge);
     if (!createPreview) {
       setPreviewError(t('feature.review.workspace.file.imageUnavailable'));
       return undefined;

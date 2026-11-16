@@ -118,6 +118,7 @@ describe('Git history browsing', () => {
     }, {
       createWorkspacePreview: async () => { throw new Error('Historical images cannot use the worktree'); },
       registerContentPreview: (input) => { content = input.content; return { previewId: 'history', url: 'preview://history' }; },
+      registerHtmlPreview: () => { throw new Error('Expected an image preview.'); },
       release: () => true,
     });
     expect(preview.ok).toBe(true);

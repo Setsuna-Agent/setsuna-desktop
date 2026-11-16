@@ -1,5 +1,4 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { isPrimaryConversationThread } from '../../services/runtime-client/runtimeThreadRelations.js';
 
 export type SidebarSearchResult = {
   isBusy: boolean;
@@ -23,7 +22,7 @@ export function buildSidebarSearchResults({
 }): SidebarSearchResult[] {
   const keyword = query.trim().toLowerCase();
   return threads
-    .filter(isPrimaryConversationThread)
+    .filter((thread) => thread.kind !== 'side' && !thread.parentThreadId)
     .map((thread) => {
       const title = compactSearchText(thread.title);
       const messageText = compactSearchText(thread.searchMatchPreview ?? thread.lastMessagePreview);

@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import { normalizeWorkspaceSearchExtensions } from '@setsuna-desktop/contracts';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
 import type {
@@ -42,6 +43,7 @@ export class RipgrepWorkspaceSearchEngine implements WorkspaceSearchEngine {
   constructor(private readonly options: RipgrepWorkspaceSearchEngineOptions) {}
 
   async search(request: WorkspaceTextSearchRequest): Promise<WorkspaceTextSearchResponse> {
+    request = { ...request, fileExtensions: normalizeWorkspaceSearchExtensions(request.fileExtensions) };
     const lease = this.supersession.start(request);
     const { controller } = lease;
     const timeoutMs = this.options.timeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS;
@@ -86,6 +88,7 @@ export function buildRipgrepArguments(input: {
     args.push('--ignore-file-case-insensitive');
   }
   for (const ignoreFile of input.ignoreFiles ?? []) args.push('--ignore-file', ignoreFile);
+  for (const extension of request.fileExtensions ?? []) args.push('--iglob', `*.${extension}`);
   const defaultExcludeGlobs = workspaceSearchDefaultExcludeGlobs(request);
   for (const glob of ripgrepExcludeGlobs(root, request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) {
     args.push('--glob', `!${glob}`);
@@ -164,6 +167,7 @@ function collectRipgrepResult(
             continue;
           }
           const relativePath = workspaceRelativeSearchPath(root, event.path);
+          if (request.fileExtensions?.length && !request.fileExtensions.some((extension) => relativePath.toLowerCase().endsWith(`.${extension}`))) continue;
           if (isWorkspaceSearchPathExcluded(root, path.join(root, relativePath), request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)
             || ignoreMatcher?.ignores(relativePath)) {
             continue;

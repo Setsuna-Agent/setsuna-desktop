@@ -48,6 +48,8 @@ import type {
   WorkspaceProject,
   WorkspaceProjectList,
   WorkspaceSearchResponse,
+  WorkspaceSearchOptions,
+  WorkspaceEntrySearchOptions,
   WorkspaceStatus,
 } from '@setsuna-desktop/contracts';
 import { RuntimeClientError } from './runtimeClientErrors.js';
@@ -97,6 +99,7 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       const params = new URLSearchParams();
       if (query.search) params.set('search', query.search);
       if (query.includeArchived) params.set('includeArchived', 'true');
+      if (query.includeFeatures) params.set('includeFeatures', 'true');
       if (query.ancestorThreadId) params.set('ancestorThreadId', query.ancestorThreadId);
       if (query.parentThreadId) params.set('parentThreadId', query.parentThreadId);
       if (query.scope) params.set('scope', query.scope);
@@ -284,10 +287,11 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         path: workspaceRequestPath(projectId, `/files?path=${encodeURIComponent(path)}`),
       });
     },
-    searchProjectEntries(projectId: WorkspaceProjectTarget, query = '', parent?: string | null) {
+    searchProjectEntries(projectId: WorkspaceProjectTarget, query = '', parent?: string | null, options: WorkspaceEntrySearchOptions = {}) {
       const params = new URLSearchParams();
       params.set('q', query);
       if (parent !== undefined && parent !== null) params.set('parent', parent);
+      if (options.filesOnly) params.set('filesOnly', 'true');
       return request<WorkspaceEntrySearchResponse>({
         path: workspaceRequestPath(projectId, `/entries/search?${params}`),
       });
@@ -332,9 +336,11 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         body: input,
       });
     },
-    searchProject(projectId: WorkspaceProjectTarget, query: string) {
+    searchProject(projectId: WorkspaceProjectTarget, query: string, options: WorkspaceSearchOptions = {}) {
+      const params = new URLSearchParams({ q: query });
+      for (const extension of options.fileExtensions ?? []) params.append('extension', extension);
       return request<WorkspaceSearchResponse>({
-        path: workspaceRequestPath(projectId, `/search?q=${encodeURIComponent(query)}`),
+        path: workspaceRequestPath(projectId, `/search?${params}`),
       });
     },
     listApprovals() {

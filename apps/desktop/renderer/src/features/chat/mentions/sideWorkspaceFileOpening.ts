@@ -4,6 +4,7 @@ import type {
   WorkspaceAppsDesktopBridge,
 } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { workspaceAppSupportsTarget } from '@setsuna-desktop/feature-workspace-apps/contracts';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
@@ -34,7 +35,7 @@ export async function openSideWorkspaceFileAtRoot({
   t = defaultTranslate,
   workspaceRoot,
 }: SideWorkspaceFileOpeningOptions): Promise<string | null> {
-  if (selectedWorkspaceApp) {
+  if (selectedWorkspaceApp && workspaceAppSupportsTarget(selectedWorkspaceApp, filePath)) {
     if (!openInWorkspaceApp) return t('chat.mention.workspaceAppUnsupported');
     await openInWorkspaceApp(workspaceRoot, selectedWorkspaceApp.id, filePath, line ?? null);
     return null;

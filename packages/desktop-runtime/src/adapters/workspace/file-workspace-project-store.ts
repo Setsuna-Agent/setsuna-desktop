@@ -19,6 +19,7 @@ import {
   type WorkspaceEntryMoveInput,
   type WorkspaceEntryList,
   type WorkspaceEntrySearchResponse,
+  type WorkspaceEntrySearchOptions,
   type WorkspaceFileRead,
   type WorkspaceFileChange,
   type WorkspaceFileChangeAction,
@@ -393,7 +394,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     await applyWorkspaceFileChanges(project.path, changes, action, persist);
   }
 
-  async searchEntries(projectId: WorkspaceProjectTarget, query = '', parent?: string | null): Promise<WorkspaceEntrySearchResponse> {
+  async searchEntries(projectId: WorkspaceProjectTarget, query = '', parent?: string | null, options: WorkspaceEntrySearchOptions = {}): Promise<WorkspaceEntrySearchResponse> {
     const project = await this.requireProject(projectId);
     const search = normalizeEntrySearchText(query);
     const parentScoped = parent !== undefined && parent !== null;
@@ -447,6 +448,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         }
 
         const haystack = `${relativePath} ${entry.name}`.toLowerCase();
+        if (options.filesOnly && !entry.isFile()) continue;
         if (search && !haystack.includes(search)) continue;
         if (entries.length >= maxResults) {
           truncated = true;
@@ -597,6 +599,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
       contextLines: 0,
       maxResults: MAX_SEARCH_RESULTS,
       signal: options.signal,
+      fileExtensions: options.fileExtensions,
     });
     return {
       query,

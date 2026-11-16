@@ -203,6 +203,7 @@ export function registerDesktopIpc({
       input?.workspaceRoot,
       input?.filePath,
       (preview) => nativeBridge.registerManagedFilePreview(preview),
+      { htmlContent: input?.htmlContent, sandbox: input?.sandbox },
     );
   });
   ipcMain.handle('desktop:release-workspace-file-preview', (event, previewId: unknown) => {

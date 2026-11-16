@@ -312,6 +312,22 @@ it('hides and restores all bottom tabs and terminal sessions without closing the
   expect(view.result.current.bottomPanelVisible).toBe(false);
 });
 
+it('releases only the terminal sessions belonging to a batch of closed tabs', async () => {
+  const { view, terminal } = renderTerminalWorkspace();
+  const opened: Array<{ panelId: string; sessionId: string }> = [];
+  for (const slot of ['side', 'side', 'bottom'] as const) {
+    act(() => view.result.current.openDesktopPanel(slot, 'terminal'));
+    const panelId = (slot === 'side' ? view.result.current.sideActivePanel : view.result.current.bottomActivePanel)!.id;
+    await waitFor(() => expect(view.result.current.terminalSessionsByPanelId[panelId]).toBeDefined());
+    opened.push({ panelId, sessionId: view.result.current.terminalSessionsByPanelId[panelId].sessionId });
+  }
+  act(() => view.result.current.closeDesktopPanelItems('side', opened.map((item) => item.panelId)));
+  expect(terminal.close.mock.calls).toEqual(opened.slice(0, 2).map((item) => [item.sessionId]));
+  expect(view.result.current.sidePanelSlot.panels).toEqual([]);
+  expect(view.result.current.bottomActivePanel?.id).toBe(opened[2].panelId);
+  expect(Object.keys(view.result.current.terminalSessionsByPanelId)).toEqual([opened[2].panelId]);
+});
+
 it.each(['side', 'bottom'] as const)('closes the exited shell tab in the %s slot and collapses only when the last tab exits', async (slot) => {
   const { view, terminal, emit } = renderTerminalWorkspace();
   const slotKey = slot === 'side' ? 'sidePanelSlot' : 'bottomPanelSlot';

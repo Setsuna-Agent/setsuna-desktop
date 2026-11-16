@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 
 import type { DesktopTextEditCommand, WorkspaceFileRead } from '@setsuna-desktop/contracts';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { Editor } from '@pierre/diffs/edit';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AppTextContextMenu } from '../../../../src/app/layout/AppTextContextMenu.js';
 import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
@@ -42,10 +44,11 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   document.getSelection()?.removeAllRanges();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
-it('copies a selection across DOCX pages after the context menu takes focus', async () => {
+it('keeps file actions alongside copying a selection across DOCX pages', async () => {
   render(<Preview />);
   const start = await screen.findByText('第一页的开头和正文');
   const end = screen.getByText('第二页的后续内容');
@@ -60,14 +63,21 @@ it('copies a selection across DOCX pages after the context menu takes focus', as
   });
 
   fireEvent.contextMenu(end);
+  fireEvent.click(await screen.findByRole('menuitem', { name: '复制文件路径' }));
+  expect(copyFilePath).toHaveBeenCalledExactlyOnceWith(file.path);
+  expect(executeTextEdit).not.toHaveBeenCalled();
+
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  document.getSelection()!.removeAllRanges();
+  document.getSelection()!.addRange(range);
+  fireEvent.contextMenu(end);
   const copy = await screen.findByRole('menuitem', { name: '复制' });
-  expect(screen.queryByRole('menuitem', { name: '复制文件路径' })).toBeNull();
   document.getSelection()!.removeAllRanges();
   fireEvent.click(copy);
 
   await waitFor(() => expect(executeTextEdit).toHaveBeenCalledExactlyOnceWith('copy'));
   expect(copied).toHaveBeenCalledExactlyOnceWith('的开头和正文第二页的后续');
-  expect(copyFilePath).not.toHaveBeenCalled();
+  expect(copyFilePath).toHaveBeenCalledExactlyOnceWith(file.path);
 });
 
 it.each(['unselected paragraph', 'file tree'])('keeps file actions when right-clicking the %s with text selected elsewhere', async (target) => {
@@ -82,10 +92,71 @@ it.each(['unselected paragraph', 'file tree'])('keeps file actions when right-cl
 
   fireEvent.contextMenu(clicked);
   const copyPath = await screen.findByRole('menuitem', { name: '复制文件路径' });
-  expect(screen.queryByRole('menuitem', { name: '复制' })).toBeNull();
+  if (target === 'unselected paragraph') {
+    fireEvent.click(screen.getByRole('menuitem', { name: '剪切' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '粘贴' }));
+  }
   fireEvent.click(copyPath);
   expect(copyFilePath).toHaveBeenCalledExactlyOnceWith(file.path);
   expect(executeTextEdit).not.toHaveBeenCalled();
+});
+
+it('keeps file actions at an unselected code caret and pastes into that editor', async () => {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    measureText: (text: string) => ({ width: text.length * 8 }),
+  } as CanvasRenderingContext2D);
+  let editor!: Editor<undefined>;
+  const edit = Editor.prototype.edit;
+  vi.spyOn(Editor.prototype, 'edit').mockImplementation(function (this: Editor<undefined>, instance) {
+    editor = this;
+    return edit.call(this, instance);
+  });
+  const codeFile: WorkspaceFileRead = { ...file, path: 'quick_sort.py', content: 'before after', preview: { kind: 'text' } };
+  const view = render(<Preview currentFile={codeFile} editing />);
+  const getInput = () => view.container.querySelector('diffs-container')?.shadowRoot?.querySelector<HTMLElement>('[role="textbox"]');
+  await waitFor(() => expect(getInput()).toBeTruthy());
+  const input = getInput()!;
+  const root = input.getRootNode() as ShadowRoot;
+  const selection = document.getSelection()!;
+  // happy-dom lacks Chromium's composed selection API; keep the real editor and menu flow.
+  Object.defineProperty(selection, 'getComposedRanges', { configurable: true,
+    value: () => selection.rangeCount ? [selection.getRangeAt(0)] : [],
+  });
+  const openCodeMenu = () => {
+    // Chromium retargets the bubbling event to the host while retaining its composed path.
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, composed: true });
+    const path: EventTarget[] = [input, root];
+    for (let node: Node | null = root.host; node; node = node.parentNode) path.push(node);
+    path.push(window);
+    Object.defineProperty(event, 'composedPath', { value: () => path });
+    fireEvent(root.host, event);
+  };
+  try {
+    act(() => { editor.focus({ lineNumber: 1 }); input.focus(); });
+    openCodeMenu();
+    fireEvent.click(await screen.findByRole('menuitem', { name: '剪切' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制' }));
+    expect(executeTextEdit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制文件路径' }));
+    expect(copyFilePath).toHaveBeenCalledExactlyOnceWith(codeFile.path);
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+
+    act(() => editor.focus({ lineNumber: 1 }));
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', 'pasted ');
+    executeTextEdit.mockImplementation(async () => {
+      fireEvent.paste(root.activeElement!, { clipboardData });
+      return true;
+    });
+    openCodeMenu();
+    fireEvent.click(await screen.findByRole('menuitem', { name: '粘贴' }));
+    await waitFor(() => expect(editor.getText()).toBe('pasted before after'));
+    expect(executeTextEdit).toHaveBeenCalledExactlyOnceWith('paste');
+    expect(copyFilePath).toHaveBeenCalledExactlyOnceWith(codeFile.path);
+  } finally {
+    Reflect.deleteProperty(selection, 'getComposedRanges');
+  }
 });
 
 const noop = () => undefined;
@@ -94,15 +165,16 @@ const searchEntries = async () => ({
   query: '', scanned: 1, truncated: false, workspaceRoot: '/repo',
 });
 
-function Preview() {
+function Preview({ currentFile = file, editing = false }: { currentFile?: WorkspaceFileRead; editing?: boolean }) {
+  const [content, setContent] = useState(currentFile.content);
   const tree = useWorkspaceFileTree({ workspaceKey: 'project', enabled: true, searchEntries });
   return <I18nProvider initialLocale="zh-CN"><ToastProvider><AppTextContextMenu /><WorkspacePanel
-    activePanel={createFilePanel(file.path)} activeProject={{ id: file.projectId, name: 'Repo', path: '/repo', createdAt: '', updatedAt: '' }}
-    filePreview={file} fileFocusRequest={null} fileTree={tree} entryOperationPending={false} onSearchProjectEntries={searchEntries}
-    fileDraft={{ content: '', editing: false, canEdit: false, dirty: false,
+    activePanel={createFilePanel(currentFile.path)} activeProject={{ id: currentFile.projectId, name: 'Repo', path: '/repo', createdAt: '', updatedAt: '' }}
+    filePreview={currentFile} fileFocusRequest={null} fileTree={tree} entryOperationPending={false} onSearchProjectEntries={searchEntries} onSearchProjectText={noop}
+    fileDraft={{ content, editing, canEdit: editing, dirty: false,
       error: null, errorMessage: null, preparing: false, saving: false, isSaving: () => false,
       save: async () => true, confirmDiscardChanges: async () => true, confirmDiscardAllChanges: async () => true,
-      hasUnsavedChanges: false, hasDirtyEntry: () => false, discardEntry: noop, isFileDirty: () => false, updateContent: noop, relocateEntry: noop }}
+      hasUnsavedChanges: false, hasDirtyEntry: () => false, discardEntry: noop, isFileDirty: () => false, updateContent: setContent, relocateEntry: noop }}
     latestReviewSummary={null} latestReviewFindings={[]} reviewError={null} reviewFocusRequest={null}
     reviewLoading={false} reviewState={null} selectedWorkspaceApp={null} workspaceApps={[]}
     onAddFileToConversation={noop} onCopyFilePath={copyFilePath} onCreateEntry={async () => null}

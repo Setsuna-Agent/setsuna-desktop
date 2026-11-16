@@ -81,10 +81,9 @@
   flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
   color: var(--app-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* Browser/chat/debug stay mounted while their tab moves between panel slots. */

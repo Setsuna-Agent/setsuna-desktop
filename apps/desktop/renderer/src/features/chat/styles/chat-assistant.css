@@ -475,9 +475,9 @@
   color: var(--app-text);
 }
 
-/* Plugin presets and custom artwork share the history's neutral default;
-   only the active row restores its original avatar colors and surface. */
-:is(.chat-plugin-use-record, .chat-tool-run__summary, .chat-tool-run__inspection-item):not(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])) .chat-work-history__plugin-icon {
+/* 工具行的插件图标始终保持中性；独立插件使用记录保留原有交互。 */
+.chat-plugin-use-record:not(:hover, :focus-visible, :has(:focus-visible), :has(a[data-context-menu-open])) .chat-work-history__plugin-icon,
+:is(.chat-tool-run__summary, .chat-tool-run__inspection-item) .chat-work-history__plugin-icon {
   color: inherit;
   background: transparent;
   filter: grayscale(1);

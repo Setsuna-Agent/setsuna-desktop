@@ -1,6 +1,6 @@
 import { detectWorkspacePreviewImageMimeType } from '@setsuna-desktop/contracts';
 import type {
-  DesktopReviewImagePreviewResult,
+  DesktopReviewFilePreviewResult,
   ReviewFilePreviewRegistry,
 } from '../contracts/index.js';
 import path from 'node:path';
@@ -12,7 +12,7 @@ export async function createReviewImagePreviewUrl(
   workspaceRootValue: unknown,
   inputValue: unknown,
   previews: ReviewFilePreviewRegistry,
-): Promise<DesktopReviewImagePreviewResult> {
+): Promise<DesktopReviewFilePreviewResult> {
   const input = normalizeReviewFileVersionInput(inputValue);
   if (!input) return { ok: false, error: 'Invalid review image preview request.' };
 

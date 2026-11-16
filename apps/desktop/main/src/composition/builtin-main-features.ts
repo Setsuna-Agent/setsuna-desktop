@@ -206,7 +206,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
             if (!resolved.ok) return resolved;
             return {
               ok: true as const,
-              ...input.nativeBridge.registerManagedFilePreview(resolved.preview),
+              ...input.nativeBridge.registerManagedFilePreview({ ...resolved.preview, sandbox: true }),
             };
           },
           registerContentPreview: (preview: Readonly<{
@@ -222,6 +222,21 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
             ),
           }),
           release: (previewId: string) => input.nativeBridge.releaseFilePreview(previewId),
+          registerHtmlPreview: (preview: Readonly<{
+            filePath: string;
+            content: string;
+            readResource(filePath: string): Promise<Uint8Array | null>;
+          }>) => input.nativeBridge.registerManagedFilePreview({
+            name: preview.filePath.split(/[\\/]/u).at(-1) ?? preview.filePath,
+            mimeType: 'text/html',
+            sandbox: true,
+            content: Buffer.from(preview.content, 'utf8'),
+            resourcePath: preview.filePath,
+            readResource: async (filePath) => {
+              const content = await preview.readResource(filePath);
+              return content ? Buffer.from(content.buffer, content.byteOffset, content.byteLength) : null;
+            },
+          }),
         }),
       ),
       provideHostCapability(

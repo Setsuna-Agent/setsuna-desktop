@@ -116,3 +116,25 @@ it.each(['side', 'bottom'] as const)('retains a dirty %s document when close is 
   expect(view.result.current.panels[slotKey].active).toBe('file:b.ts');
   expect(view.result.current.workspace.fileDraft.content).toBe('unsaved b');
 });
+
+it('waits for discard confirmation before closing a batch and leaves the other slot intact', async () => {
+  const view = setup();
+  await view.openFiles('side');
+  act(() => view.result.current.panels.openDesktopPanel('bottom', 'chat'));
+  const bottom = view.result.current.panels.bottomPanelSlot;
+  const initial = view.result.current.panels.sidePanelSlot;
+  act(() => view.result.current.workspace.fileDraft.updateContent('unsaved c'));
+  let closing!: Promise<void>;
+  act(() => { closing = view.result.current.panels.closeDesktopPanelItems('side', ['file:b.ts', 'file:c.ts']); });
+  fireEvent.click(await screen.findByRole('button', { name: '取消' }));
+  await act(async () => { await closing; });
+  expect(view.result.current.panels.sidePanelSlot).toEqual(initial);
+  expect(view.result.current.workspace.fileDraft).toMatchObject({ content: 'unsaved c', dirty: true });
+
+  act(() => { closing = view.result.current.panels.closeDesktopPanelItems('side', ['file:b.ts', 'file:c.ts']); });
+  fireEvent.click(await screen.findByRole('button', { name: '确认' }));
+  await act(async () => { await closing; });
+  await waitFor(() => expect(view.result.current.workspace.filePreview?.path).toBe('a.ts'));
+  expect(view.result.current.panels.sidePanelSlot.panels.map((panel) => panel.id)).toEqual(['files', 'file:a.ts']);
+  expect(view.result.current.panels.bottomPanelSlot).toEqual(bottom);
+});

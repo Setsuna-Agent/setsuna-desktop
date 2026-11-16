@@ -61,6 +61,24 @@ describe('main window navigation guards', () => {
     expect(preventFrameNavigation).toHaveBeenCalledOnce();
     expect(openExternal).toHaveBeenCalledTimes(1);
 
+    const pdfOrigin = 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai';
+    const preventPdfNavigation = vi.fn();
+    frameNavigate?.({
+      preventDefault: preventPdfNavigation, isMainFrame: false,
+      url: `${pdfOrigin}/pdf-stream-id`, initiator: { url: `${pdfOrigin}/index.html` },
+    });
+    expect(preventPdfNavigation).not.toHaveBeenCalled();
+    for (const request of [
+      { url: `${pdfOrigin}/index.html`, initiator: { url: 'https://example.com' } },
+      { url: `${pdfOrigin}/index.html`, initiator: undefined },
+      { url: 'chrome-extension://another-extension/page.html', initiator: { url: `${pdfOrigin}/index.html` } },
+      { url: 'file:///app/dist/renderer/index.html', initiator: { url: `${pdfOrigin}/index.html` } },
+    ]) {
+      const preventUnsafeNavigation = vi.fn();
+      frameNavigate?.({ ...request, preventDefault: preventUnsafeNavigation, isMainFrame: false });
+      expect(preventUnsafeNavigation).toHaveBeenCalledOnce();
+    }
+
     const preventChildTopNavigation = vi.fn();
     frameNavigate?.({
       preventDefault: preventChildTopNavigation,

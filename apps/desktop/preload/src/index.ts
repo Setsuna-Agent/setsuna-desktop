@@ -108,8 +108,8 @@ const desktop: SetsunaDesktopBridge['desktop'] = {
     ipcRenderer.invoke('desktop:copy-workspace-file-path', { workspaceRoot, filePath }),
   revealWorkspaceFile: (workspaceRoot, filePath) =>
     ipcRenderer.invoke('desktop:reveal-workspace-file', { workspaceRoot, filePath }),
-  createWorkspaceFilePreview: (workspaceRoot, filePath) =>
-    ipcRenderer.invoke('desktop:create-workspace-file-preview', { workspaceRoot, filePath }),
+  createWorkspaceFilePreview: (workspaceRoot, filePath, options) =>
+    ipcRenderer.invoke('desktop:create-workspace-file-preview', { workspaceRoot, filePath, htmlContent: options?.htmlContent, sandbox: options?.sandbox }),
   releaseWorkspaceFilePreview: (previewId) =>
     ipcRenderer.invoke('desktop:release-workspace-file-preview', previewId),
   readWorkspaceDocument: (workspaceRoot, filePath) =>

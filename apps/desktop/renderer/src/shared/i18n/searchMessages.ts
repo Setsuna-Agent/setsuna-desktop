@@ -1,0 +1,31 @@
+export const searchZhCN = {
+  'sidebar.searchDialog': '搜索 Setsuna',
+  'search.category.all': '全部',
+  'search.category.actions': '操作',
+  'search.category.threads': '对话',
+  'search.category.files': '文件',
+  'search.category.text': '文本',
+  'search.categories': '搜索范围',
+  'search.quickActions': '快捷操作',
+  'search.project': '搜索项目',
+  'search.extensions': '文件后缀',
+  'search.extensionsPlaceholder': '文件类型：*.ts',
+  'search.invalidExtensions': '输入文件后缀，如 *.ts, *.tsx',
+  'search.noResults': '未找到结果',
+} as const;
+
+export const searchEnUS = {
+  'sidebar.searchDialog': 'Search Setsuna',
+  'search.category.all': 'All',
+  'search.category.actions': 'Actions',
+  'search.category.threads': 'Chats',
+  'search.category.files': 'Files',
+  'search.category.text': 'Text',
+  'search.categories': 'Search categories',
+  'search.quickActions': 'Quick actions',
+  'search.project': 'Search project',
+  'search.extensions': 'File extensions',
+  'search.extensionsPlaceholder': 'File type: *.ts',
+  'search.invalidExtensions': 'Enter file extensions, e.g. *.ts, *.tsx',
+  'search.noResults': 'No results found',
+} satisfies Record<keyof typeof searchZhCN, string>;

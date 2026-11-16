@@ -103,6 +103,36 @@ body.desktop-file-tree-resizing .desktop-workspace-body--file-explorer {
   gap: 2px;
 }
 
+.desktop-editor__file-actions.sd-panel-toolbar__group {
+  gap: 8px;
+}
+
+.desktop-file-open-with {
+  --workspace-app-glyph-size: var(--app-topbar-navigation-icon-size);
+  gap: 0;
+}
+
+.desktop-file-open-with__open.sd-panel-toolbar__text-button.sd-button {
+  gap: 6px;
+  border-radius: var(--app-radius-full) 0 0 var(--app-radius-full);
+}
+
+.desktop-file-open-with__divider {
+  flex: 0 0 1px;
+  height: 16px;
+  background: var(--desktop-panel-divider);
+}
+
+.desktop-file-open-with__menu.sd-button {
+  justify-content: center;
+  width: 24px;
+  min-width: 24px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 0 var(--app-radius-full) var(--app-radius-full) 0;
+}
+
 .desktop-file-document,
 .desktop-file-document__source {
   display: grid;

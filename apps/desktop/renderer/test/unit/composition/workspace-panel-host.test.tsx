@@ -341,7 +341,7 @@ const panelProps = {
   onCreateEntry: async () => null, onRenameEntry: async () => null,
   onMoveEntry: async () => null,
   onDeleteEntry: async () => false,
-  onOpenEntry: noop, onSearchProjectEntries: vi.fn(), onOpenProjectFile: noop, onOpenFilesPanel: noop,
+  onOpenEntry: noop, onSearchProjectEntries: vi.fn(), onSearchProjectText: noop, onOpenProjectFile: noop, onOpenFilesPanel: noop,
   onOpenBrowser: noop, onOpenSideChat: noop, onOpenTerminalPanel: noop, onReviewRefresh: noop,
   onReviewBaseRefChange: noop, onReviewSourceChange: noop, onRevealFile: noop,
 } satisfies Omit<ComponentProps<typeof WorkspacePanel>, 'fileTree'>;

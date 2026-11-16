@@ -28,12 +28,13 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-it('copies selected review code through the text menu and retains file actions without a selection', async () => {
+it('merges review text and file actions while preserving the selection, file path and line', async () => {
   const copied = vi.fn();
   const executeTextEdit = vi.fn(async () => { copied(document.getSelection()?.toString()); return true; });
   vi.stubGlobal('setsunaDesktop', { desktop: { platform: 'darwin' }, windowControls: { executeTextEdit } });
   vi.mocked(createDesktopRuntimeClient).mockReturnValue({} as DesktopRuntimeClient);
   const copyFilePath = vi.fn();
+  const openFileWithApp = vi.fn();
   const view = render(<I18nProvider initialLocale="zh-CN" messageCatalog={composeRendererMessages(hostMessages, [{ module: reviewRendererFeature }])}><ToastProvider><ReviewFeatureHostBoundary>
     <AppTextContextMenu />
     <ReviewFeaturePanel
@@ -44,19 +45,29 @@ it('copies selected review code through the text menu and retains file actions w
         lines: [{ type: 'added', lineNumber: 49, newLine: 49, content: 'const reviewed = true;' }],
       }] }}
       onCopyFilePath={copyFilePath} onOpenProjectFile={vi.fn()} onExternalOpenFile={vi.fn()}
+      workspaceApp={{ id: 'vscode', label: 'VS Code', icon: '' }} onOpenFileWithApp={openFileWithApp}
       onRefresh={vi.fn()} onSelectBaseRef={vi.fn()}
     />
   </ReviewFeatureHostBoundary></ToastProvider></I18nProvider>);
   const code = view.container.querySelector('code')!;
+  code.dataset.line = '49';
   const start = code.textContent!.indexOf('reviewed');
   const range = document.createRange();
   range.setStart(code.firstChild!, start);
   range.setEnd(code.firstChild!, start + 'reviewed'.length);
   document.getSelection()!.addRange(range);
   fireEvent.contextMenu(code);
+  fireEvent.click(await view.findByRole('menuitem', { name: '复制文件路径' }));
+  expect(copyFilePath).toHaveBeenCalledExactlyOnceWith('sample.ts');
+  await waitFor(() => expect(view.queryByRole('menu')).toBeNull());
+  expect(executeTextEdit).not.toHaveBeenCalled();
+
+  document.getSelection()!.removeAllRanges();
+  document.getSelection()!.addRange(range);
+  fireEvent.contextMenu(code);
   const copy = await view.findByRole('menuitem', { name: '复制' });
-  expect(view.queryByRole('menuitem', { name: '剪切' })).toBeNull();
-  expect(view.queryByRole('menuitem', { name: '粘贴' })).toBeNull();
+  fireEvent.click(view.getByRole('menuitem', { name: '剪切' }));
+  fireEvent.click(view.getByRole('menuitem', { name: '粘贴' }));
   document.getSelection()!.removeAllRanges();
   fireEvent.click(copy);
   await waitFor(() => expect(executeTextEdit).toHaveBeenCalledExactlyOnceWith('copy'));
@@ -64,8 +75,12 @@ it('copies selected review code through the text menu and retains file actions w
 
   document.getSelection()!.removeAllRanges();
   fireEvent.contextMenu(code);
-  fireEvent.click(await view.findByRole('menuitem', { name: '复制文件路径' }));
-  expect(copyFilePath).toHaveBeenCalledExactlyOnceWith('sample.ts');
+  fireEvent.click(await view.findByRole('menuitem', { name: '复制' }));
+  fireEvent.click(view.getByRole('menuitem', { name: '剪切' }));
+  fireEvent.click(view.getByRole('menuitem', { name: '粘贴' }));
+  fireEvent.click(await view.findByRole('menuitem', { name: /VS Code.*49/ }));
+  expect(openFileWithApp).toHaveBeenCalledExactlyOnceWith('vscode', 'sample.ts', 49);
+  expect(executeTextEdit).toHaveBeenCalledExactlyOnceWith('copy');
 });
 
 it.each([

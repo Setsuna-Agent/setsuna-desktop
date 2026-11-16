@@ -16,9 +16,11 @@ function HistoryPreview(props: Omit<ComponentProps<typeof GitHistoryDiff>, 'file
   return <><ReviewFileViewControls mode={mode} onChange={setMode} /><GitHistoryDiff {...props} fileView={mode} /></>;
 }
 
-it.each(['latest', 'staged', 'commit'] as const)('switches Markdown and CSV documents in the %s panel together and keeps the selected version', async (source) => {
+it.each(['latest', 'staged', 'commit'] as const)('switches Markdown, CSV and HTML in the %s panel together and keeps the selected version', async (source) => {
   const readTextFile = vi.fn().mockImplementation(async (_root, input) => ({ ok: true, content: `# ${input.filePath}\n\nUnchanged text outside the diff.` }));
-  const bridge = { readTextFile } as unknown as DesktopReviewBridge;
+  const createHtmlPreview = vi.fn().mockResolvedValue({ ok: true, previewId: 'html', url: 'about:blank#html' });
+  const releaseFilePreview = vi.fn().mockResolvedValue(true);
+  const bridge = { readTextFile, createHtmlPreview, releaseFilePreview } as unknown as DesktopReviewBridge;
   const onOpenProjectFile = vi.fn();
   const file: DesktopDiffFile = {
     path: 'docs/README.md', action: 'Modified', additions: 1, deletions: 0, truncated: true,
@@ -29,7 +31,8 @@ it.each(['latest', 'staged', 'commit'] as const)('switches Markdown and CSV docu
     ...(source === 'commit' ? { revisions: { before: 'a'.repeat(40), after: 'b'.repeat(40) } } : {}),
   };
   const csv = { ...file, path: 'data/report.csv' };
-  const files = [file, { ...file, path: 'docs/guide.md' }, { ...file, path: 'src/app.ts' }, csv];
+  const html = { ...file, path: 'site/index.html' };
+  const files = [file, { ...file, path: 'docs/guide.md' }, { ...file, path: 'src/app.ts' }, csv, html];
   const actions = {
     workspaceApps: [],
     onOpenProjectFile, onAddFileToConversation: vi.fn(), onCopyFilePath: vi.fn(), onExternalOpenFile: vi.fn(),
@@ -45,17 +48,24 @@ it.each(['latest', 'staged', 'commit'] as const)('switches Markdown and CSV docu
   </ReviewRendererTestHost>;
   const view = render(panel());
   expect(readTextFile).not.toHaveBeenCalled();
+  expect(createHtmlPreview).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Preview', exact: true }));
   for (const entry of files.slice(0, 2)) {
     await waitFor(() => expect(screen.getByRole('region', { name: entry.path }).textContent).toContain('Unchanged text outside the diff.'));
     expect(readTextFile).toHaveBeenCalledWith('/repo', expect.objectContaining({ source, side: 'after', filePath: entry.path, revisions: pathContext.revisions }));
   }
   expect(readTextFile).toHaveBeenCalledTimes(2);
+  await waitFor(() => expect(screen.getAllByTitle(html.path)
+    .find((node) => node.tagName === 'IFRAME')?.getAttribute('src')).toBe('about:blank#html'));
+  expect(createHtmlPreview).toHaveBeenCalledWith('/repo', expect.objectContaining({
+    source, side: 'after', filePath: html.path, revisions: pathContext.revisions,
+  }));
   expect(screen.getByRole('region', { name: `After: ${csv.path}` })).toBeTruthy();
   if (source !== 'latest') expect(screen.getByRole('region', { name: `Before: ${csv.path}` })).toBeTruthy();
   // Changing the selected file/summary must inherit the panel mode, including single-file changes.
   const nextFile = { ...file, path: 'docs/next.md' };
   view.rerender(panel([nextFile]));
+  expect(releaseFilePreview).toHaveBeenCalledWith('html');
   await screen.findByRole('region', { name: nextFile.path });
   fireEvent.click(screen.getByRole('button', { name: 'Source', exact: true }));
   expect(screen.queryByRole('region', { name: nextFile.path })).toBeNull();

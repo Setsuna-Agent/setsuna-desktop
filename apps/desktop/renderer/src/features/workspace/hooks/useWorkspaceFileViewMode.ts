@@ -5,7 +5,7 @@ import type { WorkspaceFileFocusRequest } from '../model.js';
 export type WorkspaceFileViewMode = 'source' | 'preview';
 
 export function useWorkspaceFileViewMode(file: WorkspaceFileRead | null, focus: WorkspaceFileFocusRequest | null) {
-  const canPreview = Boolean(file && /\.(md|markdown|mdown|mkd|csv)$/i.test(file.path)
+  const canPreview = Boolean(file && /\.(md|markdown|mdown|mkd|csv|html?)$/i.test(file.path)
     && (!file.preview || file.preview.kind === 'text'));
   // A request to reveal a source line must leave preview, even in the same file.
   const revealLine = Boolean(file && focus?.path === file.path);

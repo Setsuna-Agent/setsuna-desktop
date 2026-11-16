@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -6,6 +6,29 @@ import { JavaScriptWorkspaceSearchEngine } from '../../../src/adapters/search/ja
 import { createWorkspaceIgnoreMatcher } from '../../../src/adapters/tool/file-mentions.js';
 
 describe('JavaScriptWorkspaceSearchEngine', () => {
+  it('filters literal suffixes before the result cap without bypassing ignores', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-search-extensions-'));
+    try {
+      await Promise.all([
+        writeFile(path.join(root, 'z-other.txt'), 'needle\n'.repeat(10)),
+        writeFile(path.join(root, 'a.D.TS'), 'needle\nneedle\n'),
+        writeFile(path.join(root, 'view.tsx'), 'needle\n'),
+        writeFile(path.join(root, 'ignored.ts'), 'needle\n'),
+        writeFile(path.join(root, '.setsunaignore'), 'ignored.ts\n'),
+      ]);
+      const engine = new JavaScriptWorkspaceSearchEngine();
+      const request = { root, query: 'needle', regex: false, caseSensitive: false, contextLines: 0, maxResults: 1 };
+      const limited = await engine.search({ ...request, fileExtensions: ['*.d.ts'] });
+      expect(limited.matches).toMatchObject([{ path: 'a.D.TS', lineNumber: 1 }]);
+      expect(limited.truncated).toBe(true);
+      const union = await engine.search({ ...request, maxResults: 10, fileExtensions: ['.TS', '*.tsx'] });
+      expect([...new Set(union.matches.map((match) => match.path))].sort()).toEqual(['a.D.TS', 'view.tsx']);
+      await expect(engine.search({ ...request, fileExtensions: ['../*'] })).rejects.toThrow('Invalid file extension');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('applies ignore, hidden-file, unicode, and symlink policy consistently', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-'));
     const outside = path.join(path.dirname(root), `${path.basename(root)}-outside.txt`);

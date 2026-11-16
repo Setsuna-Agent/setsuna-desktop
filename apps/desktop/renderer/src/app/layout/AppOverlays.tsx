@@ -3,27 +3,31 @@ import type { RefObject } from 'react';
 import { RuntimeActivityFeatureCenter } from '../../composition/RuntimeActivityFeatureBoundary.js';
 import type { DesktopNavigationState } from '../controller/useDesktopNavigation.js';
 import { SidebarSearchOverlay } from '../sidebar/SidebarSearchOverlay.js';
+import type { SidebarSearchActionHandlers } from '../sidebar/useSidebarSearchActions.js';
+import type { SidebarSearchFileTarget } from '../sidebar/sidebarSearchTypes.js';
 import { RenameThreadDialog } from './RenameThreadDialog.js';
 import { ProjectEditorDialog } from './ProjectEditorDialog.js';
 
 export function AppOverlays({
   client,
+  searchActions,
+  onOpenSearchFile,
   navigation,
   projects,
   runtimeActivityOpen,
   runtimeActivityTriggerRef,
-  searchTriggerRef,
   threads,
   onActivitiesChanged,
   onCloseRuntimeActivity,
   onOpenThread,
 }: {
   client: DesktopRuntimeClient;
+  searchActions: SidebarSearchActionHandlers;
+  onOpenSearchFile(target: SidebarSearchFileTarget): Promise<void>;
   navigation: DesktopNavigationState;
   projects: WorkspaceProject[];
   runtimeActivityOpen: boolean;
   runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
-  searchTriggerRef: RefObject<HTMLButtonElement>;
   threads: RuntimeThreadSummary[];
   onActivitiesChanged: () => unknown;
   onCloseRuntimeActivity: () => void;
@@ -34,20 +38,19 @@ export function AppOverlays({
     : null;
   return (
     <>
-      {navigation.sidebarSearchOpen ? (
+      {navigation.sidebarSearchTarget ? (
         <SidebarSearchOverlay
+          actions={searchActions}
+          activeProjectId={navigation.sidebarSearchTarget.projectId}
+          initialCategory={navigation.sidebarSearchTarget.category}
+          client={client}
           projects={projects}
           query={navigation.sidebarSearchValue}
-          returnFocusRef={searchTriggerRef}
           threads={threads}
           onChange={navigation.setSidebarSearchValue}
-          onClose={() => navigation.setSidebarSearchOpen(false)}
-          onSearchThreads={client.listThreads}
-          onSelect={(threadId) => {
-            navigation.setSidebarSearchOpen(false);
-            navigation.setSidebarSearchValue('');
-            void navigation.selectThread(threadId);
-          }}
+          onClose={navigation.closeSidebarSearch}
+          onSelectThread={navigation.selectThread}
+          onSelectFile={onOpenSearchFile}
         />
       ) : null}
       {navigation.renamingThread ? (

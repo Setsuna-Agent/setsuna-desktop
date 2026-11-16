@@ -66,9 +66,8 @@ export function ReviewFeatureHostBoundary({ children }: PropsWithChildren) {
     buildPatch: codeDiffLinesToPatch,
     loadFileChangePreview,
     copyText: copyTextToClipboard,
-    hasTextContextMenuTarget: (event) => Boolean(
-      window.setsunaDesktop?.windowControls.executeTextEdit && captureTextContextMenuTarget(event)
-    ),
+    captureTextContextMenuTarget: (event) => window.setsunaDesktop?.windowControls.executeTextEdit
+      ? captureTextContextMenuTarget(event) : null,
     openExternal: (url) => window.setsunaDesktop?.links.openExternal(url) ?? Promise.resolve(false),
     locale,
     notifySuccess: (message) => {
