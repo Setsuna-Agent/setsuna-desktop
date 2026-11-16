@@ -29,6 +29,7 @@ import { xiaomiTokenPlanCnProvider } from '@earendil-works/pi-ai/providers/xiaom
 import { xiaomiTokenPlanSgpProvider } from '@earendil-works/pi-ai/providers/xiaomi-token-plan-sgp';
 import { zaiProvider } from '@earendil-works/pi-ai/providers/zai';
 import { zaiCodingCnProvider } from '@earendil-works/pi-ai/providers/zai-coding-cn';
+import { normalizeCatalogEndpoint } from '../contracts/index.js';
 import type {
   ModelProviderCatalog,
   ModelProviderCatalogModel,
@@ -150,14 +151,10 @@ export function inferBuiltinCatalogProviderId(
   source: readonly Provider[] = supportedProviders(),
 ): string | undefined {
   const api = KIND_API[provider.provider];
-  // Pi moved Go's presets to /inference; retain identity for saved /zen connections.
-  const baseUrl = normalizeBaseUrl(provider.baseUrl).replace(
-    /^https:\/\/opencode\.ai\/zen\/go(?=\/|$)/u,
-    'https://opencode.ai/inference/go',
-  );
+  const baseUrl = normalizeCatalogEndpoint(provider.baseUrl, provider.provider);
   const matches = source.filter((candidate) => (
     candidate.getModels().some((model) => (
-      model.api === api && normalizeBaseUrl(model.baseUrl) === baseUrl
+      model.api === api && normalizeCatalogEndpoint(model.baseUrl, provider.provider) === baseUrl
     ))
   ));
   return matches.length === 1 ? matches[0]?.id : undefined;

@@ -91,29 +91,36 @@ describe('model provider catalog selection', () => {
     });
   });
 
-  it('infers legacy catalog records without overriding an explicit custom-service choice', () => {
+  it.each([
+    ['deepseek', 'openai-compatible', 'https://api.deepseek.com', 'https://api.deepseek.com'],
+    ['opencode-go', 'openai-compatible', 'https://opencode.ai/zen/go/v1', 'https://opencode.ai/inference/go/openai/v1'],
+    ['opencode-go', 'anthropic', 'https://opencode.ai/inference/go/v1', 'https://opencode.ai/inference/go/anthropic'],
+    ['opencode-go', 'openai-responses', 'https://opencode.ai/zen/go/v1', 'https://opencode.ai/inference/go/openai/v1'],
+  ] as const)('infers legacy %s %s connections without replacing saved settings', (id, provider, baseUrl, catalogBaseUrl) => {
     const catalog = {
       providers: [{
-        id: 'deepseek',
-        name: 'DeepSeek',
+        id,
+        name: id,
         plans: [{
-          id: 'deepseek:openai-completions',
-          name: 'OpenAI Chat Completions',
-          provider: 'openai-compatible' as const,
-          baseUrl: 'https://api.deepseek.com',
+          id: `${id}:${provider}`,
+          name: provider,
+          provider,
+          baseUrl: catalogBaseUrl,
           models: [],
         }],
       }],
     };
     const matching = {
       ...providerFixture(),
-      provider: 'openai-compatible' as const,
-      baseUrl: 'https://api.deepseek.com',
+      provider,
+      baseUrl,
     };
 
-    expect(attachInferredCatalogProviders([matching], catalog)[0]?.catalogProviderId).toBe('deepseek');
+    expect(attachInferredCatalogProviders([matching], catalog)).toEqual([{ ...matching, catalogProviderId: id }]);
     expect(attachInferredCatalogProviders([{ ...matching, catalogProviderId: null }], catalog)[0]?.catalogProviderId)
       .toBeNull();
+    expect(attachInferredCatalogProviders([{ ...matching, baseUrl: `${baseUrl}/custom` }], catalog)[0]?.catalogProviderId)
+      .toBeUndefined();
   });
 });
 

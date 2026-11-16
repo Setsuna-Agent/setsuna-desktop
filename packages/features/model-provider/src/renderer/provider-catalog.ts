@@ -6,6 +6,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import {
   defaultProviderRequestHeaders,
+  normalizeCatalogEndpoint,
   type ModelProviderCatalog,
   type ModelProviderCatalogModel,
   type ModelProviderCatalogPlan,
@@ -30,7 +31,7 @@ export function catalogPlanForConfig(
   if (!catalogProvider) return undefined;
   const exact = catalogProvider.plans.find((plan) => (
     plan.provider === provider.provider
-    && normalizeBaseUrl(plan.baseUrl) === normalizeBaseUrl(provider.baseUrl)
+    && normalizeCatalogEndpoint(plan.baseUrl, plan.provider) === normalizeCatalogEndpoint(provider.baseUrl, provider.provider)
   ));
   return exact ?? catalogProvider.plans.find((plan) => plan.provider === provider.provider) ?? catalogProvider.plans[0];
 }
@@ -149,11 +150,7 @@ function inferCatalogProvider(
 ): ModelProviderCatalogProvider | undefined {
   const matching = catalog.providers.filter((candidate) => candidate.plans.some((plan) => (
     plan.provider === provider.provider
-    && normalizeBaseUrl(plan.baseUrl) === normalizeBaseUrl(provider.baseUrl)
+    && normalizeCatalogEndpoint(plan.baseUrl, plan.provider) === normalizeCatalogEndpoint(provider.baseUrl, provider.provider)
   )));
   return matching.length === 1 ? matching[0] : undefined;
-}
-
-function normalizeBaseUrl(value: string): string {
-  return value.trim().replace(/\/+$/u, '').toLocaleLowerCase();
 }
