@@ -1,32 +1,93 @@
 .browser-start-search {
-  --desktop-agent-control-hover-bg: transparent;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+}
+
+/* The entire address surface expands above the tiles without reflowing the homepage. */
+.browser-start-search__surface {
+  position: absolute;
+  inset: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  color: var(--app-text);
+  background: var(--app-surface-overlay);
+}
+
+.browser-start-search:focus-within .browser-start-search__surface { border-color: var(--app-field-focus-border); }
+.browser-start-search.is-open { z-index: 10; }
+.browser-start-search.is-open .browser-start-search__surface { box-shadow: var(--app-shadow-toolbar); }
+
+.browser-start-search__row {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  max-width: 600px;
-  min-height: 46px;
-  padding: 4px 10px 4px 18px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 65%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
-  box-shadow: var(--app-shadow-card);
-  backdrop-filter: blur(12px);
-  box-sizing: border-box;
+  height: 38px;
+  padding: 0 14px;
 }
 
 .browser-start-search__icon { flex: 0 0 auto; color: var(--app-text-muted); }
 .browser-start-search .browser-start-search__input {
   flex: 1;
   min-width: 0;
-  padding: 6px 0;
+  min-height: 0;
+  padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
 }
 .browser-start-search .browser-start-search__input:focus { background: transparent; }
-.browser-start-search .browser-start-search__submit {
+.browser-start-search .browser-start-search__clear {
   flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  margin-right: -5px;
+  padding: 0;
   color: var(--app-text-muted);
 }
-.browser-start-search .browser-start-search__submit:hover:not(:disabled) { color: var(--app-text); }
+
+.browser-start-search__suggestions {
+  display: grid;
+  gap: 2px;
+  max-height: min(366px, 50vh);
+  padding: 6px;
+  border-top: 1px solid var(--app-border);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.browser-start-search__suggestion.sd-button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  text-align: left;
+}
+.browser-start-search__suggestion[aria-selected='true'] { background: var(--desktop-agent-control-hover-bg); }
+.browser-start-search__suggestion > svg { flex: 0 0 auto; color: var(--app-text-muted); }
+.browser-start-search__suggestion-title,
+.browser-start-search__suggestion-url {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browser-start-search__suggestion-url { flex: 1; color: var(--app-text-subtle); font-size: 12px; }
+.browser-start-search__enter { margin-left: auto; opacity: 0; }
+.browser-start-search__suggestion[aria-selected='true'] .browser-start-search__enter { opacity: 1; }

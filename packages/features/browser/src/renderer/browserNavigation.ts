@@ -23,10 +23,10 @@ export function normalizeBrowserInput(input: string, searchEngine: BrowserSearch
   const value = input.trim();
   if (!value) return DEFAULT_BROWSER_URL;
   if (/^https?:\/\//i.test(value)) return value;
-  if (/^(localhost|\d{1,3}(?:\.\d{1,3}){3})(:\d+)?(?:\/|$)/i.test(value)) {
+  if (/^(localhost|\[[\da-f:]+\]|\d{1,3}(?:\.\d{1,3}){3})(:\d+)?(?:[/?#]|$)/i.test(value)) {
     return `http://${value}`;
   }
-  if (/^[\w.-]+\.[a-z]{2,}(?::\d+)?(?:\/|$)/i.test(value)) return `https://${value}`;
+  if (/^[\w.-]+\.[a-z]{2,}(?::\d+)?(?:[/?#]|$)/i.test(value)) return `https://${value}`;
   return browserSearchUrl(value, searchEngine);
 }
 

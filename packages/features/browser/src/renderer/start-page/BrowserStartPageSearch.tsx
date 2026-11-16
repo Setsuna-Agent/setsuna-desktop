@@ -1,60 +1,37 @@
 import { IconButton, TextField } from '@setsuna-desktop/renderer-ui';
-import { Search } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import type { BrowserDesktopBridge } from '../../contracts/index.js';
-import { BrowserFeatureIcon } from '../BrowserFeatureIcon.js';
-import { browserSearchUrl } from '../browserNavigation.js';
-import type { BrowserTranslate } from '../messages.js';
+import { Search, X } from 'lucide-react';
+import { useId } from 'react';
+import { BrowserStartPageSuggestions } from './BrowserStartPageSuggestions.js';
+import { useBrowserStartPageSearch, type BrowserStartPageSearchProps } from './useBrowserStartPageSearch.js';
 import './start-page-search.css';
 
-export function BrowserStartPageSearch({ bridge, onNavigate, onError, translate: t }: {
-  bridge: Pick<BrowserDesktopBridge, 'getBrowserPreferences'> | null;
-  onNavigate(url: string): void;
-  onError(message: string): void;
-  translate: BrowserTranslate;
-}) {
-  const [query, setQuery] = useState('');
-  const [busy, setBusy] = useState(false);
-  const pending = useRef(false);
-  const mounted = useRef(false);
-  const composing = useRef(false);
-  useEffect(() => {
-    mounted.current = true;
-    return () => { mounted.current = false; };
-  }, []);
+export function BrowserStartPageSearch(props: BrowserStartPageSearchProps) {
+  const { translate: t } = props;
+  const search = useBrowserStartPageSearch(props);
+  const suggestionsId = useId();
 
-  const submit = async () => {
-    const value = query.trim();
-    if (!value || composing.current || pending.current) return;
-    pending.current = true;
-    setBusy(true);
-    try {
-      if (!bridge) throw new Error('Browser unavailable.');
-      // Read on submission: always use the current engine without adding startup work.
-      const { searchEngine } = await bridge.getBrowserPreferences();
-      if (mounted.current) onNavigate(browserSearchUrl(value, searchEngine));
-    } catch { if (mounted.current) onError(t('feature.browser.searchFailed')); }
-    finally {
-      pending.current = false;
-      if (mounted.current) setBusy(false);
-    }
-  };
-
-  return <form className="browser-start-search" role="search" aria-label={t('feature.browser.searchWeb')}
-    onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-    <BrowserFeatureIcon className="browser-start-search__icon" size={18} aria-hidden="true" />
-    <TextField type="search" className="browser-start-search__input" value={query}
-      aria-label={t('feature.browser.searchWeb')} placeholder={t('feature.browser.searchPlaceholder')}
-      autoComplete="off" autoCapitalize="none" spellCheck={false} enterKeyHint="search"
-      onChange={(event) => setQuery(event.currentTarget.value)}
-      onCompositionStart={() => { composing.current = true; }}
-      onCompositionEnd={() => { composing.current = false; }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' && (composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)) {
-          event.preventDefault();
-        }
-      }} />
-    <IconButton type="submit" className="browser-start-search__submit" label={t('feature.browser.searchWeb')}
-      disabled={busy || !query.trim()} aria-busy={busy}><Search size={19} /></IconButton>
+  return <form className={`browser-start-search${search.visible ? ' is-open' : ''}`} role="search"
+    aria-label={t('feature.browser.address')} aria-busy={search.busy}
+    onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) search.close(); }}
+    onSubmit={(event) => { event.preventDefault(); search.submit(); }}>
+    <div className="browser-start-search__surface">
+      <div className="browser-start-search__row">
+        <Search className="browser-start-search__icon" size={16} aria-hidden="true" />
+        <TextField className="browser-start-search__input" ref={search.inputRef} value={search.query}
+          role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={search.visible}
+          aria-controls={search.visible ? suggestionsId : undefined}
+          aria-activedescendant={search.visible ? `${suggestionsId}-${search.activeIndex}` : undefined}
+          aria-label={t('feature.browser.address')} placeholder={t('feature.browser.searchPlaceholder')}
+          autoComplete="off" autoCapitalize="none" spellCheck={false} enterKeyHint="go"
+          onFocus={search.focus} onChange={(event) => search.change(event.currentTarget.value)}
+          onCompositionStart={() => { search.composing.current = true; }}
+          onCompositionEnd={() => { search.composing.current = false; }}
+          onKeyDown={search.onKeyDown} />
+        {search.query ? <IconButton className="browser-start-search__clear" label={t('feature.browser.clearInput')}
+          onMouseDown={(event) => event.preventDefault()} onClick={search.clear}><X size={14} /></IconButton> : null}
+      </div>
+      {search.visible ? <BrowserStartPageSuggestions id={suggestionsId} suggestions={search.suggestions}
+        activeIndex={search.activeIndex} onSelect={search.select} onNavigate={search.navigate} translate={t} /> : null}
+    </div>
   </form>;
 }

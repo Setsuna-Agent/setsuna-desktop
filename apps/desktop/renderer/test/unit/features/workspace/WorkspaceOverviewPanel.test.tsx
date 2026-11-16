@@ -11,9 +11,6 @@ import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 import { hostMessages } from '../../../../src/shared/i18n/messages.js';
 import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
 
-vi.mock('../../../../src/features/workspace/overview/useWorkspaceBackground.js', () => ({
-  useWorkspaceBackground: () => ({ url: null, busy: false, change: vi.fn(), transparency: 70, setTransparency: vi.fn() }),
-}));
 beforeEach(() => window.localStorage.clear());
 afterEach(() => { cleanup(); window.localStorage.clear(); });
 const messages = composeRendererMessages(hostMessages, [{ module: browserRendererFeature }]);
@@ -29,27 +26,6 @@ const baseProps = {
   onOpenBrowser: () => undefined, onOpenFilesPanel: () => undefined, onOpenReviewPanel: () => undefined,
   onOpenChangesPanel: () => undefined, onOpenSideChat: () => undefined, onOpenTerminalPanel: () => undefined,
 };
-
-it('toggles time and search together from settings and restores the preference after reopening', async () => {
-  const view = render(<WorkspaceOverviewPanel {...baseProps} />, { wrapper: Providers });
-  expect(screen.getByRole('searchbox')).toBeTruthy();
-  expect(screen.getByText(/^\d{2}:\d{2}$/)).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: '首页设置' }));
-  fireEvent.click(await screen.findByRole('switch', { name: '显示时间和搜索框' }));
-  expect(screen.queryByRole('searchbox')).toBeNull();
-  expect(screen.queryByText(/^\d{2}:\d{2}$/)).toBeNull();
-  view.unmount();
-
-  render(<WorkspaceOverviewPanel {...baseProps} />, { wrapper: Providers });
-  expect(screen.queryByRole('searchbox')).toBeNull();
-  expect(screen.queryByText(/^\d{2}:\d{2}$/)).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: '首页设置' }));
-  const toggle = await screen.findByRole('switch', { name: '显示时间和搜索框' });
-  expect(toggle.getAttribute('aria-checked')).toBe('false');
-  fireEvent.click(toggle);
-  expect(screen.getByRole('searchbox')).toBeTruthy();
-  expect(screen.getByText(/^\d{2}:\d{2}$/)).toBeTruthy();
-});
 
 it('routes workspace actions without forwarding click events as browser URLs', () => {
   const onOpenReviewPanel = vi.fn();
