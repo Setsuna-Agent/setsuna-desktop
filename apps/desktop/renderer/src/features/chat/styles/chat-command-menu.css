@@ -146,7 +146,8 @@
 }
 
 .chat-skill-command-menu .chat-command-menu__item {
-  grid-template-columns: 16px minmax(0, 1fr);
+  /* Plugin and Skill menu avatars both occupy 22px. */
+  grid-template-columns: 22px minmax(0, 1fr);
   min-height: 28px;
   padding: 5px 8px;
 }

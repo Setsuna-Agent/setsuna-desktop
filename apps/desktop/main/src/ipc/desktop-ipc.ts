@@ -14,6 +14,7 @@ import {
   revealWorkspaceFileInFolder,
 } from '../workspace/file-opening.js';
 import { copyChatImage, readGeneratedImageAsset, revealChatImage, saveChatImage, type AttachmentImageReader } from '../workspace/generated-image-actions.js';
+import { writeImageToClipboard } from '../workspace/image-clipboard.js';
 import { desktopWindows } from '../window/registry.js';
 import { isDesktopRendererSender } from './sender.js';
 import { registerWorkspaceEntryWatchIpc } from './workspace-entry-watch-ipc.js';
@@ -138,7 +139,7 @@ export function registerDesktopIpc({
       input,
       (value) => nativeImage.createFromDataURL(value),
       (value) => nativeImage.createFromPath(value),
-      (image) => clipboard.writeImage(image),
+      (image) => writeImageToClipboard(image, clipboard),
       readAttachmentImage,
     );
   });

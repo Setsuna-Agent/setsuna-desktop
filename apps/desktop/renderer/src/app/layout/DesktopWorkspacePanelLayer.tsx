@@ -174,7 +174,7 @@ export type DesktopWorkspacePanelModel = Readonly<{
     onSelectFileRoot(rootId: string): void;
     onOpenFileWithApp(appId: string, filePath: string, line?: number): void;
     onOpenMarkdownWebLink(url: string): void;
-    onOpenProjectFile(filePath: string, line?: number): Promise<boolean>;
+    onOpenProjectFile(filePath: string, line?: number, rootId?: string): Promise<boolean>;
     onOpenSideChat(): void;
     onOpenSideTerminalPanel(): void;
     onOpenWorkspaceDirectory(directoryPath: string): void;
@@ -496,6 +496,9 @@ export function DesktopWorkspacePanelLayer({
                     onOpenFileReview={actions.onOpenFileReviewPanel}
                     onOpenInAppBrowser={actions.onOpenBrowser}
                     onOpenMarkdownWebLink={actions.onOpenMarkdownWebLink}
+                    onOpenWorkspaceFile={(filePath, line) => actions.onOpenProjectFile(
+                      filePath, line, workspaceProjectRoots(context.activeWorkspace)[0]?.id,
+                    )}
                     onResizeStart={layout.onWorkspaceResizeStart}
                     onResizeStep={layout.onWorkspaceResizeStep}
                   />

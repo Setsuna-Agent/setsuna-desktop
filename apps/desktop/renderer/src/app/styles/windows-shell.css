@@ -72,6 +72,11 @@
   container-type: inline-size;
 }
 
+.desktop-agent-page--settings-open .app-content-header {
+  /* Settings covers both content tracks while the workspace keeps its saved width. */
+  grid-column: 2 / -1;
+}
+
 .app-content-header > .sd-shortcut-tooltip-target {
   flex: 0 0 auto;
 }

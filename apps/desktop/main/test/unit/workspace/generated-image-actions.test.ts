@@ -45,16 +45,26 @@ describe('generated image desktop actions', () => {
     expect(choose).toHaveBeenCalledTimes(1);
   });
 
-  it('copies a validated image data URL through the native clipboard adapter', () => {
+  it('copies a validated image data URL through the native clipboard adapter', async () => {
     const image = { isEmpty: () => false };
     const createImage = vi.fn(() => image);
     const writeImage = vi.fn();
 
-    expect(copyImageDataUrlToClipboard('data:image/png;base64,AA==', createImage, writeImage)).toEqual({ ok: true });
+    await expect(copyImageDataUrlToClipboard('data:image/png;base64,AA==', createImage, writeImage)).resolves.toEqual({ ok: true });
     expect(createImage).toHaveBeenCalledWith('data:image/png;base64,AA==');
     expect(writeImage).toHaveBeenCalledWith(image);
-    expect(copyImageDataUrlToClipboard('https://example.test/image.png', createImage, writeImage))
-      .toEqual({ ok: false, error: 'Image data is invalid or too large.' });
+    await expect(copyImageDataUrlToClipboard('https://example.test/image.png', createImage, writeImage))
+      .resolves.toEqual({ ok: false, error: 'Image data is invalid or too large.' });
+  });
+
+  it('waits for native clipboard completion and reports an asynchronous write failure', async () => {
+    let finishWrite!: () => void;
+    const writing = new Promise<void>((_resolve, reject) => {
+      finishWrite = () => reject(new Error('Clipboard is unavailable.'));
+    });
+    const copy = copyImageDataUrlToClipboard('data:image/png;base64,AA==', () => ({ isEmpty: () => false }), () => writing);
+    finishWrite();
+    await expect(copy).resolves.toEqual({ ok: false, error: 'Failed to copy image.' });
   });
 
   it('resolves and reveals only a generated image inside its managed asset directory', async () => {

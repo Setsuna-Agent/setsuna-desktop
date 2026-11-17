@@ -20,33 +20,34 @@ export async function copyChatImage<TImage extends NativeImageLike>(
   inputValue: unknown,
   createImageFromDataUrl: (dataUrl: string) => TImage,
   createImageFromPath: (imagePath: string) => TImage,
-  writeImage: (image: TImage) => void,
+  writeImage: (image: TImage) => void | Promise<void>,
   readAttachment?: AttachmentImageReader,
 ): Promise<DesktopImageActionResult> {
   try {
     const input = await resolveChatImageInput(inputValue, readAttachment);
     if (!input.assetId) return copyImageDataUrlToClipboard(input.dataUrl, createImageFromDataUrl, writeImage);
+    let image: TImage | undefined;
     try {
-      const image = createImageFromPath(await resolveGeneratedImageAssetPath(userDataDir, input.assetId));
-      if (!image.isEmpty()) {
-        writeImage(image);
-        return { ok: true };
-      }
-      if (!input.dataUrl) return { ok: false, error: 'Image data could not be decoded.' };
+      image = createImageFromPath(await resolveGeneratedImageAssetPath(userDataDir, input.assetId));
     } catch (error) {
       if (!input.dataUrl) throw error;
     }
+    if (image && !image.isEmpty()) {
+      await writeImage(image);
+      return { ok: true };
+    }
+    if (!input.dataUrl) return { ok: false, error: 'Image data could not be decoded.' };
     return copyImageDataUrlToClipboard(input.dataUrl, createImageFromDataUrl, writeImage);
   } catch (error) {
     return { ok: false, error: publicImageActionError(error, 'Failed to copy image.') };
   }
 }
 
-export function copyImageDataUrlToClipboard<TImage extends NativeImageLike>(
+export async function copyImageDataUrlToClipboard<TImage extends NativeImageLike>(
   dataUrlValue: unknown,
   createImage: (dataUrl: string) => TImage,
-  writeImage: (image: TImage) => void,
-): DesktopImageActionResult {
+  writeImage: (image: TImage) => void | Promise<void>,
+): Promise<DesktopImageActionResult> {
   const dataUrl = String(dataUrlValue ?? '');
   if (!SAFE_IMAGE_DATA_URL.test(dataUrl) || dataUrl.length > MAX_ENCODED_IMAGE_CHARS) {
     return { ok: false, error: 'Image data is invalid or too large.' };
@@ -54,7 +55,7 @@ export function copyImageDataUrlToClipboard<TImage extends NativeImageLike>(
   try {
     const image = createImage(dataUrl);
     if (image.isEmpty()) return { ok: false, error: 'Image data could not be decoded.' };
-    writeImage(image);
+    await writeImage(image);
     return { ok: true };
   } catch {
     return { ok: false, error: 'Failed to copy image.' };
