@@ -1,6 +1,6 @@
-import type { ModelRequest, RuntimeMessage } from '@setsuna-desktop/contracts';
+import type { ModelRequest, ModelStreamEvent, RuntimeMessage } from '@setsuna-desktop/contracts';
 import { readSkill } from '@setsuna-desktop/feature-skills/contracts';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -8,6 +8,7 @@ import { parse as parseYaml } from 'yaml';
 import { InMemoryEventBus } from '../../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../../src/adapters/id/random-id-generator.js';
 import { FileSkillRegistry } from '../../../../src/adapters/skill/file-skill-registry.js';
+import { SkillManagementToolHost } from '../../../../src/adapters/tool/skill-management-tool-host.js';
 import { createTestThreadStore } from '../../../support/thread-store.js';
 import { AgentLoop } from '../../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../../src/ports/clock.js';
@@ -138,13 +139,6 @@ describe('file skill registry', () => {
         }),
       ]),
     );
-    await expect(registry.selectedSkillInjections([], { text: '请生成一个 DOCX 给我' })).resolves.toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: 'documents.documents' })]),
-    );
-    await expect(registry.selectedSkillInjections([], { text: '你好，介绍一下自己' })).resolves.toEqual([]);
-    await expect(registry.selectedSkillInjections(['builtin-demo'], { text: '请生成一个 DOCX 给我' })).resolves.toEqual([
-      expect.objectContaining({ id: 'builtin-demo' }),
-    ]);
   });
 
   it('updates and removes Plugin Skills without dropping their Plugin declaration', async () => {
@@ -224,46 +218,6 @@ describe('file skill registry', () => {
       name: 'Documents',
       path: sourceSkillPath,
     });
-  });
-
-  it('uses declared activation phrases without mixing in incidental Plugin metadata', async () => {
-    const { builtinDir, dataDir } = await createSkillFixture();
-    await installPluginSkillFixture(dataDir, {
-      pluginId: 'image-generation',
-      pluginName: '图片生成',
-      pluginDescription: 'Generate images through an OpenAI-compatible HTTPS API.',
-      pluginTags: ['图片', 'OpenAI'],
-      skillDirectory: 'image-generation',
-      skillName: '图片生成',
-      skillDescription: 'Generate images through an HTTPS API; do not use for HTML pages.',
-      autoActivate: ['生成图片'],
-    });
-    const registry = new FileSkillRegistry(builtinDir, dataDir);
-
-    await expect(registry.selectedSkillInjections([], { text: '请生成图片' })).resolves.toEqual([
-      expect.objectContaining({ id: 'image-generation.image-generation' }),
-    ]);
-    await expect(registry.selectedSkillInjections([], { text: '帮我安装这个 mcp https://search-mcp.example.com/mcp' })).resolves.toEqual([]);
-    await expect(registry.selectedSkillInjections([], { text: '请创建一个 HTML 页面' })).resolves.toEqual([]);
-  });
-
-  it('falls back to Plugin tags when no activation phrases are declared', async () => {
-    const { builtinDir, dataDir } = await createSkillFixture();
-    await installPluginSkillFixture(dataDir, {
-      pluginId: 'analytics-toolkit',
-      pluginName: 'Analytics Toolkit',
-      pluginTags: ['数据分析'],
-      skillDirectory: 'metrics-helper',
-      skillName: 'Metrics Helper',
-      skillDescription: 'Build and inspect business dashboards.',
-    });
-    const registry = new FileSkillRegistry(builtinDir, dataDir);
-
-    await expect(registry.selectedSkillInjections([], { text: '帮我做一次数据分析' })).resolves.toEqual([
-      expect.objectContaining({ id: 'analytics-toolkit.metrics-helper' }),
-    ]);
-    await expect(registry.selectedSkillInjections([], { text: '请编译当前项目' })).resolves.toEqual([]);
-    await expect(registry.selectedSkillInjections([], { text: 'Please use another helper' })).resolves.toEqual([]);
   });
 
   it('creates, updates, injects, and deletes local user skills', async () => {
@@ -553,13 +507,13 @@ describe('file skill registry', () => {
     { state: 'disabled', defaultSkillIds: ['builtin-demo'] },
     { state: 'missing', defaultSkillIds: ['missing-skill'] },
     { state: 'matching-plugin', defaultSkillIds: ['documents.documents'] },
-  ])('preserves automatic Plugin activation with $state defaults and only suppresses it for explicit selections', async ({ state, defaultSkillIds }) => {
+  ])('injects only explicit and $state default Skills regardless of request keywords', async ({ state, defaultSkillIds }) => {
     const { builtinDir, dataDir } = await createSkillFixture();
     await installDocumentsPluginFixture(dataDir);
     const registry = new FileSkillRegistry(builtinDir, dataDir);
     if (state === 'disabled') await registry.updateSkill('builtin-demo', { enabled: false });
     const threadStore = createTestThreadStore(dataDir, systemClock, new RandomIdGenerator());
-    const thread = await threadStore.createThread({ title: 'Automatic Plugin Skill routing', defaultSkillIds });
+    const thread = await threadStore.createThread({ title: 'Intent-based Plugin Skill routing', defaultSkillIds });
     const modelClient = new CapturingModelClient();
     const loop = new AgentLoop({
       threadStore,
@@ -570,28 +524,71 @@ describe('file skill registry', () => {
       skillRegistry: registry,
     });
 
-    await loop.sendTurn(thread.id, { input: '生成一个 docx 报告给我' });
-
     const injectedIds = () => modelClient.messages.filter((message) => message.id.startsWith('skill_')).map((message) => message.id).sort();
-    expect(injectedIds()).toEqual([
+    const defaultInjections = [
       ...(state === 'enabled' ? ['skill_builtin-demo'] : []),
-      'skill_documents.documents',
-    ]);
-    expect(modelClient.messages.find((message) => message.id === 'skill_documents.documents')?.content)
-      .toContain('<skill name="Word 文档处理" id="documents.documents" path="');
-    const updated = await threadStore.getThread(thread.id);
-    expect(updated?.turns?.at(-1)?.stepSnapshots?.[0]?.snapshot.selectedSkills).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'documents.documents',
-        plugin: { id: 'documents', name: 'Word 文档处理', icon: 'documents' },
-      }),
-    ]));
-
-    await loop.sendTurn(thread.id, { input: '再生成一个 docx 报告', skillIds: ['builtin-demo'] });
-    expect(injectedIds()).toEqual([
-      ...(state === 'disabled' ? [] : ['skill_builtin-demo']),
       ...(state === 'matching-plugin' ? ['skill_documents.documents'] : []),
-    ]);
+    ];
+    try {
+      await loop.sendTurn(thread.id, { input: 'DOCX 是什么？不要创建文档。' });
+      expect(injectedIds()).toEqual(defaultInjections);
+      expect((await threadStore.getThread(thread.id))?.turns?.at(-1)?.stepSnapshots?.[0]?.snapshot.selectedSkills.map((skill) => skill.id).sort())
+        .toEqual(defaultInjections.map((id) => id.slice('skill_'.length)));
+
+      await loop.sendTurn(thread.id, { input: '生成一个 docx 报告', skillIds: ['documents.documents'] });
+      expect(injectedIds()).toEqual([...new Set([...defaultInjections, 'skill_documents.documents'])].sort());
+      expect((await threadStore.getThread(thread.id))?.turns?.at(-1)?.stepSnapshots?.[0]?.snapshot.selectedSkills)
+        .toEqual(expect.arrayContaining([expect.objectContaining({
+          id: 'documents.documents', plugin: { id: 'documents', name: 'Word 文档处理', icon: 'documents' },
+        })]));
+
+      await loop.sendTurn(thread.id, { input: '现在解释一下 HTTPS API。' });
+      expect(injectedIds()).toEqual(defaultInjections);
+    } finally {
+      await loop.shutdown();
+      await threadStore.close();
+      await rm(path.dirname(builtinDir), { recursive: true, force: true });
+    }
+  });
+
+  it('loads Plugin Skill instructions only after read_skill and persists actual plugin usage', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    await installDocumentsPluginFixture(dataDir);
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+    const document = (await registry.getSkill('documents.documents'))!;
+    const threadStore = createTestThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const thread = await threadStore.createThread({ title: 'On-demand Plugin Skill' });
+    const requests: ModelRequest[] = [];
+    const loop = new AgentLoop({
+      threadStore, skillRegistry: registry, toolHost: new SkillManagementToolHost(registry),
+      eventBus: new InMemoryEventBus(), clock: systemClock, ids: new RandomIdGenerator(),
+      modelClient: { async *stream(request): AsyncGenerator<ModelStreamEvent> {
+        requests.push(request);
+        if (!request.messages.some((message) => message.role === 'tool' && message.toolName === 'read_skill')) {
+          yield { type: 'tool_calls', toolCalls: [{ id: 'load-document', name: 'read_skill', arguments: JSON.stringify({
+            skill_id: document.id, content_version: document.contentVersion,
+          }) }] };
+          yield { type: 'done', finishReason: 'tool_calls' };
+          return;
+        }
+        yield { type: 'text_delta', text: 'Skill loaded.' };
+        yield { type: 'done', finishReason: 'stop' };
+      } },
+    });
+    try {
+      await loop.sendTurn(thread.id, { input: '生成一个 DOCX 报告' });
+      expect(requests[0]?.messages.some((message) => message.content.includes(document.content))).toBe(false);
+      expect(requests[0]?.stepSnapshot?.selectedSkills).toEqual([]);
+      const loaded = requests.at(-1)?.messages.find((message) => message.role === 'tool' && message.toolName === 'read_skill');
+      expect(loaded?.content).toContain(document.content);
+      const saved = await threadStore.getThread(thread.id);
+      const run = saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'read_skill');
+      expect(run).toMatchObject({ status: 'success', data: { pluginId: 'documents', skillId: document.id, complete: true } });
+    } finally {
+      await loop.shutdown();
+      await threadStore.close();
+      await rm(path.dirname(builtinDir), { recursive: true, force: true });
+    }
   });
 });
 
@@ -668,6 +665,7 @@ async function installDocumentsPluginFixture(dataDir: string): Promise<void> {
     skillDirectory: 'documents',
     skillName: 'Word 文档处理',
     skillDescription: 'Create and verify DOCX files.',
+    autoActivate: ['docx'],
   });
 }
 
@@ -694,6 +692,8 @@ async function installPluginSkillFixture(dataDir: string, input: {
       ? ['auto-activate:', ...input.autoActivate.map((keyword) => `  - ${JSON.stringify(keyword)}`)]
       : []),
     '---',
+    '',
+    `# ${input.skillName}`,
     '',
     input.skillDescription,
   ].join('\n'));

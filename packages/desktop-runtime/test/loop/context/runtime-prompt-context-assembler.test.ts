@@ -39,7 +39,7 @@ describe('RuntimePromptContextAssembler', () => {
     expect(skillReads).toBe(2);
   });
 
-  it.each(['explicit', 'default'])('prioritizes %s skills over automatic activations when the full-content budget is exhausted', async (selection) => {
+  it.each(['explicit', 'default'])('keeps %s Skills readable when the full-content budget is exhausted', async (selection) => {
     let instructionEnvironment: unknown;
     const assembler = new RuntimePromptContextAssembler({
       memoryControl: () => ({ contextMessages: async () => [] }),
@@ -52,13 +52,12 @@ describe('RuntimePromptContextAssembler', () => {
       skillRegistry: {
         resolvePromptContext: async () => ({
           availableSkills: [
-            { id: 'automatic', name: 'Automatic Skill', description: 'Automatically activated guidance', kind: 'plugin', enabled: true, path: '/skills/automatic/SKILL.md' },
             { id: 'explicit', name: 'Explicit Skill', description: 'Explicit workflow', kind: 'plugin', enabled: true, path: '/skills/explicit/SKILL.md' },
+            { id: 'secondary', name: 'Secondary Skill', description: 'Additional workflow', kind: 'plugin', enabled: true, path: '/skills/secondary/SKILL.md' },
             { id: 'available', name: 'Available Skill', description: 'Use for deployment checks', kind: 'user', enabled: true, path: '/skills/available/SKILL.md' },
             { id: 'disabled', name: 'Disabled Skill', kind: 'user', enabled: false },
           ],
           selectedInjections: [
-            { id: 'automatic', name: 'Automatic Skill', content: '12345', path: '/skills/automatic/SKILL.md' },
             {
               id: 'explicit',
               name: 'Explicit Skill',
@@ -73,6 +72,7 @@ describe('RuntimePromptContextAssembler', () => {
                 status: 'missing',
               }],
             },
+            { id: 'secondary', name: 'Secondary Skill', content: '12345', path: '/skills/secondary/SKILL.md' },
           ],
         }),
       },
@@ -87,8 +87,8 @@ describe('RuntimePromptContextAssembler', () => {
     const result = await assembler.build({
       config: runtimeConfig(),
       hookContextMessages: [],
-      skillIds: selection === 'explicit' ? ['explicit'] : [],
-      thread: { id: 'thread_1', projectId: 'project_1', defaultSkillIds: selection === 'default' ? ['explicit'] : [] } as unknown as RuntimeThread,
+      skillIds: selection === 'explicit' ? ['explicit', 'secondary'] : [],
+      thread: { id: 'thread_1', projectId: 'project_1', defaultSkillIds: selection === 'default' ? ['explicit', 'secondary'] : [] } as unknown as RuntimeThread,
       toolContext: {
         interfaceLanguage: 'en-US',
         environment,
@@ -105,17 +105,17 @@ describe('RuntimePromptContextAssembler', () => {
 
     const catalog = result.fragments.find((fragment) => fragment.id === 'desktop_available_skills');
     const explicit = result.fragments.find((fragment) => fragment.id === 'skill_explicit');
-    const automaticSkill = result.fragments.find((fragment) => fragment.id === 'skill_automatic');
+    const secondarySkill = result.fragments.find((fragment) => fragment.id === 'skill_secondary');
     expect(explicit?.content).toContain('abcde');
     expect(explicit?.content).toContain('install_skill_mcp_dependencies');
     expect(explicit?.content).toContain('- docs: missing');
-    expect(automaticSkill?.content).toContain('budget was exhausted');
-    expect(automaticSkill?.content).toContain('read_skill');
+    expect(secondarySkill?.content).toContain('budget was exhausted');
+    expect(secondarySkill?.content).toContain('read_skill');
     expect(catalog).toMatchObject({ role: 'developer', source: 'skill', trust: 'user' });
     expect(catalog?.content).toContain('"id":"available"');
     expect(catalog?.content).toContain('Use for deployment checks');
     expect(catalog?.content).not.toContain('"id":"disabled"');
-    expect(result.selectedSkills.map((skill) => skill.id)).toEqual(['explicit', 'automatic']);
+    expect(result.selectedSkills.map((skill) => skill.id)).toEqual(['explicit', 'secondary']);
     expect(result.selectedSkills[0]?.plugin).toEqual({ id: 'documents', name: 'Documents', icon: 'documents' });
     expect(instructionEnvironment).toBe(environment);
     expect(result.fragments.find((fragment) => fragment.id === 'desktop_runtime_environment')).toMatchObject({

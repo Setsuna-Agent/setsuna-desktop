@@ -3,6 +3,7 @@ import type {
   RuntimeSkillDetail,
   RuntimeSkillInput,
   RuntimeSkillMcpDependencyInput,
+  RuntimeSkillSummary,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type {
@@ -21,9 +22,10 @@ import { abortable, throwIfAborted } from '../../loop/core/runtime-turn-errors.j
 
 const configureSkillToolName = 'configure_skill';
 const readSkillToolName = 'read_skill';
+const listSkillsToolName = 'list_skills';
 const installSkillMcpDependenciesToolName = 'install_skill_mcp_dependencies';
 const authenticateSkillMcpDependencyToolName = 'authenticate_skill_mcp_dependency';
-const READ_SKILL_RESULT_MAX_BYTES = 16 * 1024;
+const SKILL_RESULT_MAX_BYTES = 16 * 1024;
 const READ_SKILL_RESULT_CONTROL_RESERVE_BYTES = 512;
 
 function configureSkillDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
@@ -81,11 +83,26 @@ function configureSkillDefinition(language?: RuntimeInterfaceLanguage): RuntimeT
   };
 }
 
+function listSkillsDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
+  const text = runtimeText(language);
+  return {
+    name: listSkillsToolName,
+    description: text('Search or browse enabled Skill metadata, including entries and descriptions omitted from the prompt catalog. Returns a bounded page with exact IDs and content versions; does not load instructions or activate Skills. Continue with next_offset and the same query.', '搜索或浏览已启用 Skill 的元数据，包括提示词目录省略的条目和描述。返回有界分页与准确 ID、正文版本，不加载正文或激活 Skill。使用 next_offset 和相同 query 续读。'),
+    inputSchema: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        query: { type: 'string', maxLength: 256, description: text('Optional case-insensitive substring in the Skill ID, name or description. Omit to browse the directory.', '可选，按 Skill ID、名称或描述中的子串查找，不区分大小写。省略时浏览目录。') },
+        offset: { type: 'integer', minimum: 0, description: text('Entry offset from the previous page’s next_offset. Defaults to 0.', '上一页 next_offset 返回的条目偏移，默认 0。') },
+      },
+    },
+  };
+}
+
 function readSkillDefinition(language?: RuntimeInterfaceLanguage): RuntimeToolDefinition {
   const text = runtimeText(language);
   return {
     name: readSkillToolName,
-    description: text('Read one bounded chunk of the current instructions for an enabled Skill. Continue from next_offset until complete before applying a Skill that was not injected for this turn, and restart at offset 0 when content_version changes.', "分块读取已启用 Skill 的当前指令。应用本轮未注入的 Skill 前，按 next_offset 读到 complete；content_version 变化时从 offset 0 重新读取。"),
+    description: text('Load instructions for an enabled Skill explicitly selected by the user or clearly needed for the current task. Read every chunk through complete=true before applying it; continue from next_offset and restart at offset 0 when content_version changes.', '加载用户明确选择或当前任务明确需要的已启用 Skill 指令。应用前读到 complete=true；按 next_offset 续读，content_version 变化时从 offset 0 重读。'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -140,6 +157,7 @@ export class SkillManagementToolHost implements ToolHost {
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return [
+      listSkillsDefinition(context.interfaceLanguage),
       readSkillDefinition(context.interfaceLanguage),
       configureSkillDefinition(context.interfaceLanguage),
       ...(this.dependencyManager && context.features?.skill_mcp_dependency_install !== false
@@ -155,10 +173,13 @@ export class SkillManagementToolHost implements ToolHost {
     const text = runtimeText(context.interfaceLanguage);
     const advertised = request ? new Set(request.tools.map((tool) => tool.name)) : null;
     const lines: string[] = [];
+    if (toolIsAdvertised(advertised, listSkillsToolName)) {
+      lines.push(text('Use list_skills to discover needed Skills or descriptions omitted from the prompt catalog. It returns metadata only; use read_skill to load a relevant workflow.', '需要的 Skill 或描述被提示词目录省略时，通过 list_skills 查找。它只返回元数据；相关工作流的正文通过 read_skill 加载。'));
+    }
     if (toolIsAdvertised(advertised, readSkillToolName)) {
       lines.push(
         text('Every enabled Skill is advertised separately as routing metadata. Metadata visibility does not mean the full Skill instructions have been loaded.', "所有已启用 Skill 都会单独公布路由元数据。能看到元数据不代表已加载完整指令。"),
-        text('When a request matches a Skill that was not injected for the current turn, call read_skill with its skill_id and current content_version. Read every chunk through complete=true before acting, and restart from offset 0 if the catalog version changes.', "请求匹配本轮未注入的 Skill 时，调用 read_skill，提供 skill_id 和当前 content_version。行动前读取所有分块直到 complete=true；目录版本变化后从 offset 0 重读。"),
+        text('When the current task clearly needs a Skill within the catalog’s stated scope, call read_skill with its skill_id and current content_version if its instructions are not loaded. Read every chunk through complete=true before acting, and restart from offset 0 if the catalog version changes.', '当前任务明确需要目录描述范围内的 Skill、且尚未加载其指令时，调用 read_skill，提供 skill_id 和当前 content_version。行动前读取所有分块直到 complete=true；目录版本变化后从 offset 0 重读。'),
       );
     }
     if (toolIsAdvertised(advertised, configureSkillToolName)) {
@@ -208,6 +229,7 @@ export class SkillManagementToolHost implements ToolHost {
   }
 
   async previewToolCall(name: string, input: unknown, _context?: ToolExecutionContext): Promise<ToolExecutionPreview | null> {
+    if (name === listSkillsToolName) return { resultPreview: JSON.stringify(listSkillsInput(input)) };
     if (name === readSkillToolName) {
       return { resultPreview: JSON.stringify(readSkillInput(input)) };
     }
@@ -224,6 +246,14 @@ export class SkillManagementToolHost implements ToolHost {
   }
 
   async runTool(name: string, input: unknown, context?: ToolExecutionContext): Promise<ToolExecutionResult> {
+    if (name === listSkillsToolName) {
+      const query = listSkillsInput(input);
+      throwIfAborted(context?.signal);
+      const reading = this.skillRegistry.listSkills();
+      const catalog = await (context?.signal ? abortable(reading, context.signal) : reading);
+      const page = skillMetadataPage(catalog.skills, query);
+      return { content: JSON.stringify(page), data: page };
+    }
     if (name === readSkillToolName) {
       const { skillId, contentVersion, offset } = readSkillInput(input);
       throwIfAborted(context?.signal);
@@ -274,7 +304,7 @@ export class SkillManagementToolHost implements ToolHost {
       ].filter(Boolean).join('\n');
       const chunkBudget = Math.max(
         0,
-        READ_SKILL_RESULT_MAX_BYTES
+        SKILL_RESULT_MAX_BYTES
           - Buffer.byteLength(`${header}\n\n`, 'utf8')
           - READ_SKILL_RESULT_CONTROL_RESERVE_BYTES,
       );
@@ -291,7 +321,7 @@ export class SkillManagementToolHost implements ToolHost {
           : []),
       ].join('\n');
       const content = `${header}\n${control}\n\n${chunk.content}`;
-      if (Buffer.byteLength(content, 'utf8') > READ_SKILL_RESULT_MAX_BYTES) {
+      if (Buffer.byteLength(content, 'utf8') > SKILL_RESULT_MAX_BYTES) {
         throw new Error('Internal read_skill result budget error.');
       }
       return {
@@ -307,6 +337,8 @@ export class SkillManagementToolHost implements ToolHost {
         }),
         data: {
           skillId: skill.id,
+          // Attribute usage only after instructions are loaded, not when a keyword matches.
+          ...(skill.pluginId ? { pluginId: skill.pluginId } : {}),
           contentVersion: currentContentVersion,
           offset,
           nextOffset: complete ? null : chunk.nextOffset,
@@ -380,13 +412,51 @@ function readSkillInput(input: unknown): {
   const record = recordInput(input);
   const skillId = optionalString(record.skill_id ?? record.skillId);
   const contentVersion = optionalString(record.content_version ?? record.contentVersion);
-  const rawOffset = record.offset ?? 0;
   if (!skillId) throw new Error('skill_id is required.');
   if (!contentVersion) throw new Error('content_version is required.');
+  return { skillId, contentVersion, offset: skillOffset(record.offset) };
+}
+
+function skillOffset(value: unknown): number {
+  const rawOffset = value ?? 0;
   if (typeof rawOffset !== 'number' || !Number.isSafeInteger(rawOffset) || rawOffset < 0) {
     throw new Error('offset must be a non-negative safe integer.');
   }
-  return { skillId, contentVersion, offset: rawOffset };
+  return rawOffset;
+}
+
+function listSkillsInput(input: unknown): { query: string; offset: number } {
+  const record = recordInput(input);
+  if (record.query !== undefined && (typeof record.query !== 'string' || record.query.length > 256)) {
+    throw new Error('query must be a string of at most 256 characters.');
+  }
+  return {
+    query: (typeof record.query === 'string' ? record.query : '').normalize('NFKC').trim().toLowerCase(),
+    offset: skillOffset(record.offset),
+  };
+}
+
+function skillMetadataPage(skills: RuntimeSkillSummary[], input: ReturnType<typeof listSkillsInput>) {
+  const matches = skills.filter((skill) => skill.enabled && (!input.query || [skill.id, skill.name, skill.description]
+    .some((value) => value?.normalize('NFKC').toLowerCase().includes(input.query))));
+  const entries: { id: string; name: string; content_version: string; description?: string }[] = [];
+  let nextOffset: number | null = null;
+  for (let index = input.offset; index < matches.length && entries.length < 20; index += 1) {
+    const skill = matches[index];
+    const entry = {
+      id: skill.id, name: boundedSingleLine(skill.name, 512), content_version: skill.contentVersion ?? 'unversioned',
+      ...(skill.description ? { description: boundedSingleLine(skill.description, 4_096) } : {}),
+    };
+    const candidate = { skills: [...entries, entry], next_offset: index + 1 < matches.length ? index + 1 : null };
+    // Keep each page valid JSON and preserve exact IDs/versions for the subsequent read_skill call.
+    if (Buffer.byteLength(JSON.stringify(candidate), 'utf8') > SKILL_RESULT_MAX_BYTES) {
+      if (!entries.length) throw new Error('Skill metadata exceeds the discovery result budget.');
+      break;
+    }
+    entries.push(entry);
+    nextOffset = candidate.next_offset;
+  }
+  return { skills: entries, next_offset: nextOffset };
 }
 
 function utf8Chunk(value: string, offset: number, maxBytes: number): { content: string; nextOffset: number } {

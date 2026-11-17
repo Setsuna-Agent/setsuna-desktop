@@ -24,9 +24,7 @@ export type SkillInjection = {
 };
 
 export type SkillActivationContext = {
-  /** Current user text used only for declarative Plugin Skill activation. */
-  text: string;
-  /** Persistent defaults join injections without suppressing automatic Plugin Skill activation. */
+  /** Persistent defaults join the current turn's explicitly selected Skills. */
   defaultSkillIds?: readonly string[];
   /** 与当前采样步骤使用同一语言，避免配置在异步加载中切换。 */
   interfaceLanguage?: RuntimeInterfaceLanguage;

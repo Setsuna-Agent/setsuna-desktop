@@ -1,11 +1,53 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-registry.js';
 import { SkillManagementToolHost } from '../../../src/adapters/tool/skill-management-tool-host.js';
+import { runtimeSkillCatalogPrompt } from '../../../src/loop/context/runtime-skill-catalog-prompt.js';
 
 describe('skill management tool host', () => {
+  it('discovers omitted Skills in bounded metadata pages and loads only the requested body', async () => {
+    const { host, registry, root } = await createSkillHostFixture();
+    try {
+      await Promise.all(Array.from({ length: 30 }, (_, index) => registry.createSkill({
+        name: `Guide ${String(index).padStart(2, '0')}`,
+        description: `Topic ${index}: ${'适用范围🙂'.repeat(500)}`,
+        content: `Private workflow body ${index}`,
+      })));
+      await registry.updateSkill('guide-00', { enabled: false });
+      const catalog = runtimeSkillCatalogPrompt((await registry.listSkills()).skills, {
+        maxMetadataChars: 200, readSkillAvailable: true,
+      });
+      expect(catalog?.omittedSkillIds).toContain('guide-29');
+
+      type Page = { skills: { id: string; description?: string; content_version: string }[]; next_offset: number | null };
+      const discovered: Page['skills'] = [];
+      let offset: number | null = 0;
+      while (offset !== null) {
+        const result = await host.runTool('list_skills', { offset });
+        expect(Buffer.byteLength(result.content, 'utf8')).toBeLessThanOrEqual(16 * 1024);
+        expect(result.content).not.toContain('Private workflow body');
+        const page = JSON.parse(result.content) as Page;
+        expect(page.skills.length).toBeGreaterThan(0);
+        if (page.next_offset !== null) expect(page.next_offset).toBeGreaterThan(offset);
+        discovered.push(...page.skills);
+        offset = page.next_offset;
+      }
+      expect(new Set(discovered.map((skill) => skill.id)).size).toBe(30);
+      expect(discovered.map((skill) => skill.id)).not.toContain('guide-00');
+      expect(discovered.map((skill) => skill.id)).toContain('guide-29');
+
+      const found = JSON.parse((await host.runTool('list_skills', { query: 'GUIDE-29' })).content) as Page;
+      expect(found.skills.map((skill) => skill.id)).toEqual(['guide-29']);
+      await expect(host.runTool('read_skill', {
+        skill_id: found.skills[0]!.id, content_version: found.skills[0]!.content_version,
+      })).resolves.toMatchObject({ content: expect.stringContaining('Private workflow body 29'), data: { complete: true } });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('cancels read_skill while initialization is pending and permits a later read', async () => {
     const { host, registry } = await createSkillHostFixture();
     const skill = await registry.getSkill('builtin-guide');
@@ -189,7 +231,7 @@ describe('skill management tool host', () => {
   });
 });
 
-async function createSkillHostFixture(): Promise<{ host: SkillManagementToolHost; registry: FileSkillRegistry }> {
+async function createSkillHostFixture(): Promise<{ host: SkillManagementToolHost; registry: FileSkillRegistry; root: string }> {
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-skill-toolhost-test-'));
   const builtinDir = path.join(root, 'skills');
   const dataDir = path.join(root, 'data');
@@ -211,6 +253,7 @@ async function createSkillHostFixture(): Promise<{ host: SkillManagementToolHost
   );
   const registry = new FileSkillRegistry(builtinDir, dataDir);
   return {
+    root,
     host: new SkillManagementToolHost(registry),
     registry,
   };

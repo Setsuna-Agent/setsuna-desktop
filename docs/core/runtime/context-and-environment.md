@@ -103,7 +103,7 @@ HTTP 尝试开始计时，在 `model.*` / `provider.*` 中从模型调用开始�
 4. 运行必要 compaction。
 5. 构建 portable model history。
 6. 加载 memory。
-7. 从同一快照加载所有已启用 Skill 的路由元数据与正文版本，并选择显式/default/auto-activated Skill 正文。
+7. 从同一快照加载所有已启用 Skill 的路由元数据与正文版本，只直接注入显式选择和项目默认 Skill 的正文；其他 Skill 由模型判断任务相关性后通过 `read_skill` 按需加载。
 8. 获取 tool definitions/system prompt。
 9. 加载 project workflow 和 instructions。
 10. 生成 provider replay context。
@@ -194,7 +194,7 @@ Workflow 以 user/external fragment 注入，项目 script 不能提升为 runti
 - 本地文件引用在每次 turn 开始时重新确认存在且为普通文件，并将该文件自身作为精确的 direct-tool-only readable root；链接不进入 shell sandbox plan、不授予额外写权限，也不授予同目录其他文件的访问权。文件若本来位于 workspace 或已配置的 writable root 内，仍遵循原有 workspace 权限。
 - 图片在线程事件中始终保持为 runtime 引用；仅当当前模型支持图片且文件低于独立的内存安全边界时，runtime 才在 provider 请求边界读取、复验签名并临时转换为图片内容，Base64 不写入线程。更大的本地图片仍可由 Agent 通过精确链接路径访问。
 - 用户安装视觉识别插件并选定已配置的视觉模型后，Bundle 内的 `analyze_image` 只把附件 ID 与问题交给 host bridge；host 再次校验 thread 归属并复用 provider client，扩展 worker 不会直接获得附件路径，主 Agent 则通过附件上下文获得原文件的精确路径。
-- 文件名/MIME 可参与 Skill auto-activation。
+- 文件名/MIME 只作为附件上下文，不自动注入 Skill 正文，也不代表用户显式选择了 Plugin。
 - composer 和排队编辑会把 legacy 内联图片归一化为托管附件；本地文件保持引用，切换模型不需要改写持久化消息。
 
 ## Review profile
