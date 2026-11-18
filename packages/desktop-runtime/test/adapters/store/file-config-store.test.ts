@@ -1,11 +1,38 @@
-import type { RuntimeConfigInput } from '@setsuna-desktop/contracts';
+import type { RuntimeConfigInput, RuntimeMessage } from '@setsuna-desktop/contracts';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
+import { ContextTokenCalibration, contextModelIdentity } from '../../../src/loop/context/context-token-calibration.js';
+import { createTestTempDirectory } from '../../support/test-temp-directory.js';
 
 describe('file config store', () => {
+  it('preserves a restored token baseline across unrelated saves and invalidates it when credentials or headers change', async () => {
+    const dataDir = await createTestTempDirectory('setsuna-config-calibration-');
+    const store = new FileConfigStore(dataDir);
+    const model = { providerId: 'custom', model: 'chat' };
+    const history: RuntimeMessage[] = [{ id: 'message', role: 'user', content: 'hello', createdAt: '2026-11-01T00:00:00Z', status: 'complete' }];
+    const before = await store.saveConfig({ providers: [{ id: 'custom', apiKey: 'key-original-tail' }] });
+    const calibration = new ContextTokenCalibration();
+    calibration.record(contextModelIdentity(model, before), history, undefined, { inputTokens: 200 });
+    const restored = new ContextTokenCalibration(calibration.snapshot());
+    const adjustment = restored.adjustment(contextModelIdentity(model, before), history);
+    expect(adjustment).toBeGreaterThan(0);
+
+    const reopened = new FileConfigStore(dataDir);
+    await reopened.saveConfig({ providers: [{ id: 'custom', name: 'Renamed' }] });
+    expect(restored.adjustment(contextModelIdentity(model, await reopened.getConfig()), history)).toBe(adjustment);
+
+    const rotated = await reopened.saveConfig({ providers: [{ id: 'custom', apiKey: 'key-rotated-tail' }] });
+    expect(rotated.providers[0].apiKeyPreview).toBe(before.providers[0].apiKeyPreview);
+    expect(restored.adjustment(contextModelIdentity(model, rotated), history)).toBe(0);
+
+    restored.record(contextModelIdentity(model, rotated), history, undefined, { inputTokens: 200 });
+    const updated = await reopened.saveConfig({ providers: [{ id: 'custom', requestHeaders: { 'x-project': 'new-project' } }] });
+    expect(restored.adjustment(contextModelIdentity(model, updated), history)).toBe(0);
+  });
+
   it('persists developer role overrides across reloads and partial updates, and resets to automatic', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-role-'));
     const store = new FileConfigStore(dataDir);
@@ -682,7 +709,7 @@ describe('file config store', () => {
       modelId: 'vision-model',
     });
     expect(await store.getConfig()).not.toHaveProperty('visionRecognition');
-    expect(await readFile(path.join(dataDir, 'secrets.json'), 'utf8')).not.toContain('vision');
+    expect(JSON.parse(await readFile(path.join(dataDir, 'secrets.json'), 'utf8'))).not.toHaveProperty('visionRecognition');
     await adapter.retire();
     expect(await readFile(configPath, 'utf8')).not.toContain('"visionRecognition"');
   });

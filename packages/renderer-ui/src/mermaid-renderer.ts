@@ -11,7 +11,10 @@ export function renderMermaidDiagram(code: string, theme: MermaidTheme, signal: 
   const result = renderQueue.then(async () => {
     if (signal.aborted) return null;
     // Diagram code and layouts stay out of the initial renderer bundle.
-    const { default: mermaid } = await import('mermaid');
+    const [{ default: mermaid }, { default: DOMPurify }] = await Promise.all([
+      import('mermaid'),
+      import('dompurify'),
+    ]);
     if (signal.aborted) return null;
 
     const appearance = createMermaidTheme(theme);
@@ -39,7 +42,13 @@ export function renderMermaidDiagram(code: string, theme: MermaidTheme, signal: 
     try {
       const { svg } = await mermaid.render(`setsuna-mermaid-${++nextDiagramId}`, code, container);
       if (signal.aborted) return null;
-      return diagramImageSource(svg, appearance.themeVariables.background);
+      // Keep the same SVG elements and attributes as Mermaid's strict renderer.
+      const diagram = DOMPurify.sanitize(svg, {
+        ADD_TAGS: ['foreignobject'],
+        ADD_ATTR: ['dominant-baseline'],
+        HTML_INTEGRATION_POINTS: { foreignobject: true },
+      });
+      return diagramImageSource(diagram, appearance.themeVariables.background);
     } finally {
       container.remove();
     }
@@ -49,8 +58,9 @@ export function renderMermaidDiagram(code: string, theme: MermaidTheme, signal: 
   return result;
 }
 
-function diagramImageSource(svg: string, background: string): string {
-  const document = new DOMParser().parseFromString(svg, 'image/svg+xml');
+function diagramImageSource(sanitizedSvg: string, background: string): string {
+  // Parse as XML so SVG and embedded XHTML retain their namespace declarations.
+  const document = new DOMParser().parseFromString(sanitizedSvg, 'image/svg+xml');
   const root = document.documentElement;
   if (root.localName !== 'svg' || document.querySelector('parsererror')) {
     throw new Error('Invalid Mermaid SVG');

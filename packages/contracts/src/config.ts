@@ -43,6 +43,8 @@ export type ProviderConfigState = {
   icon?: ProviderIconConfig;
   apiKeySet: boolean;
   apiKeyPreview: string;
+  /** Opaque revision of the provider's credentials and custom request headers. */
+  requestConfigRevision?: string;
   proxyRoute?: DesktopNetworkProxyRoute;
   /** Omitted: provider preset. Empty object: no preset headers. */
   requestHeaders?: ProviderRequestHeaders;

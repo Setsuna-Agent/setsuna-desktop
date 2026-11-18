@@ -48,6 +48,13 @@ export function createVitestConfig(test: VitestTestConfig = {}) {
     },
     test: {
       environment: 'node',
+      setupFiles: [resolve(rootDir, 'scripts/test/setup-happy-dom.ts')],
+      environmentOptions: {
+        happyDOM: {
+          // Bridge fixtures need a frame window for their synthetic messages.
+          settings: { enableIframePageLoading: true, navigation: { disableChildFrameNavigation: true } },
+        },
+      },
       include: include ?? testFileGlobs,
       exclude: exclude ?? baseExcludeGlobs,
       ...testOptions,
