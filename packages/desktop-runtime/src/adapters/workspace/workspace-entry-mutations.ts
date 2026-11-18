@@ -5,19 +5,24 @@ import {
   type WorkspaceEntryRenameInput,
   type WorkspaceEntryMoveInput,
 } from '@setsuna-desktop/contracts';
-import { lstat, mkdir, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 
-export async function createWorkspaceEntry(root: string, input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry> {
+export async function createWorkspaceEntry(
+  root: string,
+  input: WorkspaceEntryCreateInput,
+  options: Readonly<{ content?: string | Uint8Array; signal?: AbortSignal }> = {},
+): Promise<WorkspaceEntry> {
   assertEntryName(input?.name);
   if (input.type !== 'file' && input.type !== 'directory') throw new Error('Entry type must be file or directory.');
   return withFileStateUpdate(root, async () => {
     const parent = await resolveEntryParent(root, input.parentPath);
     const target = path.join(parent, input.name);
+    options.signal?.throwIfAborted();
     // Exclusive creation also protects existing files and dangling symlinks.
     if (input.type === 'directory') await mkdir(target);
-    else await writeFile(target, '', { flag: 'wx' });
+    else await createWorkspaceFile(target, options.content ?? '');
     return entryForPath(root, target, input.type);
   });
 }
@@ -38,7 +43,7 @@ export function moveWorkspaceEntry(root: string, relativePath: string, input: Wo
 
 function relocateWorkspaceEntry(root: string, relativePath: string, input: { name?: string; parentPath?: string }): Promise<WorkspaceEntry> {
   return withFileStateUpdate(root, async () => {
-    const { target: source, stats: sourceStat } = await resolveExistingEntry(root, relativePath);
+    const { target: source, stats: sourceStat } = await resolveExistingWorkspaceEntry(root, relativePath);
     const parent = input.parentPath === undefined ? path.dirname(source) : await resolveEntryParent(root, input.parentPath);
     const type = sourceStat.isDirectory() ? 'directory' : 'file';
     const name = input.name ?? path.basename(source);
@@ -70,13 +75,13 @@ function relocateWorkspaceEntry(root: string, relativePath: string, input: { nam
 
 export async function deleteWorkspaceEntry(root: string, relativePath: string): Promise<void> {
   await withFileStateUpdate(root, async () => {
-    const { target, stats } = await resolveExistingEntry(root, relativePath);
+    const { target, stats } = await resolveExistingWorkspaceEntry(root, relativePath);
     // rm does not follow symlinks nested inside a directory being removed.
     await rm(target, { recursive: stats.isDirectory() });
   });
 }
 
-async function resolveExistingEntry(root: string, relativePath: string) {
+export async function resolveExistingWorkspaceEntry(root: string, relativePath: string) {
   const normalized = normalizeEntryPath(relativePath);
   if (!normalized || normalized === '.') throw new Error('The workspace root cannot be modified.');
   const parent = await resolveEntryParent(root, path.posix.dirname(normalized));
@@ -86,6 +91,20 @@ async function resolveExistingEntry(root: string, relativePath: string) {
   const stats = await lstat(target);
   if (!stats.isFile() && !stats.isDirectory()) throw new Error('Only regular files and folders can be modified.');
   return { target, stats };
+}
+
+async function createWorkspaceFile(target: string, content: string | Uint8Array): Promise<void> {
+  const file = await open(target, 'wx');
+  try {
+    try {
+      await file.writeFile(content);
+    } finally {
+      await file.close();
+    }
+  } catch (error) {
+    await rm(target, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 function assertEntryName(name: unknown): asserts name is string {

@@ -2,7 +2,7 @@ import { WORKSPACE_ENTRIES_WATCH_CHANNELS, type SetsunaDesktopBridge } from '@se
 import { ipcRenderer, type IpcRendererEvent } from 'electron';
 
 export const watchWorkspaceEntries: SetsunaDesktopBridge['desktop']['watchWorkspaceEntries'] = (
-  workspaceRoot, directoryPaths, callback,
+  workspaceRoot, directoryPaths, callback, options,
 ) => {
   const channels = WORKSPACE_ENTRIES_WATCH_CHANNELS;
   const subscriptionId = globalThis.crypto.randomUUID();
@@ -11,7 +11,7 @@ export const watchWorkspaceEntries: SetsunaDesktopBridge['desktop']['watchWorksp
     if (!cancelled && payload.subscriptionId === subscriptionId) callback();
   };
   ipcRenderer.on(channels.changed, listener);
-  void ipcRenderer.invoke(channels.subscribe, { subscriptionId, workspaceRoot, directoryPaths }).then(() => {
+  void ipcRenderer.invoke(channels.subscribe, { subscriptionId, workspaceRoot, directoryPaths, options }).then(() => {
     // Re-read once after attachment to close the gap between the initial listing and watching.
     if (!cancelled) callback();
   }).catch((error: unknown) => {

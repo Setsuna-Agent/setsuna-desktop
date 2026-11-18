@@ -66,6 +66,7 @@ importers:
       '@setsuna-desktop/feature-computer-use': workspace:*
       '@setsuna-desktop/feature-conversation-debug': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/feature-design': workspace:*
       '@setsuna-desktop/feature-diagnostics': workspace:*
       '@setsuna-desktop/feature-goal': workspace:*
       '@setsuna-desktop/feature-image-generation': workspace:*
@@ -168,6 +169,7 @@ importers:
       '@setsuna-desktop/feature-computer-use': link:packages/features/computer-use
       '@setsuna-desktop/feature-conversation-debug': link:packages/features/conversation-debug
       '@setsuna-desktop/feature-core': link:packages/feature-core
+      '@setsuna-desktop/feature-design': link:packages/features/design
       '@setsuna-desktop/feature-diagnostics': link:packages/features/diagnostics
       '@setsuna-desktop/feature-goal': link:packages/features/goal
       '@setsuna-desktop/feature-image-generation': link:packages/features/image-generation
@@ -268,6 +270,7 @@ importers:
       '@setsuna-desktop/feature-computer-use': workspace:*
       '@setsuna-desktop/feature-conversation-debug': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/feature-design': workspace:*
       '@setsuna-desktop/feature-goal': workspace:*
       '@setsuna-desktop/feature-image-generation': workspace:*
       '@setsuna-desktop/feature-mcp': workspace:*
@@ -304,6 +307,7 @@ importers:
       '@setsuna-desktop/feature-computer-use': link:../features/computer-use
       '@setsuna-desktop/feature-conversation-debug': link:../features/conversation-debug
       '@setsuna-desktop/feature-core': link:../feature-core
+      '@setsuna-desktop/feature-design': link:../features/design
       '@setsuna-desktop/feature-goal': link:../features/goal
       '@setsuna-desktop/feature-image-generation': link:../features/image-generation
       '@setsuna-desktop/feature-mcp': link:../features/mcp
@@ -471,6 +475,30 @@ importers:
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
+
+  packages/features/design:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/renderer-ui': workspace:*
+      konva: ^10.0.0
+      lucide-react: ^0.468.0
+      paper: 0.17.0
+      react: ^18.3.1
+      react-dom: ^18.3.1
+      react-konva: 18.2.14
+      yoga-layout: 3.2.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      '@setsuna-desktop/renderer-ui': link:../../renderer-ui
+      konva: 10.9.1
+      lucide-react: 0.468.0_react@18.3.1
+      paper: 0.17.0
+      react: 18.3.1
+      react-dom: 18.3.1_react@18.3.1
+      react-konva: 18.2.14_24mriur4p4dzd3yrrwnyckke5m
+      yoga-layout: 3.2.1
 
   packages/features/diagnostics:
     specifiers:
@@ -5713,6 +5741,14 @@ packages:
       '@types/react': 18.3.31
     dev: true
 
+  /@types/react-reconciler/0.28.9_@types+react@18.3.31:
+    resolution: {integrity: sha512-HHM3nxyUZ3zAylX8ZEyrDNd2XZOnQ0D5XfunJF5FLQnZbHHYq4UWvW1QfelQNXv1ICNkwYhfxjwfnqivYB6bFg==}
+    peerDependencies:
+      '@types/react': '*'
+    dependencies:
+      '@types/react': 18.3.31
+    dev: false
+
   /@types/react/18.3.31:
     resolution: {integrity: sha512-vfEqpXTvwT91yhmwdfouStN2hSKwTvyRs8qpLfADyrq/kxDw0hZM7Wk9Ug1FELj8hIby+S/+kQCSRFF32nv2Qw==}
     dependencies:
@@ -8405,6 +8441,17 @@ packages:
     engines: {node: '>=20'}
     dev: true
 
+  /its-fine/1.2.5_ldrqq4ddkzwykih5vpyejmhynu:
+    resolution: {integrity: sha512-fXtDA0X0t0eBYAGLVM5YsgJGsJ5jEmqZEPrGbzdf5awjv0xE7nqv3TVnvtUF060Tkes15DbDAKW/I48vsb6SyA==}
+    peerDependencies:
+      react: '>=18.0'
+    dependencies:
+      '@types/react-reconciler': 0.28.9_@types+react@18.3.31
+      react: 18.3.1
+    transitivePeerDependencies:
+      - '@types/react'
+    dev: false
+
   /jake/10.9.4:
     resolution: {integrity: sha512-wpHYzhxiVQL+IV05BLE2Xn34zW1S223hvjtqk0+gsPrwd/8JNLXJgZZM/iPFsYc1xyphF+6M6EvdE5E9MBGkDA==}
     engines: {node: '>=10'}
@@ -8535,6 +8582,18 @@ packages:
 
   /khroma/2.1.0:
     resolution: {integrity: sha512-Ls993zuzfayK269Svk9hzpeGUKob/sIgZzyHYdjQoAdQetRKpOLj+k/QQQ/6Qi0Yz65mlROrfd+Ev+1+7dz9Kw==}
+    dev: false
+
+  /konva/10.9.1:
+    resolution: {integrity: sha512-m49x+GatSxEUSvqahYhxpTjgKbtrLtw4P4o4B4iux953ZFpceaK52Ea+CFsAsd7W4I0Y5u6mMoRUsY/eltNZmw==}
+    peerDependencies:
+      canvas: ^3.0.0
+      skia-canvas: ^3.0.0
+    peerDependenciesMeta:
+      canvas:
+        optional: true
+      skia-canvas:
+        optional: true
     dev: false
 
   /layout-base/1.0.2:
@@ -9603,6 +9662,11 @@ packages:
     resolution: {integrity: sha512-zAMfbta9nPA8AKkA4WdmNAT8R8s6Dk0/xwPsqNnRidMFcLo1YkLuPDTgs2f64XdzS8vbLNnoJ+uUIkgbz7oRHA==}
     dev: false
 
+  /paper/0.17.0:
+    resolution: {integrity: sha512-AWHQVUNScPN/swbCg0wwb2bTerMieraol76Fpn1s+7Zw7R6mMyI0QltMkj/XOS3Jv+9785q0p4eLsYggn63ZQw==}
+    engines: {node: '>=8.0.0'}
+    dev: false
+
   /parent-module/1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
@@ -9997,6 +10061,24 @@ packages:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
     dev: true
 
+  /react-konva/18.2.14_24mriur4p4dzd3yrrwnyckke5m:
+    resolution: {integrity: sha512-lBDe/5fTgquMdg1AHI0B16YZdAOvEhWMBWuo12ioyY0icdxcz9Cf12j86fsCJCHdnvjUOlZeC0f5q+siyHbD4Q==}
+    peerDependencies:
+      konva: ^8.0.1 || ^7.2.5 || ^9.0.0 || ^10.0.0
+      react: '>=18.0.0'
+      react-dom: '>=18.0.0'
+    dependencies:
+      '@types/react-reconciler': 0.28.9_@types+react@18.3.31
+      its-fine: 1.2.5_ldrqq4ddkzwykih5vpyejmhynu
+      konva: 10.9.1
+      react: 18.3.1
+      react-dom: 18.3.1_react@18.3.1
+      react-reconciler: 0.29.2_react@18.3.1
+      scheduler: 0.23.2
+    transitivePeerDependencies:
+      - '@types/react'
+    dev: false
+
   /react-markdown/10.1.0_ldrqq4ddkzwykih5vpyejmhynu:
     resolution: {integrity: sha512-qKxVopLT/TyA6BX3Ue5NwabOsAzm0Q7kAPwq6L+wWDwisYs7R8vZ0nRXqq6rkueboxpkjvLGU9fWifiX/ZZFxQ==}
     peerDependencies:
@@ -10018,6 +10100,17 @@ packages:
       vfile: 6.0.3
     transitivePeerDependencies:
       - supports-color
+
+  /react-reconciler/0.29.2_react@18.3.1:
+    resolution: {integrity: sha512-zZQqIiYgDCTP/f1N/mAR10nJGrPD2ZR+jDSEsKWJHYC7Cm2wodlwbR3upZRdC3cjIjSlTLNVyO7Iu0Yy7t2AYg==}
+    engines: {node: '>=0.10.0'}
+    peerDependencies:
+      react: ^18.3.1
+    dependencies:
+      loose-envify: 1.4.0
+      react: 18.3.1
+      scheduler: 0.23.2
+    dev: false
 
   /react-refresh/0.17.0:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
@@ -11503,6 +11596,10 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
     dev: true
+
+  /yoga-layout/3.2.1:
+    resolution: {integrity: sha512-0LPOt3AxKqMdFBZA3HBAt/t/8vIKq7VaQYbuA8WxCgung+p9TVyKRYdpvCb80HcdTN2NkbIKbhNwKUfm3tQywQ==}
+    dev: false
 
   /zod-to-json-schema/3.25.2_zod@4.6.7:
     resolution: {integrity: sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==}

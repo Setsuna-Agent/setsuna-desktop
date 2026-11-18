@@ -1,6 +1,7 @@
 import type { RuntimeMessageAttachment, WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
+import type { RendererAppRouteId } from '@setsuna-desktop/renderer-contracts/shell';
 
-export type MainView = 'chat' | 'capabilities' | 'plugin' | 'settings' | 'pull-requests' | 'automation';
+export type MainView = RendererAppRouteId;
 
 export type ConversationOverviewVisibility = 'auto' | 'hidden' | 'shown';
 

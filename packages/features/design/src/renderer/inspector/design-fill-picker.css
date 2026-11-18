@@ -1,0 +1,127 @@
+.sd-color-picker.design-fill-picker {
+  --design-control: color-mix(in srgb, var(--app-surface) 91%, var(--app-text));
+  --design-line: color-mix(in srgb, var(--app-text) 12%, transparent);
+  --design-accent: var(--app-primary);
+  --design-ink: var(--app-primary);
+  container: design-inspector / inline-size;
+  width: min(280px, calc(100vw - 24px));
+  max-height: min(540px, var(--radix-popover-content-available-height, 80vh));
+  padding: 10px;
+  overflow: hidden auto;
+  font-size: 12px;
+}
+
+.design-fill-picker__body,
+.design-fill-picker__image {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.design-fill-picker__body {
+  --design-inspector-control-height: 26px;
+  --design-inspector-control-radius: 6px;
+  --design-inspector-gap: 4px;
+  --design-inspector-icon-size: 22px;
+}
+
+.design-fill-picker__header,
+.design-fill-picker__source {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.design-fill-picker__modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--design-control);
+}
+
+.design-fill-picker__modes > .sd-icon-button {
+  width: 100%;
+  height: var(--design-inspector-control-height);
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--app-text-secondary);
+}
+
+.design-fill-picker__modes > [aria-pressed='true'] {
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+}
+
+.design-fill-picker .sd-select-field.design-fill-picker__blend {
+  --design-control: transparent;
+  --design-inspector-focus: transparent;
+  align-self: stretch;
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+  color: var(--app-text-secondary);
+}
+
+.design-fill-picker .design-fill-picker__blend:is(:hover, :focus-visible, .is-open):not(:disabled) {
+  color: var(--app-text);
+}
+
+.design-fill-picker .sd-color-picker__formats .sd-select-field {
+  width: auto;
+  min-height: var(--sd-color-picker-field-height);
+}
+
+.design-fill-picker__blend .sd-select-field__chevron {
+  display: none;
+}
+
+.design-fill-picker__blend .sd-select-field__value {
+  display: grid;
+  place-items: center;
+}
+
+.design-fill-picker__image-preview {
+  width: 100%;
+  height: 94px;
+  border-radius: 7px;
+  background: var(--design-control);
+  object-fit: contain;
+}
+
+.design-fill-picker__source input {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.design-gradient-track {
+  position: relative;
+  height: 16px;
+  margin: 2px 7px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--design-line);
+  background: var(--design-gradient), repeating-conic-gradient(#888 0% 25%, #ddd 0% 50%) 0 0 / 8px 8px;
+}
+
+.design-gradient-track__stop {
+  position: absolute;
+  inset-block-start: 50%;
+  width: 16px;
+  height: 18px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--app-surface);
+  border-radius: 5px;
+  box-shadow: 0 0 0 1px var(--design-line), 0 1px 3px rgb(0 0 0 / 18%);
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.design-gradient-track__stop:is(:focus-visible, :active) {
+  z-index: 1;
+  box-shadow: 0 0 0 2px var(--app-primary);
+}

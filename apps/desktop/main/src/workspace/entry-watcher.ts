@@ -1,12 +1,14 @@
+import { isIgnoredWorkspaceEntryName, normalizeWorkspaceSearchExtensions, type DesktopWorkspaceEntriesWatchOptions } from '@setsuna-desktop/contracts';
 import { watch, type FSWatcher } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-/** Publish changes only for listed directories and their direct entries. */
+/** Publish changes within the listed directories. Descendant entries are opt-in. */
 export async function watchWorkspaceEntries(
   workspaceRoot: string,
   directoryPaths: string[],
   onChange: () => void,
+  options: DesktopWorkspaceEntriesWatchOptions = {},
 ): Promise<() => void> {
   if (typeof workspaceRoot !== 'string' || !path.isAbsolute(workspaceRoot)) {
     throw new Error('Workspace root must be an absolute path.');
@@ -21,10 +23,14 @@ export async function watchWorkspaceEntries(
     assertWithinWorkspace(root, target);
     return target;
   });
+  const includeDescendants = options.recursive === true;
+  const contentSuffixes = normalizeWorkspaceSearchExtensions(options.contentExtensions).map((extension) => `.${extension}`);
   const watchers = new Map<string, { directory: string; device: number; inode: number; watcher: FSWatcher }>();
   // Windows handles on descendants can block renaming their parent. One native
   // recursive root handle avoids those locks; filter events to the listed paths.
-  const recursive = process.platform === 'win32';
+  const windows = process.platform === 'win32';
+  const recursive = includeDescendants || windows;
+  const comparablePath = (directory: string) => windows ? directory.toLowerCase() : directory;
   let recursiveWatcher: FSWatcher | undefined;
   let recursiveDirectories: string[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -37,6 +43,11 @@ export async function watchWorkspaceEntries(
     if (timer || refreshing) return;
     timer = setTimeout(() => { timer = undefined; void refresh(); }, 150);
   };
+  function matchesContent(event: string, filename: string | Buffer | null) {
+    if (event !== 'change' || !contentSuffixes.length || !filename) return true;
+    const name = filename.toString().toLowerCase();
+    return contentSuffixes.some((suffix) => name.endsWith(suffix));
+  }
   const close = () => {
     closed = true;
     if (timer) clearTimeout(timer);
@@ -62,7 +73,9 @@ export async function watchWorkspaceEntries(
         current?.watcher.close();
         watchers.delete(target);
         if (!stats.isDirectory()) continue;
-        const watcher = watch(directory, { persistent: false }, changed);
+        const watcher = watch(directory, { persistent: false }, (event, filename) => {
+          if (matchesContent(event, filename)) changed();
+        });
         watchers.set(target, { directory, device: stats.dev, inode: stats.ino, watcher });
         watcher.on('error', () => {
           if (watchers.get(target)?.watcher === watcher) {
@@ -78,15 +91,20 @@ export async function watchWorkspaceEntries(
       }
     }
     if (recursive && !closed && targets.length) {
-      recursiveDirectories = [...directories].map((directory) => directory.toLowerCase());
+      recursiveDirectories = [...directories].map(comparablePath);
       if (!recursiveWatcher) {
         try {
-          const watcher = watch(root, { persistent: false, recursive: true }, (_event, filename) => {
+          const watcher = watch(root, { persistent: false, recursive: true }, (event, filename) => {
+            if (!matchesContent(event, filename)) return;
             if (filename) {
-              const entry = path.resolve(root, filename.toString()).toLowerCase();
+              const absolutePath = path.resolve(root, filename.toString());
+              if (!isWithinWorkspace(root, absolutePath)) return;
+              if (includeDescendants && path.relative(root, absolutePath).split(path.sep).some(isIgnoredWorkspaceEntryName)) return;
+              const entry = comparablePath(absolutePath);
               // Ancestor changes can create or replace a requested directory.
               if (!recursiveDirectories.some((directory) => directory === entry
-                || directory === path.dirname(entry) || directory.startsWith(`${entry}${path.sep}`))) return;
+                || directory === path.dirname(entry) || directory.startsWith(`${entry}${path.sep}`)
+                || (includeDescendants && isWithinWorkspace(directory, entry)))) return;
             }
             changed();
           });
@@ -130,10 +148,12 @@ export async function watchWorkspaceEntries(
 }
 
 function assertWithinWorkspace(root: string, target: string): void {
+  if (!isWithinWorkspace(root, target)) throw new Error('Directory path must stay inside the workspace.');
+}
+
+function isWithinWorkspace(root: string, target: string): boolean {
   const relative = path.relative(root, target);
-  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw new Error('Directory path must stay inside the workspace.');
-  }
+  return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
 function isMissingDirectory(error: unknown): boolean {

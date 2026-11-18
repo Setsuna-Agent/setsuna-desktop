@@ -90,9 +90,9 @@ export class PluginUiPermissions {
   private hostPermission(contents: WebContents | null, session: Session, permission: string, main: boolean, url?: string): boolean {
     if (!main || !contents || contents.isDestroyed() || contents.session !== session) return false;
     const owner = this.ownerFor(contents);
-    // Preserve host copy/fullscreen actions without extending them to Plugin frames.
+    // Desktop actions use the main frame. Plugin frames have separate document-scoped grants.
     return Boolean(owner && !owner.isDestroyed() && (!url || url === contents.getURL())
-      && (permission === 'clipboard-sanitized-write' || permission === 'fullscreen'));
+      && (permission === 'clipboard-sanitized-write' || permission === 'fullscreen' || permission === 'local-fonts'));
   }
 
   private target(contents: WebContents | null, session: Session, url: string | undefined, main: boolean) {

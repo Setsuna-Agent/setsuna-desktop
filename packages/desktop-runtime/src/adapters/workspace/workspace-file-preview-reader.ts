@@ -2,6 +2,7 @@ import {
   getDocumentPreviewFormat,
   detectWorkspacePreviewVideoMimeType,
   isDocumentPreviewContent,
+  MAX_WORKSPACE_IMAGE_BYTES,
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   WORKSPACE_TEXT_FILE_MAX_BYTES,
   type WorkspaceFileRead,
@@ -14,7 +15,6 @@ import {
   isProbablyBinaryWorkspaceFile,
 } from '../../utils/workspace-file-preview.js';
 
-export const MAX_WORKSPACE_IMAGE_BYTES = 8 * 1024 * 1024;
 // Includes the SVG classifier's bounded XML preamble, not just binary magic bytes.
 const FILE_TYPE_SAMPLE_BYTES = 64 * 1024;
 type FilePreviewContent = Omit<WorkspaceFileRead, 'projectId' | 'rootId' | 'path'>;

@@ -29,7 +29,7 @@ export function registerWorkspaceEntryWatchIpc(): void {
         if (subscriptions.get(id) === subscription && !event.sender.isDestroyed()) {
           event.sender.send(channels.changed, { subscriptionId: input.subscriptionId });
         }
-      });
+      }, input.options);
       // Each consumer owns its watcher. Unsubscribe/navigation can overtake path resolution.
       if (subscriptions.get(id) !== subscription) dispose();
       else subscription.dispose = dispose;

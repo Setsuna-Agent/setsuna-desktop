@@ -292,6 +292,7 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       params.set('q', query);
       if (parent !== undefined && parent !== null) params.set('parent', parent);
       if (options.filesOnly) params.set('filesOnly', 'true');
+      for (const extension of options.fileExtensions ?? []) params.append('extension', extension);
       return request<WorkspaceEntrySearchResponse>({
         path: workspaceRequestPath(projectId, `/entries/search?${params}`),
       });

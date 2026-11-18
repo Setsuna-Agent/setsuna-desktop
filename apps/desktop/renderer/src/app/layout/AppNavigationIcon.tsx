@@ -1,9 +1,10 @@
 // Filled variants adapted from Lucide (ISC); see THIRD_PARTY_NOTICES.md.
-import { Blocks, Clock3, GitPullRequestArrow, Home, Settings } from 'lucide-react';
+import { Blocks, Clock3, GitPullRequestArrow, Home, PenTool, Settings } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 const outlineIcons = {
   chat: Home,
+  design: PenTool,
   'pull-requests': GitPullRequestArrow,
   automation: Clock3,
   capabilities: Blocks,

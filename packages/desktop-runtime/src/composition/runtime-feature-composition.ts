@@ -34,6 +34,9 @@ import {
   artifactWorkspaceFilesCapability,
 } from '@setsuna-desktop/feature-artifact/contracts';
 import { artifactRuntimeFeature } from '@setsuna-desktop/feature-artifact/runtime';
+import { designWorkspaceFilesCapability } from '@setsuna-desktop/feature-design/contracts';
+import { designRuntimeFeature } from '@setsuna-desktop/feature-design/runtime';
+import { createDesignWorkspaceFiles } from '../adapters/workspace/design-workspace-files.js';
 import { computerRuntimeToolsCapability } from '@setsuna-desktop/feature-computer-use/contracts';
 import { computerRuntimeFeature } from '@setsuna-desktop/feature-computer-use/runtime';
 import { browserRuntimeToolServiceCapability } from '@setsuna-desktop/feature-browser/contracts';
@@ -161,6 +164,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
     approvalReviewRuntimeFeature,
     collaborationRuntimeFeature,
     conversationDebugRuntimeFeature,
+    designRuntimeFeature,
     imageGenerationRuntimeFeature,
     goalRuntimeFeature,
     memoryRuntimeFeature,
@@ -202,6 +206,7 @@ export async function activateBuiltinRuntimeFeatures(
         runtime.configStore.approvalReviewLegacySettingsAdapter(),
       ),
       provideHostCapability(artifactWorkspaceFilesCapability, runtime.workspaceProjects),
+      provideHostCapability(designWorkspaceFilesCapability, createDesignWorkspaceFiles(runtime.workspaceProjects)),
       provideHostCapability(
         modelProviderRuntimeHostCapability,
         Object.freeze({

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserSettingsNavigationProvider } from '../../composition/BrowserWorkspaceFeatureBoundary.js';
 import { useAssistantsFeature } from '../../composition/assistants/AssistantsFeatureBoundary.js';
 import { useAssistantConversationEntry } from '../../composition/assistants/useAssistantConversationEntry.js';
+import { useDesignClient } from '../../composition/design/DesignFeatureBoundary.js';
+import { DesignWorkspaceRoute } from '../../composition/design/DesignWorkspaceRoute.js';
 import { TerminalActionsHostProvider, type TerminalActionsHost } from '../../composition/TerminalWorkspaceFeatureBoundary.js';
 import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
 import { useContentFindTarget } from '../../shared/find/useContentFindTarget.js';
@@ -64,6 +66,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     chatActions,
     clearCapabilitySelectionRequest,
     composerKey,
+    designLocation,
+    designSources,
     draft,
     draftSkillReferences,
     draftSendIntent,
@@ -86,6 +90,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     selectPluginForChat,
     startPluginAppChat,
     setActiveView,
+    setDesignLocation,
     setDraft,
     setSidebarCollapsed,
     shellClassName,
@@ -110,6 +115,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     workspaceWidth,
     workspacePanels,
   } = controller;
+  const designAvailable = Boolean(useDesignClient());
   const [conversationOverviewVisibility, setConversationOverviewVisibility] = useState<ConversationOverviewVisibility>('auto');
   const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
   const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
@@ -180,7 +186,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         ? { view: activeView, viewKey: selectedPluginViewKey }
         : activeView === 'settings'
           ? { view: activeView, ...settingsLocation }
-          : { view: activeView };
+          : activeView === 'design'
+            ? { view: activeView, location: designLocation }
+            : { view: activeView };
   const openHistoryLocation = useCallback(async (location: AppNavigationLocation) => {
     if (location.view === 'chat') {
       if (location.threadId) {
@@ -198,8 +206,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     if (location.view === 'capabilities') setSelectedCapabilitiesPluginId(location.pluginId);
     if (location.view === 'plugin') setSelectedPluginViewKey(location.viewKey);
     if (location.view === 'settings') setSettingsLocation({ sectionId: location.sectionId, path: location.path });
+    if (location.view === 'design') setDesignLocation(location.location);
     await navigation.changeView(location.view);
-  }, [activeProjectId, currentThread, navigation, newThreadDraftId, runtime.projects]);
+  }, [activeProjectId, currentThread, navigation, newThreadDraftId, runtime.projects, setDesignLocation]);
   const reportHistoryError = useCallback((error: unknown) => {
     runtime.setError(error instanceof Error ? error.message : String(error));
   }, [runtime.setError]);
@@ -222,6 +231,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setActiveView('capabilities');
   }, [setActiveView]);
   const openChat = useCallback(() => setActiveView('chat'), [setActiveView]);
+  const openDesign = useCallback(() => setActiveView('design'), [setActiveView]);
   const openPullRequests = useCallback(() => setActiveView('pull-requests'), [setActiveView]);
   const openAutomation = useCallback(() => setActiveView('automation'), [setActiveView]);
   const openCapabilitiesPlugin = useCallback((pluginId: string) => {
@@ -520,6 +530,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           runtimeActivityTriggerRef={runtimeActivityTriggerRef}
           themeToggleTriggerRef={themeToggleTriggerRef}
           onOpenChat={openChat}
+          onOpenDesign={designAvailable ? openDesign : undefined}
           onOpenCapabilities={openCapabilities}
           onOpenPullRequests={openPullRequests}
           onOpenAutomation={openAutomation}
@@ -642,7 +653,11 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           refreshRequests: pluginPageRefresh.requests,
           onBack: openChat,
         }}
-        renderDefault={(routeId) => (
+        renderDefault={(routeId) => routeId === 'design' ? (
+          <DesignWorkspaceRoute preferredProjectId={activeProject?.id ?? activeProjectId}
+            projects={[...runtime.projects, ...designSources.filter((source) => !runtime.projects.some(({ id }) => id === source.id))]}
+            location={designLocation} onLocationChange={setDesignLocation} onAddProject={navigation.openCreateProject} />
+        ) : (
           <AppRouteContent
             onSelectConversation={navigation.selectThreadInView}
             starterProjectSelection={{

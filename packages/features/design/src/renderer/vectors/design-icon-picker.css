@@ -1,0 +1,76 @@
+.design-icon-picker {
+  --desktop-panel-search-height: 36px;
+  display: grid;
+  gap: 12px;
+}
+
+.design-icon-picker__search,
+.design-icon-picker__scroll {
+  padding-inline: var(--design-icon-picker-inset, 0px);
+}
+
+.design-icon-picker__search {
+  overflow: hidden;
+}
+
+.design-icon-picker__scroll {
+  height: min(272px, 42vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.design-icon-picker__scroll:focus {
+  outline: none;
+}
+
+.design-icon-picker__spacer {
+  position: relative;
+}
+
+.design-icon-picker__grid {
+  display: grid;
+  position: absolute;
+  inset-inline: 0;
+}
+
+.design-icon-picker__grid .sd-icon-button {
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  padding: 0;
+  border-radius: 9px;
+  background: transparent;
+}
+
+.design-icon-picker__grid .sd-icon-button:is(:hover, :active, [aria-pressed='true']):not(:disabled) {
+  background: transparent;
+  color: light-dark(#5141b7, #cec3ff);
+}
+
+.design-icon-picker__grid .sd-icon-button svg {
+  width: 22px;
+  height: 22px;
+}
+
+.design-icon-picker__actions {
+  display: flex;
+  align-items: center;
+}
+
+.sd-popover.design-icon-picker__popover {
+  --design-icon-picker-inset: 10px;
+  width: min(320px, calc(100vw - 16px));
+  padding: 10px 0;
+}
+
+.design-icon-picker__trigger.sd-button {
+  width: 100%;
+  justify-content: space-between;
+  background: var(--app-surface-muted);
+}
+
+.design-icon-picker__trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

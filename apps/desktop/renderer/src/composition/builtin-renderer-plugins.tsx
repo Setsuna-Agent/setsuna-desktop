@@ -56,6 +56,7 @@ import { FeatureRecoveryShell } from './FeatureRecoveryShell.js';
 
 const REQUIRED_APP_ROUTE_IDS: readonly RendererAppRouteId[] = Object.freeze([
   'chat',
+  'design',
   'settings',
   'capabilities',
   'plugin',
@@ -134,6 +135,7 @@ const routePlugin = defineRendererPlugin({
       declareRendererChildSlot(chatDetailsSlot, { required: true }),
       declareRendererChildSlot(workspacePanelSlot, { requiredKeys: RENDERER_WORKSPACE_PANEL_TYPES }),
     ]);
+    registerRoute(ui, 'design', []);
     registerRoute(ui, 'settings', [
       declareRendererChildSlot(settingsPageSlot, { requiredKeys: REQUIRED_SETTINGS_PAGE_KEYS }),
       declareRendererChildSlot(settingsPageExtensionSlot),

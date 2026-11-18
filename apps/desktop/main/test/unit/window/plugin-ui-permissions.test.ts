@@ -71,6 +71,13 @@ it('denies unknown, foreign, remote, worker and ambiguous frame requests while p
   const write = vi.fn();
   request(first.contents, 'clipboard-sanitized-write', write, { isMainFrame: true, requestingUrl: first.main.url });
   expect(write).toHaveBeenCalledWith(true);
+  const fonts = vi.fn();
+  // Electron 43's native permission converter reports local-fonts before its declarations list it.
+  const localFonts = 'local-fonts' as Parameters<typeof request>[1] & Parameters<typeof query>[0];
+  request(first.contents, localFonts, fonts, { isMainFrame: true, requestingUrl: first.main.url });
+  request(first.contents, localFonts, fonts, details);
+  expect(fonts.mock.calls).toEqual([[true], [false]]);
+  expect(query(localFonts, first.contents, first.main.url, { isMainFrame: true })).toBe(true);
   const contents = Object.assign(new EventEmitter(), { id: 3, session: first.contents.session, isDestroyed: () => false,
     getURL: () => first.main.url });
   const window = Object.assign(new EventEmitter(), { webContents: contents, isDestroyed: () => false });

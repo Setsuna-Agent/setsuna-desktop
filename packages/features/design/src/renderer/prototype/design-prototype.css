@@ -1,0 +1,57 @@
+.design-prototype-viewport {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--app-surface-subtle);
+}
+
+.design-prototype-page,
+.design-prototype-overlay {
+  display: grid;
+  justify-items: center;
+  padding: 16px;
+}
+
+.design-prototype-page {
+  max-block-size: 70vh;
+  overflow: auto;
+}
+
+.design-prototype-overlay {
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  overflow: auto;
+  background-color: rgb(13 12 18 / 45%);
+}
+
+.design-prototype-board {
+  position: relative;
+  max-inline-size: 100%;
+}
+
+.design-prototype-board img {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.design-prototype-hotspots {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  pointer-events: none;
+}
+
+.design-prototype-hotspots [role='button'] {
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.design-prototype-controls {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}

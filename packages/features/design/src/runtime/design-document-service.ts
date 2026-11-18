@@ -1,0 +1,104 @@
+import { randomUUID } from 'node:crypto';
+import { WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES } from '@setsuna-desktop/contracts';
+import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
+import {
+  designDocumentCodec, designDocumentVersion, type CommitDesignEditsInput, type CreateDesignDocumentInput, type DesignDocument,
+  type DesignDocumentRef, type DesignSnapshot, type DesignWorkspaceDocument, type DesignWorkspaceFiles,
+  type NavigateDesignHistoryInput,
+} from '../contracts/index.js';
+import { applyDesignEdits } from '../contracts/apply-design-edits.js';
+
+const historyDepth = 32;
+const historyDocuments = 12;
+
+type DesignHistory = {
+  revision: string;
+  document: DesignDocument;
+  undo: readonly DesignDocument[];
+  redo: readonly DesignDocument[];
+};
+
+export class DesignDocumentService {
+  private readonly histories = new Map<string, DesignHistory>();
+
+  constructor(private readonly files: Pick<DesignWorkspaceFiles, 'create' | 'withDocument'>) {}
+
+  create(input: CreateDesignDocumentInput, signal: AbortSignal) {
+    const document: DesignDocument = { schemaVersion: designDocumentVersion, documentId: randomUUID(), rootIds: [], nodes: {} };
+    return this.files.create(input, serializeDocument(document), signal);
+  }
+
+  read(ref: DesignDocumentRef, signal: AbortSignal): Promise<DesignSnapshot> {
+    return this.files.withDocument(ref, signal, async (file) => toSnapshot(await this.readHistory(file)));
+  }
+
+  commit(input: CommitDesignEditsInput, signal: AbortSignal): Promise<DesignSnapshot> {
+    return this.files.withDocument(input.ref, signal, async (file) => {
+      const state = await this.readHistory(file);
+      assertRevision(state, input.expectedRevision);
+      const document = applyDesignEdits(state.document, input.edits);
+      const content = serializeDocument(document);
+      if (content === serializeDocument(state.document)) return toSnapshot(state);
+      return this.replace(file, state.revision, content, {
+        document, undo: [...state.undo, state.document].slice(-historyDepth), redo: [],
+      });
+    });
+  }
+
+  navigate(input: NavigateDesignHistoryInput, signal: AbortSignal): Promise<DesignSnapshot> {
+    return this.files.withDocument(input.ref, signal, async (file) => {
+      const state = await this.readHistory(file);
+      assertRevision(state, input.expectedRevision);
+      const from = state[input.direction];
+      const document = from.at(-1);
+      if (!document) return toSnapshot(state);
+      const next = input.direction === 'undo'
+        ? { undo: from.slice(0, -1), redo: [...state.redo, state.document] }
+        : { undo: [...state.undo, state.document], redo: from.slice(0, -1) };
+      return this.replace(file, state.revision, serializeDocument(document), { document, ...next });
+    });
+  }
+
+  private async readHistory(file: DesignWorkspaceDocument): Promise<DesignHistory> {
+    const { content, revision } = await file.read();
+    const state = this.histories.get(file.key);
+    if (state?.revision === revision) return state;
+    // File changes from outside this service invalidate the in-memory undo chain.
+    this.histories.delete(file.key);
+    try {
+      return { revision, document: designDocumentCodec.parse(JSON.parse(content)), undo: [], redo: [] };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid design document.';
+      throw new FeatureOperationFailure({ code: 'INVALID_DESIGN_DOCUMENT', message, retryable: false });
+    }
+  }
+
+  private async replace(
+    file: DesignWorkspaceDocument, expectedRevision: string, content: string, next: Omit<DesignHistory, 'revision'>,
+  ): Promise<DesignSnapshot> {
+    const revision = await file.replace(content, expectedRevision);
+    const state = { revision, ...next };
+    this.histories.delete(file.key);
+    this.histories.set(file.key, state);
+    if (this.histories.size > historyDocuments) {
+      const oldest = this.histories.keys().next().value;
+      if (oldest !== undefined) this.histories.delete(oldest);
+    }
+    return toSnapshot(state);
+  }
+}
+
+function assertRevision(state: DesignHistory, expected: string): void {
+  if (state.revision === expected) return;
+  throw new FeatureOperationFailure({ code: 'REVISION_CONFLICT', message: 'The design changed on disk.', retryable: true });
+}
+
+function toSnapshot(state: DesignHistory): DesignSnapshot {
+  return { document: state.document, revision: state.revision, canUndo: state.undo.length > 0, canRedo: state.redo.length > 0 };
+}
+
+function serializeDocument(document: DesignDocument): string {
+  const content = `${JSON.stringify(document, null, 2)}\n`;
+  if (Buffer.byteLength(content) <= WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES) return content;
+  throw new FeatureOperationFailure({ code: 'INVALID_INPUT', message: 'The design exceeds the workspace file size limit.', retryable: false });
+}

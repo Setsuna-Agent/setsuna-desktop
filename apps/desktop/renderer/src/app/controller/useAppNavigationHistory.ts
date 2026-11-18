@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SettingsPageLocation } from '../../features/settings/settings-types.js';
 import type { MainView } from '../types.js';
+import type { DesignWorkspaceLocation } from '../../composition/design/DesignFeatureBoundary.js';
 
 export type AppNavigationLocation =
   | { view: 'chat'; threadId: string | null; projectId: string | null; draftId?: string }
+  | { view: 'design'; location: DesignWorkspaceLocation | null }
   | { view: 'capabilities'; pluginId: string | null }
   | { view: 'plugin'; viewKey: string | null }
   | ({ view: 'settings' } & SettingsPageLocation)
-  | { view: Exclude<MainView, 'chat' | 'capabilities' | 'plugin' | 'settings'> };
+  | { view: Exclude<MainView, 'chat' | 'design' | 'capabilities' | 'plugin' | 'settings'> };
 
 type HistoryEntry = { key: string; location: AppNavigationLocation };
 type NavigationHistory = { entries: HistoryEntry[]; index: number };
