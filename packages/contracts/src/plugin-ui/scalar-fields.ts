@@ -5,7 +5,7 @@ export type RuntimePluginUiScalarNode = RuntimePluginUiNumberNode | RuntimePlugi
 export function validPluginUiScalarValue(node: RuntimePluginUiScalarNode, value: string): boolean {
   if (node.type === 'boolean') return value === 'true' || value === 'false';
   if (!value.trim()) return !node.required;
-  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/iu.test(value)) return false;
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/iu.test(value)) return false;
   const number = Number(value);
   if (!Number.isFinite(number) || (node.min !== undefined && number < node.min) || (node.max !== undefined && number > node.max)) return false;
   if (node.step !== undefined) {

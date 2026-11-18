@@ -4,6 +4,9 @@ import mermaid, { type MermaidConfig } from 'mermaid';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderMermaidDiagram } from '../src/mermaid-renderer.js';
 
+// happy-dom's SVG parser is incompatible with DOMPurify. Keep the real Mermaid config parser below.
+vi.mock('dompurify', () => ({ default: { sanitize: (svg: string) => svg } }));
+
 let parsedType: string;
 let parsedConfig: MermaidConfig;
 

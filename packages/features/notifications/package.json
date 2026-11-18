@@ -25,7 +25,7 @@
   "dependencies": {
     "@setsuna-desktop/contracts": "workspace:*",
     "@setsuna-desktop/feature-core": "workspace:*",
-    "undici": "7.29.1"
+    "undici": "7.30.2"
   },
   "devDependencies": {
     "electron": "^43.8.3"

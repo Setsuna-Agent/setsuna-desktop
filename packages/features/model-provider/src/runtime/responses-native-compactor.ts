@@ -18,14 +18,16 @@ export async function compactNativeResponses(
   protocols: Map<string, ResponsesCompactionProtocol>,
   providers?: readonly Provider[],
 ): Promise<ModelCompactionResult> {
-  const key = createHash('sha256').update(JSON.stringify([
-    provider.id, provider.baseUrl, request.model, provider.apiKey, provider.requestHeaders, provider.proxyRoute,
+  // The config store owns the credential revision. Unversioned providers are probed on demand.
+  const key = provider.requestConfigRevision === undefined ? undefined : createHash('sha256').update(JSON.stringify([
+    provider.id, provider.baseUrl, request.model, provider.requestConfigRevision, provider.proxyRoute,
   ])).digest('hex');
   const remember = (protocol: ResponsesCompactionProtocol) => {
+    if (key === undefined) return;
     protocols.set(key, protocol);
     if (protocols.size > 64) protocols.delete(protocols.keys().next().value!);
   };
-  const protocol = protocols.get(key);
+  const protocol = key === undefined ? undefined : protocols.get(key);
   if (protocol === 'unsupported') return { kind: 'unsupported' };
   const prepared = preparePiRequest(provider, { ...request, responseFormat: undefined, toolChoice: undefined }, providers);
   let input: readonly unknown[] | undefined;

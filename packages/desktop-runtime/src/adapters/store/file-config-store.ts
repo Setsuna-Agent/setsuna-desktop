@@ -41,8 +41,10 @@ import type {
   VisionRecognitionLegacySettingsAdapter,
   VisionRecognitionModelSelection,
 } from '@setsuna-desktop/feature-vision-recognition/contracts';
+import { randomUUID } from 'node:crypto';
 import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import type {
   ConfigStore,
   RuntimeProviderConfig,
@@ -79,6 +81,7 @@ import {
 } from './model-config.js';
 
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
+const INITIAL_PROVIDER_REQUEST_REVISION = 'initial';
 const CONFIG_SCHEMA_VERSION = 7;
 // Network access changed from an implicit deny to an explicit, user-controllable
 // setting in schema v2. Later schema changes must not replay that one-time migration.
@@ -107,11 +110,12 @@ type StoredConfig = Omit<
   /** Compatibility input consumed once by the Vision Recognition Feature. */
   visionRecognition?: VisionRecognitionModelSelection;
   desktopSettings?: StoredDesktopSettings;
-  providers: Omit<ProviderConfigState, 'apiKeySet' | 'apiKeyPreview'>[];
+  providers: Omit<ProviderConfigState, 'apiKeySet' | 'apiKeyPreview' | 'requestConfigRevision'>[];
 };
 
 type StoredSecrets = {
   providerApiKeys: Record<string, string>;
+  providerRequestRevisions: Record<string, string>;
   imageGenerationApiKey?: string;
 };
 
@@ -489,7 +493,7 @@ export class FileConfigStore implements ConfigStore {
   }
 
   private async readSecrets(): Promise<StoredSecrets> {
-    return normalizeSecrets(await readJsonFile<StoredSecrets>(this.secretsPath, { providerApiKeys: {} }));
+    return normalizeSecrets(await readJsonFile<unknown>(this.secretsPath, {}));
   }
 
   private async writeSecrets(secrets: StoredSecrets): Promise<void> {
@@ -510,6 +514,7 @@ export class FileConfigStore implements ConfigStore {
         models: normalizeProviderModels(provider.models, provider.provider),
         apiKeySet: apiKey.length > 0,
         apiKeyPreview: maskApiKey(apiKey),
+        requestConfigRevision: secrets.providerRequestRevisions[provider.id] ?? INITIAL_PROVIDER_REQUEST_REVISION,
       };
     });
     return {
@@ -545,8 +550,10 @@ function pruneRemovedProviderSecrets(
   providers: Array<StoredConfig['providers'][number] & { apiKey?: string }>,
 ): void {
   const retainedProviderIds = new Set(providers.map((provider) => provider.id));
-  for (const providerId of Object.keys(secrets.providerApiKeys)) {
-    if (!retainedProviderIds.has(providerId)) delete secrets.providerApiKeys[providerId];
+  for (const values of [secrets.providerApiKeys, secrets.providerRequestRevisions]) {
+    for (const providerId of Object.keys(values)) {
+      if (!retainedProviderIds.has(providerId)) delete values[providerId];
+    }
   }
 }
 
@@ -611,11 +618,16 @@ function normalizeProviders(
     const requestHeaders = normalizeProviderRequestHeaders(
       Object.hasOwn(provider, 'requestHeaders') ? provider.requestHeaders : previous?.requestHeaders,
     );
+    const previousApiKey = secrets.providerApiKeys[id];
     if ('apiKey' in provider && typeof provider.apiKey === 'string' && provider.apiKey.trim()) {
       secrets.providerApiKeys[id] = provider.apiKey.trim();
     }
     if ('clearApiKey' in provider && provider.clearApiKey) {
       delete secrets.providerApiKeys[id];
+    }
+    // Store the revision with the credential so both are replaced together.
+    if (!previous || previousApiKey !== secrets.providerApiKeys[id] || !isDeepStrictEqual(requestHeaders, previous.requestHeaders)) {
+      secrets.providerRequestRevisions[id] = randomUUID();
     }
     return {
       id,
@@ -642,22 +654,28 @@ function normalizeProviders(
 }
 
 function normalizeSecrets(value: unknown): StoredSecrets {
-  if (!value || typeof value !== 'object') return { providerApiKeys: {} };
-  const record = value as {
+  const record = (value && typeof value === 'object' ? value : {}) as {
     providerApiKeys?: unknown;
+    providerRequestRevisions?: unknown;
     imageGenerationApiKey?: unknown;
   };
-  const providerApiKeys = record.providerApiKeys;
   return {
-    providerApiKeys: providerApiKeys && typeof providerApiKeys === 'object'
-      ? Object.fromEntries(
-          Object.entries(providerApiKeys).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-        )
-      : {},
+    providerApiKeys: normalizeProviderSecretRecord(record.providerApiKeys),
+    providerRequestRevisions: normalizeProviderSecretRecord(record.providerRequestRevisions),
     imageGenerationApiKey: typeof record.imageGenerationApiKey === 'string'
       ? record.imageGenerationApiKey
       : undefined,
   };
+}
+
+function normalizeProviderSecretRecord(value: unknown): Record<string, string> {
+  const result: Record<string, string> = Object.create(null);
+  if (value && typeof value === 'object') {
+    for (const [id, entry] of Object.entries(value)) {
+      if (typeof entry === 'string') result[id] = entry;
+    }
+  }
+  return result;
 }
 
 function defaultImageGenerationSettings(): StoredImageGenerationConfig {
@@ -693,6 +711,7 @@ function runtimeProviderConfig(
     proxyRoute: normalizeDesktopNetworkProxyRoute(provider.proxyRoute) ?? { mode: 'inherit' },
     models,
     apiKey: secrets.providerApiKeys[provider.id] ?? '',
+    requestConfigRevision: secrets.providerRequestRevisions[provider.id] ?? INITIAL_PROVIDER_REQUEST_REVISION,
     activeModel: models.find((model) => model.enabled) ?? models[0],
   };
 }

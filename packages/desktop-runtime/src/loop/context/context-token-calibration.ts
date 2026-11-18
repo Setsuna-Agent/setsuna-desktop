@@ -40,7 +40,7 @@ export function contextModelIdentity(model: Pick<ModelRequest, 'model' | 'provid
   return {
     ...model,
     ...(provider ? { providerFingerprint: createHash('sha256').update(JSON.stringify([
-      provider.id, provider.provider, provider.baseUrl, provider.apiKeySet, provider.apiKeyPreview, provider.requestHeaders,
+      provider.id, provider.provider, provider.baseUrl, provider.requestConfigRevision,
     ])).digest('hex') } : {}),
   };
 }

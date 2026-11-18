@@ -114,6 +114,8 @@ Chat Completions 厂商的高级配置提供 `Developer role`（自动 / 启用 
 
 `FileConfigStore` 继续拥有 `config.json`/`secrets.json` 的锁与原子写入。Feature host 暴露 provider 查询/保存、按 proxy route 解析的 fetch 和原生剪贴板写入；已保存的 API key 不进入 renderer state。
 
+API key 或自定义请求头变更时，`secrets.json` 同步更新该厂商的随机配置版本号。上下文用量校准和压缩协议缓存使用该版本号识别连接配置的变更。
+
 API Key 输入框右侧提供复制按钮，优先复制当前输入，否则复制该服务已保存的密钥。`model-provider.api-key.copy` 通过已认证的 native bridge 直接写入系统剪贴板，仅返回成功状态；复制不会保存输入草稿。按钮在无密钥时禁用，成功后短暂显示对勾，失败显示可重试提示。
 
 同一输入框的清除按钮同时清空输入草稿和已保存标记，通过自动保存提交 `clearApiKey: true`，从 `secrets.json` 删除该服务的密钥。手动留空仍保留已保存密钥。清除沿用串行保存和页面离开时的 flush，较早的在途保存不能覆盖清除意图；随后输入新密钥会改为保存新值。

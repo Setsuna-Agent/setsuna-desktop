@@ -25,15 +25,17 @@ describe('Responses V2 compaction', () => {
     expect(bodies[1]!.input.find((item: any) => item.type === 'function_call_output')).toMatchObject({ call_id: 'call_1', output: expect.arrayContaining([{ type: 'input_image', image_url: 'data:image/png;base64,YWJj', detail: 'auto' }]) });
   });
 
-  it('falls back only on explicit rejection, then remembers standalone support for this connection', async () => {
+  it('caches explicit protocol rejections until the connection config changes', async () => {
     const calls: { url: string; body: any }[] = [];
-    const output = [{ type: 'message', role: 'user', content: 'retained' }, { type: 'compaction', encrypted_content: 'opaque' }];
+    const compaction = { type: 'compaction', encrypted_content: 'opaque' };
+    const output = [{ type: 'message', role: 'user', content: 'retained' }, compaction];
+    const requestConfig = { requestConfigRevision: 'original' };
     const client = createClient(async (url, init) => {
       calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
-      return String(url).endsWith('/compact')
-        ? Response.json({ id: 'compact', output })
-        : Response.json({ error: { message: 'Unsupported input type: compaction_trigger' } }, { status: 400 });
-    });
+      if (String(url).endsWith('/compact')) return Response.json({ id: 'compact', output });
+      if (requestConfig.requestConfigRevision === 'updated') return streamResponse([compaction]);
+      return Response.json({ error: { message: 'Unsupported input type: compaction_trigger' } }, { status: 400 });
+    }, requestConfig);
     const first = await client.compactConversation(requestFixture());
     const second = await client.compactConversation(requestFixture());
     expect(first).toMatchObject({ kind: 'native', mode: 'responses-compact', providerMetadata: { openAiResponsesCompaction: { items: output } } });
@@ -43,6 +45,9 @@ describe('Responses V2 compaction', () => {
     ]);
     expect(calls[1]!.body.input).toEqual(calls[0]!.body.input.slice(0, -1));
     expect(calls[2]!.body.input).toEqual(calls[1]!.body.input);
+
+    requestConfig.requestConfigRevision = 'updated';
+    await expect(client.compactConversation(requestFixture())).resolves.toMatchObject({ kind: 'native', mode: 'responses-v2' });
   });
 
   it.each([401, 403, 400])('does not turn an unrelated HTTP %i failure into a different compaction protocol', async (status) => {
@@ -114,11 +119,11 @@ function requestFixture(): ModelRequest {
   };
 }
 
-function createClient(fetch: typeof globalThis.fetch) {
+function createClient(fetch: typeof globalThis.fetch, requestConfig = { requestConfigRevision: 'initial' }) {
   const activeModel = { id: 'model', name: 'Test', code: 'test-model', enabled: true, maxOutputTokens: 8192, supportsImages: true, thinkingEnabled: false, thinkingEfforts: [] };
   const provider: ModelProviderRuntimeConfig = { id: 'provider', name: 'Test', provider: 'openai-responses', baseUrl: 'https://provider.test/v1', apiKey: 'sk-test', enabled: true, models: [activeModel], activeModel };
   return new PiModelClient({
-    appVersion: 'test', dataDir: '', resolveProvider: async () => provider, fetchForRoute: () => fetch,
+    appVersion: 'test', dataDir: '', resolveProvider: async () => ({ ...provider, ...requestConfig }), fetchForRoute: () => fetch,
     readProviderState: async () => ({ providers: [{ ...provider, apiKeySet: true, apiKeyPreview: '' }] }),
     saveProviderState: async (input) => ({ ...input, providers: input.providers as ProviderConfigState[] }),
     writeClipboardText: async () => undefined,
