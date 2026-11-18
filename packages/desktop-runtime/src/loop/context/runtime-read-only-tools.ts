@@ -6,6 +6,7 @@ const RUNTIME_READ_ONLY_TOOL_NAMES = new Set([
   'search_text',
   'read_file',
   'read_skill',
+  'list_skills',
   // Restricted direct Git execution when the host cannot sandbox a review shell.
   'git_inspect',
   // Core marks these turns readOnly; the PC host enforces a sandbox without writes.

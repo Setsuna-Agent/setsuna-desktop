@@ -23,7 +23,7 @@ Setsuna Desktop 有四种容易混淆的扩展机制，它们的信任级别、�
 - [Plugin 概览](plugins/README.md)：Bundle 类型、目录要求、安装和信任模型。
 - [Plugin Bundles 与默认市场](plugins/bundles.md)：manifest、内置能力和安装事务。
 - [可执行扩展 API](plugins/extensions.md)：worker、Tool、Hook、网络与结构化 UI。
-- [Builtin Skills](skills/README.md)：Skill 来源、选择、自动激活、依赖和编辑规则。
+- [Builtin Skills](skills/README.md)：Skill 来源、选择、按需加载、依赖和编辑规则。
 - [MCP Feature](../features/mcp.md)：连接、OAuth、工具执行和宿主兼容面。
 
 ## 安全基线

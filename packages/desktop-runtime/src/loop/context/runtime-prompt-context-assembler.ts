@@ -103,9 +103,9 @@ export class RuntimePromptContextAssembler {
         [...new Set([...skillIds, ...pluginContext.skillIds])],
         config,
         language,
-        { text: skillActivationText, defaultSkillIds: thread.defaultSkillIds },
+        { defaultSkillIds: thread.defaultSkillIds },
         skillCatalogContextWindowTokens,
-        tools.some((tool) => tool.name === 'read_skill'),
+        tools,
       ), toolContext.signal),
       this.options.memoryControl().contextMessages(thread.projectId),
       this.options.projectInstructions?.load({
@@ -153,24 +153,21 @@ export class RuntimePromptContextAssembler {
     language: RuntimeInterfaceLanguage,
     activation: SkillActivationContext,
     skillCatalogContextWindowTokens: number | undefined,
-    readSkillAvailable: boolean,
+    tools: RuntimeToolDefinition[],
   ): Promise<RuntimePromptContext> {
     const text = runtimeText(language);
     const snapshot = await this.options.skillRegistry?.resolvePromptContext(skillIds, { ...activation, interfaceLanguage: language });
     if (!snapshot) return { fragments: [], selectedSkills: [] };
     const injections = snapshot.selectedInjections;
+    const readSkillAvailable = tools.some((tool) => tool.name === 'read_skill');
     const catalog = runtimeSkillCatalogPrompt(snapshot.availableSkills, {
       contextWindowTokens: skillCatalogContextWindowTokens,
       readSkillAvailable,
+      listSkillsAvailable: tools.some((tool) => tool.name === 'list_skills'),
       language,
     });
-    const selectedSkillIds = new Set([...skillIds, ...(activation.defaultSkillIds ?? [])]);
-    const orderedInjections = injections
-      .map((skill, index) => ({ index, skill }))
-      .sort((left, right) => Number(selectedSkillIds.has(right.skill.id)) - Number(selectedSkillIds.has(left.skill.id)) || left.index - right.index)
-      .map(({ skill }) => skill);
     let remainingBytes = positiveSetting(config?.desktopSettings?.skillPromptMaxBytes) ?? DEFAULT_SKILL_PROMPT_MAX_BYTES;
-    const selectedSkillFragments = orderedInjections.map((skill): RuntimePromptFragment => {
+    const selectedSkillFragments = injections.map((skill): RuntimePromptFragment => {
       const content = skill.content.trim();
       const contentBytes = Buffer.byteLength(content, 'utf8');
       const includeContent = contentBytes <= remainingBytes;
@@ -212,7 +209,7 @@ export class RuntimePromptContextAssembler {
         }] : []),
         ...selectedSkillFragments,
       ],
-      selectedSkills: orderedInjections.map((skill) => ({
+      selectedSkills: injections.map((skill) => ({
         id: skill.id,
         name: skill.name,
         ...(skill.path ? { path: skill.path } : {}),

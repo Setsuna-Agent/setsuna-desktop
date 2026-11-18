@@ -79,7 +79,7 @@ Skills Feature 拥有 Skill catalog、详情、用户 Skill CRUD、extra roots�
 
 内置和 Plugin Skill 只读，用户 Skill 才能编辑。Renderer service 串行 mutation，并防止已开始的旧 refresh 覆盖新结果；宿主 Capabilities 页面只消费 service，不拥有 Skill snapshot。
 
-Skill 格式、来源和自动激活见 [Builtin Skills](../extensions/skills/README.md)。
+Skill 格式、来源和按需加载见 [Builtin Skills](../extensions/skills/README.md)。
 
 ## Plugin Management
 

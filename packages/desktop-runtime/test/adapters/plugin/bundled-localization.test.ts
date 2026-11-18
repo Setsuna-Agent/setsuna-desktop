@@ -174,7 +174,7 @@ describe('bundled content localization', () => {
     }
     const prompt = await skills.resolvePromptContext(['create-mcp-in-chat']);
     expect(prompt.selectedInjections[0]?.content).toContain('# Create MCP in Chat');
-    const zhStep = await skills.resolvePromptContext(['create-mcp-in-chat'], { text: '', interfaceLanguage: 'zh-CN' });
+    const zhStep = await skills.resolvePromptContext(['create-mcp-in-chat'], { interfaceLanguage: 'zh-CN' });
     expect(zhStep.selectedInjections[0]?.content).toContain('# 对话创建 MCP');
     expect(zhStep.selectedInjections[0]?.contentVersion).not.toBe(prompt.selectedInjections[0]?.contentVersion);
     await language('zh-CN');
@@ -219,8 +219,6 @@ describe('bundled content localization', () => {
     expect(await plugins.readResource('documents', 'content-spec')).toMatchObject({
       text: expect.stringContaining('# DOCX 内容规格'),
     });
-    expect((await skills.resolvePromptContext([], { text: 'Need library documentation' })).selectedInjections)
-      .toEqual([expect.objectContaining({ id: 'context7-docs.context7-docs' })]);
     expect(await readFile(path.join(root, 'plugins.json'), 'utf8')).toBe(before);
     for (const record of records.filter((plugin) => plugin.extension)) {
       expect((await inspectBundleTree(record.installPath)).bundleHash).toBe(record.extension?.trustedHash);

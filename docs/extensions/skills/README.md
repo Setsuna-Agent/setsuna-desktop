@@ -87,22 +87,21 @@ main RuntimeHost
 
 Skill 目录页按已继承目录和 Skill 文件路径分组，每个 extra root 单独成组；预设目录沿用运行时设置中的来源名称，自定义目录使用路径。Setsuna 本地创建的 Skill 保留在「个人」，插件与内置 Skill 保留各自分组。分组仅用于目录展示，不改变 Skill 的运行时 kind 或启用、编辑逻辑。
 
-## 选择与自动激活
+## 选择与按需加载
 
 注入来源：
 
 - 用户在当前输入显式选择的 Skill。
+- 用户在当前输入显式引用的已安装 Plugin 所属 Skill。
 - 会话创建时绑定的项目默认 Skill，持续参与每轮上下文。
-- Plugin Skill 的 auto-activation。
 
-仅当轮显式选择会阻止自动匹配；项目默认 Skill 不关闭自动匹配，禁用或缺失的默认项会跳过。各来源合并后按 Skill ID 去重。自动匹配可使用：
+各来源合并后按 Skill ID 去重，禁用或缺失的项会跳过。其他已启用 Skill 只进入路由元数据目录；模型根据当前请求的目标和 `description` 的适用范围判断是否需要，再通过 `read_skill` 读取完整正文。
 
-- `auto-activate` 短语。
-- 用户文本。
-- 附件文件名和 MIME。
-- Plugin/Skill 名称与高置信度标签 fallback。
+提示词目录预算不足时会省略条目或缩短描述，但不会隐藏实际可用的 Skill：`list_skills` 提供全部已启用 Skill 的有界元数据分页，可按 ID、名称或描述中的子串查询。每页最多 20 项、16 KiB，返回准确 ID 与 `content_version`，供后续 `read_skill` 使用；查询目录不会加载正文或记录为插件使用。
 
-匹配只是选择候选，不能改变 Skill 的信任级别或工具权限。
+runtime 不再用 `auto-activate`、插件/Skill 名称、标签、描述关键词、附件名或 MIME 自动注入正文。旧 Bundle 可以保留这些自定义 frontmatter 字段，但它们不再参与激活。仅提问、引用示例、提到扩展名或明确否定某项操作，不代表要求执行相应 Skill 的工作流；任务变化时需重新判断已加载 Skill 是否相关。
+
+显式选择、默认项和按需加载均不改变 Skill 的信任级别或工具权限。插件使用归因来自实际注入或成功读取正文，不来自目录可见性或关键词命中。
 
 ## `SKILL.md` 结构
 
@@ -127,12 +126,7 @@ description: "在明确的示例任务中使用。"
 - 不读取任务范围外的文件。
 ```
 
-Plugin Skill 可额外声明：
-
-```yaml
-auto-activate:
-  - 精确短语
-```
+`description` 应明确说明适用的任务和必要的排除条件，供模型判断是否需要该工作流，不要把通用技术名词当作自动执行条件。
 
 用户 Skill 的 frontmatter 由 runtime 根据结构化输入生成；管理工具的 `content` 只传正文。
 

@@ -256,23 +256,24 @@ worker 不应填写 `pluginId`；runtime 只接受真实 Plugin tool run 的卡�
 
 完整所有权与安全决策见 [Renderer Plugin Runtime](../../designs/current/renderer-plugin-runtime.md)，worker 动作 API 见 [可执行扩展 API v1](extensions.md#apionuiactionactionid-handler)。
 
-### Skill 自动激活
+### Skill 注入与按需加载
 
-任意 Plugin Skill 都可以在 `SKILL.md` frontmatter 中声明自动激活词，不依赖插件 ID 或内置白名单：
+Plugin Skill 通过 `SKILL.md` frontmatter 的描述声明适用任务，供模型在执行当前请求时判断：
 
 ```yaml
 ---
 name: "数据库迁移助手"
-description: "规划并检查 PostgreSQL 数据库迁移。"
-auto-activate:
-  - PostgreSQL migration
-  - 数据库迁移
+description: "用户要求规划或检查 PostgreSQL 数据库迁移时使用；询问数据库概念不需要执行迁移工作流。"
 ---
 ```
 
-runtime 会用当前 turn 的实际用户输入（含补充指令）或分配给子代理的任务，以及输入附件名和 MIME 类型匹配这些短语；匹配不区分大小写并执行 Unicode 规范化。协作汇报、邮箱消息、继承历史、Hook 上下文和压缩摘要即使使用 `user` 消息角色，也不参与自动激活或插件引用选择。没有声明时，会以插件/Skill 名称、插件标签和描述中的高置信度标识做兼容匹配，让升级前已安装的 Bundle 仍可路由。用户在输入框显式选择 Skill 时，以显式选择为准，不再追加自动匹配结果。
+runtime 只直接注入当前输入显式选择的 Skill、显式引用的 Plugin 所属 Skill，以及会话绑定的项目默认 Skill。其他已启用 Skill 仅提供目录元数据，由模型根据当前请求的目标和描述范围按需调用 `read_skill`。插件名称、标签、描述中的关键词、附件名和 MIME 均不会自动注入正文；旧 `auto-activate` 字段不再参与激活。
 
-插件使用状态按能力来源统一归因，不局限于 Skill：Plugin Skill 写入采样快照，Plugin MCP 按工具命名空间归因，Plugin Hook 按 `pluginId` 归因，Plugin resource 按资源工具参数归因。renderer 在 turn 进行中显示“正在使用插件”，结束后显示“已使用插件”。
+提示词目录因预算省略条目或描述时，模型可通过只读 `list_skills` 查询完整的已启用目录。查询返回有界元数据分页与准确正文版本，不激活 Skill，也不计为插件使用。
+
+插件引用只从当前 turn 的实际用户输入（含补充指令）或分配给子代理的任务中解析。协作汇报、邮箱消息、继承历史、Hook 上下文和压缩摘要即使使用 `user` 消息角色，也不代表用户选中了其中的 Plugin。
+
+插件使用状态按能力来源统一归因，不局限于 Skill：直接注入的 Plugin Skill 写入采样快照，`read_skill` 成功读取正文时在工具结果中携带所属 `pluginId`，Plugin MCP 按工具命名空间归因，Plugin Hook 按 `pluginId` 归因，Plugin resource 按资源工具参数归因。renderer 在 turn 进行中显示“正在使用插件”，结束后显示“已使用插件”。
 
 ### 随应用实现的原生能力
 

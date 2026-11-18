@@ -28,7 +28,6 @@ import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile, writeTextFile } from '../store/json-file.js';
 import { PluginSkillOverrideStore } from './plugin-skill-override-store.js';
 import { mergeSkillManifest, readOptionalSkillManifest } from './skill-manifest-editor.js';
-import { inferredPluginActivationKeywords, pluginSkillMatchesActivation, uniqueStrings, type PluginSkillOrigin } from './skill-activation.js';
 import { readLocalizedSkillDocument } from './localized-skill-document.js';
 import { installedPluginMessages, localizePluginDisplayFields, pluginText } from '../plugin/bundled-plugin-localization.js';
 
@@ -50,7 +49,6 @@ type ParsedSkill = {
   references: string[];
   mcpDependencies: RuntimeSkillMcpDependency[];
   dependencyErrors: string[];
-  autoActivate: string[];
   plugin?: RuntimePluginReference;
 };
 
@@ -203,17 +201,16 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
     const skills = await this.readSkills(activation?.interfaceLanguage, state);
     const explicitSkillIds = new Set(skillIds.filter(Boolean));
     const defaultSkillIds = new Set(activation?.defaultSkillIds ?? []);
-    const allowAutomaticPluginActivation = explicitSkillIds.size === 0 && Boolean(activation?.text.trim());
     const resolvedSkills = skills.map((parsed) => ({ parsed, detail: toDetail(parsed, state) }));
     return {
       availableSkills: resolvedSkills
         .filter(({ detail }) => detail.enabled)
         .map(({ parsed }) => toSummary(parsed, state)),
+      // Discovery advertises metadata; only explicit selections and defaults inject a workflow.
       selectedInjections: resolvedSkills
-        .filter(({ parsed, detail }) => detail.enabled && (
+        .filter(({ detail }) => detail.enabled && (
           explicitSkillIds.has(detail.id)
           || defaultSkillIds.has(detail.id)
-          || (allowAutomaticPluginActivation && pluginSkillMatchesActivation(parsed, activation?.text ?? ''))
         ))
         .map(({ parsed, detail }) => ({
           id: detail.id,
@@ -300,13 +297,9 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
         ...dependencyManifest,
         ...(document.localized ? { displayName: undefined } : {}),
       }, {
-        reference: {
-          id: plugin.id,
-          name: pluginText(messages, plugin.name),
-          ...(plugin.icon ? { icon: plugin.icon } : {}),
-        },
-        description: plugin.description,
-        tags: plugin.tags ?? [],
+        id: plugin.id,
+        name: pluginText(messages, plugin.name),
+        ...(plugin.icon ? { icon: plugin.icon } : {}),
       });
       return override ? parsed : {
         ...localizePluginDisplayFields(parsed, messages),
@@ -511,18 +504,12 @@ function parseSkill(
   skillPath: string,
   rawContent: string,
   dependencyManifest: SkillDependencyManifest,
-  pluginOrigin?: PluginSkillOrigin,
+  plugin?: RuntimePluginReference,
 ): ParsedSkill {
   const frontmatter = parseFrontmatter(rawContent);
   const content = frontmatter.body.trim();
   const name = dependencyManifest.displayName ?? frontmatter.name ?? id;
   const description = frontmatter.description;
-  // 显式短语是 Skill 作者声明的路由边界；元数据推导只兼容尚未声明该字段的旧 Bundle。
-  const autoActivate = pluginOrigin
-    ? frontmatter.autoActivate.length
-      ? frontmatter.autoActivate
-      : inferredPluginActivationKeywords(id, name, description, pluginOrigin)
-    : [];
   return {
     id,
     name,
@@ -535,14 +522,13 @@ function parseSkill(
     references: referencePaths(content),
     mcpDependencies: dependencyManifest.mcpDependencies,
     dependencyErrors: dependencyManifest.errors,
-    autoActivate: uniqueStrings(autoActivate),
-    ...(pluginOrigin ? { plugin: { ...pluginOrigin.reference } } : {}),
+    ...(plugin ? { plugin: { ...plugin } } : {}),
   };
 }
 
-function parseFrontmatter(rawContent: string): { name?: string; description?: string; autoActivate: string[]; body: string } {
+function parseFrontmatter(rawContent: string): { name?: string; description?: string; body: string } {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(rawContent);
-  if (!match) return { autoActivate: [], body: rawContent };
+  if (!match) return { body: rawContent };
   const block = match[1];
   const body = rawContent.slice(match[0].length);
   try {
@@ -550,13 +536,11 @@ function parseFrontmatter(rawContent: string): { name?: string; description?: st
     return {
       name: optionalString(fields.name),
       description: optionalString(fields.description),
-      autoActivate: frontmatterStringArray(fields.autoActivate ?? fields.auto_activate ?? fields['auto-activate']),
       body,
     };
   } catch {
     // 可选的 frontmatter 块格式错误时，不能让其他内容仍可读取的 Skill 消失。
     return {
-      autoActivate: [],
       body,
     };
   }
@@ -571,12 +555,6 @@ function existingSkillMetadata(rawContent?: string): Record<string, unknown> {
   } catch {
     return {};
   }
-}
-
-function frontmatterStringArray(value: unknown): string[] {
-  if (typeof value === 'string') return value.trim() ? [value.trim()] : [];
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean);
 }
 
 function referencePaths(content: string): string[] {

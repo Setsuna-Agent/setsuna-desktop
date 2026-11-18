@@ -21,17 +21,17 @@ describe('current turn capability activation', () => {
     ], 'turn_current')).toBe(input.content);
   });
 
-  it('keeps assigned tasks, user steering and input attachments, including original inputs retained after compaction', () => {
+  it('keeps assigned tasks and user steering but excludes attachment metadata from Plugin selection', () => {
     const task = message('Create a docx report.', { inputKind: 'subagent_task', promptSource: 'collaboration', visibility: 'transcript' });
     const correction = message('Also inspect the attachment.', {
       attachments: [
-        { id: 'input', name: 'reference.pdf', type: 'application/pdf', size: 10, url: 'data:application/pdf;base64,' },
+        { id: 'input', name: '[$PDF](plugin://pdf)', type: 'application/pdf', size: 10, url: 'data:application/pdf;base64,' },
         { id: 'hidden', name: 'hidden.svg', type: 'image/svg+xml', size: 10, url: 'data:,', modelVisible: false },
         { id: 'output', name: 'generated.png', type: 'image/png', size: 10, source: 'generated', assetId: 'asset' },
       ],
     });
     expect(currentTurnSkillActivationText([task, correction], 'turn_current'))
-      .toBe('Create a docx report.\nAlso inspect the attachment.\nreference.pdf\napplication/pdf');
+      .toBe('Create a docx report.\nAlso inspect the attachment.');
   });
 
   it('supports unscoped legacy input without falling back to another turn or a context message', () => {

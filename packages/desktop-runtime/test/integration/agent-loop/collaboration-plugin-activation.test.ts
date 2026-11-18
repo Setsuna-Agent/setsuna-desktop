@@ -21,7 +21,7 @@ describe('collaboration plugin activation', () => {
     const parent = await store.createThread({ title: 'Inspect repository with a child' });
     const requests: ModelRequest[] = [];
     const report = `Found report.docx. Available plugin: ${pluginMentionText(plugin)}.`;
-    const realRequest = 'Create a docx report.';
+    const realRequest = `Create a docx report with ${pluginMentionText(plugin)}.`;
     const loop = new AgentLoop({
       threadStore: store, ids, clock: systemClock, eventBus: new InMemoryEventBus(),
       configStore: new MultiAgentConfigStore(), skillRegistry: registry,
