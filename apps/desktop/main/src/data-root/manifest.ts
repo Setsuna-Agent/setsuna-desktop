@@ -3,7 +3,9 @@ import {
   type DesktopDataMigrationCategoryId,
   type DesktopDataMigrationCategorySummary,
   type DesktopDataMigrationIssue,
+  type DesktopDataMigrationPlan,
 } from '@setsuna-desktop/contracts';
+import { randomUUID } from 'node:crypto';
 import { lstat, readFile, readlink, readdir, realpath, statfs } from 'node:fs/promises';
 import path from 'node:path';
 import { DATA_ROOT_MARKER_FILE_NAME } from './layout.js';
@@ -30,6 +32,32 @@ const TRANSIENT_ROOT_FILE_NAMES = new Set([
 ]);
 const MINIMUM_SPACE_RESERVE_BYTES = 64 * 1024 * 1024;
 const ACTIVE_MEMORY_INDEX_PATH = 'runtime/memories/memories.json';
+
+export async function buildDataMigrationPlan(
+  sourceRoot: string, targetRoot: string, reservedRoots: readonly string[],
+): Promise<DesktopDataMigrationPlan> {
+  const target = path.resolve(targetRoot);
+  const { manifest, blockers: manifestBlockers } = await buildDataMigrationManifest(sourceRoot);
+  const targetInspection = await inspectDataMigrationTarget({
+    sourceRoot,
+    targetRoot: target,
+    totalBytes: manifest.totalBytes,
+    reservedRoots,
+  });
+  return {
+    planId: randomUUID(),
+    sourceRoot,
+    targetRoot: target,
+    totalFiles: manifest.entries.length,
+    totalBytes: manifest.totalBytes,
+    requiredBytes: targetInspection.requiredBytes,
+    availableBytes: targetInspection.availableBytes,
+    categories: await summarizeMigrationPlanCategories(manifest),
+    blockers: [...manifestBlockers, ...targetInspection.blockers],
+    warnings: targetInspection.warnings,
+    createdAt: new Date().toISOString(),
+  };
+}
 
 export async function buildDataMigrationManifest(sourceRoot: string): Promise<{
   manifest: DataMigrationManifest;

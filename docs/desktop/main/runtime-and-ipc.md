@@ -41,7 +41,9 @@
 - `/health`
 - `/v1/*`
 
-它负责附加 Authorization、JSON 编解码和 transport 诊断。幂等 GET 在 loopback
+它负责附加 Authorization、JSON 编解码和 transport 诊断。runtime 开发重载或崩溃恢复期间，
+新请求和 GET 重试都等待子进程通过健康检查，再使用当前端口。启动失败会返回给等待中的调用方。
+幂等 GET 在 loopback
 连接失败时会短重试一次；POST/PUT/PATCH/DELETE 不会盲重试，因为响应丢失不能证明
 runtime 没有执行写操作。最终 transport 错误必须携带 method/path、底层错误码和
 runtime 子进程状态。Renderer 永远看不到实际端口、token 或 headers。

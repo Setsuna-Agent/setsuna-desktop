@@ -48,7 +48,7 @@ corepack pnpm@7.33.7 <command>
 - `pnpm prepare:electron`：检查并准备当前平台的 Electron 二进制；默认使用 Electron
   文档推荐的中国镜像，可通过 `ELECTRON_MIRROR` 覆盖下载源。CI 和 Release workflow
   显式使用 Electron 官方 GitHub 下载源，避免海外 runner 访问国内镜像时下载缓慢或超时。
-- `pnpm dev:electron`：先准备 Electron，再构建 contracts、feature-core、app-sdk、Feature packages、runtime 和 Electron bundle 并启动。
+- `pnpm dev:electron` 准备 Electron、app-sdk 和平台助手，从 workspace 源码构建并监听后台 bundle，首次编译成功后启动桌面。
 - `pnpm build`：clean 后依次构建 contracts、feature-core、renderer-contracts、renderer-ui、app-sdk、Feature packages、runtime、Electron 与 renderer。
 - `pnpm build:contracts`：只编译 `packages/contracts/src`，测试由独立 test tsconfig 类型检查。
 - `pnpm build:app-sdk`：编译自定义 React 应用的 SDK 及其共享 UI 依赖，打包组件、类型、宿主 token/CSS 和独立项目安装清单。
@@ -99,9 +99,9 @@ dev 启动流程：
 
 1. `dev:electron` 先通过 `scripts/prepare-electron.mjs` 检查二进制；缺失时显示周期进度，
    下载超时会明确失败而不是让启动命令无限等待。安装期的 root `postinstall` 也执行同一检查。
-2. 复用当前 pnpm entrypoint 构建 contracts、Feature packages 和 runtime。
+2. 复用当前 pnpm entrypoint 构建供自定义应用使用的 app-sdk 分发目录。
 3. Windows x64 调用 `build:windows-sandbox` 编译并校验 Rust 沙箱程序，再通过 `prepare:windows-sandbox-curl` 准备 curl；任一步失败都会阻止 Electron 启动。
-4. 调用 `buildElectron()`。
+4. 准备当前平台的桌面控制助手，并用 esbuild 增量构建 main、preload、runtime CLI 及 worker。开发构建将 contracts、feature-core 和各 Feature 解析到源码。
 5. macOS 只检查少量缓存元数据，有有效的 `Setsuna Desktop Dev.app` 时立即使用；
    缓存缺失或失效则立即启动原 Electron，随后后台复制、签名并注册开发应用。
    准备成功后供下一次启动或应用内计划重启使用，不中断当前窗口；Windows 继续使用原 Electron，
@@ -112,7 +112,9 @@ dev 启动流程：
    应用内计划重启使用专用退出码原地拉起，不等待后台准备，也不结束 Vite renderer。
 6. 注入：
    - `SETSUNA_DESKTOP_DEV_SERVER_URL=http://127.0.0.1:5174`
-   - `SETSUNA_DESKTOP_RUNTIME_ENTRY=packages/desktop-runtime/dist/cli.js`
+   - `SETSUNA_DESKTOP_RUNTIME_ENTRY=dist/runtime/cli.cjs`
+
+`watch-electron-dev.ts` 按 esbuild 输入图重建受改动影响的入口。一次保存涉及的入口全部编译成功后，按 JavaScript 产物变化通过父子进程 IPC 通知 Electron。runtime 和 worker 的改动沿用正常的子进程关闭与就绪握手，窗口内已有 SSE 订阅会续传。main 或 preload 的改动复用计划重启退出码，同批改动只需重启一次 Electron。
 
 未打包的 Electron 使用独立开发 profile，位于系统 `appData` 下的
 `Setsuna Desktop Development/`。它拥有独立的数据根、Chromium session、runtime

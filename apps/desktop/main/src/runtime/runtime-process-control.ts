@@ -9,6 +9,18 @@ export type RuntimeChildProcess = ChildProcessByStdio<Writable, Readable, Readab
 const RUNTIME_SHUTDOWN_TIMEOUT_MS = 15_000;
 const RUNTIME_FORCE_EXIT_TIMEOUT_MS = 1_000;
 
+class UncleanRuntimeExit extends Error {}
+
+/** Dev can load the next build once the old child has exited. A live child or failed cleanup still blocks it. */
+export async function allowUncleanExitForDevReload(stopping: Promise<void>): Promise<void> {
+  try {
+    await stopping;
+  } catch (error) {
+    if (!(error instanceof UncleanRuntimeExit)) throw error;
+    console.warn('[electron-dev] previous runtime exited uncleanly; continuing reload', error);
+  }
+}
+
 /**
  * Ask the runtime to release durable resources before terminating it. Windows does not
  * deliver POSIX signals to Node child processes, so child.kill('SIGTERM') is only a fallback.
@@ -40,14 +52,14 @@ export async function stopRuntimeChild(
 
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
     if (await settlesWithin(exited, RUNTIME_FORCE_EXIT_TIMEOUT_MS)) {
-      throw new Error('Runtime required forced termination after graceful shutdown timed out.');
+      throw new UncleanRuntimeExit('Runtime required forced termination after graceful shutdown timed out.');
     }
 
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     if (!await settlesWithin(exited, RUNTIME_FORCE_EXIT_TIMEOUT_MS)) {
       throw new Error('Runtime process did not exit after forced termination.');
     }
-    throw new Error('Runtime required forced termination after graceful shutdown timed out.');
+    throw new UncleanRuntimeExit('Runtime required forced termination after graceful shutdown timed out.');
   } finally {
     child.stdin.off('error', ignoreStdinError);
   }
@@ -55,7 +67,7 @@ export async function stopRuntimeChild(
 
 function assertCleanRuntimeExit(child: RuntimeChildProcess): void {
   if (child.exitCode === 0 && child.signalCode === null) return;
-  throw new Error(
+  throw new UncleanRuntimeExit(
     `Runtime reported an unsuccessful graceful shutdown (code=${child.exitCode ?? 'null'}, signal=${child.signalCode ?? 'null'}).`,
   );
 }
@@ -81,6 +93,17 @@ export async function findAvailablePort(): Promise<number> {
   await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   if (!address || typeof address === 'string') throw new Error('Unable to allocate runtime port.');
   return address.port;
+}
+
+/** Cancelling one request must not cancel the shared runtime startup. */
+export function waitForRuntimeTransition(ready: Promise<void>, signal?: AbortSignal | null): Promise<void> {
+  if (!signal) return ready;
+  signal.throwIfAborted();
+  return new Promise<void>((resolve, reject) => {
+    const cancel = () => reject(signal.reason);
+    signal.addEventListener('abort', cancel, { once: true });
+    void ready.finally(() => signal.removeEventListener('abort', cancel)).then(resolve, reject);
+  });
 }
 
 export function abortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {

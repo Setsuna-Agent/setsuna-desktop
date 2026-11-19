@@ -53,11 +53,18 @@ pnpm dev
 并行启动：
 
 - Vite renderer：`127.0.0.1:5174`
-- Electron supervisor：构建 contracts、Feature packages 和 runtime；Windows x64 还会编译沙箱并准备 curl，再构建 main/preload 和当前平台桌面控制助手、启动桌面
+- Electron supervisor 从源码增量构建 main、preload、runtime 及其 worker，准备应用 SDK 和当前平台的桌面控制助手。Windows x64 还会编译沙箱并准备 curl。
 
 如果没有 provider，runtime 使用 test/smoke model 验证完整链路。
 
-Renderer 支持热更新；runtime、Electron main/preload 和原生代码不随窗口刷新重载。修改这些代码后，停止并重新运行 `pnpm dev`，让启动脚本重新构建并创建新进程。
+保存 renderer 代码由 Vite 热更新。保存后台 TypeScript 后，`pnpm dev` 按实际变化的产物加载新代码。
+
+- 只有 runtime 或其 worker 改变时，Electron 保留窗口并重启 runtime 子进程。已有聊天订阅从上次收到的事件继续，正在执行的 Agent 轮次会随旧进程关闭而取消。
+- main 或 preload 改变时，开发版 Electron 直接重启，窗口中未保存的编辑会丢失。Vite 继续运行。共享 contracts 和 Feature 源码按同一规则处理。
+- 编译出错会在运行 `pnpm dev` 的终端显示错误。修正并保存后自动重试。
+
+修改 Swift、Rust 等原生助手后，重新运行 `pnpm dev` 以编译原生代码。
+新增或重命名整个 workspace Feature 包后也需要重新运行 `pnpm dev`，以注册新的源码目录。
 
 macOS 的 `pnpm dev` 自动在后台准备并缓存独立签名的 `Setsuna Desktop Dev.app`，无需
 发布打包或开发者证书。有缓存时立即使用；首次或缓存失效时先启动原 Electron，终端

@@ -1,5 +1,4 @@
 import { build, type BuildOptions } from 'esbuild';
-import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // @ts-expect-error Native build helpers are ESM scripts.
@@ -64,40 +63,45 @@ export function createRuntimeBuildOptions(projectRoot: string): BuildOptions[] {
   ];
 }
 
-export async function buildElectron(): Promise<void> {
-  await mkdir(resolve(rootDir, 'dist/electron/main'), { recursive: true });
-  await mkdir(resolve(rootDir, 'dist/electron/preload'), { recursive: true });
-  await mkdir(resolve(rootDir, 'dist/runtime'), { recursive: true });
-
-  await mkdir(resolve(rootDir, 'dist/computer-use'), { recursive: true });
-  await Promise.all([
-    ...(process.platform === 'darwin' ? [buildMacComputerHelper()] : []),
-    ...(process.platform === 'win32' ? [buildWindowsComputerHelper()] : []),
-    build({
-      entryPoints: [resolve(rootDir, 'apps/desktop/main/src/index.ts')],
-      outfile: resolve(rootDir, 'dist/electron/main/index.js'),
+export function createElectronBuildOptions(projectRoot: string): BuildOptions[] {
+  return [
+    {
+      entryPoints: [resolve(projectRoot, 'apps/desktop/main/src/index.ts')],
+      outfile: resolve(projectRoot, 'dist/electron/main/index.js'),
       bundle: true,
       platform: 'node',
       target: 'node22',
       format: 'esm',
       sourcemap: true,
       external: electronMainExternals,
-    }),
-    build({
-      entryPoints: [resolve(rootDir, 'apps/desktop/preload/src/index.ts')],
-      outfile: resolve(rootDir, 'dist/electron/preload/index.cjs'),
+    },
+    {
+      entryPoints: [resolve(projectRoot, 'apps/desktop/preload/src/index.ts')],
+      outfile: resolve(projectRoot, 'dist/electron/preload/index.cjs'),
       bundle: true,
       platform: 'node',
       target: 'node22',
       format: 'cjs',
       sourcemap: true,
       external: ['electron'],
-    }),
-    build({
-      entryPoints: [resolve(rootDir, 'packages/features/browser/src/preload/extension-actions.ts')],
-      outfile: resolve(rootDir, 'dist/electron/preload/browser-extensions.cjs'),
+    },
+    {
+      entryPoints: [resolve(projectRoot, 'packages/features/browser/src/preload/extension-actions.ts')],
+      outfile: resolve(projectRoot, 'dist/electron/preload/browser-extensions.cjs'),
       bundle: true, platform: 'node', target: 'node22', format: 'cjs', external: ['electron'],
-    }),
+    },
+  ];
+}
+
+export async function buildNativeComputerHelper(): Promise<void> {
+  if (process.platform === 'darwin') await buildMacComputerHelper();
+  if (process.platform === 'win32') await buildWindowsComputerHelper();
+}
+
+export async function buildElectron(): Promise<void> {
+  await Promise.all([
+    buildNativeComputerHelper(),
+    ...createElectronBuildOptions(rootDir).map((options) => build(options)),
     ...createRuntimeBuildOptions(rootDir).map((options) => build(options)),
   ]);
 }

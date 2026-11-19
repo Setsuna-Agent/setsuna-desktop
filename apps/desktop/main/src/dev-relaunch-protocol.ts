@@ -2,6 +2,9 @@ export const DESKTOP_DEV_RELAUNCH_EXIT_CODE = 75;
 export const DESKTOP_DEV_RELAUNCH_EXIT_CODE_ENV =
   'SETSUNA_DESKTOP_DEV_RELAUNCH_EXIT_CODE';
 
+/** Private messages from the development supervisor to its Electron child. */
+export type DesktopDevReload = 'restart-runtime' | 'relaunch-electron';
+
 export function parseDesktopDevRelaunchExitCode(
   value: string | undefined,
 ): number | null {

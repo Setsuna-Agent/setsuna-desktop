@@ -55,6 +55,7 @@ import {
 } from './runtime/bundled-tools.js';
 import { hydrateDesktopProcessEnvironment } from './runtime/desktop-environment.js';
 import { RuntimeHost } from './runtime/host.js';
+import { allowUncleanExitForDevReload } from './runtime/runtime-process-control.js';
 import { DesktopNativeBridgeServer } from './runtime/native-bridge-server.js';
 import { electronCredentialEncryption } from './security/credential-encryption.js';
 import { DesktopCredentialVault } from './security/credential-vault.js';
@@ -179,7 +180,7 @@ app.setPath('sessionData', electronProfileRoot);
 const dataRootCoordinator = new DesktopDataRootCoordinator({
   appDataRoot: desktopAppDataRoot,
   bootMode: desktopDataRootBootMode,
-  getRuntimeHost: () => runtimeHost,
+  getRuntimeHost: () => desktopRelaunchRequested ? null : runtimeHost,
   requestRelaunch: requestDesktopRelaunch,
 });
 
@@ -540,11 +541,13 @@ async function createDataRootMaintenanceWindow(): Promise<void> {
   prepareDesktopAppIdentity();
 }
 
-async function requestDesktopRelaunch(): Promise<void> {
+type DesktopRelaunchReason = 'data-root' | 'dev-reload';
+
+async function requestDesktopRelaunch(reason: DesktopRelaunchReason = 'data-root'): Promise<void> {
   if (desktopRelaunchRequested) return;
   desktopRelaunchRequested = true;
   try {
-    await shutdownDesktopServices({ requireRuntimeExit: true });
+    await shutdownDesktopServices(reason);
     const devRelaunchExitCode = parseDesktopDevRelaunchExitCode(
       process.env[DESKTOP_DEV_RELAUNCH_EXIT_CODE_ENV],
     );
@@ -635,9 +638,7 @@ function requireWindowsSandboxMainService(): ActivatedBuiltinMainFeatures['windo
   return windowsSandboxMainService;
 }
 
-function shutdownDesktopServices(
-  options: { requireRuntimeExit?: boolean } = {},
-): Promise<void> {
+function shutdownDesktopServices(relaunch?: DesktopRelaunchReason): Promise<void> {
   if (desktopServicesShutdownPromise) return desktopServicesShutdownPromise;
 
   activityPreferences?.dispose();
@@ -654,7 +655,10 @@ function shutdownDesktopServices(
   desktopServicesShutdownPromise = (async () => {
     let runtimeStopError: unknown;
     try {
-      await currentRuntimeHost?.stop();
+      if (currentRuntimeHost) {
+        const stopping = currentRuntimeHost.stop();
+        await (relaunch === 'dev-reload' ? allowUncleanExitForDevReload(stopping) : stopping);
+      }
     } catch (error) {
       console.error('[runtime] graceful shutdown failed', error);
       runtimeStopError = error;
@@ -680,7 +684,7 @@ function shutdownDesktopServices(
     if (desktopUpdaterLifecycle === currentDesktopUpdaterLifecycle) desktopUpdaterLifecycle = null;
     if (networkProxyMainService === currentNetworkProxyMainService) networkProxyMainService = null;
     if (windowsSandboxMainService === currentWindowsSandboxMainService) windowsSandboxMainService = null;
-    if (runtimeStopError && options.requireRuntimeExit) throw runtimeStopError;
+    if (runtimeStopError && relaunch) throw runtimeStopError;
   })();
   return desktopServicesShutdownPromise;
 }
@@ -700,7 +704,7 @@ if (!ownsDesktopInstance) {
     revealDesktopWindow(mainWindow);
   });
 
-  app.whenReady().then(async () => {
+  const startup = app.whenReady().then(async () => {
     const startedAt = performance.now();
     reportDiagnostic(recordDiagnostic, 'desktop-startup-started', {});
     await createWindow();
@@ -715,6 +719,20 @@ if (!ownsDesktopInstance) {
     console.error(error);
     app.quit();
   });
+
+  if (!app.isPackaged && process.connected && process.env[DESKTOP_DEV_RELAUNCH_EXIT_CODE_ENV]) {
+    process.on('message', (message) => {
+      if (message !== 'restart-runtime' && message !== 'relaunch-electron') return;
+      void startup.then(async () => {
+        if (desktopDataRootBootMode.mode !== 'normal') return;
+        // Migration must own its clean exit and any rollback before a dev save can replace the process.
+        while (dataRootCoordinator.activeMigration) await dataRootCoordinator.activeMigration.catch(() => undefined);
+        if (isAppQuitting || desktopRelaunchRequested || updateInstallCoordinator.active) return;
+        if (message === 'relaunch-electron') return requestDesktopRelaunch('dev-reload');
+        return runtimeHost?.restart();
+      }).catch((error) => console.error('[electron-dev] reload failed', error));
+    });
+  }
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
