@@ -1,0 +1,70 @@
+.design-web-toolbar {
+  position: absolute;
+  /* Keep the header attached as the layer crosses the viewport edges. */
+  top: calc(var(--design-web-toolbar-top) - var(--design-web-toolbar-height) - var(--design-web-toolbar-gap));
+  inline-size: max(144px, var(--design-web-toolbar-width));
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  height: var(--design-web-toolbar-height);
+  padding-inline: 4px;
+  border: 1px solid var(--design-line);
+  border-radius: 12px;
+  background: var(--design-panel);
+  box-shadow: var(--design-float-shadow);
+}
+
+.design-web-toolbar[data-expanded] {
+  top: var(--design-panel-top);
+  inset-inline: var(--design-left-inset) var(--design-right-inset);
+  inline-size: auto;
+}
+
+.design-web-toolbar[data-raised] {
+  z-index: 2;
+}
+
+.design-web-toolbar .sd-icon-button {
+  flex: 0 0 22px;
+  min-width: 0;
+  min-height: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--app-text-secondary);
+}
+
+.design-web-toolbar .design-web-toolbar__grip:not(:disabled) {
+  cursor: grab;
+  touch-action: none;
+}
+
+.design-web-toolbar > .design-inspector__field {
+  flex: 1;
+  min-width: 0;
+  min-height: 22px;
+  padding-inline: 4px;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.design-web-toolbar > .design-inspector__field:focus-within {
+  background: var(--design-control);
+}
+
+.design-web-toolbar .sd-field {
+  text-overflow: ellipsis;
+}
+
+.design-web-toolbar .design-web-toolbar__exit {
+  flex-basis: 32px;
+  width: 32px;
+  background: var(--design-control);
+}
+
+.design-web-toolbar__exit kbd {
+  font: inherit;
+}

@@ -1,7 +1,7 @@
 import { Eye, EyeOff, Minus, Plus } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
-import { ColorPicker, IconButton, TextField } from '@setsuna-desktop/renderer-ui';
-import type { DesignQuad } from '../../contracts/index.js';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ComponentProps, type FocusEvent,
+  type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import { IconButton, TextArea, TextField } from '@setsuna-desktop/renderer-ui';
 
 export function InspectorSection({ title, children, action }: Readonly<{
   title: string; children?: ReactNode; action?: ReactNode;
@@ -10,6 +10,10 @@ export function InspectorSection({ title, children, action }: Readonly<{
     <header><h3>{title}</h3>{action}</header>
     {children}
   </section>;
+}
+
+export function InspectorGroup({ title, children }: Readonly<{ title: string; children: ReactNode }>) {
+  return <div className="design-inspector__group"><h4>{title}</h4>{children}</div>;
 }
 
 export function PaintToggle({ enabled, label, disabled, onToggle }: Readonly<{
@@ -34,23 +38,7 @@ export function VisibilityButton({ visible, label, disabled, onToggle }: Readonl
   </IconButton>;
 }
 
-export function QuadFields({ values, labels, prefixes, onSave }: Readonly<{
-  values: DesignQuad;
-  labels: readonly [string, string, string, string];
-  prefixes: readonly [ReactNode, ReactNode, ReactNode, ReactNode];
-  onSave(values: DesignQuad): Promise<boolean>;
-}>) {
-  return <div className="design-inspector__pair">
-    {values.map((value, index) => <NumberField key={index} label={labels[index]} prefix={prefixes[index]}
-      value={value} min={0} onSave={(next) => {
-        const measurements: [number, number, number, number] = [...values];
-        measurements[index] = next;
-        return onSave(measurements);
-      }} />)}
-  </div>;
-}
-
-export function NumberField({ label, prefix, suffix, value, previewValue, min, max, readOnly, onSave, onPreview }: Readonly<{
+export function NumberField({ label, prefix, suffix, value, previewValue, min, max, integer, precision = 2, readOnly, onSave, onPreview }: Readonly<{
   label: string;
   prefix?: ReactNode;
   suffix?: string;
@@ -58,123 +46,227 @@ export function NumberField({ label, prefix, suffix, value, previewValue, min, m
   previewValue?: number;
   min?: number;
   max?: number;
+  integer?: boolean;
+  precision?: number;
   readOnly?: boolean;
   onSave(value: number): Promise<boolean>;
   onPreview?(value: number | undefined, owner: string): void;
 }>) {
-  const id = useId();
   function parse(text: string) {
-    const number = Number(text);
-    return text.trim() && Number.isFinite(number) && (min === undefined || number >= min) && (max === undefined || number <= max)
-      ? number : undefined;
+    const parsed = Number(text);
+    return text.trim() && Number.isFinite(parsed) && (!integer || Number.isInteger(parsed))
+      && (min === undefined || parsed >= min) && (max === undefined || parsed <= max) ? parsed : undefined;
   }
   return <InspectorField label={label} prefix={prefix ?? (suffix ? undefined : label)} suffix={suffix}
-    value={value === undefined ? '' : String(Number(value.toFixed(2)))} placeholder={value === undefined ? '—' : undefined}
-    previewValue={previewValue === undefined ? undefined : String(Number(previewValue.toFixed(2)))}
-    onDraft={onPreview ? (text) => onPreview(text === undefined ? undefined : parse(text), id) : undefined}
-    type="number" step="any" min={min} max={max} readOnly={readOnly} onSave={(text) => {
+    value={value === undefined ? '' : String(Number(value.toFixed(precision)))} placeholder={value === undefined ? '—' : undefined}
+    previewValue={previewValue === undefined ? undefined : String(Number(previewValue.toFixed(precision)))}
+    onDraft={onPreview ? (text, owner) => onPreview(text === undefined ? undefined : parse(text), owner) : undefined}
+    type="number" step={integer ? 1 : 'any'} min={min} max={max} readOnly={readOnly} onSave={(text) => {
       const number = parse(text);
       return number === undefined || number === value ? Promise.resolve(false) : onSave(number);
     }} />;
 }
 
-export function InspectorField({ label, prefix, suffix, value, previewValue, readOnly, onSave, onDraft, onChange, ...props }: Omit<ComponentProps<typeof TextField>, 'value' | 'prefix' | 'onBlur' | 'onKeyDown'> & {
-  label: string;
-  prefix?: ReactNode;
-  suffix?: string;
+type FieldEdit = Readonly<{
   value: string;
   previewValue?: string;
+  readOnly?: boolean;
   onSave(value: string): Promise<boolean>;
-  onDraft?(value: string | undefined): void;
+  onDraft?(value: string | undefined, owner: string): void;
+}>;
+
+export function InspectorField({ label, prefix, suffix, trailing, value, previewValue, readOnly, onSave, onDraft, onChange, ...props }:
+  Omit<ComponentProps<typeof TextField>, 'value' | 'prefix' | 'onBlur' | 'onKeyDown'> & FieldEdit & {
+    label: string; prefix?: ReactNode; suffix?: string; trailing?: ReactNode;
 }) {
-  const fieldRef = useRef<HTMLInputElement>(null);
+  const { input, numberDrag } = useInspectorField<HTMLInputElement>({ value, previewValue, readOnly, onSave, onDraft });
+  const dragPrefix = props.type === 'number' && value !== '' && !input.readOnly && !props.disabled;
+  const Container = trailing ? 'div' : 'label';
+  return <Container className="design-inspector__field" title={label}>
+    {prefix ? <span aria-hidden="true" className={dragPrefix ? 'design-inspector__number-drag' : undefined}
+      {...(dragPrefix ? numberDrag : undefined)}>{prefix}</span> : null}
+    <TextField {...props} {...input} aria-label={label} onChange={(event) => { onChange?.(event); input.onChange(event); }} />
+    {suffix ? <span aria-hidden="true">{suffix}</span> : null}
+    {trailing}
+  </Container>;
+}
+
+export function InspectorTextArea({ value, previewValue, readOnly, onSave, onDraft, ...props }:
+  Omit<ComponentProps<typeof TextArea>, 'value' | 'onBlur' | 'onChange' | 'onKeyDown'> & FieldEdit,
+) {
+  const { input } = useInspectorField<HTMLTextAreaElement>({ value, previewValue, readOnly, onSave, onDraft });
+  return <TextArea {...props} {...input} />;
+}
+
+type NumberDrag = {
+  pointerId: number;
+  startX: number;
+  startValue: number;
+  changed: boolean;
+  release(): void;
+};
+
+function useInspectorField<T extends HTMLInputElement | HTMLTextAreaElement>({ value, previewValue, readOnly, onSave, onDraft }: FieldEdit) {
+  const owner = useId();
+  const fieldRef = useRef<T>(null);
   const editing = useRef(false);
   const editId = useRef(0);
+  const previousValue = useRef(value);
   const clearDraft = useRef<() => void>();
+  const drag = useRef<NumberDrag>();
   const [settledEdit, setSettledEdit] = useState(0);
   const fieldReadOnly = readOnly || previewValue !== undefined;
   useLayoutEffect(() => {
+    const valueChanged = previousValue.current !== value;
+    const canceledDrag = drag.current && (valueChanged || fieldReadOnly);
+    if (canceledDrag) {
+      drag.current?.release();
+      editing.current = false;
+    }
+    if (!editing.current && (valueChanged || canceledDrag)) {
+      // The optimistic model now owns this value, so a draft cannot cover a newer edit.
+      clearDraft.current?.();
+      clearDraft.current = undefined;
+    }
+    previousValue.current = value;
     const field = fieldRef.current;
     const displayed = previewValue ?? value;
     if (field && (!editing.current || fieldReadOnly) && field.value !== displayed) field.value = displayed;
   }, [fieldReadOnly, previewValue, settledEdit, value]);
-  useEffect(() => () => clearDraft.current?.(), []);
+  useEffect(() => () => {
+    drag.current?.release();
+    clearDraft.current?.();
+  }, []);
 
-  return <label className="design-inspector__field" title={label}>
-    {prefix ? <span aria-hidden="true">{prefix}</span> : null}
-    <TextField {...props} ref={fieldRef} aria-label={label} defaultValue={value} readOnly={fieldReadOnly} onChange={(event) => {
-      onChange?.(event);
-      editing.current = true;
-      editId.current += 1;
-      if (onDraft) {
-        clearDraft.current = () => onDraft(undefined);
-        onDraft(event.currentTarget.value);
-      }
-    }} onBlur={(event) => {
-      const field = event.currentTarget;
-      if (!editing.current) return;
+  function discardPreview() {
+    clearDraft.current?.();
+    clearDraft.current = undefined;
+  }
+
+  function previewEdit(field: T) {
+    editing.current = true;
+    editId.current += 1;
+    if (onDraft) {
+      clearDraft.current = () => onDraft(undefined, owner);
+      onDraft(field.validity.badInput ? undefined : field.value, owner);
+    }
+  }
+
+  function submitEdit(field: T) {
+    if (!editing.current) return;
+    editing.current = false;
+    if (field.validity.badInput) field.value = value;
+    if (field.value === value || fieldReadOnly) { discardPreview(); return; }
+    const attempt = editId.current;
+    void onSave(field.value).then(() => {
+      if (attempt !== editId.current) return;
+      discardPreview();
+      if (field.isConnected) setSettledEdit(attempt);
+    });
+  }
+
+  function finishDrag(field: T, save: boolean) {
+    const active = drag.current;
+    active?.release();
+    if (!active?.changed) return false;
+    if (save) submitEdit(field);
+    else {
       editing.current = false;
-      function discardPreview() {
-        clearDraft.current?.();
-        clearDraft.current = undefined;
-      }
-      if (field.value === value || fieldReadOnly) { discardPreview(); return; }
-      const attempt = editId.current;
-      void onSave(field.value).then(() => {
-        if (attempt !== editId.current) return;
-        discardPreview();
-        if (field.isConnected) setSettledEdit(attempt);
-      });
-    }} onKeyDown={(event) => {
+      field.value = value;
+      discardPreview();
+    }
+    return true;
+  }
+
+  function dragNumber(event: PointerEvent<HTMLSpanElement>) {
+    const active = drag.current;
+    const field = fieldRef.current;
+    if (!active || active.pointerId !== event.pointerId || !(field instanceof HTMLInputElement)) return;
+    const delta = Math.round(event.clientX - active.startX);
+    if (!active.changed && Math.abs(delta) < 2) return;
+    const min = field.min === '' ? -Infinity : Number(field.min);
+    const max = field.max === '' ? Infinity : Number(field.max);
+    const next = String(Math.min(max, Math.max(min, Number((active.startValue + delta).toFixed(2)))));
+    if (next === field.value) return;
+    active.changed = true;
+    field.value = next;
+    previewEdit(field);
+  }
+
+  function endNumberDrag(event: PointerEvent<HTMLSpanElement>, save: boolean) {
+    const field = fieldRef.current;
+    if (!field || drag.current?.pointerId !== event.pointerId) return;
+    // Release can arrive before the last pointer move is delivered.
+    if (save) dragNumber(event);
+    finishDrag(field, save);
+  }
+
+  function startNumberDrag(event: PointerEvent<HTMLSpanElement>) {
+    const field = fieldRef.current;
+    if (event.button !== 0 || drag.current || fieldReadOnly || !(field instanceof HTMLInputElement)
+      || field.matches(':disabled') || !Number.isFinite(field.valueAsNumber)) return;
+    event.preventDefault();
+    const { currentTarget: handle, pointerId, clientX: startX } = event;
+    try {
+      handle.setPointerCapture?.(pointerId);
+    } catch {
+      // The platform can cancel the pointer before it is captured.
+      return;
+    }
+    const view = handle.ownerDocument.defaultView;
+    const cancel = () => { finishDrag(field, false); };
+    drag.current = {
+      pointerId, startX, startValue: field.valueAsNumber, changed: false,
+      release() {
+        drag.current = undefined;
+        view?.removeEventListener('blur', cancel);
+        if (handle.hasPointerCapture?.(pointerId)) handle.releasePointerCapture(pointerId);
+      },
+    };
+    view?.addEventListener('blur', cancel);
+    field.focus({ preventScroll: true });
+  }
+
+  const input = {
+    ref: fieldRef,
+    defaultValue: value,
+    readOnly: fieldReadOnly,
+    onChange: (event: ChangeEvent<T>) => previewEdit(event.currentTarget),
+    onBlur(event: FocusEvent<T>) {
+      if (!finishDrag(event.currentTarget, false)) submitEdit(event.currentTarget);
+    },
+    onKeyDown(event: KeyboardEvent<T>) {
       event.stopPropagation();
       if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-      if (event.key === 'Escape') event.currentTarget.value = value;
-      if (event.key === 'Escape' || event.key === 'Enter') {
+      if (event.key === 'Escape') {
+        finishDrag(event.currentTarget, false);
+        event.currentTarget.value = value;
+      }
+      const enter = event.key === 'Enter'
+        && (event.currentTarget.tagName === 'INPUT' || event.metaKey || event.ctrlKey);
+      if (event.key === 'Escape' || enter) {
         event.preventDefault();
         event.currentTarget.blur();
       }
-    }} />
-    {suffix ? <span aria-hidden="true">{suffix}</span> : null}
-  </label>;
+    },
+  };
+  const numberDrag = {
+    onPointerDown: startNumberDrag,
+    onPointerMove: dragNumber,
+    onPointerUp: (event: PointerEvent<HTMLSpanElement>) => endNumberDrag(event, true),
+    onPointerCancel: (event: PointerEvent<HTMLSpanElement>) => endNumberDrag(event, false),
+    onLostPointerCapture: (event: PointerEvent<HTMLSpanElement>) => endNumberDrag(event, false),
+  };
+  return { input, numberDrag };
 }
 
-export const designPaintPopoverPosition = {
+export const designInspectorPopoverPosition = {
   placement: 'leftTop',
   sideOffset: 6,
   getAnchorRect(trigger: HTMLElement) {
     const row = trigger.getBoundingClientRect();
-    const panel = trigger.closest('.design-editor__inspector')?.getBoundingClientRect();
-    // Keep the swatch's vertical position and clear the panel on either side.
+    const panel = trigger.closest('.design-editor__inspector, .sd-popover')?.getBoundingClientRect();
+    // Line up with the control vertically and clear the panel that contains it.
     return panel ? new DOMRect(panel.left, row.top, panel.width, row.height) : row;
   },
 } as const;
-
-export function PaintField({ label, value, mixed = false, disabled, onPreview, onSave }: Readonly<{
-  label: string;
-  value: string;
-  mixed?: boolean;
-  disabled: boolean;
-  onPreview(color: string | undefined): void;
-  onSave(value: string): Promise<boolean>;
-}>) {
-  const [preview, setPreview] = useState<{ source: string; color: string }>();
-  const previewColor = preview?.source === value ? preview.color : undefined;
-  return <>
-    <ColorPicker label={label} value={value} mixed={mixed} disabled={disabled} {...designPaintPopoverPosition}
-      onValuePreview={(color) => {
-        setPreview(color === undefined ? undefined : { source: value, color });
-        onPreview(color);
-      }} onValueCommit={onSave} />
-    <PaintHexField label={label} value={value} mixed={mixed} preview={previewColor} disabled={disabled} onSave={onSave} />
-  </>;
-}
-
-export function PaintHexField({ label, value, mixed, preview, disabled, onSave }: Readonly<{
-  label: string; value: string; mixed?: boolean; preview?: string; disabled: boolean; onSave(value: string): Promise<boolean>;
-}>) {
-  return <InspectorField label={label} value={mixed ? '' : value.slice(1).toUpperCase()} placeholder={mixed ? '—' : undefined} readOnly={disabled}
-    previewValue={preview?.slice(1).toUpperCase()} maxLength={7} spellCheck={false} onSave={(next) => {
-      const hex = next.replace(/^#/u, '');
-      return /^[0-9a-f]{6}$/iu.test(hex) ? onSave(`#${hex}`) : Promise.resolve(false);
-    }} />;
-}

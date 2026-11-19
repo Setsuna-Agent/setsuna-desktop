@@ -297,7 +297,7 @@ export function ChatRouteAdapter({
       onActivateBottomPanel: async (panelId) => {
         const panel = workspacePanels.bottomPanelSlot.panels.find((item) => item.id === panelId);
         if (panel?.type === 'file' && panel.filePath) {
-          void projectWorkspace.openProjectFile(panel.filePath, undefined, panel.rootId);
+          void projectWorkspace.openRootFile(panel.filePath, undefined, panel.rootId);
           return;
         }
         if (panel?.type === 'files' && !await projectWorkspace.setFilePreview(null)) return;

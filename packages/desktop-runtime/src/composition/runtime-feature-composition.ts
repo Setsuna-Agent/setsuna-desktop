@@ -34,8 +34,9 @@ import {
   artifactWorkspaceFilesCapability,
 } from '@setsuna-desktop/feature-artifact/contracts';
 import { artifactRuntimeFeature } from '@setsuna-desktop/feature-artifact/runtime';
-import { designWorkspaceFilesCapability } from '@setsuna-desktop/feature-design/contracts';
+import { designFontStorageCapability, designScriptSandboxCapability, designWorkspaceFilesCapability } from '@setsuna-desktop/feature-design/contracts';
 import { designRuntimeFeature } from '@setsuna-desktop/feature-design/runtime';
+import { createDesignScriptSandbox } from '../adapters/tool-program/design-script-sandbox.js';
 import { createDesignWorkspaceFiles } from '../adapters/workspace/design-workspace-files.js';
 import { computerRuntimeToolsCapability } from '@setsuna-desktop/feature-computer-use/contracts';
 import { computerRuntimeFeature } from '@setsuna-desktop/feature-computer-use/runtime';
@@ -206,7 +207,9 @@ export async function activateBuiltinRuntimeFeatures(
         runtime.configStore.approvalReviewLegacySettingsAdapter(),
       ),
       provideHostCapability(artifactWorkspaceFilesCapability, runtime.workspaceProjects),
-      provideHostCapability(designWorkspaceFilesCapability, createDesignWorkspaceFiles(runtime.workspaceProjects)),
+      provideHostCapability(designWorkspaceFilesCapability, createDesignWorkspaceFiles(runtime.workspaceProjects, runtime.dataDir)),
+      provideHostCapability(designFontStorageCapability, { dataDir: runtime.dataDir }),
+      provideHostCapability(designScriptSandboxCapability, createDesignScriptSandbox()),
       provideHostCapability(
         modelProviderRuntimeHostCapability,
         Object.freeze({

@@ -1,0 +1,81 @@
+.design-drawing-controls {
+  --design-inspector-control-height: 28px;
+  --design-inspector-control-radius: 7px;
+  --design-inspector-gap: 4px;
+  --design-inspector-focus: var(--design-accent-soft);
+  z-index: 2;
+  inset-block-start: calc(var(--design-tools-top) + var(--design-toolbar-row) + 2px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 11px;
+}
+
+.design-drawing-controls > .sd-color-picker__trigger {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.design-drawing-controls__width {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: 68px;
+  grid-auto-columns: minmax(0, 76px);
+  align-items: center;
+  min-width: 0;
+  padding-inline-end: 8px;
+  border-radius: var(--design-inspector-control-radius);
+  background: var(--design-control);
+}
+
+.design-drawing-controls__width .sd-slider {
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+}
+
+.design-drawing-controls__preset.sd-button {
+  gap: 4px;
+  min-width: 0;
+  padding-inline: 6px;
+}
+
+.design-drawing-preset-stroke {
+  display: block;
+  width: 72px;
+  height: 18px;
+}
+
+.sd-popover.design-drawing-presets {
+  padding: 4px;
+}
+
+.design-drawing-presets__list {
+  display: grid;
+  gap: 2px;
+}
+
+.design-drawing-presets__option.sd-button {
+  display: grid;
+  grid-template-columns: minmax(48px, 1fr) 72px 14px;
+  gap: 8px;
+  padding: 4px 8px;
+  text-align: start;
+}
+
+.design-drawing-presets__option.sd-button[aria-pressed='true'] {
+  background: var(--app-accent-soft);
+}
+
+@container design-editor (max-width: 540px) {
+  .design-drawing-controls__width {
+    padding-inline-end: 0;
+  }
+
+  .design-drawing-controls__width .sd-slider {
+    display: none;
+  }
+}

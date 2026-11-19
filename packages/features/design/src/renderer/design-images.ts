@@ -2,8 +2,10 @@ import { detectWorkspacePreviewImageMimeType, MAX_WORKSPACE_IMAGE_BYTES, type De
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { readImageFile } from '@setsuna-desktop/renderer-ui';
 import { useEffect, useMemo, useState } from 'react';
-import { designImageExtensions, designImageFileExtensions, parseAssetPath, type DesignDocument, type DesignDocumentRef, type DesignNode } from '../contracts/index.js';
+import { designImageExtensions, designImageFileExtensions, designLayerImagePaths, parseAssetPath, type DesignDocument, type DesignDocumentRef } from '../contracts/index.js';
 import type { DesignAssets, DesignClient } from './client.js';
+
+export { designLayerImagePaths, designPaintImagePaths } from '../contracts/index.js';
 
 export type LoadDesignImage = (path: string, options?: { fresh?: boolean }) => Promise<HTMLImageElement>;
 export type WatchDesignDirectories = (directories: readonly string[], changed: () => void, options?: DesktopWorkspaceEntriesWatchOptions) => () => void;
@@ -24,11 +26,6 @@ export function isDesignImageName(name: string): boolean {
 
 export function clipboardDesignImage(clipboard: DataTransfer): File | undefined {
   return Array.from(clipboard.files).find(({ name, type }) => type.toLowerCase().startsWith('image/') || isDesignImageName(name));
-}
-
-export function designLayerImagePaths(node: DesignNode, visibleOnly = false): readonly string[] {
-  if (node.kind === 'image') return [node.assetPath];
-  return node.fills?.flatMap((fill) => fill.image && (!visibleOnly || !fill.hidden && fill.opacity !== 0) ? [fill.image.assetPath] : []) ?? [];
 }
 
 function createDesignImageLoader(assets: Pick<DesignAssets, 'read'>, ref: DesignDocumentRef): LoadDesignImage {

@@ -6,6 +6,7 @@ import type {
   DesktopRuntimeClient,
   RuntimeThread,
   RuntimeThreadSummary,
+  SetsunaDesktopBridge,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { isCoreRuntimeEvent, isRuntimeActivityEvent } from '@setsuna-desktop/contracts';
@@ -104,7 +105,7 @@ export function useRuntimeThreadState({
   const [threads, setThreads] = useState<RuntimeThreadSummary[]>([]);
   const [archivedThreads, setArchivedThreads] = useState<RuntimeThreadSummary[]>([]);
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
-  const [windowSessionKey, setWindowSessionKey] = useState<string | null>(null);
+  const [windowSession, setWindowSession] = useState<Awaited<ReturnType<SetsunaDesktopBridge['windowControls']['getSessionContext']>>>();
   const currentThreadCommit = useAnimationFrameCommit(setCurrentThreadState);
   const [contextCompactingThreadId, setContextCompactingThreadId] = useState<string | null>(null);
   const [activityEvents, setActivityEvents] = useState<CoreRuntimeEvent[]>([]);
@@ -179,7 +180,7 @@ export function useRuntimeThreadState({
     const context = await window.setsunaDesktop?.windowControls?.getSessionContext?.()
       ?? { initialThreadId: null, sessionKey: 'primary:0' };
     const selection = readInitialChatSelection(context.sessionKey, context.initialThreadId, primaryThreads, projects, readPersistedActiveThreadId());
-    setWindowSessionKey(context.sessionKey);
+    setWindowSession(context);
     onRestoreNewThreadDraft?.(selection.draftId ?? null);
     if ('projectId' in selection) {
       setActiveProjectId(selection.projectId ?? null);
@@ -629,7 +630,8 @@ export function useRuntimeThreadState({
     startCurrentThreadReview,
     terminalTurnIdsRef,
     threads,
-    windowSessionKey,
+    windowSessionKey: windowSession?.sessionKey ?? null,
+    initialWindowThreadId: windowSession?.initialThreadId ?? null,
   };
 }
 

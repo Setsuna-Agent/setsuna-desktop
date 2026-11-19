@@ -1,0 +1,26 @@
+.design-thumbnail {
+  --design-thumbnail-background: var(--app-surface-muted);
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--design-thumbnail-size, 26px);
+  block-size: var(--design-thumbnail-size, 26px);
+  padding: 2px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--design-thumbnail-background);
+}
+
+.design-thumbnail:has(> img) {
+  /* A neutral backdrop keeps both dark and light artwork visible through transparent pixels. */
+  background: light-dark(var(--design-thumbnail-background),
+    color-mix(in srgb, var(--design-thumbnail-background), var(--app-text) 45%));
+}
+
+.design-thumbnail > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}

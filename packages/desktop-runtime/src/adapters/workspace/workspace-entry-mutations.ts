@@ -5,9 +5,13 @@ import {
   type WorkspaceEntryRenameInput,
   type WorkspaceEntryMoveInput,
 } from '@setsuna-desktop/contracts';
-import { lstat, mkdir, open, readdir, realpath, rename, rm } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, realpath, rename, rm, unlink, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
-import { withFileStateUpdate } from '../store/file-state-coordinator.js';
+import { isPathWithin } from '../search/workspace-search-policy.js';
+import { withFileStateUpdate, withFileStateUpdates } from '../store/file-state-coordinator.js';
+
+export type WorkspaceEntryRelocation = (source: string, target: string, type: WorkspaceEntry['type'], relocateEntry: () => Promise<void>) => Promise<void>;
+type RelocationOptions = Readonly<{ boundRoots: readonly string[]; relocate: WorkspaceEntryRelocation }>;
 
 export async function createWorkspaceEntry(
   root: string,
@@ -31,18 +35,23 @@ export async function renameWorkspaceEntry(
   root: string,
   relativePath: string,
   input: WorkspaceEntryRenameInput,
+  options: RelocationOptions,
 ): Promise<WorkspaceEntry> {
   assertEntryName(input?.name);
-  return relocateWorkspaceEntry(root, relativePath, { name: input.name });
+  return relocateWorkspaceEntry(root, relativePath, { name: input.name }, options);
 }
 
-export function moveWorkspaceEntry(root: string, relativePath: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry> {
+export function moveWorkspaceEntry(root: string, relativePath: string, input: WorkspaceEntryMoveInput,
+  options: RelocationOptions): Promise<WorkspaceEntry> {
   if (typeof input?.parentPath !== 'string') throw new Error('Destination directory is required.');
-  return relocateWorkspaceEntry(root, relativePath, { parentPath: input.parentPath });
+  return relocateWorkspaceEntry(root, relativePath, { parentPath: input.parentPath }, options);
 }
 
-function relocateWorkspaceEntry(root: string, relativePath: string, input: { name?: string; parentPath?: string }): Promise<WorkspaceEntry> {
-  return withFileStateUpdate(root, async () => {
+function relocateWorkspaceEntry(root: string, relativePath: string, input: { name?: string; parentPath?: string },
+  { boundRoots, relocate }: RelocationOptions): Promise<WorkspaceEntry> {
+  // A directory can contain another bound root where writes would otherwise bypass this lock.
+  const overlappingRoots = boundRoots.filter((directory) => isPathWithin(root, directory) || isPathWithin(directory, root));
+  return withFileStateUpdates([root, ...overlappingRoots], async () => {
     const { target: source, stats: sourceStat } = await resolveExistingWorkspaceEntry(root, relativePath);
     const parent = input.parentPath === undefined ? path.dirname(source) : await resolveEntryParent(root, input.parentPath);
     const type = sourceStat.isDirectory() ? 'directory' : 'file';
@@ -55,20 +64,29 @@ function relocateWorkspaceEntry(root: string, relativePath: string, input: { nam
         throw new Error('A folder cannot be moved into itself or one of its subfolders.');
       }
     }
-    const targetStat = await lstat(target).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === 'ENOENT') return null;
-      throw error;
-    });
-    if (targetStat) {
-      // Permit a casing-only rename on case-insensitive volumes, but never
-      // replace another directory entry, including hard links to this file.
-      const names = await readdir(parent);
-      if (names.includes(name) || sourceStat.ino !== targetStat.ino || sourceStat.dev !== targetStat.dev) {
-        // Match the collision code from exclusive file and directory creation.
-        throw Object.assign(new Error(`An entry named "${name}" already exists.`), { code: 'EEXIST' });
+    await relocate(source, target, type, async () => {
+      // Preparing descendants can take time. Recheck that both paths still refer to the planned locations.
+      const current = await resolveExistingWorkspaceEntry(root, relativePath);
+      const destination = await resolveEntryParent(root, path.relative(root, parent) || '.');
+      if (path.relative(source, current.target) || path.relative(parent, destination)
+        || sourceStat.ino !== current.stats.ino || sourceStat.dev !== current.stats.dev) {
+        throw new Error('The workspace entry changed during relocation.');
       }
-    }
-    await rename(source, target);
+      const targetStat = await lstat(target).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      });
+      if (targetStat) {
+        // Permit a casing-only rename on case-insensitive volumes, but never
+        // replace another directory entry, including hard links to this file.
+        const names = await readdir(parent);
+        if (names.includes(name) || sourceStat.ino !== targetStat.ino || sourceStat.dev !== targetStat.dev) {
+          // Match the collision code from exclusive file and directory creation.
+          throw Object.assign(new Error(`An entry named "${name}" already exists.`), { code: 'EEXIST' });
+        }
+      }
+      await rename(source, target);
+    });
     return entryForPath(root, target, type);
   });
 }
@@ -84,8 +102,8 @@ export async function deleteWorkspaceEntry(root: string, relativePath: string): 
 export async function resolveExistingWorkspaceEntry(root: string, relativePath: string) {
   const normalized = normalizeEntryPath(relativePath);
   if (!normalized || normalized === '.') throw new Error('The workspace root cannot be modified.');
-  const parent = await resolveEntryParent(root, path.posix.dirname(normalized));
-  const target = path.join(parent, path.posix.basename(normalized));
+  const parent = await resolveEntryParent(root, path.dirname(normalized));
+  const target = path.join(parent, path.basename(normalized));
   assertWithinWorkspace(root, target);
   if (path.relative(root, target) === '') throw new Error('The workspace root cannot be modified.');
   const stats = await lstat(target);
@@ -93,18 +111,34 @@ export async function resolveExistingWorkspaceEntry(root: string, relativePath: 
   return { target, stats };
 }
 
-async function createWorkspaceFile(target: string, content: string | Uint8Array): Promise<void> {
-  const file = await open(target, 'wx');
+export async function createWorkspaceFile(target: string, content: string | Uint8Array) {
+  const file = await open(target, 'wx+');
   try {
     try {
       await file.writeFile(content);
-    } finally {
-      await file.close();
+    } catch (error) {
+      await removePartialWrite(target, file, content).catch(() => undefined);
+      throw error;
     }
-  } catch (error) {
-    await rm(target, { force: true }).catch(() => undefined);
-    throw error;
+    return await file.stat();
+  } finally {
+    await file.close();
   }
+}
+
+async function removePartialWrite(target: string, file: FileHandle, content: string | Uint8Array) {
+  const written = await file.stat();
+  const bytes = typeof content === 'string' ? Buffer.from(content) : content;
+  if (written.size > bytes.byteLength) return;
+  // The exclusively created entry is already visible. Clean up only our own partial bytes.
+  const partial = Buffer.alloc(written.size);
+  const { bytesRead } = await file.read(partial, 0, partial.length, 0);
+  if (bytesRead !== partial.length || !partial.equals(bytes.subarray(0, bytesRead))) return;
+  const parent = path.dirname(target);
+  if (path.relative(parent, await realpath(parent))) return;
+  const current = await lstat(target);
+  if (current.ino === written.ino && current.dev === written.dev && current.size === written.size
+    && current.ctimeMs === written.ctimeMs && current.mtimeMs === written.mtimeMs) await unlink(target);
 }
 
 function assertEntryName(name: unknown): asserts name is string {
@@ -112,13 +146,14 @@ function assertEntryName(name: unknown): asserts name is string {
 }
 
 function normalizeEntryPath(value: string): string {
-  if (typeof value !== 'string' || value.includes('\0') || path.win32.isAbsolute(value) || path.posix.isAbsolute(value)) {
+  if (typeof value !== 'string' || value.includes('\0') || path.parse(value).root) {
     throw new Error('Entry paths must be relative to the workspace.');
   }
-  return path.posix.normalize(value.replace(/\\/gu, '/'));
+  // A backslash can be part of a listed macOS filename. Only the host knows its separators.
+  return path.normalize(value);
 }
 
-async function resolveEntryParent(root: string, relativePath: string): Promise<string> {
+export async function resolveEntryParent(root: string, relativePath: string): Promise<string> {
   const candidate = path.resolve(root, normalizeEntryPath(relativePath));
   assertWithinWorkspace(root, candidate);
   const parent = await realpath(candidate);
@@ -135,5 +170,5 @@ function assertWithinWorkspace(root: string, target: string): void {
 }
 
 function entryForPath(root: string, target: string, type: WorkspaceEntry['type']): WorkspaceEntry {
-  return { name: path.basename(target), path: path.relative(root, target).replace(/\\/gu, '/'), type };
+  return { name: path.basename(target), path: path.relative(root, target).split(path.sep).join('/'), type };
 }

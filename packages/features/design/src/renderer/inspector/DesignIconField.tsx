@@ -5,13 +5,15 @@ import { Button, Popover, useToast } from '@setsuna-desktop/renderer-ui';
 import type { DesignVector } from '../../contracts/index.js';
 import { DesignLucidePicker, designLucideLabel } from '../vectors/DesignLucidePicker.js';
 import type { DesignLucideSource } from '../vectors/design-svg-source.js';
-import { InspectorSection } from './DesignInspectorFields.js';
+import { designInspectorPopoverPosition, InspectorSection } from './DesignInspectorFields.js';
+import { previewDesignNode, type InspectorFieldEdits } from './design-inspector-edit.js';
 
-export function DesignIconField({ node, icon, disabled, onSave, translate: t }: Readonly<{
+export function DesignIconField({ node, icon, disabled, onSave, fieldEdits, translate: t }: Readonly<{
   node: DesignVector;
   icon: string;
   disabled: boolean;
   onSave(node: DesignVector): Promise<boolean>;
+  fieldEdits: InspectorFieldEdits;
   translate: RendererTranslate;
 }>) {
   const toast = useToast();
@@ -19,16 +21,20 @@ export function DesignIconField({ node, icon, disabled, onSave, translate: t }: 
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
 
+  async function replacement(source: DesignLucideSource): Promise<DesignVector> {
+    const { readDesignSvg, designSvgGeometry } = await import('../vectors/design-svg-import.js');
+    const asset = await readDesignSvg(source);
+    const name = !node.name || node.name === designLucideLabel(icon, t) ? source.name : node.name;
+    return { ...node, name, geometry: designSvgGeometry(asset) };
+  }
+
   async function replace(source: DesignLucideSource) {
     if (disabled || saving.current) return;
     if (source.icon === icon) { setOpen(false); return; }
     saving.current = true;
     setBusy(true);
     try {
-      const { readDesignSvg, designSvgGeometry } = await import('../vectors/design-svg-import.js');
-      const asset = await readDesignSvg(source);
-      const name = !node.name || node.name === designLucideLabel(icon, t) ? source.name : node.name;
-      if (await onSave({ ...node, name, geometry: designSvgGeometry(asset) })) setOpen(false);
+      if (await onSave(await replacement(source))) setOpen(false);
     } catch {
       toast.error(t('feature.design.importSvgFailed'));
     } finally {
@@ -39,9 +45,10 @@ export function DesignIconField({ node, icon, disabled, onSave, translate: t }: 
 
   return <InspectorSection title={t('feature.design.icon')}>
     <Popover open={open} onOpenChange={(next) => { if (!saving.current) setOpen(next); }}
-      className="design-icon-picker__popover" placement="leftTop" hideWhenDetached contentLabel={t('feature.design.changeIcon')}
+      {...designInspectorPopoverPosition} className="design-icon-picker__popover" hideWhenDetached contentLabel={t('feature.design.changeIcon')}
       content={open ? <div className="design-icon-picker" onKeyDown={(event) => event.stopPropagation()} onPaste={(event) => event.stopPropagation()}>
-        <DesignLucidePicker selected={icon} disabled={disabled || busy} onPick={(source) => void replace(source)} translate={t} />
+        <DesignLucidePicker selected={icon} disabled={disabled || busy} onPick={(source) => void replace(source)}
+          preview={{ prepare: replacement, show: previewDesignNode(fieldEdits) }} translate={t} />
       </div> : null}>
       <Button className="design-icon-picker__trigger" size="small" variant="ghost" title={icon}
         aria-label={t('feature.design.changeIcon')} disabled={disabled || busy}>

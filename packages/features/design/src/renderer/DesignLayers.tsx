@@ -1,19 +1,24 @@
 import {
-  ChevronDown, ChevronRight, Circle, Component, Diamond, Eye, EyeOff, Frame, Group,
-  ImageIcon, Lock, LockOpen, PanelLeftClose, PanelLeftOpen, Square, Type,
+  ChevronDown, ChevronRight, Circle, CodeXml, Component, Diamond, Eye, EyeOff, Frame, Globe, Group,
+  ImageIcon, Lock, LockOpen, Square, Type,
 } from 'lucide-react';
-import { useId, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type MutableRefObject, type ReactElement } from 'react';
+import { useCallback, useId, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type MutableRefObject, type ReactElement } from 'react';
+import { createPortal } from 'react-dom';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { IconButton, useNativeDragPreview, useReorderLayout } from '@setsuna-desktop/renderer-ui';
 import type { DesignDocument } from '../contracts/index.js';
+import { DesignThumbnail, useDesignThumbnails } from './canvas/DesignThumbnail.js';
+import { DesignPanelToggle, DesignSidePanel } from './canvas/DesignSidePanels.js';
+import { useDesignLayerExpansion } from './canvas/use-design-layer-expansion.js';
 import type { DesignLayerMenuTarget } from './context/use-design-layer-actions.js';
 import { activeDesignLayerDrag, canDropDesignLayer, changesDesignLayerOrder, designLayerDragType, designLayerOrder,
   type DesignLayerDestination, type DesignLayerDrag } from './design-layer-drop.js';
+import type { LoadDesignImage } from './design-images.js';
 import type { DesignScene } from './design-layout.js';
 import { designVectorIcons } from './vectors/design-vector-icons.js';
 import { designLucideIcon } from './vectors/design-vector.js';
 
-const layerIcons = { frame: Frame, image: ImageIcon, rectangle: Square, ellipse: Circle, text: Type };
+const layerIcons = { frame: Frame, image: ImageIcon, rectangle: Square, ellipse: Circle, text: Type, web: Globe, script: CodeXml };
 
 type LayerDrop = DesignLayerDestination & Readonly<{
   id: string;
@@ -37,22 +42,27 @@ function beforeIdAtEdge({ ids, frontFirst }: LayerOrder, id: string, edge: 'befo
   return (edge === 'after') !== frontFirst ? ids[ids.indexOf(id) + 1] ?? null : id;
 }
 
-function layerIndent(depth: number): CSSProperties {
-  return { '--design-layer-indent': `${Math.min(depth, 8) * 9}px` } as CSSProperties;
+function layerDepth(depth: number): CSSProperties {
+  return { '--design-layer-depth': Math.min(depth, 8) } as CSSProperties;
 }
 
 export function DesignLayers({
-  document, scene, revision, drag, selectedIds, open, disabled, onTogglePanel, onSelect, onToggle, onDrop, onContextMenu, translate: t,
+  document, projected, scene, loadImage, revision, drag, selectedIds, open, disabled, toggleTarget,
+  onTogglePanel, onSelect, onHoverLayer, onToggle, onDrop, onContextMenu, translate: t,
 }: Readonly<{
   document: DesignDocument;
+  projected: DesignDocument;
   scene: DesignScene;
+  loadImage: LoadDesignImage;
   revision: string;
   drag: MutableRefObject<DesignLayerDrag | undefined>;
   selectedIds: readonly string[];
   open: boolean;
   disabled: boolean;
+  toggleTarget?: HTMLElement;
   onTogglePanel(): void;
   onSelect(id: string, additive: boolean): void;
+  onHoverLayer(id: string | undefined): void;
   onToggle(id: string, flag: 'locked' | 'hidden'): void;
   onDrop(id: string, destination: DesignLayerDestination, expectedRevision: string): Promise<boolean>;
   onContextMenu(target: DesignLayerMenuTarget): void;
@@ -60,9 +70,11 @@ export function DesignLayers({
 }>) {
   const panelId = useId();
   const list = useRef<HTMLDivElement>(null);
+  const selectThumbnail = useCallback((id: string) => scene[id]?.visible ? { document: projected, scene, ids: [id] } : undefined, [projected, scene]);
+  const observeThumbnail = useDesignThumbnails(list, selectThumbnail, loadImage, { open });
   const panelHeight = useRef(0);
   const lastHover = useRef<LayerHover>();
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const { collapsed, updateLayerExpansion } = useDesignLayerExpansion(document.documentId);
   const [hoverDrop, setHoverDrop] = useState<LayerDrop | null>(null);
   const [pendingDrop, setPendingDrop] = useState<Readonly<{ source: DesignLayerDrag; target: LayerDrop }>>();
   const [confirmedDrag, setConfirmedDrag] = useState<DesignLayerDrag>();
@@ -158,12 +170,7 @@ export function DesignLayers({
     const pending = { source, target };
     setPendingDrop(pending);
     void onDrop(source.id, target, source.revision).then((applied) => {
-      if (applied && target.placement === 'inside') setCollapsed((current) => {
-        if (!current.has(target.id)) return current;
-        const next = new Set(current);
-        next.delete(target.id);
-        return next;
-      });
+      if (applied && target.placement === 'inside') updateLayerExpansion(target.id, 'expand');
     }).finally(() => {
       setPendingDrop((current) => current === pending ? undefined : current);
     });
@@ -176,15 +183,17 @@ export function DesignLayers({
       const index = slot.beforeId === null ? order.ids.length : order.ids.indexOf(slot.beforeId);
       const visualIndex = order.frontFirst ? order.ids.length - index : index;
       rows.splice(visualIndex, 0, <li key=":drop" className="design-layer__drop-slot" data-design-layer-drop-slot="" aria-hidden="true"
-        style={layerIndent(depth)} />);
+        style={layerDepth(depth)} />);
     }
     return <ul>{rows}</ul>;
   }
 
   const renderLayer = (id: string, depth: number) => {
     const node = document.nodes[id];
+    const resolved = projected.nodes[id] ?? node;
+    const hidden = resolved.hidden;
     const { locked } = scene[id];
-    const children = node.kind === 'frame' ? node.childIds : [];
+    const hasChildren = node.kind === 'frame' && node.childIds.length > 0;
     const expanded = !collapsed.has(id);
     const isGroup = node.kind === 'frame' && node.group;
     const isComponent = node.kind === 'frame' && node.component;
@@ -192,33 +201,29 @@ export function DesignLayers({
     const Icon = isComponent ? Component : isInstance ? Diamond : isGroup ? Group
       : node.kind === 'vector' ? designVectorIcons[node.geometry.kind] : layerIcons[node.kind];
     const Chevron = expanded ? ChevronDown : ChevronRight;
-    const Visibility = node.hidden ? EyeOff : Eye;
+    const Visibility = hidden ? EyeOff : Eye;
     const LockState = locked ? Lock : LockOpen;
     const kindName = isComponent ? 'component' : isInstance ? 'instance' : isGroup ? 'group' : depth === 0 && node.kind === 'frame' ? 'artboard'
       : node.kind === 'vector' ? (designLucideIcon(node.geometry) ? 'icon' : node.geometry.kind) : node.kind;
-    const name = node.name || (node.kind === 'text' && node.text.trim().split('\n', 1)[0]) || t(`feature.design.${kindName}`);
+    const name = node.name || (resolved.kind === 'text' && resolved.text.trim().split('\n', 1)[0]) || t(`feature.design.${kindName}`);
     const receivesLayer = slot?.id === id && slot.placement === 'inside';
     const order = designLayerOrder(document, id);
     const lifted = movingId === id;
     return <li className="design-layer-item" key={id} data-design-layer-id={id}
-      data-reorder-id={lifted ? undefined : id} data-lifted={lifted || undefined} style={layerIndent(depth)}>
-      <div className="design-layer" data-selected={selectedIds.includes(id)} data-hidden={node.hidden || undefined}
+      data-reorder-id={lifted ? undefined : id} data-lifted={lifted || undefined} style={layerDepth(depth)}>
+      <div className="design-layer" data-selected={selectedIds.includes(id)} data-hidden={hidden || undefined}
         data-drop={receivesLayer ? 'inside' : undefined}
+        onPointerEnter={(event) => {
+          if (event.pointerType !== 'touch' && !activeDrag) onHoverLayer(id);
+        }} onPointerLeave={() => onHoverLayer(undefined)}
         onContextMenu={(event) => {
           if (disabled) return;
           event.preventDefault();
           event.currentTarget.querySelector<HTMLButtonElement>('.design-layer__select')?.focus({ preventScroll: true });
           onContextMenu({ id, point: { x: event.clientX, y: event.clientY } });
         }}>
-        {children.length ? <IconButton className="design-layer__expand" label={t(expanded ? 'feature.design.collapseLayer' : 'feature.design.expandLayer')}
-          aria-expanded={expanded} size="small" onClick={() => {
-            setCollapsed((current) => {
-              const next = new Set(current);
-              if (next.has(id)) next.delete(id);
-              else next.add(id);
-              return next;
-            });
-          }}><Chevron size={12} /></IconButton> : null}
+        {hasChildren ? <IconButton className="design-layer__expand" label={t(expanded ? 'feature.design.collapseLayer' : 'feature.design.expandLayer')}
+          aria-expanded={expanded} size="small" onClick={() => updateLayerExpansion(id, 'toggle')}><Chevron size={12} /></IconButton> : null}
         <button className="design-layer__select" type="button" title={name} aria-pressed={selectedIds.includes(id)} draggable={!disabled && !locked}
           onDragStart={(event) => {
             if (disabled || locked) {
@@ -230,6 +235,7 @@ export function DesignLayers({
             drag.current = { id, revision };
             // Keep the panel's blank drop area available after its source row is lifted.
             panelHeight.current = list.current?.parentElement?.offsetHeight ?? 0;
+            onHoverLayer(undefined);
             clearHover();
             preview.start(event, event.currentTarget.parentElement ?? event.currentTarget);
           }}
@@ -241,32 +247,35 @@ export function DesignLayers({
             onContextMenu({ id, point: { x: left, y: bottom } });
           }}
           onClick={(event) => onSelect(id, event.shiftKey || event.metaKey || event.ctrlKey)}>
-          <Icon size={14} aria-hidden="true" />
-          <span>{name}</span>
+          <Icon aria-hidden="true" />
+          <DesignThumbnail id={id} observe={observeThumbnail} />
+          <span className="design-layer__name">{name}</span>
         </button>
-        <div className="design-layer__actions" data-visible={Boolean(node.hidden || locked)}>
-          <IconButton label={t(node.hidden ? 'feature.design.showLayer' : 'feature.design.hideLayer')} size="small"
-            aria-pressed={!node.hidden} disabled={disabled} onClick={() => onToggle(id, 'hidden')}><Visibility size={13} /></IconButton>
+        <div className="design-layer__actions" data-visible={Boolean(hidden || locked)}>
+          <IconButton label={t(hidden ? 'feature.design.showLayer' : 'feature.design.hideLayer')} size="small"
+            aria-pressed={!hidden} disabled={disabled} onClick={() => onToggle(id, 'hidden')}><Visibility size={13} /></IconButton>
           <IconButton label={t(locked ? 'feature.design.unlockLayer' : 'feature.design.lockLayer')} size="small"
             aria-pressed={locked} disabled={disabled || (locked && !node.locked)} onClick={() => onToggle(id, 'locked')}><LockState size={13} /></IconButton>
         </div>
       </div>
-      {(children.length && expanded) || slot?.parentId === id
+      {(hasChildren && expanded) || slot?.parentId === id
         ? renderList(id, depth + 1, order, expanded ? displayOrder(order) : []) : null}
     </li>;
   };
 
-  const PanelToggle = open ? PanelLeftClose : PanelLeftOpen;
-  return <aside className="design-editor__layers" aria-label={t('feature.design.layers')}
-    style={movingId && panelHeight.current ? { height: panelHeight.current } : undefined}>
-    <header className="design-panel__header">
-      {open ? <h2>{t('feature.design.layers')}</h2> : null}
-      <IconButton className="design-panel__toggle" label={t('feature.design.layers')} size="small"
-        aria-expanded={open} aria-controls={panelId} onClick={onTogglePanel}><PanelToggle size={15} /></IconButton>
-    </header>
-    <div className="design-layer-list" id={panelId} ref={list} hidden={!open} data-dragging={Boolean(movingId) || undefined}
-      onDragOver={onDragOver} onDrop={dropLayer} onDragLeave={onDragLeave}>
-      {open ? renderList(null, 0, rootOrder, roots) : null}
-    </div>
-  </aside>;
+  const label = t('feature.design.layers');
+  const toggle = <DesignPanelToggle side="layers" label={label} aria-expanded={open} aria-controls={panelId} onClick={() => {
+    onHoverLayer(undefined);
+    onTogglePanel();
+  }} />;
+  return <>
+    {toggleTarget ? createPortal(toggle, toggleTarget) : <div className="design-layers-toggle">{toggle}</div>}
+    <DesignSidePanel side="layers" id={panelId} label={label} resizeLabel={t('feature.design.resizeLayers')}
+      open={open} style={movingId && panelHeight.current ? { height: panelHeight.current } : undefined}>
+      <div className="design-layer-list design-panel-scroll" ref={list} data-dragging={Boolean(movingId) || undefined}
+        onDragOver={onDragOver} onDrop={dropLayer} onDragLeave={onDragLeave}>
+        {open ? renderList(null, 0, rootOrder, roots) : null}
+      </div>
+    </DesignSidePanel>
+  </>;
 }

@@ -1,14 +1,23 @@
 import { Search, type LucideIcon } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { IconButton, TextField, useToast } from '@setsuna-desktop/renderer-ui';
-import { designIconNames, designTextFill } from '../../contracts/index.js';
+import { IconButton, TextField, useHoverPreview, useToast } from '@setsuna-desktop/renderer-ui';
+import { designDefaultColor } from '../../contracts/design-color.js';
+import { designIconNames, type DesignVector } from '../../contracts/index.js';
+import { defaultDesignStroke } from '../design-paint.js';
 import type { DesignLucideSource } from './design-svg-source.js';
 import './design-icon-picker.css';
 
 type IconLoader = () => Promise<{ default: LucideIcon }>;
 type LucideCatalog = Readonly<Record<string, IconLoader>>;
 type Entry = Readonly<{ name: string; label: string; search: string; load: IconLoader }>;
+type IconActions = Readonly<{
+  onPick(source: DesignLucideSource): void;
+  preview?: Readonly<{
+    prepare(source: DesignLucideSource): Promise<DesignVector>;
+    show(node: DesignVector | undefined, owner: string): void;
+  }>;
+}>;
 const commonNames = new Set<string>(designIconNames);
 const tile = 42;
 const gap = 5;
@@ -19,10 +28,10 @@ export function designLucideLabel(name: string, translate: RendererTranslate) {
   return commonNames.has(name) ? translate(`feature.design.icon.${name}`) : name.replaceAll('-', ' ');
 }
 
-export function DesignLucidePicker({ selected, disabled, onPick, translate: t }: Readonly<{
+export function DesignLucidePicker({ selected, disabled, searchAction, onPick, preview, translate: t }: IconActions & Readonly<{
   selected?: string;
   disabled: boolean;
-  onPick(source: DesignLucideSource): void;
+  searchAction?: ReactNode;
   translate: RendererTranslate;
 }>) {
   const toast = useToast();
@@ -52,22 +61,23 @@ export function DesignLucidePicker({ selected, disabled, onPick, translate: t }:
     <div className="design-icon-picker__search design-panel-scroll">
       <TextField autoFocus appearance="search" aria-label={t('feature.design.searchIcons')} placeholder={t('feature.design.searchIcons')}
         leadingIcon={<Search size={15} />} value={query} readOnly={disabled} onChange={(event) => setQuery(event.target.value)} />
+      {searchAction}
     </div>
-    <DesignIconGrid key={search} entries={matches} selected={selected} disabled={disabled} onPick={onPick} label={t('feature.design.icon')} />
+    <DesignIconGrid key={search} entries={matches} selected={selected} disabled={disabled} onPick={onPick} preview={preview} label={t('feature.design.icon')} />
   </>;
 }
 
-function DesignIconGrid({ entries, label, selected, disabled, onPick }: Readonly<{
+function DesignIconGrid({ entries, label, selected, disabled, onPick, preview }: IconActions & Readonly<{
   entries: readonly Entry[];
   label: string;
   selected?: string;
   disabled: boolean;
-  onPick(source: DesignLucideSource): void;
 }>) {
   const scroll = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 300, height: 272 });
   const [scrollTop, setScrollTop] = useState(0);
+  const hover = useHoverPreview(disabled ? undefined : preview?.show);
 
   useLayoutEffect(() => {
     const element = scroll.current;
@@ -97,13 +107,19 @@ function DesignIconGrid({ entries, label, selected, disabled, onPick }: Readonly
         top: firstRow * rowStep, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridAutoRows: tile, gap,
       }}>
         {entries.slice(firstRow * columns, pastRow * columns).map((entry) => <CatalogIcon key={entry.name} entry={entry}
-          selected={entry.name === selected} disabled={disabled} onPick={onPick} />)}
+          {...(preview && entry.name !== selected ? hover.option(async (tile) => {
+            const source = iconSource(tile, entry);
+            if (source) return preview.prepare(source);
+          }) : undefined)}
+          selected={entry.name === selected} disabled={disabled} onPick={(source) => { hover.clear(); onPick(source); }} />)}
       </div>
     </div>
   </div>;
 }
 
-function CatalogIcon({ entry, selected, disabled, onPick }: Readonly<{
+type IconHoverEvents = Pick<ComponentProps<typeof IconButton>, 'onPointerEnter' | 'onPointerLeave'>;
+
+function CatalogIcon({ entry, selected, disabled, onPick, ...hoverEvents }: IconHoverEvents & Readonly<{
   entry: Entry;
   selected: boolean;
   disabled: boolean;
@@ -116,11 +132,16 @@ function CatalogIcon({ entry, selected, disabled, onPick }: Readonly<{
     void load().then(({ default: glyph }) => { if (active) setIcon(() => glyph); }).catch(() => undefined);
     return () => { active = false; };
   }, [load]);
-  return <IconButton label={label} title={label === name ? label : label + ' · ' + name} aria-pressed={selected || undefined}
+  return <IconButton {...hoverEvents} label={label} title={label === name ? label : label + ' · ' + name} aria-pressed={selected || undefined}
     disabled={disabled || !Icon} onClick={(event) => {
-      const svg = event.currentTarget.querySelector('svg');
-      if (svg) onPick({ markup: svg.outerHTML, name: label, icon: name, color: designTextFill });
+      const source = iconSource(event.currentTarget, entry);
+      if (source) onPick(source);
     }}>
-    {Icon ? <Icon size={24} aria-hidden="true" /> : null}
+    {Icon ? <Icon size={24} strokeWidth={defaultDesignStroke.width} aria-hidden="true" /> : null}
   </IconButton>;
+}
+
+function iconSource(tile: HTMLElement, { name, label }: Entry): DesignLucideSource | undefined {
+  const svg = tile.querySelector('svg');
+  if (svg) return { markup: svg.outerHTML, name: label, icon: name, color: designDefaultColor };
 }

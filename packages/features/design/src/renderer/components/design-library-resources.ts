@@ -1,29 +1,44 @@
-import type { DesignDocument, DesignNode, DesignStyle } from '../../contracts/index.js';
+import type { DesignDocument, DesignNode, DesignPaint, DesignStyle } from '../../contracts/index.js';
 import { mapDesignLayerReferences } from '../../contracts/design-references.js';
 import { designResourceId, designResourceParts } from '../../contracts/design-resource-id.js';
+import { mapDesignVariableAliases } from '../../contracts/design-variable-aliases.js';
+import { designVariableCollectionKey, designVariableCollections, type DesignVariableCollection, type DesignVariableCollections } from '../../contracts/design-variable-collections.js';
+import { mapDesignVariableIds } from '../../contracts/design-variables.js';
 
 export type DesignLibraryResources = Readonly<{
+  documents: ReadonlyMap<string, DesignDocument>;
   nodes: Readonly<Record<string, DesignNode>>;
   styles: Readonly<Record<string, DesignStyle>>;
+  variableCollections: Readonly<Record<string, DesignVariableCollections>>;
 }>;
 
-export const emptyDesignLibraryResources: DesignLibraryResources = { nodes: Object.create(null), styles: Object.create(null) };
+export const emptyDesignLibraryResources: DesignLibraryResources = {
+  documents: new Map(), nodes: Object.create(null), styles: Object.create(null), variableCollections: Object.create(null),
+};
 
 export function buildDesignLibraryResources(documentId: string, libraries: readonly DesignDocument[]): DesignLibraryResources {
   if (!libraries.length) return emptyDesignLibraryResources;
   const nodes: Record<string, DesignNode> = Object.create(null);
   const styles: Record<string, DesignStyle> = Object.create(null);
+  const variableCollections: Record<string, DesignVariableCollections> = Object.create(null);
   for (const library of libraries) {
     function qualify(id: string) {
       const reference = designResourceParts(id);
       if (reference) return reference.documentId === documentId ? reference.id : id;
       return designResourceId(library.documentId, id);
     }
-    for (const [id, style] of Object.entries(library.styles ?? {})) styles[qualify(id)] = style;
+    const entries = Object.entries(library.styles ?? {});
+    for (const [id, style] of entries) {
+      styles[qualify(id)] = style.kind === 'text' ? { ...style, typography: mapDesignVariableIds(style.typography, qualify) }
+        : mapDesignVariableAliases(style, qualify);
+    }
+    if (library.variableCollections || entries.some(([, style]) => style.kind !== 'text')) {
+      variableCollections[library.documentId] = designVariableCollections(library.variableCollections);
+    }
     function collect(id: string) {
       const qualifiedId = qualify(id);
       if (Object.hasOwn(nodes, qualifiedId)) return;
-      const node = mapDesignLayerReferences(mapDesignStyleIds(library.nodes[id], qualify), qualify);
+      const node = mapDesignLayerReferences(mapDesignNodeResourceIds(library.nodes[id], qualify), qualify);
       const interaction = node.interaction && 'targetId' in node.interaction ? undefined : node.interaction;
       // These definitions are inputs to the editor's projection. Only instances enter the canvas tree.
       nodes[qualifiedId] = node.kind === 'frame' ? { ...node, interaction, childIds: node.childIds.map(qualify) } : { ...node, interaction };
@@ -31,7 +46,29 @@ export function buildDesignLibraryResources(documentId: string, libraries: reado
     }
     for (const [id, node] of Object.entries(library.nodes)) if (node.kind === 'frame' && node.component) collect(id);
   }
-  return { nodes, styles };
+  return { documents: new Map(libraries.map((library) => [library.documentId, library])), nodes, styles, variableCollections };
+}
+
+export type DesignLibraryVariableCollection = Readonly<{
+  key: string;
+  id: string;
+  collection: DesignVariableCollection;
+  path?: string;
+}>;
+
+export function designLibraryVariableCollections(document: DesignDocument, resources: DesignLibraryResources): DesignLibraryVariableCollection[] {
+  function entries(owner: string, collections: DesignVariableCollections, path?: string) {
+    return Object.entries(collections).map(([id, collection]) => ({ id, key: designVariableCollectionKey(owner, id), collection, path }));
+  }
+  return [
+    ...entries(document.documentId, designVariableCollections(document.variableCollections)),
+    ...Object.entries(document.libraries ?? {}).flatMap(([owner, path]) =>
+      Object.hasOwn(resources.variableCollections, owner) ? entries(owner, resources.variableCollections[owner], path) : []),
+  ];
+}
+
+export function designVariableCollectionLabel({ collection, path }: DesignLibraryVariableCollection, defaultName: string): string {
+  return collection.name ?? path?.split('/').at(-1)?.replace(/\.design\.json$/iu, '') ?? defaultName;
 }
 
 export function designResourceNode(document: DesignDocument, id: string, resources: DesignLibraryResources | undefined): DesignNode | undefined {
@@ -50,13 +87,17 @@ export function designStyleChoices(document: DesignDocument, resources: DesignLi
   return linked.length ? { ...document.styles, ...Object.fromEntries(linked) } : document.styles;
 }
 
-export function mapDesignStyleIds(node: DesignNode, mapId: (id: string) => string | undefined): DesignNode {
-  const paint = <T extends { styleId?: string }>(value: T): T => value.styleId ? { ...value, styleId: mapId(value.styleId) } : value;
-  const base = { ...node, strokes: node.strokes?.map(paint), shadow: node.shadow && paint(node.shadow) };
+export function mapDesignNodeResourceIds(node: DesignNode, mapId: (id: string) => string | undefined): DesignNode {
+  const style = <T extends { styleId?: string }>(value: T): T => value.styleId ? { ...value, styleId: mapId(value.styleId) } : value;
+  const paint = <T extends DesignPaint>(value: T): T => {
+    const mapped = mapDesignVariableIds(style(value), mapId);
+    const gradient = value.gradient;
+    return gradient ? { ...mapped, gradient: { ...gradient, stops: gradient.stops.map(style) } } : mapped;
+  };
+  const base = { ...mapDesignVariableIds(node, mapId), strokes: node.strokes?.map(paint), shadow: node.shadow && paint(node.shadow) };
   if (base.kind === 'image') return base;
-  const fills = base.fills?.map((fill) => ({
-    ...paint(fill), gradient: fill.gradient && { ...fill.gradient, stops: fill.gradient.stops.map(paint) },
-  }));
-  return base.kind === 'text' ? { ...base, fills, textStyleId: base.textStyleId && mapId(base.textStyleId), runs: base.runs?.map(paint) }
+  const fills = base.fills?.map(paint);
+  if (base.kind === 'frame') return { ...base, fills, layout: base.layout && mapDesignVariableIds(base.layout, mapId) };
+  return base.kind === 'text' ? { ...base, fills, textStyleId: base.textStyleId && mapId(base.textStyleId), runs: base.runs?.map(style) }
     : { ...base, fills };
 }

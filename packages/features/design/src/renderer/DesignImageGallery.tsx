@@ -1,11 +1,11 @@
 import { Check, ImageIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { LoadDesignImage } from './design-images.js';
 
-export function useProjectImagePreview(path: string | undefined, loadImage: LoadDesignImage) {
+export function useProjectImagePreview(path: string | undefined, loadImage: LoadDesignImage | undefined) {
   const [result, setResult] = useState<{ path: string; src: string | null }>();
   useEffect(() => {
-    if (!path) return;
+    if (!path || !loadImage) return;
     let active = true;
     void loadImage(path).then((image) => {
       if (active) setResult({ path, src: image.src });
@@ -51,15 +51,24 @@ export function DesignImageGallery({ paths, selected, loadImage, onSelect, disab
   }, [canObserve, paths]);
 
   return <div className="design-image-picker__gallery" ref={gallery} role="group" aria-label={label} aria-busy={searching}>
-    {paths.map((path) => <button key={path} type="button" className="design-image-picker__tile" title={path}
-      aria-label={path} aria-pressed={selected === path} disabled={disabled} data-asset-path={path} onClick={() => onSelect(path)}>
-      <span className="design-image-picker__thumbnail">
-        {!canObserve || visible.has(path) || selected === path ? <Thumbnail path={path} loadImage={loadImage} /> : <ImageIcon size={18} aria-hidden="true" />}
-        {selected === path ? <span className="design-image-picker__selected"><Check size={12} aria-hidden="true" /></span> : null}
-      </span>
-      <span className="design-image-picker__file-name">{path.split('/').at(-1)}</span>
-    </button>)}
+    {paths.map((path) => <DesignPreviewTile key={path} title={path} label={path.split('/').at(-1) ?? path} assetPath={path}
+      selected={selected === path} disabled={disabled} onSelect={() => onSelect(path)}>
+      {!canObserve || visible.has(path) || selected === path ? <Thumbnail path={path} loadImage={loadImage} /> : <ImageIcon size={18} aria-hidden="true" />}
+    </DesignPreviewTile>)}
   </div>;
+}
+
+export function DesignPreviewTile({ title, label, assetPath, selected, disabled, onSelect, children }: Readonly<{
+  title: string; label: string; assetPath?: string; selected: boolean; disabled?: boolean; onSelect(): void; children: ReactNode;
+}>) {
+  return <button type="button" className="design-image-picker__tile" title={title} aria-label={title}
+    aria-pressed={selected} disabled={disabled} data-asset-path={assetPath} onClick={onSelect}>
+    <span className="design-image-picker__thumbnail">
+      {children}
+      {selected ? <span className="design-image-picker__selected"><Check size={12} aria-hidden="true" /></span> : null}
+    </span>
+    <span className="design-image-picker__file-name">{label}</span>
+  </button>;
 }
 
 function Thumbnail({ path, loadImage }: Readonly<{ path: string; loadImage: LoadDesignImage }>) {

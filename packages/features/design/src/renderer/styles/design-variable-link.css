@@ -1,0 +1,42 @@
+.design-variable-link:is(.sd-icon-button, .sd-select-field) {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--design-variable-link-width, 22px);
+  block-size: var(--design-variable-link-height, 22px);
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-radius-xs);
+  background-color: transparent;
+  color: var(--app-text-muted);
+}
+
+.design-variable-link:is(.sd-icon-button, .sd-select-field):is(:hover, :focus-visible, .is-open, [data-overlay-open]):not(:disabled) {
+  background-color: transparent;
+  color: var(--design-ink, var(--app-primary));
+}
+
+.design-variable-link:is(.sd-icon-button, .sd-select-field):focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: -2px;
+}
+
+.design-variable-link.is-linked {
+  color: var(--design-ink, var(--app-primary));
+}
+
+.design-variable-link svg {
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+.design-variable-link .sd-select-field__chevron {
+  display: none;
+}
+
+.design-variable-link .sd-select-field__value {
+  display: grid;
+  place-items: center;
+}

@@ -9,10 +9,16 @@ export type ComponentActions = Readonly<{
   librarySource?: boolean;
   library: readonly { id: string; name: string }[];
   onCreate(): void;
-  onInsert(id: string): void;
+  onInsert(id: string): Promise<boolean>;
   onLocate?: (id: string) => void;
   onDetach?: () => void;
-  variant?: Readonly<{ value: string; items: readonly { id: string; name: string }[]; select(id: string): void }>;
+  variant?: Readonly<{
+    instanceId: string;
+    value: string;
+    items: readonly { id: string; name: string }[];
+    select(id: string): void;
+    preview(id: string | undefined, owner: string): void;
+  }>;
   definition?: Readonly<{ name: string; onRename(name: string): Promise<boolean>; add(): void }>;
 }>;
 
@@ -28,8 +34,8 @@ export function DesignComponentActions({ sourceId, library, librarySource, onIns
       <Button size="small" variant="ghost" icon={<Plus size={14} />} disabled={disabled}
         onClick={definition.add}>{t('feature.design.addVariant')}</Button>
     </> : null}
-    {variant && variant.items.length > 1 ? <SelectField aria-label={t('feature.design.variant')} value={variant.value}
-      disabled={disabled || !onDetach} onValueChange={variant.select}>
+    {variant && variant.items.length > 1 ? <SelectField key={variant.instanceId} aria-label={t('feature.design.variant')} value={variant.value}
+      disabled={disabled || !onDetach} onValueChange={variant.select} onValuePreview={variant.preview}>
       {variant.items.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
     </SelectField> : null}
     {sourceId ? <div className="design-inspector__pair">
@@ -41,7 +47,7 @@ export function DesignComponentActions({ sourceId, library, librarySource, onIns
       </Button>
     </div> : null}
     {library.length ? <SelectField aria-label={t('feature.design.insertComponent')} title={t('feature.design.insertComponent')}
-      value="" disabled={disabled} onValueChange={(id) => { if (id) onInsert(id); }}>
+      value="" disabled={disabled} onValueChange={(id) => { if (id) void onInsert(id); }}>
       <option value="" disabled>{t('feature.design.insertComponent')}</option>
       {library.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
     </SelectField> : null}

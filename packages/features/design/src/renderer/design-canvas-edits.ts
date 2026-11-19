@@ -1,9 +1,10 @@
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
-import type { DesignDocument, DesignEdit, DesignFrame, DesignLayout, DesignNode } from '../contracts/index.js';
+import type { DesignDocument, DesignEdit, DesignFrame, DesignLayout, DesignNode, DesignText } from '../contracts/index.js';
 import { applyDesignEdits } from '../contracts/apply-design-edits.js';
 import { remapDesignLayerReferences } from '../contracts/design-references.js';
-import { designResourceNode, type DesignLibraryResources } from './components/design-library-resources.js';
-import { layerTransform, orientationInParent, rotatePoint, roundDesignValue, toLocal, toLocalVector, toWorld, transformedBounds, unionBounds, type Bounds, type Point } from './design-geometry.js';
+import { bindDesignVariable, designPaddingVariableFields, normalizeDesignRotation, validDesignWidthLimits,
+  type DesignVariableField } from '../contracts/design-variables.js';
+import { layerOutline, layerTransform, orientationInParent, rotatePoint, roundDesignValue, toLocal, toLocalVector, toWorld, transformedBounds, unionBounds, type Point } from './design-geometry.js';
 import { canDropDesignLayer, changesDesignLayerOrder, designLayerOrder, findDesignFrameAtPoint, type DesignLayerDestination } from './design-layer-drop.js';
 import { participatesInDesignFlow, type DesignLayerBox, type DesignScene } from './design-layout.js';
 import { measureDesignText } from './design-text.js';
@@ -59,23 +60,36 @@ export function movePositions(scene: DesignScene, ids: readonly string[], delta:
 }
 
 export function moveDesignLayer(
-  document: DesignDocument, scene: DesignScene, nodeId: string, position: Point,
+  document: DesignDocument, scene: DesignScene, nodeId: string, position: Point, projected = document,
 ): DesignEdit | undefined {
   const box = scene[nodeId];
   if (!box || box.locked) return;
-  const parent = box.parentId === null ? undefined : document.nodes[box.parentId];
-  if (parent?.kind !== 'frame' || !parent.layout || !participatesInDesignFlow(document.nodes[nodeId], nodeId, parent)) {
+  const parent = box.parentId === null ? undefined : projected.nodes[box.parentId];
+  if (parent?.kind !== 'frame' || !parent.layout || !participatesInDesignFlow(projected.nodes[nodeId], nodeId, parent)) {
     if (box.x === position.x && box.y === position.y) return;
-    return { kind: 'move', nodeId, ...position };
+    return positionEdit(document, nodeId, box, position);
   }
-  const siblings = parent.childIds.filter((id) => participatesInDesignFlow(document.nodes[id], id, parent));
+  const siblings = parent.childIds.filter((id) => participatesInDesignFlow(projected.nodes[id], id, parent));
   const beforeId = designFlowBeforeId(scene, siblings, nodeId, parent.layout,
     { x: position.x + box.width / 2, y: position.y + box.height / 2 });
   if (!changesDesignLayerOrder(siblings, nodeId, beforeId)) return;
   return { kind: 'reorder', nodeId, beforeId };
 }
 
-function designFlowBeforeId(scene: DesignScene, ids: readonly string[], nodeId: string, layout: DesignLayout, center: Point) {
+function withLocalPosition<T extends DesignNode>(node: T, position: Point, before?: Point): T {
+  // A canvas move replaces just the axes that changed from the resolved position.
+  return (['x', 'y'] as const).reduce((current, axis) => before && roundDesignValue(before[axis]) === roundDesignValue(position[axis])
+    ? current : bindDesignVariable(current, axis, undefined, position[axis]), node);
+}
+
+function positionEdit(document: DesignDocument, nodeId: string, before: Point, position: Point): DesignEdit {
+  const node = document.nodes[nodeId];
+  return node.variableIds?.x || node.variableIds?.y
+    ? { kind: 'update', nodeId, node: withLocalPosition(node, position, before) }
+    : { kind: 'move', nodeId, ...position };
+}
+
+export function designFlowBeforeId(scene: DesignScene, ids: readonly string[], nodeId: string, layout: DesignLayout, center: Point) {
   const horizontal = layout.direction === 'horizontal';
   const axis = horizontal ? 'x' : 'y';
   const dimension = horizontal ? 'width' : 'height';
@@ -102,90 +116,118 @@ function designFlowBeforeId(scene: DesignScene, ids: readonly string[], nodeId: 
 }
 
 export function transformDesignLayer(
-  document: DesignDocument, scene: DesignScene, nodeId: string, placement: LayerPlacement,
+  document: DesignDocument, scene: DesignScene, nodeId: string, placement: LayerPlacement, projected = document,
 ): DesignNode | undefined {
   const box = scene[nodeId];
   if (!box || box.locked) return;
   const node = document.nodes[nodeId];
+  const drawn = projected.nodes[nodeId];
   const { height, rotation } = placement;
-  const width = placement.width === undefined ? undefined : constrainedWidth(node, placement.width);
+  const width = placement.width === undefined ? undefined : constrainDesignWidth(drawn, placement.width);
   const widthChanged = width !== undefined && width !== box.width;
   const heightChanged = height !== undefined && node.kind !== 'text' && height !== box.height;
-  const reposition = !isFlowChild(document, scene, nodeId) && (box.x !== placement.x || box.y !== placement.y);
-  const rotated = rotation !== undefined && rotation !== (node.rotation ?? 0);
+  const reposition = !isFlowChild(projected, scene, nodeId) && (box.x !== placement.x || box.y !== placement.y);
+  const rotated = rotation !== undefined && rotation !== (drawn.rotation ?? 0);
   if (!widthChanged && !heightChanged && !reposition && !rotated) return;
-  return {
-    ...node,
-    ...(reposition ? { x: placement.x, y: placement.y } : {}),
-    ...(widthChanged ? { width, widthMode: 'fixed' } : {}),
-    ...(heightChanged ? { height, heightMode: 'fixed' } : {}),
-    ...(rotated ? { rotation } : {}),
-  };
+  let next = reposition ? withLocalPosition(node, placement, box) : node;
+  if (rotated) next = bindDesignVariable(next, 'rotation', undefined, rotation);
+  if (widthChanged) next = bindDesignVariable({ ...next, widthMode: 'fixed' }, 'width', undefined, width);
+  if (heightChanged && next.kind !== 'text') next = bindDesignVariable({ ...next, heightMode: 'fixed' }, 'height', undefined, height);
+  return next;
 }
 
 type LayerUpdate = Extract<DesignEdit, { kind: 'update' }>;
+export type DesignEditGeometry = Readonly<{ projected: DesignDocument; scene: DesignScene }>;
 
-function constrainedWidth(node: DesignNode, width: number) {
+export function constrainDesignWidth(node: DesignNode, width: number) {
   return Math.min(node.maxWidth ?? Infinity, Math.max(node.minWidth ?? 0, width));
 }
 
 export function planDesignLayerUpdate(
-  document: DesignDocument, nodeId: string, node: DesignNode, baseSize?: Pick<Bounds, 'width' | 'height'>, resources?: DesignLibraryResources,
+  document: DesignDocument, nodeId: string, node: DesignNode, geometry?: DesignEditGeometry,
 ): LayerUpdate[] {
   const current = document.nodes[nodeId];
   const update: LayerUpdate = { kind: 'update', nodeId, node };
   if (current.kind !== 'frame' || !current.group || node.kind !== 'frame') return [update];
+  const projected = geometry?.projected ?? document;
+  const drawn = projected.nodes[nodeId];
+  const baseSize = geometry?.scene[nodeId];
 
-  const changesWidth = node.widthMode === 'fixed' && (node.width !== current.width || node.widthMode !== current.widthMode);
-  const changesHeight = node.heightMode === 'fixed' && (node.height !== current.height || node.heightMode !== current.heightMode);
+  const changesWidth = node.widthMode === 'fixed' && (node.width !== current.width || node.widthMode !== current.widthMode
+    || node.variableIds?.width !== current.variableIds?.width);
+  const changesHeight = node.heightMode === 'fixed' && (node.height !== current.height || node.heightMode !== current.heightMode
+    || node.variableIds?.height !== current.variableIds?.height);
   // Use the stored dimensions for fixed axes so the layout engine's float32 rounding does not accumulate.
-  const beforeWidth = (current.widthMode ?? 'fixed') === 'fixed' ? constrainedWidth(current, current.width) : baseSize?.width || current.width;
-  const beforeHeight = (current.heightMode ?? 'fixed') === 'fixed' ? current.height : baseSize?.height || current.height;
+  const beforeWidth = (current.widthMode ?? 'fixed') === 'fixed' && !current.variableIds?.width
+    ? constrainDesignWidth(drawn, current.width) : baseSize?.width || drawn.width;
+  const beforeHeight = (current.heightMode ?? 'fixed') === 'fixed' && !current.variableIds?.height
+    ? current.height : baseSize?.height || current.height;
   const scale = {
-    x: changesWidth ? constrainedWidth(node, node.width) / beforeWidth : 1,
+    x: changesWidth ? constrainDesignWidth(drawn, node.width) / beforeWidth : 1,
     y: changesHeight ? node.height / beforeHeight : 1,
   };
   if (scale.x === 1 && scale.y === 1) return [update];
 
-  const edits: LayerUpdate[] = [{ ...update, node: node.layout ? { ...node, layout: scaleLayout(node.layout, scale) } : node }];
+  const layout = node.layout && scaleLayout(node.layout, scale, node.layout === current.layout && drawn.kind === 'frame' ? drawn.layout : undefined);
+  const edits: LayerUpdate[] = [{ ...update, node: layout ? { ...node, layout } : node }];
   function scaleChild(id: string, parentScale: Point) {
     const child = document.nodes[id];
-    const localScale = scaleAlongRotatedAxes(parentScale, child.rotation ?? 0);
-    const source = child.kind === 'frame' && child.instanceOf ? designResourceNode(document, child.instanceOf, resources) : undefined;
-    const definition = source?.kind === 'frame' ? source : undefined;
-    const inheritedWidth = constrainedWidth(child, definition && !child.widthMode ? definition.width : child.width);
-    const width = inheritedWidth * localScale.x;
-    const x = scaleCenterOrigin(child.x, inheritedWidth, width, parentScale.x);
-    const horizontal = { x, width,
-      minWidth: child.minWidth === undefined ? undefined : child.minWidth * localScale.x,
-      maxWidth: child.maxWidth === undefined ? undefined : child.maxWidth * localScale.x };
-    if (child.kind === 'text') {
-      const text = { ...child, ...horizontal, y: child.y * parentScale.y, fontSize: child.fontSize * localScale.y,
-        runs: child.runs?.map((run) => run.fontSize === undefined ? run : { ...run, fontSize: run.fontSize * localScale.y }),
-        letterSpacing: child.letterSpacing === undefined ? undefined : child.letterSpacing * localScale.x };
+    const drawn = projected.nodes[id];
+    const localScale = scaleAlongRotatedAxes(parentScale, drawn.rotation ?? 0);
+    const beforeWidth = constrainDesignWidth(drawn, drawn.width);
+    const width = beforeWidth * localScale.x;
+    const horizontal = { x: scaleCenterOrigin(drawn.x, beforeWidth, width, parentScale.x), width,
+      minWidth: drawn.minWidth === undefined ? undefined : drawn.minWidth * localScale.x,
+      maxWidth: drawn.maxWidth === undefined ? undefined : drawn.maxWidth * localScale.x };
+    const before = { ...drawn, width: beforeWidth };
+    if (child.kind === 'text' && drawn.kind === 'text') {
+      const fontSize = drawn.fontSize * localScale.y;
+      const letterSpacing = drawn.letterSpacing === undefined ? undefined : drawn.letterSpacing * localScale.x;
+      const scaleRuns = (runs: DesignText['runs']) => localScale.y === 1 ? runs
+        : runs?.map((run) => run.fontSize === undefined ? run : { ...run, fontSize: run.fontSize * localScale.y });
+      const scaled = { ...horizontal, y: drawn.y * parentScale.y, fontSize, letterSpacing };
       if (localScale.y !== parentScale.y) {
-        const hug = child.widthMode === 'hug';
-        const before = measureDesignText(child, hug ? undefined : child.width);
-        const after = measureDesignText(text, hug ? undefined : width);
-        text.y = scaleCenterOrigin(child.y, before.height, after.height, parentScale.y);
-        if (hug) text.x = scaleCenterOrigin(child.x, before.width, after.width, parentScale.x);
+        const hug = drawn.widthMode === 'hug';
+        const size = measureDesignText(drawn, hug ? undefined : drawn.width);
+        const after = measureDesignText({ ...drawn, ...scaled, runs: scaleRuns(drawn.runs) }, hug ? undefined : width);
+        scaled.y = scaleCenterOrigin(drawn.y, size.height, after.height, parentScale.y);
+        if (hug) scaled.x = scaleCenterOrigin(drawn.x, size.width, after.width, parentScale.x);
       }
-      edits.push({ kind: 'update', nodeId: id, node: text });
+      edits.push({ kind: 'update', nodeId: id, node: { ...applyScaledGeometry(child, before, scaled), runs: scaleRuns(child.runs) } });
       return;
     }
-    const inheritedHeight = definition && !child.heightMode ? definition.height : child.height;
-    const height = inheritedHeight * localScale.y;
-    const scaled = {
-      ...child, ...horizontal, y: scaleCenterOrigin(child.y, inheritedHeight, height, parentScale.y), height,
-      widthMode: definition && localScale.x !== 1 ? child.widthMode ?? (definition.widthMode === 'hug' ? 'hug' : 'fixed') : child.widthMode,
-      heightMode: definition && localScale.y !== 1 ? child.heightMode ?? (definition.heightMode === 'hug' ? 'hug' : 'fixed') : child.heightMode,
-    } as const;
-    edits.push({ kind: 'update', nodeId: id, node: scaled.kind === 'frame' && scaled.layout
-      ? { ...scaled, layout: scaleLayout(scaled.layout, localScale) } : scaled });
+    if (drawn.kind === 'text') return;
+    const height = drawn.height * localScale.y;
+    let scaled = applyScaledGeometry(child, before, { ...horizontal, y: scaleCenterOrigin(drawn.y, drawn.height, height, parentScale.y), height });
+    if (scaled.kind === 'frame') {
+      if (scaled.instanceOf) scaled = { ...scaled,
+        widthMode: localScale.x !== 1 ? scaled.widthMode ?? drawn.widthMode ?? 'fixed' : scaled.widthMode,
+        heightMode: localScale.y !== 1 ? scaled.heightMode ?? drawn.heightMode ?? 'fixed' : scaled.heightMode,
+      };
+      if (scaled.layout) scaled = { ...scaled, layout: scaleLayout(scaled.layout, localScale, drawn.kind === 'frame' ? drawn.layout : undefined) };
+    }
+    edits.push({ kind: 'update', nodeId: id, node: scaled });
     if (child.kind === 'frame') child.childIds.forEach((id) => scaleChild(id, localScale));
   }
   node.childIds.forEach((id) => scaleChild(id, scale));
   return edits;
+}
+
+type ScaledField = 'x' | 'y' | 'width' | 'height' | 'minWidth' | 'maxWidth' | 'fontSize' | 'letterSpacing';
+type ScaledGeometry = Partial<Record<ScaledField, number | undefined>>;
+
+function applyScaledGeometry<T extends DesignNode>(node: T, before: ScaledGeometry, scaled: ScaledGeometry): T {
+  const updates: ScaledGeometry = {};
+  for (const field of Object.keys(scaled) as ScaledField[]) {
+    if (before[field] !== scaled[field]) updates[field] = scaled[field];
+  }
+  if (!validDesignWidthLimits({ ...node, ...updates })) {
+    // A bound minimum of zero may stay at zero while the new maximum crosses its authored fallback.
+    updates.minWidth = scaled.minWidth;
+    updates.maxWidth = scaled.maxWidth;
+  }
+  // A scaled value can equal its old local fallback while differing from the value on the canvas.
+  return (Object.keys(updates) as ScaledField[]).reduce((current, field) => bindDesignVariable(current, field, undefined), { ...node, ...updates });
 }
 
 function scaleAlongRotatedAxes(scale: Point, rotation: number): Point {
@@ -204,13 +246,20 @@ function scaleCenterOrigin(origin: number, size: number, nextSize: number, scale
   return origin * scale + (size * scale - nextSize) / 2;
 }
 
-function scaleLayout(layout: DesignLayout, { x: scaleX, y: scaleY }: Point): DesignLayout {
-  const { padding, paddingX = padding, paddingY = padding, paddingSides } = layout;
-  return {
-    ...layout, gap: layout.gap * (layout.direction === 'horizontal' ? scaleX : scaleY),
-    paddingX: paddingX * scaleX, paddingY: paddingY * scaleY,
-    paddingSides: paddingSides && [paddingSides[0] * scaleY, paddingSides[1] * scaleX, paddingSides[2] * scaleY, paddingSides[3] * scaleX],
-  };
+function scaleLayout(layout: DesignLayout, { x: scaleX, y: scaleY }: Point, resolved = layout): DesignLayout {
+  let next = layout;
+  function scaleField(field: DesignVariableField, before: number, factor: number) {
+    const value = before * factor;
+    // Compare with the drawn value so unchanged axes retain their bindings, even with different fallbacks.
+    if (value !== before) next = bindDesignVariable(next, field, undefined, value);
+  }
+  scaleField('gap', resolved.gap, layout.direction === 'horizontal' ? scaleX : scaleY);
+  scaleField('paddingX', resolved.paddingX ?? resolved.padding, scaleX);
+  scaleField('paddingY', resolved.paddingY ?? resolved.padding, scaleY);
+  layout.paddingSides?.forEach((padding, index) => {
+    scaleField(designPaddingVariableFields[index], resolved.paddingSides?.[index] ?? padding, index % 2 ? scaleX : scaleY);
+  });
+  return next;
 }
 
 export function changeDesignLayout(
@@ -231,7 +280,7 @@ export function changeDesignLayout(
 }
 
 export function dropDesignLayer(
-  document: DesignDocument, scene: DesignScene, nodeId: string, { parentId, beforeId, center }: DesignLayerDestination,
+  document: DesignDocument, scene: DesignScene, nodeId: string, { parentId, beforeId, center }: DesignLayerDestination, projected = document,
 ): DesignEdit[] {
   if (!canDropDesignLayer(document, scene, nodeId, parentId)) return [];
   const box = scene[nodeId];
@@ -241,32 +290,32 @@ export function dropDesignLayer(
   const { ids } = designLayerOrder(document, parentId);
   if (box.parentId === parentId) {
     if (center) {
-      const edit = moveDesignLayer(document, scene, nodeId, position);
+      const edit = moveDesignLayer(document, scene, nodeId, position, projected);
       return edit ? [edit] : [];
     }
     return changesDesignLayerOrder(ids, nodeId, beforeId) ? [{ kind: 'reorder', nodeId, beforeId }] : [];
   }
 
   const node = document.nodes[nodeId];
-  const target = parentId ? document.nodes[parentId] : undefined;
+  const target = parentId ? projected.nodes[parentId] : undefined;
   const parent = target?.kind === 'frame' ? target : undefined;
   const layout = parent?.layout;
-  const inFlow = layout && participatesInDesignFlow(node, nodeId, parent);
+  const inFlow = layout && participatesInDesignFlow(projected.nodes[nodeId], nodeId, parent);
   const nextBeforeId = center && inFlow
-    ? designFlowBeforeId(scene, ids.filter((id) => participatesInDesignFlow(document.nodes[id], id, parent)), nodeId, layout, local)
+    ? designFlowBeforeId(scene, ids.filter((id) => participatesInDesignFlow(projected.nodes[id], id, parent)), nodeId, layout, local)
     : beforeId;
   const next = inFlow ? node : placeFreeLayer(node, box,
     destination && !center ? fitPosition(position.x, box.width, destination.width) : position.x,
     destination && !center ? fitPosition(position.y, box.height, destination.height) : position.y);
   return [
     { kind: 'reparent', nodeId, parentId, beforeId: nextBeforeId },
-    { kind: 'update', nodeId, node: { ...next, absolute: layout ? next.absolute : undefined, ...orientationInParent(box, destination) } },
+    { kind: 'update', nodeId, node: { ...orientInParent(next, projected.nodes[nodeId], box, destination), absolute: layout ? next.absolute : undefined } },
   ];
 }
 
-export function planDesignCanvasDrop(document: DesignDocument, scene: DesignScene, id: string, center: Point): DesignCanvasDrop {
-  const parentId = findDesignFrameAtPoint(document, scene, center, id);
-  const edits = dropDesignLayer(document, scene, id, { parentId, beforeId: null, center });
+export function planDesignCanvasDrop(document: DesignDocument, scene: DesignScene, id: string, center: Point, projected = document): DesignCanvasDrop {
+  const parentId = findDesignFrameAtPoint(projected, scene, center, id);
+  const edits = dropDesignLayer(document, scene, id, { parentId, beforeId: null, center }, projected);
   const change = edits[0];
   const order = change?.kind === 'reparent' || change?.kind === 'reorder' ? { parentId, beforeId: change.beforeId } : undefined;
   return { id, center, order, edits };
@@ -287,10 +336,19 @@ export function previewDesignCanvasDrop(document: DesignDocument, scene: DesignS
 
 export function placeFreeLayer(node: DesignNode, box: DesignLayerBox, x: number, y: number): DesignNode {
   return {
-    ...node, x: roundDesignValue(x), y: roundDesignValue(y),
+    ...withLocalPosition(node, { x: roundDesignValue(x), y: roundDesignValue(y) }),
     ...(node.widthMode === 'fill' ? { width: Math.max(1, box.width), widthMode: 'fixed' } : {}),
     ...(node.kind !== 'text' && node.heightMode === 'fill' ? { height: Math.max(1, box.height), heightMode: 'fixed' } : {}),
   };
+}
+
+function orientInParent(node: DesignNode, projected: DesignNode, box: DesignLayerBox, parent?: DesignLayerBox): DesignNode {
+  const orientation = orientationInParent(box, parent);
+  const rotation = normalizeDesignRotation(orientation.rotation ?? 0);
+  if (node.variableIds?.rotation && rotation === roundDesignValue(projected.rotation ?? 0)) {
+    return { ...node, flipX: orientation.flipX, flipY: orientation.flipY };
+  }
+  return bindDesignVariable({ ...node, ...orientation }, 'rotation', undefined, rotation);
 }
 
 function fitPosition(position: number, layerSize: number, frameSize: number) {
@@ -306,18 +364,18 @@ function alignmentSettings(mode: Alignment) {
   return { axis, size, distributed, factor } as const;
 }
 
-export function alignDesignLayerToFrame(document: DesignDocument, scene: DesignScene, nodeId: string, mode: Alignment): DesignEdit[] {
+export function alignDesignLayerToFrame(document: DesignDocument, scene: DesignScene, nodeId: string, mode: Alignment, projected = document): DesignEdit[] {
   const box = scene[nodeId];
   const { axis, size, distributed, factor } = alignmentSettings(mode);
-  if (!box?.parentId || box.locked || distributed || isFlowChild(document, scene, nodeId)) return [];
+  if (!box?.parentId || box.locked || distributed || isFlowChild(projected, scene, nodeId)) return [];
   const parent = scene[box.parentId];
-  const outline = transformedBounds({ ...box, ...layerTransform(box, document.nodes[nodeId]) });
+  const outline = layerOutline(box, projected.nodes[nodeId]);
   const delta = (parent[size] - outline[size]) * factor - outline[axis];
   if (Math.abs(delta) < 0.005) return [];
-  return [{ kind: 'move', nodeId, x: box.x, y: box.y, [axis]: roundDesignValue(box[axis] + delta) }];
+  return [positionEdit(document, nodeId, box, { x: box.x, y: box.y, [axis]: roundDesignValue(box[axis] + delta) })];
 }
 
-export function alignDesignLayers(scene: DesignScene, ids: readonly string[], mode: Alignment): DesignEdit[] {
+export function alignDesignLayers(document: DesignDocument, scene: DesignScene, ids: readonly string[], mode: Alignment): DesignEdit[] {
   const bounds = unionBounds(ids.map((id) => scene[id].paintBounds));
   if (!bounds || ids.length < 2) return [];
   const { axis, size, distributed, factor } = alignmentSettings(mode);
@@ -334,7 +392,7 @@ export function alignDesignLayers(scene: DesignScene, ids: readonly string[], mo
     const delta = target - box[axis];
     if (Math.abs(delta) < 0.005) return [];
     const { x, y } = movePositions(scene, [nodeId], axis === 'x' ? { x: delta, y: 0 } : { x: 0, y: delta })[nodeId];
-    return [{ kind: 'move', nodeId, x, y }];
+    return [positionEdit(document, nodeId, scene[nodeId], { x, y })];
   });
 }
 
@@ -351,11 +409,15 @@ export function duplicateDesignLayers(document: DesignDocument, scene: DesignSce
   function copy(source: string, parentId: string | null, offset: number): string {
     const nodeId = mapping.get(source)!;
     const original = document.nodes[source];
-    const node = { ...original, x: original.x + offset, y: original.y + offset };
+    const node = offset ? withLocalPosition(original, {
+      x: (original.variableIds?.x ? scene[source].x : original.x) + offset,
+      y: (original.variableIds?.y ? scene[source].y : original.y) + offset,
+    }) : original;
     if (node.kind === 'frame' && node.component) {
       edits.push({ kind: 'insert', nodeId, parentId, node: {
         kind: 'frame', instanceOf: source, childIds: [], name: node.name, x: node.x, y: node.y,
         width: node.width, height: node.height, absolute: node.absolute, rotation: node.rotation,
+        variableIds: node.variableIds?.rotation ? { rotation: node.variableIds.rotation } : undefined,
         flipX: node.flipX, flipY: node.flipY, hidden: node.hidden, locked: node.locked,
       } });
       return nodeId;
@@ -385,17 +447,17 @@ export function canGroupDesignLayers(document: DesignDocument, scene: DesignScen
 
 export function groupDesignLayers(
   document: DesignDocument, scene: DesignScene, ids: readonly string[], name: string,
-  frame: Pick<DesignFrame, 'group' | 'component' | 'layout' | 'maskId'> = { group: true },
+  frame: Pick<DesignFrame, 'group' | 'component' | 'layout' | 'maskId'> = { group: true }, projected = document,
 ) {
   const id = crypto.randomUUID();
   const parentId = scene[ids[0]].parentId;
   const parent = parentId ? document.nodes[parentId] : undefined;
   const siblings = parent?.kind === 'frame' ? parent.childIds : document.rootIds;
   const order = siblings.filter((childId) => ids.includes(childId));
-  const flows = isFlowChild(document, scene, ids[0]);
+  const flows = isFlowChild(projected, scene, ids[0]);
   const bounds = unionBounds(order.map((childId) => {
     const box = scene[childId];
-    return transformedBounds({ ...box, ...layerTransform(box, document.nodes[childId]) });
+    return transformedBounds({ ...box, ...layerTransform(box, projected.nodes[childId]) });
   }));
   if (!bounds) return { id, edits: [] };
   const edits: DesignEdit[] = [{
@@ -415,53 +477,25 @@ export function groupDesignLayers(
   return { id, edits };
 }
 
-export function ungroupDesignLayer(document: DesignDocument, scene: DesignScene, nodeId: string, group: DesignFrame): DesignEdit[] {
+export function ungroupDesignLayer(document: DesignDocument, scene: DesignScene, nodeId: string, group: DesignFrame, projected = document): DesignEdit[] {
   const parentId = scene[nodeId].parentId;
   const parent = parentId ? document.nodes[parentId] : undefined;
   const parentBox = parentId ? scene[parentId] : undefined;
   const absolute = parent?.kind === 'frame' && parent.layout && group.absolute;
+  const { opacity = 1, hidden } = projected.nodes[nodeId];
   const edits: DesignEdit[] = [];
   for (const childId of group.childIds) {
     const child = document.nodes[childId];
     const box = scene[childId];
     const center = toLocal(parentBox, toWorld(box, { x: box.width / 2, y: box.height / 2 }));
-    const next = placeFreeLayer(child, box, center.x - box.width / 2, center.y - box.height / 2);
+    let next = placeFreeLayer(child, box, center.x - box.width / 2, center.y - box.height / 2);
+    if (opacity !== 1) next = bindDesignVariable(next, 'opacity', undefined, opacity * (projected.nodes[childId].opacity ?? 1));
+    if (hidden) next = bindDesignVariable(next, 'hidden', undefined, true);
     edits.push({ kind: 'reparent', nodeId: childId, parentId, beforeId: nodeId }, {
       kind: 'update', nodeId: childId, node: {
-        ...next, ...orientationInParent(box, parentBox), absolute: absolute || child.absolute,
-        opacity: (group.opacity ?? 1) * (child.opacity ?? 1), hidden: group.hidden || child.hidden,
+        ...orientInParent(next, projected.nodes[childId], box, parentBox), absolute: absolute || child.absolute,
       },
     });
   }
   return [...edits, { kind: 'remove', nodeId }];
-}
-
-export type DesignGuide = Readonly<{ axis: 'x' | 'y'; at: number; start: number; end: number }>;
-
-export function snapDesignDelta(moving: Bounds, neighbors: readonly Bounds[], delta: Point, tolerance: number) {
-  const guides: DesignGuide[] = [];
-  function snap(axis: 'x' | 'y'): number {
-    const size = axis === 'x' ? 'width' : 'height';
-    const other = axis === 'x' ? 'y' : 'x';
-    const otherSize = axis === 'x' ? 'height' : 'width';
-    let best = tolerance;
-    let offset = 0;
-    let guide: DesignGuide | undefined;
-    for (const neighbor of neighbors) {
-      for (const anchor of [0, 0.5, 1]) {
-        for (const target of [0, 0.5, 1]) {
-          const at = neighbor[axis] + neighbor[size] * target;
-          const difference = at - (moving[axis] + delta[axis] + moving[size] * anchor);
-          if (Math.abs(difference) >= best) continue;
-          best = Math.abs(difference);
-          offset = difference;
-          guide = { axis, at, start: Math.min(neighbor[other], moving[other] + delta[other]),
-            end: Math.max(neighbor[other] + neighbor[otherSize], moving[other] + delta[other] + moving[otherSize]) };
-        }
-      }
-    }
-    if (guide) guides.push(guide);
-    return delta[axis] + offset;
-  }
-  return { point: { x: snap('x'), y: snap('y') }, guides };
 }

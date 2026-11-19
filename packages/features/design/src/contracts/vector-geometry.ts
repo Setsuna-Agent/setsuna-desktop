@@ -6,6 +6,9 @@ export const defaultDesignPolygonSides = 5;
 export const maxDesignPathAnchors = 512;
 export const maxDesignSvgPaths = 512;
 export const designSvgNumberPattern = '[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?';
+export const designBrushPresets = ['tapered', 'flat', 'dry'] as const;
+export const designPencilPresets = ['smooth', 'wavy', 'rough'] as const;
+export const designFreehandPresets = [...designBrushPresets, ...designPencilPresets] as const;
 
 export const designIconNames = [
   'heart', 'star', 'house', 'search', 'user', 'users', 'bell', 'mail', 'message-circle',
@@ -18,7 +21,10 @@ export const designIconNames = [
 export type DesignIconName = (typeof designIconNames)[number];
 export type DesignVectorPoint = Readonly<{ x: number; y: number }>;
 export type DesignPathAnchor = DesignVectorPoint & Readonly<{ incoming?: DesignVectorPoint; outgoing?: DesignVectorPoint }>;
-export type DesignPathGeometry = Readonly<{ kind: 'path'; anchors: readonly DesignPathAnchor[]; closed: boolean }>;
+export type DesignFreehandStyle = Readonly<{ preset: (typeof designFreehandPresets)[number]; width: number }>;
+export type DesignPathGeometry = Readonly<{
+  kind: 'path'; anchors: readonly DesignPathAnchor[]; closed: boolean; freehand?: DesignFreehandStyle; endMarker?: 'arrow';
+}>;
 export type DesignSvgMatrix = readonly [number, number, number, number, number, number];
 export type DesignSvgViewBox = DesignVectorPoint & Readonly<{ width: number; height: number }>;
 export type DesignSvgPath = Readonly<{
@@ -35,6 +41,12 @@ export type DesignVectorGeometry = DesignPathGeometry
   | Readonly<{ kind: 'polygon'; sides: number }>
   | Readonly<{ kind: 'icon'; icon: DesignIconName }>
   | DesignSvgGeometry;
+
+export function isStraightDesignPath({ anchors, closed, freehand }: DesignPathGeometry): boolean {
+  if (closed || freehand || anchors.length !== 2) return false;
+  const [start, end] = anchors;
+  return !start.incoming && !start.outgoing && !end.incoming && !end.outgoing && (start.x !== end.x || start.y !== end.y);
+}
 
 export function parseDesignSvgNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 10_000_000) return value;

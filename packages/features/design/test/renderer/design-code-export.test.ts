@@ -3,7 +3,7 @@ import { Util } from 'konva/lib/Util.js';
 import { expect, it, vi } from 'vitest';
 import { loadYoga } from 'yoga-layout/load';
 import { applyDesignEdits } from '../../src/contracts/apply-design-edits.js';
-import { designDocumentCodec } from '../../src/contracts/index.js';
+import { designDocumentCodec, designDocumentVersion } from '../../src/contracts/index.js';
 import { dropDesignLayer, planDesignLayerUpdate, transformDesignLayer } from '../../src/renderer/design-canvas-edits.js';
 import { resolveDesignScene } from '../../src/renderer/design-layout.js';
 import { measureDesignText } from '../../src/renderer/design-text.js';
@@ -19,13 +19,16 @@ it('exports plain text with the same hyphen and whitespace breaks as the canvas'
   const canvasProbe = vi.spyOn(Util, 'isCanvasFarblingActive').mockReturnValue(false);
   try {
     const document = designDocumentCodec.parse({ schemaVersion: 5, documentId: 'caption', rootIds: ['label'], nodes: {
-      label: { kind: 'text', name: 'Caption', x: 0, y: 0, width: 60, fontSize: 10, text: 'aa-bbbbb c' },
+      label: { kind: 'text', name: 'Caption', x: 0, y: 0, width: 60, fontSize: 10, fontWeight: 200,
+        fontStyle: 'italic', text: 'aa-bbbbb c' },
     } });
     const scene = resolveDesignScene(await loadYoga(), document, measureDesignText);
     const selection = { document, scene, ids: document.rootIds };
     const svg = renderDesignSvg(selection, designExportBounds(selection)!, new Map(), 'Caption');
     const lines = new DOMParser().parseFromString(svg, 'image/svg+xml').querySelectorAll('text');
     expect(Array.from(lines, (line) => line.textContent)).toEqual(['aa-', 'bbbbb', 'c']);
+    expect(Array.from(lines, (line) => [line.getAttribute('font-style'), line.getAttribute('font-weight')]))
+      .toEqual([['italic', '200'], ['italic', '200'], ['italic', '200']]);
   } finally {
     context.mockRestore();
     canvasProbe.mockRestore();
@@ -41,7 +44,7 @@ it('exports inert layer content, typography and image framing in both HTML forma
       frame: { kind: 'frame', x: 300, y: -30, width: 200, height: 100, name, childIds: ['text', 'cover', 'contain'],
         layout: { direction: 'vertical', padding: 8, gap: 4, align: 'start' } },
       text: { kind: 'text', x: 0, y: 0, width: 180, fontSize: 16, text, name: 'Title',
-        fontFamily: 'serif', fontWeight: 600, lineHeight: 1.5, letterSpacing: -0.25, textAlign: 'right' },
+        fontFamily: 'serif', fontWeight: 900, fontStyle: 'italic', lineHeight: 1.5, letterSpacing: -0.25, textAlign: 'right' },
       cover: { kind: 'image', x: 0, y: 0, width: 20, height: 18, assetPath: 'photo.png', crop: { x: 0.2, y: 0.6 } },
       contain: { kind: 'image', x: 0, y: 0, width: 20, height: 18, assetPath: 'photo.png', fit: 'contain', crop: { x: 0.2, y: 0.6 } },
     },
@@ -58,7 +61,7 @@ it('exports inert layer content, typography and image framing in both HTML forma
     expect(html.title).toBe(text);
     expect(html.querySelector('script, [onclick]')).toBeNull();
     expect(html.querySelector('[data-layer="Title"]')?.getAttribute('style'))
-      .toContain('font:600 16px/1.5 Georgia, serif;letter-spacing:-0.25px;text-align:right');
+      .toContain('font:italic 900 16px/1.5 Georgia, serif;letter-spacing:-0.25px;text-align:right');
     expect([...html.querySelectorAll('img')].map((image) => [
       image.style.getPropertyValue('object-fit'), image.style.getPropertyValue('object-position'),
     ])).toEqual([['cover', '20% 60%'], ['contain', '50% 50%']]);
@@ -154,7 +157,7 @@ it('resizes each editable SVG layer and exports only the converted geometry', as
   const box = scene[id];
   const expanded = transformDesignLayer(document, scene, id, { x: box.x, y: box.y, width: box.width * 2 });
   if (!expanded) throw new Error('Expected a resized group.');
-  const resized = applyDesignEdits(document, planDesignLayerUpdate(document, id, expanded, box));
+  const resized = applyDesignEdits(document, planDesignLayerUpdate(document, id, expanded, { projected: document, scene }));
   const resizedScene = resolveDesignScene(yoga, resized, measure);
   for (const childId of group.childIds) {
     expect(resizedScene[childId].x).toBeCloseTo(scene[childId].x * 2);
@@ -169,6 +172,18 @@ it('resizes each editable SVG layer and exports only the converted geometry', as
   const path = html.querySelector('[data-layer="trim"] path');
   expect(path?.getAttribute('transform')).toBe('matrix(1 0 0 1 4 3)');
   expect(path?.getAttribute('stroke-dasharray')).toBe('3 2');
+});
+
+it('preserves an imported arrow-shaped SVG when reopening a v5 draft', async () => {
+  const data = 'M80 6.6 L0 6.6 M12 13.2 L0 6.6 L12 0';
+  const asset = await readDesignSvg({ markup: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 13.2">'
+    + `<path d="${data}" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/></svg>` });
+  const { id, edits } = insertDesignSvg(asset, null, { x: 0, y: 0 }, undefined, 'Imported');
+  const empty = designDocumentCodec.parse({ schemaVersion: 5, documentId: 'imported-svg', rootIds: [], nodes: {} });
+  const saved = applyDesignEdits(empty, edits);
+
+  const reopened = designDocumentCodec.parse({ ...saved, schemaVersion: 5 });
+  expect(reopened.nodes[id]).toMatchObject({ geometry: { kind: 'svg', viewBox: asset.viewBox, paths: [{ data, lineCap: 'round' }] } });
 });
 
 it('round-trips vector geometry and exports open Bézier paths, polygons and icons as SVG', async () => {
@@ -190,13 +205,33 @@ it('round-trips vector geometry and exports open Bézier paths, polygons and ico
   for (const format of ['html', 'html-tailwind'] as const) {
     const html = new DOMParser().parseFromString(renderDesignHtml(selection, bounds, new Map(), 'Vectors', format), 'text/html');
     expect(html.querySelector('svg[data-layer="Curve"] path')?.getAttribute('d')).toBe('M0 0 C10 10 30 10 40 20');
-    const polygon = html.querySelector('svg[data-layer="Polygon"] path')?.getAttribute('d');
+    const polygonPath = html.querySelector('svg[data-layer="Polygon"] path');
+    expect(polygonPath?.getAttribute('stroke-linejoin')).toBe('round');
+    const polygon = polygonPath?.getAttribute('d');
     expect(polygon?.match(/L/g)).toHaveLength(4);
     expect(polygon?.endsWith('Z')).toBe(true);
     const icon = html.querySelector('svg[data-layer="Heart"]');
     expect(icon?.getAttribute('viewBox')).toBe('0 0 24 24');
     expect(icon?.querySelector('path')?.getAttribute('d')).toMatch(/^M.*Z$/);
   }
+});
+
+it('includes the thick arrowhead outside its shaft bounds in the exported drawing', async () => {
+  const document = designDocumentCodec.parse({ schemaVersion: designDocumentVersion, documentId: 'arrow-export', rootIds: ['arrow'], nodes: {
+    arrow: { kind: 'vector', x: 0, y: 0, width: 110, height: 1, strokes: [{ color: '#000000', width: 12 }],
+      geometry: { kind: 'path', endMarker: 'arrow', closed: false, anchors: [{ x: 0, y: 0 }, { x: 1, y: 0 }] } },
+  } });
+  const scene = resolveDesignScene(await loadYoga(), document, () => ({ width: 1, height: 1 }));
+  const selection = { document, scene, ids: document.rootIds };
+  const bounds = designExportBounds(selection)!;
+  const file = new DOMParser().parseFromString(renderDesignSvg(selection, bounds, new Map(), 'Arrow'), 'image/svg+xml');
+  const path = file.querySelector('path')!;
+  const points = [...(path.getAttribute('d') ?? '').matchAll(/[ML](-?[\d.]+) (-?[\d.]+)/gu)].map(([, x, y]) => ({ x: Number(x), y: Number(y) }));
+  expect(points).toHaveLength(5);
+  const vertical = points.map(({ y }) => y);
+  expect(Math.max(...vertical) - Math.min(...vertical)).toBeGreaterThan(12);
+  expect(bounds.y).toBeLessThanOrEqual(Math.min(...vertical) - 6);
+  expect(bounds.y + bounds.height).toBeGreaterThanOrEqual(Math.max(...vertical) + 6);
 });
 
 it('keeps an image fill and ordered visible outlines in the generated files', async () => {
@@ -226,4 +261,52 @@ it('keeps an image fill and ordered visible outlines in the generated files', as
   expect(html).toContain(raster.src);
   expect(html).toContain('mix-blend-mode:multiply');
   expect(html).not.toContain('#df527c');
+});
+
+it('exports gradient and image outlines with the referenced image, clip and blend mode', async () => {
+  const assetPath = 'design-assets/outline.png';
+  const design = designDocumentCodec.parse({ schemaVersion: designDocumentVersion, documentId: 'outlines', rootIds: ['frame'], nodes: {
+    frame: { kind: 'frame', name: 'Frame', x: 0, y: 0, width: 80, height: 50, cornerRadius: 6, childIds: ['tile'],
+      clip: true, strokes: [
+        { color: '#556677', width: 8, alignment: 'outside', opacity: 0.5,
+          gradient: { kind: 'linear', axis: { start: { x: 0.2, y: 0.25 }, end: { x: 0.8, y: 0.75 } },
+            stops: [{ offset: 0, color: '#55667780' }, { offset: 1, color: '#112233' }] } },
+        { color: '#000000', width: 3, alignment: 'inside', image: { assetPath, fit: 'stretch' }, blendMode: 'screen' },
+      ] },
+    tile: { name: 'Tile', kind: 'rectangle', x: 2, y: 3, width: 25, height: 30, cornerRadius: 0 },
+  } });
+  const selection = { document: design, scene: resolveDesignScene(await loadYoga(), design, () => ({ width: 1, height: 1 })), ids: design.rootIds };
+  const bounds = designExportBounds(selection)!;
+  const raster = document.createElement('img');
+  raster.src = 'data:image/png;base64,b3V0bGluZQ==';
+  const load = vi.fn().mockResolvedValue(raster);
+  const images = await loadExportImages(selection, load);
+  expect(load).toHaveBeenCalledExactlyOnceWith(assetPath, { fresh: true });
+
+  const svg = new DOMParser().parseFromString(renderDesignSvg(selection, bounds, images, 'Frame'), 'image/svg+xml');
+  function definitionFor(value: string | null | undefined) {
+    const id = value?.match(/^url\(#([^\s)]+)\)$/u)?.[1];
+    return id ? svg.getElementById(id) : null;
+  }
+  const [gradient, pattern] = svg.querySelectorAll('[data-layer="Frame"] path[stroke]');
+  const mask = definitionFor(gradient.parentElement?.getAttribute('mask'));
+  expect(mask?.localName).toBe('mask');
+  expect(mask?.querySelector('path')?.getAttribute('d')).toMatch(/^\s*[Mm]/u);
+  const gradientDefinition = definitionFor(gradient.getAttribute('stroke'));
+  const points = ['x1', 'y1', 'x2', 'y2'].map((axis) => Number(gradientDefinition?.getAttribute(axis)));
+  expect(points).toEqual([11.2, 8.5, 68.8, 41.5]);
+  expect(gradientDefinition?.querySelector('stop')?.getAttribute('stop-opacity')).toBe('0.251');
+  const clip = definitionFor(pattern.parentElement?.getAttribute('clip-path'));
+  expect(clip?.localName).toBe('clipPath');
+  expect(clip?.querySelector('path')?.getAttribute('d')).toMatch(/^\s*[Mm]/u);
+  expect(pattern.parentElement?.getAttribute('style')).toBe('mix-blend-mode:screen');
+  expect(definitionFor(pattern.getAttribute('stroke'))?.querySelector('image')?.getAttribute('href')).toBe(raster.src);
+
+  for (const format of ['html', 'html-tailwind'] as const) {
+    const html = new DOMParser().parseFromString(renderDesignHtml(selection, bounds, images, 'Frame', format), 'text/html');
+    const frame = html.querySelector<HTMLElement>('[data-layer="Frame"]')!;
+    expect(frame.style.overflow).not.toBe('hidden');
+    expect(frame.querySelector('svg[style*="mix-blend-mode:screen"] path')?.getAttribute('stroke')).toMatch(/^url\(#/u);
+    expect(html.querySelector('pattern image')?.getAttribute('href')).toBe(raster.src);
+  }
 });

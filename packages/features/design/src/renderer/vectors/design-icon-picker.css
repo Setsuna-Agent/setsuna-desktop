@@ -4,13 +4,33 @@
   gap: 12px;
 }
 
+.design-icon-picker-panel > .design-icon-picker {
+  padding: 10px 12px 12px;
+  gap: 8px;
+}
+
 .design-icon-picker__search,
 .design-icon-picker__scroll {
   padding-inline: var(--design-icon-picker-inset, 0px);
 }
 
+.design-icon-picker-panel .design-icon-picker__scroll {
+  height: clamp(96px, calc(var(--design-tool-popover-height) - 68px), 248px);
+}
+
 .design-icon-picker__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   overflow: hidden;
+}
+
+.design-icon-picker-panel .design-icon-picker__search {
+  scrollbar-gutter: auto;
+}
+
+.design-icon-picker__search > .sd-button {
+  min-height: var(--desktop-panel-search-height);
 }
 
 .design-icon-picker__scroll {
@@ -44,7 +64,7 @@
 
 .design-icon-picker__grid .sd-icon-button:is(:hover, :active, [aria-pressed='true']):not(:disabled) {
   background: transparent;
-  color: light-dark(#5141b7, #cec3ff);
+  color: var(--design-ink, light-dark(#5141b7, #cec3ff));
 }
 
 .design-icon-picker__grid .sd-icon-button svg {
@@ -52,14 +72,9 @@
   height: 22px;
 }
 
-.design-icon-picker__actions {
-  display: flex;
-  align-items: center;
-}
-
 .sd-popover.design-icon-picker__popover {
   --design-icon-picker-inset: 10px;
-  width: min(320px, calc(100vw - 16px));
+  width: min(320px, calc(var(--radix-popover-content-available-width, 100vw) * var(--app-page-scale-inverse, 1)));
   padding: 10px 0;
 }
 

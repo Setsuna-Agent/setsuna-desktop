@@ -1,8 +1,9 @@
 import { designDocumentCodec, designDocumentVersion, type DesignDocument, type DesignDocumentRef, type DesignEdit, type DesignNode } from '../../contracts/index.js';
 import { remapDesignLayerReferences } from '../../contracts/design-references.js';
 import { designResourceId, designResourceParts } from '../../contracts/design-resource-id.js';
+import { bindDesignVariable } from '../../contracts/design-variables.js';
 import { independentLayer } from '../components/design-components.js';
-import { linkedDesignPath, mapDesignStyleIds } from '../components/design-library-resources.js';
+import { linkedDesignPath, mapDesignNodeResourceIds } from '../components/design-library-resources.js';
 import { layerTransform, orientationInParent, roundDesignValue, toLocal, toWorld, transformedBounds, unionBounds,
   type Bounds, type Point } from '../design-geometry.js';
 import { centerDesignLayer } from '../design-insertion.js';
@@ -20,6 +21,11 @@ export function designClipboardSharesRoot(clipboard: LayerClipboard, ref: Design
   return clipboard.projectId === ref.projectId && clipboard.rootId === ref.rootId;
 }
 
+function localClipboardPlacement(node: DesignNode): DesignNode {
+  // Clipboard roots move between coordinate spaces. Descendants keep their locally bound geometry.
+  return (['x', 'y', 'rotation'] as const).reduce((placed, field) => bindDesignVariable(placed, field, undefined), node);
+}
+
 export function copyDesignBranches(
   ref: DesignDocumentRef, document: DesignDocument, scene: DesignScene, ids: readonly string[], origin: Point,
 ): string {
@@ -30,15 +36,15 @@ export function copyDesignBranches(
     idsBySource.set(id, nextId);
     const box = scene[id];
     const original = document.nodes[id];
-    let node = original.kind === 'frame' ? { ...independentLayer(original), childIds: original.childIds.map((child) => copy(child, false)) } : original;
+    let node: DesignNode = original.kind === 'frame' ? { ...independentLayer(original), childIds: original.childIds.map((child) => copy(child, false)) } : original;
     if (topLevel) {
       const center = toWorld(box, { x: box.width / 2, y: box.height / 2 });
-      node = {
+      node = localClipboardPlacement({
         ...node, ...orientationInParent(box),
         x: center.x - origin.x - box.width / 2, y: center.y - origin.y - box.height / 2,
         width: Math.max(0.01, box.width), widthMode: 'fixed',
         ...(node.kind === 'text' ? {} : { height: Math.max(0.01, box.height), heightMode: 'fixed' }),
-      };
+      });
     }
     nodes[nextId] = node;
     return nextId;
@@ -72,7 +78,7 @@ export function pasteDesignBranches(clipboard: LayerClipboard, destination: Desi
   const idsBySource = new Map(Object.keys(document.nodes).map((id) => [id, crypto.randomUUID()]));
   const origin = 'origin' in target ? target.origin : target.center;
   const rootBounds: Bounds[] = [];
-  // The clipboard carries resolved paint and typography. Keep links only when their owner is available at the destination.
+  // The clipboard carries the values resolved on the source board.
   function destinationStyle(id: string): string | undefined {
     if (!sameRoot || !clipboard.path) return;
     const resource = designResourceParts(id);
@@ -85,8 +91,15 @@ export function pasteDesignBranches(clipboard: LayerClipboard, destination: Desi
     const nodeId = idsBySource.get(id)!;
     const source = document.nodes[id];
     const mapped = remapDesignLayerReferences(source, idsBySource);
-    const original = sameDocument ? mapped : mapDesignStyleIds(mapped, destinationStyle);
-    let node = original.kind === 'frame' ? { ...independentLayer(original), childIds: [] } : original;
+    const original = sameDocument ? mapped : mapDesignNodeResourceIds(mapped, destinationStyle);
+    let node: DesignNode = original.kind === 'frame' ? { ...independentLayer(original), childIds: [] } : original;
+    if (!sameDocument && node.kind === 'frame' && node.variableModeIds) {
+      const entries = Object.entries(node.variableModeIds).filter(([key]) => {
+        const owner = designResourceParts(key)?.documentId ?? key;
+        return sameRoot && (owner === destination.documentId || Object.hasOwn(destination.libraries ?? {}, owner));
+      });
+      node = { ...node, variableModeIds: entries.length ? Object.fromEntries(entries) : undefined };
+    }
     if (!sameDocument && source.interaction && 'targetId' in source.interaction && !idsBySource.has(source.interaction.targetId)) {
       node = { ...node, interaction: undefined };
     }
@@ -96,8 +109,8 @@ export function pasteDesignBranches(clipboard: LayerClipboard, destination: Desi
       const height = node.kind === 'text' ? measureDesignText(node, width).height : node.height;
       const pose = layerTransform({ ...node, height }, node);
       const center = toLocal(target.parent, { x: origin.x + node.x + width / 2, y: origin.y + node.y + height / 2 });
-      node = { ...node, ...orientationInParent(pose, target.parent), absolute: target.absolute,
-        x: roundDesignValue(center.x - width / 2), y: roundDesignValue(center.y - height / 2) };
+      node = localClipboardPlacement({ ...node, ...orientationInParent(pose, target.parent), absolute: target.absolute,
+        x: roundDesignValue(center.x - width / 2), y: roundDesignValue(center.y - height / 2) });
       if ('center' in target) rootBounds.push(transformedBounds({ ...layerTransform({ ...node, height }, node), width, height }));
     }
     edits.push({ kind: 'insert', nodeId, parentId, node });

@@ -1,17 +1,32 @@
 import { isValidWorkspaceEntryName, MAX_DESIGN_SVG_BYTES } from '@setsuna-desktop/contracts';
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
+import { parseDesignColor as color } from './design-color.js';
+import { parseDesignLayerContext, parseDesignScriptPath, parseDesignWebDevice, parseDesignWebUrl, parseDesignWebZoom } from './design-content-source.js';
+import { designFontStyles, designFontWeights, type DesignFontStyle, type DesignFontWeight } from './design-fonts.js';
 import { designResourceParts, parseDesignId as nodeId, parseDesignLibraryPath, parseDesignResourceId } from './design-resource-id.js';
+import { parseDesignScriptInputs, type DesignScriptInputs } from './design-script-parameters.js';
+import { parseDesignShaderPaint, type DesignShaderPaint } from './design-shader.js';
+import { restoreLegacyDesignArrow } from './legacy-design-arrow.js';
 import {
-  designIconNames, maxDesignPathAnchors, maxDesignPolygonSides, maxDesignSvgPaths, minDesignPolygonSides,
-  parseDesignSvgNumber, parseDesignSvgPathData,
-  type DesignPathAnchor, type DesignSvgGeometry, type DesignSvgMatrix, type DesignSvgPath, type DesignVectorGeometry,
+  parseDesignModeSelection, parseDesignVariableCollection, parseDesignVariableCollections, validateDesignVariableCollections,
+  type DesignVariableCollection, type DesignVariableCollections, type DesignVariableModeIds,
+} from './design-variable-collections.js';
+import {
+  designLayerVariableFields, designLayoutVariableFields, designTypographyVariableFields, normalizeDesignRotation,
+  parseDesignVariable, parseDesignVariableIds, validDesignWidthLimits,
+  type DesignVariable, type DesignVariableTarget,
+} from './design-variables.js';
+import {
+  designFreehandPresets, designIconNames, maxDesignPathAnchors, maxDesignPolygonSides, maxDesignSvgPaths, minDesignPolygonSides,
+  isStraightDesignPath, parseDesignSvgNumber, parseDesignSvgPathData,
+  type DesignPathAnchor, type DesignPathGeometry, type DesignSvgGeometry, type DesignSvgMatrix, type DesignSvgPath, type DesignVectorGeometry,
 } from './vector-geometry.js';
 
 type Position = Readonly<{ x: number; y: number }>;
 export type DesignSizeMode = 'fixed' | 'hug' | 'fill';
 export type DesignQuad = readonly [number, number, number, number];
 
-export type DesignLayout = Readonly<{
+export type DesignLayout = DesignVariableTarget & Readonly<{
   direction: 'horizontal' | 'vertical';
   gap: number;
   padding: number;
@@ -23,42 +38,48 @@ export type DesignLayout = Readonly<{
   justify?: 'start' | 'center' | 'end' | 'space-between' | 'space-around';
 }>;
 
-export type DesignStroke = Readonly<{
-  color: string;
-  styleId?: string;
-  width: number;
-  opacity?: number;
-  hidden?: boolean;
-  alignment?: 'inside' | 'center' | 'outside';
-  join?: 'miter' | 'round' | 'bevel';
-}>;
-export type DesignShadow = Readonly<{ color: string; styleId?: string; blur: number; x: number; y: number; opacity?: number; hidden?: boolean }>;
+export type DesignShadow = DesignVariableTarget & Readonly<{ color: string; styleId?: string; blur: number; x: number; y: number; opacity?: number; hidden?: boolean }>;
 
 export type DesignGradientStop = Readonly<{ offset: number; color: string; opacity?: number; styleId?: string }>;
-export type DesignGradient = Readonly<{ kind: 'linear' | 'radial'; angle?: number; stops: readonly DesignGradientStop[] }>;
+export const designGradientKinds = ['linear', 'radial', 'angular', 'diamond'] as const;
+export const maxDesignGradientStops = 16;
+export type DesignGradientAxis = Readonly<{ start: Position; end: Position }>;
+export type DesignGradient = Readonly<{
+  kind: (typeof designGradientKinds)[number];
+  angle?: number;
+  /** Layer-relative handles. For non-linear gradients, start is the center. */
+  axis?: DesignGradientAxis;
+  stops: readonly DesignGradientStop[];
+}>;
 export const designFillImageFits = ['cover', 'contain', 'stretch'] as const;
 export type DesignFillImage = Readonly<{ assetPath: string; fit: (typeof designFillImageFits)[number] }>;
 export const designBlendModes = ['normal', 'darken', 'multiply', 'color-burn', 'lighten', 'screen', 'color-dodge', 'overlay',
   'soft-light', 'hard-light', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity'] as const;
 export type DesignBlendMode = (typeof designBlendModes)[number];
-export type DesignFill = Readonly<{
+export type DesignPaint = DesignVariableTarget & Readonly<{
   color: string; styleId?: string; opacity?: number; hidden?: boolean;
-  gradient?: DesignGradient; image?: DesignFillImage; blendMode?: DesignBlendMode;
+  gradient?: DesignGradient; image?: DesignFillImage; shader?: DesignShaderPaint; blendMode?: DesignBlendMode;
+}>;
+export type DesignFill = DesignPaint;
+export type DesignStroke = DesignPaint & Readonly<{
+  width: number;
+  alignment?: 'inside' | 'center' | 'outside';
+  join?: 'miter' | 'round' | 'bevel';
 }>;
 export const maxDesignFills = 32;
 export const maxDesignStrokes = 32;
-export const designFrameFill = '#ffffff';
-export const designTextFill = '#1c1f26';
+const legacyShapeFill = '#ffffff';
+const legacyTextFill = '#1c1f26';
 type Fill = Readonly<{ fills?: readonly DesignFill[] }>;
 export const designFontFamilies = ['system', 'sans', 'serif', 'mono'] as const;
-export const designFontWeights = [300, 400, 500, 600, 700, 800] as const;
 export const designTextAlignments = ['left', 'center', 'right', 'justify'] as const;
 export const designImageFits = ['cover', 'contain'] as const;
 
-export type DesignTypography = Readonly<{
+export type DesignTypography = DesignVariableTarget & Readonly<{
   fontSize: number;
   fontFamily?: string;
-  fontWeight?: (typeof designFontWeights)[number];
+  fontWeight?: DesignFontWeight;
+  fontStyle?: DesignFontStyle;
   lineHeight?: number;
   letterSpacing?: number;
   textAlign?: (typeof designTextAlignments)[number];
@@ -69,7 +90,7 @@ export type DesignTextRun = Readonly<{
   fontFamily?: string; fontSize?: number; fontWeight?: DesignTypography['fontWeight'];
 }>;
 export type DesignStyle =
-  | Readonly<{ kind: 'color'; name: string; color: string }>
+  | DesignVariable
   | Readonly<{ kind: 'text'; name: string; typography: DesignTypography }>;
 
 export type DesignInteraction =
@@ -78,8 +99,9 @@ export type DesignInteraction =
 
 export type DesignContentOverride = Readonly<{ kind: 'text'; text: string }> | Readonly<{ kind: 'image'; assetPath: string }>;
 
-type Layer = Position & Readonly<{
+type Layer = Position & DesignVariableTarget & Readonly<{
   name?: string;
+  context?: string;
   width: number;
   widthMode?: DesignSizeMode;
   minWidth?: number;
@@ -116,6 +138,7 @@ export type DesignFrame = Box & Fill & Readonly<{
   instanceOf?: string;
   maskId?: string;
   contentOverrides?: Readonly<Record<string, DesignContentOverride>>;
+  variableModeIds?: DesignVariableModeIds;
 }>;
 
 export type DesignText = Layer & Fill & DesignTypography & Readonly<{
@@ -136,11 +159,20 @@ export type DesignImage = Box & Readonly<{
   kind: 'image'; assetPath: string; fit?: (typeof designImageFits)[number]; crop?: Position;
 }>;
 export type DesignVector = Box & Fill & Readonly<{ kind: 'vector'; geometry: DesignVectorGeometry }>;
-export type DesignNode = DesignFrame | DesignText | DesignRectangle | DesignEllipse | DesignImage | DesignVector;
+export type DesignWeb = Box & Fill & Readonly<{
+  kind: 'web';
+  url?: string;
+  deviceId?: string;
+  zoom?: number;
+  cornerRadius?: number;
+  cornerRadii?: DesignQuad;
+}>;
+export type DesignScript = Box & Fill & Readonly<{ kind: 'script'; scriptPath?: string; scriptInputs?: DesignScriptInputs }>;
+export type DesignNode = DesignFrame | DesignText | DesignRectangle | DesignEllipse | DesignImage | DesignVector | DesignWeb | DesignScript;
 export type DesignLibraryLinks = Readonly<Record<string, string>>;
 export const maxDesignTreeDepth = 48;
 export const maxExpandedDesignLayers = 20_000;
-export const designDocumentVersion = 5;
+export const designDocumentVersion = 12;
 
 export type DesignDocument = Readonly<{
   schemaVersion: typeof designDocumentVersion;
@@ -148,6 +180,7 @@ export type DesignDocument = Readonly<{
   rootIds: readonly string[];
   nodes: Readonly<Record<string, DesignNode>>;
   styles?: Readonly<Record<string, DesignStyle>>;
+  variableCollections?: DesignVariableCollections;
   libraries?: DesignLibraryLinks;
 }>;
 
@@ -160,20 +193,28 @@ export type DesignEdit =
   | Readonly<{ kind: 'reparent'; nodeId: string; parentId: string | null; beforeId: string | null }>
   | Readonly<{ kind: 'remove'; nodeId: string }>
   | Readonly<{ kind: 'setStyle'; styleId: string; style: DesignStyle | null }>
-  | Readonly<{ kind: 'linkLibrary'; documentId: string; path: string }>;
+  | Readonly<{ kind: 'setVariableCollection'; collectionId: string; collection: DesignVariableCollection | null }>
+  | Readonly<{ kind: 'linkLibrary'; documentId: string; path: string }>
+  | Readonly<{ kind: 'unlinkLibrary'; documentId: string }>;
 
 export const designDocumentCodec = defineRuntimeCodec<DesignDocument>((input) => {
   const value = record(input);
-  if (![1, 2, 3, 4, designDocumentVersion].some((version) => version === value.schemaVersion)) {
+  const version = value.schemaVersion;
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1 || version > designDocumentVersion) {
     throw new Error('Unsupported design document version.');
   }
-  const nodes = Object.fromEntries(Object.entries(record(value.nodes)).map(([id, node]) => [nodeId(id), parseNode(node)]));
+  const legacyPaint = version < 8;
+  // The v10 arrow tool stored its outline as SVG.
+  const legacyArrows = version === 10;
+  const nodes = Object.fromEntries(Object.entries(record(value.nodes)).map(([id, node]) => [nodeId(id), parseNode(node, legacyPaint, legacyArrows)]));
   const document = { schemaVersion: designDocumentVersion, documentId: nodeId(value.documentId), rootIds: idList(value.rootIds), nodes,
     styles: optional(value.styles, (value) => Object.fromEntries(Object.entries(record(value)).map(([id, style]) => [nodeId(id), parseDesignStyle(style)]))),
+    variableCollections: parseDesignVariableCollections(value.variableCollections, value.variableModes, shortName),
     libraries: optional(value.libraries, (value) => Object.fromEntries(Object.entries(record(value)).map(([id, path]) => [nodeId(id), parseDesignLibraryPath(path)]))) } as const;
   if (document.libraries && Object.hasOwn(document.libraries, document.documentId)) throw new Error('A draft cannot link to itself.');
   indexDesignParents(document);
   validateDesignComponents(document);
+  validateDesignVariableCollections(document.styles, document.variableCollections);
   return document;
 });
 
@@ -233,6 +274,11 @@ export function parseDesignEdit(input: unknown): DesignEdit {
   const value = record(input);
   if (value.kind === 'setStyle') return { kind: 'setStyle', styleId: nodeId(value.styleId), style: value.style === null ? null : parseDesignStyle(value.style) };
   if (value.kind === 'linkLibrary') return { kind: 'linkLibrary', documentId: nodeId(value.documentId), path: parseDesignLibraryPath(value.path) };
+  if (value.kind === 'unlinkLibrary') return { kind: 'unlinkLibrary', documentId: nodeId(value.documentId) };
+  if (value.kind === 'setVariableCollection') {
+    return { kind: 'setVariableCollection', collectionId: nodeId(value.collectionId),
+      collection: value.collection === null ? null : parseDesignVariableCollection(value.collection, shortName) };
+  }
   const id = nodeId(value.nodeId);
   switch (value.kind) {
     case 'insert':
@@ -254,13 +300,17 @@ export function parseDesignEdit(input: unknown): DesignEdit {
   }
 }
 
-function parseNode(input: unknown): DesignNode {
+function parseNode(input: unknown, legacyPaint = false, legacyArrows = false): DesignNode {
   const value = record(input);
   const minWidth = optional(value.minWidth, spacing);
   const maxWidth = optional(value.maxWidth, dimension);
-  if (minWidth !== undefined && maxWidth !== undefined && minWidth > maxWidth) throw new Error('Invalid layer width limits.');
+  if (!validDesignWidthLimits({ minWidth, maxWidth })) throw new Error('Invalid layer width limits.');
+  const strokes = parseStrokes(value);
+  // Persist the original implicit paint so reopening or editing an older draft preserves its appearance.
+  const paint = { fills: parseFills(value) ?? (legacyPaint && value.kind !== 'image' ? [{ color: legacyFillColor(value.kind) }] : undefined) };
   const layer = { ...position(value), width: dimension(value.width),
-    name: optional(value.name, text),
+    variableIds: parseDesignVariableIds(value.variableIds, value.variableIds === undefined ? [] : designLayerVariableFields(value.kind, value.geometry)),
+    name: optional(value.name, text), context: optional(value.context, parseDesignLayerContext),
     widthMode: optional(value.widthMode, sizeMode), minWidth, maxWidth,
     rotation: optional(value.rotation, degrees),
     flipX: optional(value.flipX, flag),
@@ -269,11 +319,10 @@ function parseNode(input: unknown): DesignNode {
     hidden: optional(value.hidden, flag),
     locked: optional(value.locked, flag),
     absolute: optional(value.absolute, flag),
-    strokes: parseStrokes(value),
+    strokes: legacyPaint && value.kind === 'vector' ? strokes?.map((stroke) => ({ ...stroke, join: stroke.join ?? 'round' })) : strokes,
     shadow: optional(value.shadow, parseShadow),
     interaction: optional(value.interaction, parseInteraction), componentSlot: optional(value.componentSlot, nodeId),
   };
-  const paint = { fills: parseFills(value) };
   if (value.kind === 'text') {
     const content = text(value.text);
     return { ...layer, ...paint, ...parseTypography(value), kind: 'text', text: content,
@@ -288,6 +337,7 @@ function parseNode(input: unknown): DesignNode {
         component: optional(value.component, flag),
         componentSet: optional(value.componentSet, nodeId), variantName: optional(value.variantName, shortName), maskId: optional(value.maskId, nodeId),
         instanceOf, contentOverrides: optional(value.contentOverrides, parseContentOverrides),
+        variableModeIds: parseDesignModeSelection(value.variableModeIds),
         cornerRadius: optional(value.cornerRadius, spacing),
         cornerRadii: optional(value.cornerRadii, quad),
         clip: optional(value.clip, flag),
@@ -302,14 +352,21 @@ function parseNode(input: unknown): DesignNode {
     case 'image':
       return { ...box, kind: 'image', assetPath: parseAssetPath(value.assetPath), fit: option(value.fit, designImageFits),
         crop: optional(value.crop, (input) => { const { x, y } = record(input); return { x: unitInterval(x), y: unitInterval(y) }; }) };
+    case 'web':
+      return { ...box, ...paint, kind: 'web', url: optional(value.url, parseDesignWebUrl),
+        deviceId: optional(value.deviceId, parseDesignWebDevice), zoom: optional(value.zoom, parseDesignWebZoom),
+        cornerRadius: optional(value.cornerRadius, spacing), cornerRadii: optional(value.cornerRadii, quad) };
+    case 'script':
+      return { ...box, ...paint, kind: 'script', scriptPath: optional(value.scriptPath, parseDesignScriptPath),
+        scriptInputs: optional(value.scriptInputs, parseDesignScriptInputs) };
     case 'vector':
-      return { ...box, ...paint, kind: 'vector', geometry: parseVectorGeometry(value.geometry) };
+      return { ...box, ...paint, kind: 'vector', geometry: parseVectorGeometry(value.geometry, legacyArrows) };
     default:
       throw new Error('Unsupported design layer type.');
   }
 }
 
-function parseVectorGeometry(input: unknown): DesignVectorGeometry {
+function parseVectorGeometry(input: unknown, legacyArrows: boolean): DesignVectorGeometry {
   const value = record(input);
   if (value.kind === 'polygon') {
     const sides = coordinate(value.sides);
@@ -318,11 +375,21 @@ function parseVectorGeometry(input: unknown): DesignVectorGeometry {
     const icon = option(value.icon, designIconNames);
     if (icon) return { kind: 'icon', icon };
   } else if (value.kind === 'svg') {
-    return parseSvgGeometry(value);
+    const svg = parseSvgGeometry(value);
+    return legacyArrows ? restoreLegacyDesignArrow(svg) ?? svg : svg;
   } else if (value.kind === 'path') {
     const closed = flag(value.closed);
     if (Array.isArray(value.anchors) && value.anchors.length >= (closed ? 3 : 2) && value.anchors.length <= maxDesignPathAnchors) {
-      return { kind: 'path', closed, anchors: value.anchors.map(parsePathAnchor) };
+      const freehand = optional(value.freehand, (input) => {
+        const style = record(input);
+        const preset = option(style.preset, designFreehandPresets);
+        if (!preset) throw new Error('Invalid drawing preset.');
+        return { preset, width: dimension(style.width) };
+      });
+      const path: DesignPathGeometry = { kind: 'path', closed, anchors: value.anchors.map(parsePathAnchor), ...(freehand ? { freehand } : undefined) };
+      const endMarker = option(value.endMarker, ['arrow'] as const);
+      if (endMarker && !isStraightDesignPath(path)) throw new Error('An arrow needs two distinct endpoints.');
+      return endMarker ? { ...path, endMarker } : path;
     }
   }
   throw new Error('Invalid design vector geometry.');
@@ -390,13 +457,14 @@ function parseContentOverrides(input: unknown): Readonly<Record<string, DesignCo
 }
 
 function parseLayout(input: unknown): DesignLayout {
-  const { direction, gap, padding, paddingX, paddingY, paddingSides, align, justify, wrap } = record(input);
+  const { direction, gap, padding, paddingX, paddingY, paddingSides, align, justify, wrap, variableIds } = record(input);
   if ((direction !== 'horizontal' && direction !== 'vertical') || (align !== 'start' && align !== 'center' && align !== 'end')) {
     throw new Error('Invalid automatic layout.');
   }
   if (justify !== undefined && justify !== 'start' && justify !== 'center' && justify !== 'end'
     && justify !== 'space-between' && justify !== 'space-around') throw new Error('Invalid layout distribution.');
   return { direction, gap: spacing(gap), padding: spacing(padding), align, justify,
+    variableIds: parseDesignVariableIds(variableIds, designLayoutVariableFields),
     paddingX: optional(paddingX, spacing), paddingY: optional(paddingY, spacing), paddingSides: optional(paddingSides, quad), wrap: optional(wrap, flag) };
 }
 
@@ -407,19 +475,20 @@ function parseStrokes({ strokes, stroke }: Record<string, unknown>): readonly De
 }
 
 function parseStroke(input: unknown): DesignStroke {
-  const { color: paint, width, opacity, hidden, alignment, join, styleId } = record(input);
+  const value = record(input);
+  const { width, alignment, join } = value;
   if (alignment !== undefined && alignment !== 'inside' && alignment !== 'center' && alignment !== 'outside') {
     throw new Error('Invalid stroke alignment.');
   }
   if (join !== undefined && join !== 'miter' && join !== 'round' && join !== 'bevel') throw new Error('Invalid stroke join.');
-  return { color: color(paint), width: dimension(width), opacity: optional(opacity, unitInterval), hidden: optional(hidden, flag), alignment, join,
-    styleId: optional(styleId, parseDesignResourceId) };
+  return { ...parsePaint(value, 'stroke'), width: dimension(width), alignment, join };
 }
 
 function parseShadow(input: unknown): DesignShadow {
-  const { color: paint, blur, x, y, opacity, hidden, styleId } = record(input);
+  const { color: paint, blur, x, y, opacity, hidden, styleId, variableIds } = record(input);
   return { color: color(paint), blur: spacing(blur), x: coordinate(x), y: coordinate(y),
-    opacity: optional(opacity, unitInterval), hidden: optional(hidden, flag), styleId: optional(styleId, parseDesignResourceId) };
+    opacity: optional(opacity, unitInterval), hidden: optional(hidden, flag), styleId: optional(styleId, parseDesignResourceId),
+    variableIds: parseDesignVariableIds(variableIds, ['x', 'y', 'blur', 'opacity']) };
 }
 
 function quad(value: unknown): DesignQuad {
@@ -435,30 +504,45 @@ function optional<T>(value: unknown, parse: (value: unknown) => T): T | undefine
 function parseFills(value: Record<string, unknown>): readonly DesignFill[] | undefined {
   if (value.fills !== undefined) {
     if (!Array.isArray(value.fills) || value.fills.length > maxDesignFills) throw new Error('Invalid design fill stack.');
-    return value.fills.map((entry) => {
-      const fill = record(entry);
-      if (fill.gradient !== undefined && fill.image !== undefined) throw new Error('A fill cannot contain both a gradient and an image.');
-      return { color: color(fill.color), opacity: optional(fill.opacity, unitInterval), hidden: optional(fill.hidden, flag),
-        styleId: optional(fill.styleId, parseDesignResourceId), gradient: optional(fill.gradient, parseGradient),
-        blendMode: option(fill.blendMode, designBlendModes), image: optional(fill.image, (value): DesignFillImage => {
-          const image = record(value);
-          return { assetPath: parseAssetPath(image.assetPath), fit: option(image.fit, designFillImageFits) ?? 'cover' };
-        }) };
-    });
+    return value.fills.map((entry) => parsePaint(record(entry), 'fill'));
   }
   if (value.fill === null) return [];
   if (value.fill === undefined && value.fillOpacity === undefined && value.fillHidden === undefined) return undefined;
-  const fallback = value.kind === 'text' ? designTextFill : designFrameFill;
-  return [{ color: value.fill === undefined ? fallback : color(value.fill),
+  return [{ color: value.fill === undefined ? legacyFillColor(value.kind) : color(value.fill),
     opacity: optional(value.fillOpacity, unitInterval), hidden: optional(value.fillHidden, flag) }];
 }
 
+function parsePaint(value: Record<string, unknown>, kind: 'fill' | 'stroke'): DesignPaint {
+  if (value.gradient !== undefined && value.image !== undefined) throw new Error(`A ${kind} cannot contain both a gradient and an image.`);
+  if (value.shader !== undefined && (kind !== 'fill' || value.gradient !== undefined || value.image !== undefined)) {
+    throw new Error('A shader requires its own fill.');
+  }
+  return { color: color(value.color), opacity: optional(value.opacity, unitInterval), hidden: optional(value.hidden, flag),
+    variableIds: parseDesignVariableIds(value.variableIds, kind === 'stroke' ? ['width', 'opacity'] : ['opacity']),
+    styleId: optional(value.styleId, parseDesignResourceId), gradient: optional(value.gradient, parseGradient),
+    ...(value.shader === undefined ? {} : { shader: parseDesignShaderPaint(value.shader, parseAssetPath) }),
+    blendMode: option(value.blendMode, designBlendModes), image: optional(value.image, (input): DesignFillImage => {
+      const image = record(input);
+      return { assetPath: parseAssetPath(image.assetPath), fit: option(image.fit, designFillImageFits) ?? 'cover' };
+    }) };
+}
+
+function legacyFillColor(kind: unknown): string {
+  return kind === 'text' ? legacyTextFill : legacyShapeFill;
+}
+
 function parseGradient(input: unknown): DesignGradient {
-  const { kind, angle, stops } = record(input);
-  if ((kind !== 'linear' && kind !== 'radial') || !Array.isArray(stops) || stops.length < 2 || stops.length > 16) {
+  const { kind: mode, angle, axis, stops } = record(input);
+  const kind = option(mode, designGradientKinds);
+  if (!kind || !Array.isArray(stops) || stops.length < 2 || stops.length > maxDesignGradientStops) {
     throw new Error('Invalid design gradient.');
   }
-  return { kind, angle: optional(angle, degrees), stops: stops.map((entry) => {
+  return { kind, angle: optional(angle, degrees), axis: optional(axis, (value) => {
+    const { start, end } = record(value);
+    const points = { start: position(record(start)), end: position(record(end)) };
+    if (points.start.x === points.end.x && points.start.y === points.end.y) throw new Error('Invalid design gradient axis.');
+    return points;
+  }), stops: stops.map((entry) => {
     const stop = record(entry);
     return { offset: unitInterval(stop.offset), color: color(stop.color), opacity: optional(stop.opacity, unitInterval), styleId: optional(stop.styleId, parseDesignResourceId) };
   }).sort((a, b) => a.offset - b.offset) };
@@ -466,16 +550,20 @@ function parseGradient(input: unknown): DesignGradient {
 
 function parseTypography(value: Record<string, unknown>): DesignTypography {
   return { fontSize: dimension(value.fontSize), fontFamily: optional(value.fontFamily, shortName),
-    fontWeight: option(value.fontWeight, designFontWeights), lineHeight: optional(value.lineHeight, dimension),
+    fontWeight: option(value.fontWeight, designFontWeights), fontStyle: option(value.fontStyle, designFontStyles),
+    lineHeight: optional(value.lineHeight, dimension),
     letterSpacing: optional(value.letterSpacing, coordinate), textAlign: option(value.textAlign, designTextAlignments) };
 }
 
 function parseDesignStyle(input: unknown): DesignStyle {
   const value = record(input);
   const name = shortName(value.name);
-  if (value.kind === 'color') return { kind: 'color', name, color: color(value.color) };
-  if (value.kind === 'text') return { kind: 'text', name, typography: parseTypography(record(value.typography)) };
-  throw new Error('Invalid design style.');
+  if (value.kind === 'text') {
+    const typography = record(value.typography);
+    return { kind: 'text', name, typography: { ...parseTypography(typography),
+      variableIds: parseDesignVariableIds(typography.variableIds, designTypographyVariableFields) } };
+  }
+  return parseDesignVariable(value, name);
 }
 
 function parseTextRuns(input: unknown, length: number): readonly DesignTextRun[] {
@@ -518,18 +606,12 @@ function unitInterval(value: unknown): number {
 }
 
 function degrees(value: unknown): number {
-  const angle = coordinate(value) % 360;
-  return angle >= 180 ? angle - 360 : angle < -180 ? angle + 360 : angle;
+  return normalizeDesignRotation(coordinate(value));
 }
 
 function sizeMode(value: unknown): DesignSizeMode {
   if (value === 'fixed' || value === 'hug' || value === 'fill') return value;
   throw new Error('Invalid layout sizing mode.');
-}
-
-function color(value: unknown): string {
-  if (typeof value === 'string' && /^#[a-f\d]{6}$/iu.test(value)) return value;
-  throw new Error('Invalid design color.');
 }
 
 export function parseAssetPath(value: unknown): string {

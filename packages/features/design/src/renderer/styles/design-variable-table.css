@@ -1,0 +1,355 @@
+.design-variable-panel {
+  --design-inspector-control-height: 24px;
+  --design-inspector-control-radius: 6px;
+  --design-inspector-gap: 6px;
+  --design-inspector-focus: color-mix(in srgb, var(--design-ink) 9%, var(--app-surface-overlay));
+  --design-paint-swatch-width: 24px;
+  --design-paint-opacity-width: 49px;
+  --design-variable-link-width: 18px;
+  --design-variable-link-height: var(--design-inspector-control-height);
+  --design-accent-soft: var(--design-inspector-focus);
+  --design-line: var(--app-border);
+  /* Derive the fields from the overlay so each cell reads clearly in either theme. */
+  --design-control: color-mix(in srgb, var(--app-surface-overlay) 92%, var(--app-text));
+  --variable-content-inset: 12px;
+  --variable-action-padding: 8px;
+  --variable-name-width: 168px;
+  --variable-value-width: 164px;
+  --variable-actions-width: 34px;
+  display: flex;
+  flex-direction: column;
+  block-size: min(380px, var(--design-tool-popover-height, 380px));
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+.design-variable-panel__toolbar,
+.design-variable-panel__footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding-inline: calc(var(--variable-content-inset) - var(--variable-action-padding)) 8px;
+}
+
+.design-variable-panel__toolbar {
+  gap: 4px;
+}
+
+.design-variable-panel__collections {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-inline-size: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.design-variable-panel__collection,
+.design-variable-panel__rename > .design-inspector__field,
+.design-variable-panel__footer > .sd-button {
+  padding-inline: var(--variable-action-padding);
+}
+
+.design-variable-panel__collection {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 4px;
+  max-inline-size: 168px;
+  padding-block: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.design-variable-panel__collection > span {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.design-variable-panel__collection > svg {
+  flex: none;
+}
+
+.design-variable-panel__collection:is(:hover, [aria-expanded='true']):not(:disabled) {
+  background: var(--app-surface-subtle);
+}
+
+.design-variable-panel__collection[aria-pressed='true'] {
+  color: var(--app-text);
+}
+
+.design-variable-panel__collection:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: -2px;
+}
+
+.design-variable-panel__rename {
+  align-self: center;
+  inline-size: 144px;
+  flex: none;
+}
+
+.design-variable-panel__scroll {
+  flex: 1;
+  min-block-size: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.design-variable-panel__table {
+  inline-size: 100%;
+  min-inline-size: calc(var(--variable-name-width) + var(--design-variable-columns) * var(--variable-value-width) + var(--variable-actions-width));
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+
+.design-variable-panel__name-col {
+  inline-size: var(--variable-name-width);
+}
+
+.design-variable-panel__actions-col {
+  inline-size: var(--variable-actions-width);
+}
+
+.design-variable-panel__table :is(th, td) {
+  padding: 4px;
+  border-block-end: 1px solid var(--app-border);
+  text-align: start;
+  background: var(--app-surface-overlay);
+}
+
+.design-variable-panel__table th {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  padding-block: 3px;
+  background: var(--app-surface-subtle);
+  color: var(--app-text-secondary);
+  font-weight: 600;
+}
+
+.design-variable-panel__table .design-variable-panel__name {
+  position: sticky;
+  inset-inline-start: 0;
+  padding-inline: var(--variable-content-inset) 4px;
+}
+
+.design-variable-panel__table .design-variable-panel__actions {
+  position: sticky;
+  inset-inline-end: 0;
+  padding-inline: 2px;
+  text-align: center;
+}
+
+.design-variable-panel__table .sd-icon-button:where(:not(.design-variable-link, .sd-color-picker__trigger)) {
+  inline-size: var(--design-inspector-control-height);
+  block-size: var(--design-inspector-control-height);
+  vertical-align: middle;
+}
+
+.design-variable-panel__table td:is(.design-variable-panel__name, .design-variable-panel__actions) {
+  z-index: 1;
+}
+
+.design-variable-panel__table th:is(.design-variable-panel__name, .design-variable-panel__actions) {
+  z-index: 3;
+}
+
+.design-variable-panel__column-title :is(.design-inspector__field, .sd-button),
+.design-variable-panel__column-title > span {
+  padding-inline: 3px;
+}
+
+.design-variable-panel__column-title .sd-button {
+  max-inline-size: 100%;
+  min-block-size: var(--design-inspector-control-height);
+  gap: 4px;
+  padding-block: 0;
+  border: 0;
+  color: inherit;
+  font-weight: inherit;
+  vertical-align: middle;
+}
+
+.design-variable-panel__column-title .sd-button > svg {
+  flex: none;
+}
+
+.design-variable-panel__column-title .design-inspector__field .sd-field {
+  font-weight: inherit;
+}
+
+.design-variable-panel__column-title > span {
+  display: block;
+  line-height: var(--design-inspector-control-height);
+}
+
+.design-variable-panel__column-title > span,
+.design-variable-panel__column-title .sd-button > span,
+.design-variable-panel__readonly-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.design-variable-panel__readonly-name,
+.design-variable-panel__cell {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+  min-block-size: var(--design-inspector-control-height);
+  border-radius: var(--design-inspector-control-radius);
+  background-color: var(--design-control);
+}
+
+.design-variable-panel__cell > :first-child {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.design-variable-panel__cell:focus-within {
+  background-color: var(--design-inspector-focus);
+}
+
+.design-variable-panel__cell :is(.design-inspector__field, .sd-textarea) {
+  background-color: transparent;
+}
+
+.design-variable-panel__cell .sd-checkbox {
+  padding-inline: 8px;
+}
+
+.design-variable-panel__readonly-name {
+  gap: 6px;
+  padding-inline: 8px;
+}
+
+.design-variable-panel__readonly-name svg {
+  flex: none;
+}
+
+.design-variable-panel__cell[data-inherited] .sd-field {
+  color: var(--app-text-muted);
+}
+
+.design-variable-panel__cell .design-variable-link {
+  opacity: 0;
+}
+
+.design-variable-panel__cell:is(:hover, :focus-within) .design-variable-link,
+.design-variable-panel__cell .design-variable-link:is(.is-linked, [data-overlay-open]) {
+  opacity: 1;
+}
+
+.design-variable-panel__cell > .design-variable-link {
+  margin-inline-end: 2px;
+}
+
+.design-variable-panel__table .sd-textarea {
+  inline-size: 100%;
+  min-block-size: var(--design-inspector-control-height);
+  block-size: var(--design-inspector-control-height);
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--design-inspector-control-radius);
+  resize: vertical;
+  font-size: inherit;
+  line-height: 18px;
+}
+
+.design-variable-panel .design-variable-panel__context-action {
+  flex: none;
+  inline-size: 20px;
+  min-inline-size: 0;
+  padding: 0;
+  opacity: 0;
+}
+
+.design-variable-panel td:is(:hover, :focus-within) .design-variable-panel__context-action,
+.design-variable-panel .design-variable-panel__context-action:focus-visible {
+  opacity: 1;
+}
+
+.sd-menu.design-variable-row-menu {
+  min-inline-size: 128px;
+}
+
+.design-variable-panel__footer {
+  min-block-size: 36px;
+  border-block-start: 1px solid var(--app-border);
+}
+
+.design-variable-panel__footer > .sd-button {
+  border: 0;
+}
+
+.design-variable-panel__footer:empty {
+  display: none;
+}
+
+.sd-menu.design-variable-alias-menu {
+  --app-menu-item-height: 32px;
+  display: flex;
+  flex-direction: column;
+  inline-size: 240px;
+  max-block-size: min(334px, calc(var(--radix-dropdown-menu-content-available-height, 70vh) * var(--app-page-scale-inverse, 1)));
+  gap: 4px;
+  overflow: hidden;
+}
+
+.design-variable-alias-menu__options {
+  min-block-size: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.design-variable-alias-menu__options .sd-menu__item {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+}
+
+.design-variable-alias-menu__options .sd-menu__item > .sd-menu__text {
+  grid-area: 1 / 2;
+}
+
+.design-variable-alias-menu__options .sd-menu__item > .sd-menu__extra {
+  grid-area: 1 / 1;
+  margin: 0;
+}
+
+.design-variable-alias-menu__choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.design-variable-alias-menu__choice > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.design-variable-alias-menu__swatch {
+  inline-size: 16px;
+  block-size: 16px;
+  flex: none;
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+}
+
+@media (max-width: 520px) {
+  .design-variable-panel {
+    --variable-name-width: 120px;
+  }
+}

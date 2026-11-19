@@ -24,21 +24,26 @@ it('opens through the selected project after navigation commits and keeps the ma
       onOpenFilePanel: (_path, nextRootId) => setRootId(nextRootId!),
     });
     const open = useSidebarSearchFileNavigation({
-      activeProjectId: projectId, activeView: 'chat', workspaceId: projectId, openProjectFile: workspace.openProjectFile,
+      activeProjectId: projectId, activeView: 'chat', workspaceId: projectId, openRootFile: workspace.openRootFile,
       navigation: { changeView: async () => undefined, startProjectThread: async (id) => { setProjectId(id); return true; } },
     });
     return { open, workspace };
   }, { wrapper: ToastProvider });
-  await act(() => view.result.current.open({ projectId: 'B', rootId: 'other', path: 'same.ts', line: 12 }));
+  const target = { projectId: 'B', rootId: 'other' };
+  const flat = 'a\\b.design.json';
+  await act(() => view.result.current.open({ ...target, path: flat, line: 12 }));
   await waitFor(() => expect(view.result.current.workspace.filePreview?.projectId).toBe('B'));
-  expect(readProjectFile).toHaveBeenCalledExactlyOnceWith({ projectId: 'B', rootId: 'other' }, 'same.ts');
-  expect(view.result.current.workspace.fileFocusRequest).toMatchObject({ path: 'same.ts', line: 12 });
+  expect(readProjectFile).toHaveBeenCalledExactlyOnceWith(target, flat);
+  expect(view.result.current.workspace.fileFocusRequest).toMatchObject({ path: flat, line: 12 });
+  await act(() => view.result.current.open({ ...target, path: 'a/b.design.json' }));
+  await act(() => view.result.current.open({ ...target, path: flat }));
+  expect(readProjectFile.mock.calls.map(([, path]) => path)).toEqual([flat, 'a/b.design.json', flat]);
 });
 
 it('does not open a file when leaving the current project is cancelled', async () => {
-  const openProjectFile = vi.fn(async () => true);
+  const openRootFile = vi.fn(async () => true);
   const navigation = { changeView: vi.fn(async () => undefined), startProjectThread: vi.fn(async () => false) };
-  const view = renderHook(() => useSidebarSearchFileNavigation({ activeProjectId: 'A', workspaceId: 'A', activeView: 'chat', navigation, openProjectFile }));
+  const view = renderHook(() => useSidebarSearchFileNavigation({ activeProjectId: 'A', workspaceId: 'A', activeView: 'chat', navigation, openRootFile }));
   await act(() => view.result.current({ projectId: 'B', rootId: 'primary', path: 'same.ts', line: 12 }));
-  expect(openProjectFile).not.toHaveBeenCalled();
+  expect(openRootFile).not.toHaveBeenCalled();
 });

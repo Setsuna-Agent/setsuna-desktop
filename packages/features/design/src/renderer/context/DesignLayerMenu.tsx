@@ -1,6 +1,7 @@
 import { Check, Settings2 } from 'lucide-react';
-import { Checkbox, Dialog, PointMenu, type MenuItem } from '@setsuna-desktop/renderer-ui';
+import { PointMenu, type MenuItem } from '@setsuna-desktop/renderer-ui';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import type { ComponentActions } from '../components/DesignComponentActions.js';
 import type { Point } from '../design-geometry.js';
 import type { DesignCanvasSetting, DesignCanvasSettings } from './design-canvas-settings.js';
 import type { DesignLayerActions, DesignLayerCommand } from './design-layer-commands.js';
@@ -22,13 +23,13 @@ type SettingsControls = Readonly<{
   translate: RendererTranslate;
 }>;
 
-export function DesignLayerMenu({ point, actions, hasSelection, onCopyPng, onCopyHtml, onOpenSettings, onClose, settings, onToggle, translate: t }: SettingsControls & Readonly<{
+export function DesignLayerMenu({ point, actions, hasSelection, components, onCopyPng, onCopyHtml, onClose, settings, onToggle, translate: t }: SettingsControls & Readonly<{
   point: Point;
   actions: DesignLayerActions;
   hasSelection: boolean;
+  components: Pick<ComponentActions, 'library' | 'onInsert'>;
   onCopyPng?: () => void;
   onCopyHtml?: () => void;
-  onOpenSettings(): void;
   onClose(): void;
 }>) {
   const mac = /Mac/u.test(navigator.platform);
@@ -39,12 +40,16 @@ export function DesignLayerMenu({ point, actions, hasSelection, onCopyPng, onCop
   };
   const settingsMenu: MenuItem = {
     key: 'settings', label: t('feature.design.canvasSettings'), icon: <Settings2 size={14} />,
-    children: [...settingsKeys.map((key): MenuItem => ({
+    children: settingsKeys.map((key): MenuItem => ({
       key, label: t(`feature.design.${key}`),
-      icon: settings[key] ? <Check size={14} /> : <span aria-hidden="true" />,
+      extra: settings[key] ? <Check size={14} className="sd-menu__extra" aria-hidden="true" /> : null,
       onClick: ({ domEvent }) => { domEvent.preventDefault(); onToggle(key); },
-    })), divider, { key: 'openSettings', label: t('feature.design.openCanvasSettings'), onClick: onOpenSettings }],
+    })),
   };
+  const insertComponent: MenuItem | null = !hasSelection && components.library.length ? {
+    key: 'insertComponent', label: t('feature.design.insertComponent'),
+    children: components.library.map(({ id, name }) => ({ key: id, label: name, onClick: () => { void components.onInsert(id); } })),
+  } : null;
   return <PointMenu {...point} onClose={onClose} menu={{ items: hasSelection ? [
     command('copy'),
     { key: 'copyAs', label: t('feature.design.copyAs'), disabled: !onCopyPng && !onCopyHtml, children: [
@@ -57,15 +62,5 @@ export function DesignLayerMenu({ point, actions, hasSelection, onCopyPng, onCop
     command('component'), actions.detach ? command('detach') : null, divider,
     ...(['mask', 'removeMask', 'union', 'subtract'] as const).flatMap((key) => actions[key] ? [command(key)] : []),
     command('flipX'), command('flipY'), divider, command('delete'), divider, settingsMenu,
-  ] : [command('paste'), divider, settingsMenu] }} />;
-}
-
-export function DesignCanvasSettingsDialog({ settings, onToggle, onClose, translate: t }: SettingsControls & Readonly<{ onClose(): void }>) {
-  return <Dialog title={t('feature.design.canvasSettings')} width={340} closeLabel={t('feature.design.close')} onClose={onClose}>
-    <div className="design-canvas-settings">
-      {settingsKeys.map((key) => <Checkbox key={key} checked={settings[key]} onChange={() => onToggle(key)}>
-        {t(`feature.design.${key}`)}
-      </Checkbox>)}
-    </div>
-  </Dialog>;
+  ] : [command('paste'), insertComponent, divider, settingsMenu] }} />;
 }

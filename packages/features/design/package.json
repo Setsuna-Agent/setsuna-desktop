@@ -22,6 +22,7 @@
     "@setsuna-desktop/contracts": "workspace:*",
     "@setsuna-desktop/feature-core": "workspace:*",
     "@setsuna-desktop/renderer-ui": "workspace:*",
+    "fontkit": "2.0.4",
     "konva": "^10.0.0",
     "lucide-react": "^0.468.0",
     "paper": "0.17.0",
@@ -33,5 +34,8 @@
   "scripts": {
     "build": "tsc -b tsconfig.build.json",
     "typecheck": "tsc -b tsconfig.build.json --pretty false"
+  },
+  "devDependencies": {
+    "@types/fontkit": "2"
   }
 }

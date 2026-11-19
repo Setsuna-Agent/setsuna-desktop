@@ -7,12 +7,16 @@ import {
 } from '@setsuna-desktop/contracts';
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { defineFeatureOperation } from '@setsuna-desktop/feature-core/operation';
+import { parseDesignScriptName, parseDesignScriptPath, parseDesignScriptSource } from './design-content-source.js';
 import { designDocumentCodec, parseAssetPath, parseDesignEdit, type DesignDocument, type DesignEdit } from './document.js';
 import { isDesignDocumentPath } from './design-resource-id.js';
+import { parseDesignScriptInputs, parseDesignScriptParameters, type DesignScriptInputs } from './design-script-parameters.js';
+import { parseDesignShaderName, parseDesignShaderPath, parseDesignShaderSource } from './design-shader.js';
 
 export type DesignWorkspace = Readonly<{ projectId: string; rootId?: string }>;
 export type DesignDocumentRef = DesignWorkspace & Readonly<{ path: string }>;
 export type CreateDesignDocumentInput = DesignWorkspace & Readonly<{ parentPath: string; name: string }>;
+export type MoveDesignDocumentInput = Readonly<{ ref: DesignDocumentRef; destination: DesignWorkspace }>;
 export type DesignSnapshot = Readonly<{ document: DesignDocument; revision: string; canUndo: boolean; canRedo: boolean }>;
 
 export const designImageExtensions = {
@@ -22,6 +26,12 @@ export const designImageExtensions = {
 export const designImageFileExtensions = [...Object.values(designImageExtensions), 'jpeg'] as const;
 export type DesignImageExtension = (typeof designImageExtensions)[WorkspaceFilePreviewImageMimeType];
 export type ImportDesignImageInput = Readonly<{ ref: DesignDocumentRef; name: string; base64: string }>;
+export type ImportDesignScriptInput = Readonly<{ ref: DesignDocumentRef; name: string; source: string }>;
+export type ImportDesignShaderInput = ImportDesignScriptInput;
+export type ReadDesignShaderInput = DesignDocumentRef & Readonly<{ shaderPath: string }>;
+export type ReadDesignScriptParametersInput = DesignDocumentRef & Readonly<{ scriptPath: string }>;
+export type RenderDesignScriptInput = Readonly<{ ref: DesignDocumentRef; scriptPath: string; width: number; height: number;
+  inputs?: DesignScriptInputs }>;
 
 const refCodec = defineRuntimeCodec<DesignDocumentRef>((input) => {
   const value = record(input);
@@ -82,6 +92,8 @@ const historyCodec = defineRuntimeCodec<NavigateDesignHistoryInput>((input) => {
 });
 
 const documentErrors = { INVALID_DESIGN_DOCUMENT: { status: 422 }, DESIGN_NOT_FOUND: { status: 404 } } as const;
+const resourceRootErrors = { DESIGN_RESOURCE_ROOT_AMBIGUOUS: { status: 409 }, DESIGN_RESOURCE_ROOT_UNAVAILABLE: { status: 409 } } as const;
+const scriptErrors = { DESIGN_SCRIPT_FAILED: { status: 422 } } as const;
 const documentsRoute = '/v1/features/design/documents';
 
 export const listDesignDocuments = defineFeatureOperation({
@@ -96,7 +108,61 @@ export const listDesignDocuments = defineFeatureOperation({
 
 export const importDesignImage = defineFeatureOperation({
   id: 'design.image.import', path: '/v1/features/design/images', method: 'POST', input: imageImportCodec, output: imagePathCodec,
-  errors: documentErrors, idempotency: 'non-idempotent',
+  errors: { ...documentErrors, ...resourceRootErrors }, idempotency: 'non-idempotent',
+});
+
+export const importDesignScript = defineFeatureOperation({
+  id: 'design.script.import', path: '/v1/features/design/scripts', method: 'POST',
+  input: defineRuntimeCodec<ImportDesignScriptInput>((input) => {
+    const { ref, name, source } = record(input);
+    return { ref: refCodec.parse(ref), name: parseDesignScriptName(name), source: parseDesignScriptSource(source) };
+  }),
+  output: defineRuntimeCodec(parseDesignScriptPath),
+  errors: { ...documentErrors, ...resourceRootErrors }, idempotency: 'non-idempotent',
+});
+
+const shadersRoute = '/v1/features/design/shaders';
+export const importDesignShader = defineFeatureOperation({
+  id: 'design.shader.import', path: shadersRoute, method: 'POST',
+  input: defineRuntimeCodec<ImportDesignShaderInput>((input) => {
+    const { ref, name, source } = record(input);
+    return { ref: refCodec.parse(ref), name: parseDesignShaderName(name), source: parseDesignShaderSource(source) };
+  }),
+  output: defineRuntimeCodec(parseDesignShaderPath),
+  errors: { ...documentErrors, ...resourceRootErrors }, idempotency: 'non-idempotent',
+});
+
+export const readDesignShader = defineFeatureOperation({
+  id: 'design.shader.read', path: shadersRoute, method: 'GET',
+  input: defineRuntimeCodec<ReadDesignShaderInput>((input) => {
+    const value = record(input);
+    return { ...refCodec.parse(value), shaderPath: parseDesignShaderPath(value.shaderPath) };
+  }),
+  output: defineRuntimeCodec(parseDesignShaderSource),
+  errors: { ...documentErrors, DESIGN_SHADER_FAILED: { status: 422 } }, idempotency: 'safe',
+});
+
+export const readDesignScriptParameters = defineFeatureOperation({
+  id: 'design.script.parameters', path: '/v1/features/design/scripts/parameters', method: 'GET',
+  input: defineRuntimeCodec<ReadDesignScriptParametersInput>((input) => {
+    const value = record(input);
+    return { ...refCodec.parse(value), scriptPath: parseDesignScriptPath(value.scriptPath) };
+  }),
+  output: defineRuntimeCodec(parseDesignScriptParameters),
+  errors: scriptErrors, idempotency: 'safe',
+});
+
+export const renderDesignScript = defineFeatureOperation({
+  id: 'design.script.render', path: '/v1/features/design/scripts/render', method: 'POST',
+  input: defineRuntimeCodec<RenderDesignScriptInput>((input) => {
+    const { ref, scriptPath, width, height, inputs } = record(input);
+    if (typeof width !== 'number' || !Number.isFinite(width) || width <= 0
+      || typeof height !== 'number' || !Number.isFinite(height) || height <= 0) throw new Error('Invalid script dimensions.');
+    return { ref: refCodec.parse(ref), scriptPath: parseDesignScriptPath(scriptPath), width, height,
+      ...(inputs === undefined ? {} : { inputs: parseDesignScriptInputs(inputs) }) };
+  }),
+  output: designDocumentCodec,
+  errors: scriptErrors, idempotency: 'non-idempotent',
 });
 
 export const createDesignDocument = defineFeatureOperation({
@@ -104,9 +170,35 @@ export const createDesignDocument = defineFeatureOperation({
   errors: { [WORKSPACE_ENTRY_EXISTS_ERROR_CODE]: { status: 409 } }, idempotency: 'non-idempotent',
 });
 
+export const moveDesignDocument = defineFeatureOperation({
+  id: 'design.document.move', path: `${documentsRoute}/move`, method: 'POST',
+  input: defineRuntimeCodec<MoveDesignDocumentInput>((input) => {
+    const value = record(input);
+    return { ref: refCodec.parse(value.ref), destination: workspace(record(value.destination)) };
+  }),
+  output: refCodec,
+  errors: { ...documentErrors, ...resourceRootErrors, [WORKSPACE_ENTRY_EXISTS_ERROR_CODE]: { status: 409 },
+    DESIGN_LIBRARY_IN_USE: { status: 409 }, DESIGN_DEPENDENCY_UNAVAILABLE: { status: 409 } },
+  idempotency: 'non-idempotent',
+});
+
+export const deleteDesignDocument = defineFeatureOperation({
+  id: 'design.document.delete', path: documentsRoute, method: 'DELETE', input: refCodec,
+  output: defineRuntimeCodec<null>((input) => {
+    if (input !== null) throw new Error('Invalid design deletion result.');
+    return null;
+  }),
+  errors: { ...documentErrors, DESIGN_LIBRARY_IN_USE: { status: 409 }, DESIGN_DEPENDENCY_UNAVAILABLE: { status: 409 } }, idempotency: 'idempotent',
+});
+
 export const readDesignDocument = defineFeatureOperation({
   id: 'design.document.read', path: documentsRoute, method: 'GET', input: refCodec, output: snapshotCodec,
   errors: documentErrors, idempotency: 'safe',
+});
+
+export const resolveDesignDocumentRoot = defineFeatureOperation({
+  id: 'design.document.resolve-root', path: `${documentsRoute}/resource-root`, method: 'GET', input: refCodec, output: refCodec,
+  errors: { ...documentErrors, ...resourceRootErrors }, idempotency: 'safe',
 });
 
 export const commitDesignEdits = defineFeatureOperation({

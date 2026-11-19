@@ -1,3 +1,9 @@
+.design-prototype-preview {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
 .design-prototype-viewport {
   position: relative;
   overflow: hidden;
@@ -13,7 +19,7 @@
 }
 
 .design-prototype-page {
-  max-block-size: 70vh;
+  max-block-size: min(70vh, max(0px, calc(var(--design-tool-popover-height, 70vh) - 52px)));
   overflow: auto;
 }
 
@@ -51,7 +57,7 @@
 
 .design-prototype-controls {
   display: grid;
-  grid-template-columns: auto minmax(140px, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
 }

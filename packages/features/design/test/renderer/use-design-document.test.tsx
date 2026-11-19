@@ -33,8 +33,11 @@ it('drains submitted coordinates after unmount and waits for them when reopening
   const read = vi.fn<DesignClient['read']>((ref) => service.read(ref, signal));
   const commit = vi.fn<DesignClient['commit']>((edit) => service.commit(edit, signal));
   const client: DesignClient = {
-    read, commit, list: vi.fn(), create: vi.fn(), importImage: vi.fn(), navigate: vi.fn(),
-    assets: { search: vi.fn(), read: vi.fn(), requestClipboardPaste: vi.fn(), output: {
+    fonts: { list: vi.fn().mockResolvedValue([]), read: vi.fn(), import: vi.fn(), remove: vi.fn() },
+    read, commit, list: vi.fn(), create: vi.fn(), move: vi.fn(), delete: vi.fn(), importImage: vi.fn(), importScript: vi.fn(),
+    readScriptParameters: vi.fn(), renderScript: vi.fn(), importShader: vi.fn(), readShader: vi.fn(), navigate: vi.fn(),
+    resolveResourceRoot: async (ref) => ref,
+    assets: { search: vi.fn(), read: vi.fn(), readLinkedImage: vi.fn(), requestClipboardPaste: vi.fn(), output: {
       saveDesignHtml: vi.fn(), saveDesignSvg: vi.fn(), saveImageAs: vi.fn(), copyImageToClipboard: vi.fn(),
       copyDesignLayers: vi.fn(), readDesignLayers: vi.fn(), copyText: vi.fn(),
     } },
@@ -47,10 +50,10 @@ it('drains submitted coordinates after unmount and waits for them when reopening
     const editor = open();
     await waitFor(() => expect(editor.result.current.snapshot?.revision).toBe('0'));
     let x!: Promise<boolean>;
-    act(() => { x = editor.result.current.editNumber('tile', (node) => ({ ...node, x: 12 }), '0'); });
+    act(() => { x = editor.result.current.editFields(new Map([['tile', (node) => ({ ...node, x: 12 })]]), '0'); });
     await waitFor(() => expect(replace).toHaveBeenCalledOnce());
     let y!: Promise<boolean>;
-    act(() => { y = editor.result.current.editNumber('tile', (node) => ({ ...node, y: 9 }), '0'); });
+    act(() => { y = editor.result.current.editFields(new Map([['tile', (node) => ({ ...node, y: 9 })]]), editor.result.current.snapshot!.revision); });
     editor.unmount();
     const reopened = open();
     expect(commit).toHaveBeenCalledOnce();

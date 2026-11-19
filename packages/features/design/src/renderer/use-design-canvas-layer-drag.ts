@@ -1,22 +1,28 @@
 import { useEffect, useState, type DragEvent, type MutableRefObject, type RefObject } from 'react';
 import type { DesignDocument, DesignEdit } from '../contracts/index.js';
 import { planDesignCanvasDrop, type DesignCanvasDropPreview } from './design-canvas-edits.js';
-import { activeDesignLayerDrag, designLayerDragType, type DesignLayerDrag } from './design-layer-drop.js';
+import { activeDesignComponentDrag, activeDesignLayerDrag, designComponentDragType, designLayerDragType,
+  type DesignComponentDrag, type DesignLayerDrag } from './design-layer-drop.js';
+import type { Point } from './design-geometry.js';
 import type { DesignScene } from './design-layout.js';
 import { toCanvasScreen, toCanvasWorld, type CanvasViewport } from './use-design-canvas-gestures.js';
 
 type Preview = Readonly<{ source: DesignLayerDrag }> & DesignCanvasDropPreview;
 
-export function useDesignCanvasLayerDrag({ surface, drag, document, scene, revision, viewport, disabled, isGestureActive, onDrop }: Readonly<{
+export function useDesignCanvasLayerDrag({ surface, drag, componentDrag, document, projected, scene, revision, viewport, disabled, isGestureActive,
+  onDrop, onComponentDrop }: Readonly<{
   surface: RefObject<HTMLDivElement>;
   drag: MutableRefObject<DesignLayerDrag | undefined>;
+  componentDrag: MutableRefObject<DesignComponentDrag | undefined>;
   document: DesignDocument;
+  projected: DesignDocument;
   scene: DesignScene;
   revision: string;
   viewport: CanvasViewport;
   disabled: boolean;
   isGestureActive(): boolean;
   onDrop(id: string, edits: readonly DesignEdit[], revision: string): Promise<boolean>;
+  onComponentDrop(id: string, point: Point, revision: string): Promise<void>;
 }>) {
   const [preview, setPreview] = useState<Preview>();
   const active = preview?.source.revision === revision
@@ -44,18 +50,25 @@ export function useDesignCanvasLayerDrag({ surface, drag, document, scene, revis
     };
   }, [drag, hoveringSource, surface]);
 
-  function dropAt(event: DragEvent<HTMLDivElement>) {
-    if (disabled || isGestureActive()) return;
-    const source = activeDesignLayerDrag(event.dataTransfer, drag.current, revision);
-    if (!source) return;
+  function dropPoint(event: DragEvent<HTMLDivElement>) {
     const screen = toCanvasScreen(event.currentTarget, { x: event.clientX, y: event.clientY });
-    const center = toCanvasWorld(viewport, screen);
-    return { source, drop: planDesignCanvasDrop(document, scene, source.id, center) };
+    return toCanvasWorld(viewport, screen);
+  }
+
+  function dropAt(event: DragEvent<HTMLDivElement>) {
+    const source = activeDesignLayerDrag(event.dataTransfer, drag.current, revision);
+    return source && { source, drop: planDesignCanvasDrop(document, scene, source.id, dropPoint(event), projected) };
   }
 
   return {
     preview: active,
     onDragOver(event: DragEvent<HTMLDivElement>) {
+      if (disabled || isGestureActive()) return;
+      if (activeDesignComponentDrag(event.dataTransfer, componentDrag.current, revision)) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        return;
+      }
       const target = dropAt(event);
       if (!target) return;
       event.preventDefault();
@@ -67,6 +80,14 @@ export function useDesignCanvasLayerDrag({ surface, drag, document, scene, revis
       setPreview((current) => current?.phase === 'hover' ? undefined : current);
     },
     onDrop(event: DragEvent<HTMLDivElement>) {
+      if (disabled || isGestureActive()) return;
+      const component = activeDesignComponentDrag(event.dataTransfer, componentDrag.current, revision);
+      if (component && event.dataTransfer.getData(designComponentDragType) === component.id) {
+        event.preventDefault();
+        componentDrag.current = undefined;
+        void onComponentDrop(component.id, dropPoint(event), component.revision);
+        return;
+      }
       const target = dropAt(event);
       if (!target || event.dataTransfer.getData(designLayerDragType) !== target.source.id) return;
       event.preventDefault();

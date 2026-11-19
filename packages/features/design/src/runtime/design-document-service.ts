@@ -39,7 +39,7 @@ export class DesignDocumentService {
       const document = applyDesignEdits(state.document, input.edits);
       const content = serializeDocument(document);
       if (content === serializeDocument(state.document)) return toSnapshot(state);
-      return this.replace(file, state.revision, content, {
+      return this.replace(file, state, content, {
         document, undo: [...state.undo, state.document].slice(-historyDepth), redo: [],
       });
     });
@@ -55,7 +55,7 @@ export class DesignDocumentService {
       const next = input.direction === 'undo'
         ? { undo: from.slice(0, -1), redo: [...state.redo, state.document] }
         : { undo: [...state.undo, state.document], redo: from.slice(0, -1) };
-      return this.replace(file, state.revision, serializeDocument(document), { document, ...next });
+      return this.replace(file, state, serializeDocument(document), { document, ...next });
     });
   }
 
@@ -74,9 +74,9 @@ export class DesignDocumentService {
   }
 
   private async replace(
-    file: DesignWorkspaceDocument, expectedRevision: string, content: string, next: Omit<DesignHistory, 'revision'>,
+    file: DesignWorkspaceDocument, previous: DesignHistory, content: string, next: Omit<DesignHistory, 'revision'>,
   ): Promise<DesignSnapshot> {
-    const revision = await file.replace(content, expectedRevision);
+    const revision = await file.replace(content, previous.revision, previous.document, next.document);
     const state = { revision, ...next };
     this.histories.delete(file.key);
     this.histories.set(file.key, state);

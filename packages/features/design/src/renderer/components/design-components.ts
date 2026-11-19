@@ -1,34 +1,55 @@
-import { rebaseDesignTextRuns, resolveDesignNodeStyles, resolveDesignStyles, type DesignContentOverride, type DesignDocument, type DesignEdit, type DesignFrame, type DesignNode } from '../../contracts/index.js';
+import { rebaseDesignTextRuns, resolveDesignNodeStyles, type DesignContentOverride, type DesignDocument, type DesignEdit, type DesignFrame, type DesignNode } from '../../contracts/index.js';
 import { maxDesignTreeDepth, maxExpandedDesignLayers } from '../../contracts/document.js';
 import { remapDesignLayerReferences } from '../../contracts/design-references.js';
 import { designResourceParts } from '../../contracts/design-resource-id.js';
-import { designResourceNode, linkedDesignPath, mapDesignStyleIds, type DesignLibraryResources } from './design-library-resources.js';
+import { designStylesForModes } from '../../contracts/design-styles.js';
+import { bindDesignVariable, validDesignWidthLimits, type DesignVariableIds } from '../../contracts/design-variables.js';
+import { designResourceNode, linkedDesignPath, mapDesignNodeResourceIds, type DesignLibraryResources } from './design-library-resources.js';
 
 type OverrideScope = Readonly<{ root: string; overrides: NonNullable<DesignFrame['contentOverrides']> }>;
 
 export function projectDesignComponents(authored: DesignDocument, resources?: DesignLibraryResources): DesignDocument {
   const styles = resources && Object.keys(resources.styles).length ? { ...authored.styles, ...resources.styles } : authored.styles;
-  const document = resolveDesignStyles(styles === authored.styles ? authored : { ...authored, styles });
-  const instances = Object.entries(document.nodes).filter(([, node]) => node.kind === 'frame' && node.instanceOf);
-  if (!instances.length) return document;
-  const nodes: Record<string, DesignNode> = { ...document.nodes };
+  if ((!styles || !Object.keys(styles).length) && !Object.values(authored.nodes).some((node) => node.kind === 'frame' && node.instanceOf)) {
+    return authored;
+  }
+  const defaults = designStylesForModes(styles, authored.documentId);
+  const nodes: Record<string, DesignNode> = { ...authored.nodes };
+  const instances: { id: string; styles: DesignDocument['styles'] }[] = [];
+  function visit(id: string, scoped: DesignDocument['styles']) {
+    const node = resolveDesignNodeStyles(authored.nodes[id], scoped);
+    nodes[id] = node;
+    if (node.kind !== 'frame') return;
+    if (node.instanceOf) instances.push({ id, styles: scoped });
+    node.childIds.forEach((child) => visit(child, scoped));
+  }
+  for (const id of authored.rootIds) {
+    const root = authored.nodes[id];
+    const scoped = root.kind === 'frame' && root.variableModeIds
+      ? designStylesForModes(styles, authored.documentId, root.variableModeIds) : defaults;
+    visit(id, scoped);
+  }
+  if (!instances.length) return { ...authored, styles, nodes };
+
   const activeSources = new Set<string>();
-  const resolvedSources = new Map<string, DesignNode>();
+  const resolvedSources = new Map<DesignDocument['styles'], Map<string, DesignNode>>();
   let remaining = Math.max(0, maxExpandedDesignLayers - Object.keys(nodes).length);
 
-  function getNode(id: string): DesignNode | undefined {
-    if (Object.hasOwn(document.nodes, id)) return document.nodes[id];
-    const cached = resolvedSources.get(id);
+  function getNode(id: string, scoped: DesignDocument['styles']): DesignNode | undefined {
+    let cache = resolvedSources.get(scoped);
+    const cached = cache?.get(id);
     if (cached) return cached;
-    const external = resources?.nodes[id];
-    if (!external || !styles) return external;
-    const resolved = resolveDesignNodeStyles(external, styles);
-    resolvedSources.set(id, resolved);
+    const source = designResourceNode(authored, id, resources);
+    if (!source) return;
+    const resolved = resolveDesignNodeStyles(source, scoped);
+    if (!cache) resolvedSources.set(scoped, cache = new Map());
+    cache.set(id, resolved);
     return resolved;
   }
 
-  function project(id: string, sourceId: string, instanceRoot: string, scopes: readonly OverrideScope[] = [], depth = 0) {
-    const node = getNode(sourceId);
+  function project(id: string, sourceId: string, instanceRoot: string, scoped: DesignDocument['styles'], scopes: readonly OverrideScope[] = [], depth = 0) {
+    // The instance's board supplies modes even for sources authored on a different board.
+    const node = getNode(sourceId, scoped);
     if (!node) return;
     if (node.kind !== 'frame') {
       // The outer instance's explicit choice takes precedence over a nested instance's authored defaults.
@@ -41,12 +62,12 @@ export function projectDesignComponents(authored: DesignDocument, resources?: De
           break;
         }
       }
-      nodes[id] = node.kind === 'text' && override?.kind === 'text' ? { ...node, text: override.text,
-        runs: rebaseDesignTextRuns(node.text, override.text, node.runs) }
+      nodes[id] = node.kind === 'text' && override?.kind === 'text' ? bindDesignVariable({ ...node, text: override.text,
+        runs: rebaseDesignTextRuns(node.text, override.text, node.runs) }, 'text', undefined)
         : node.kind === 'image' && override?.kind === 'image' ? { ...node, assetPath: override.assetPath } : node;
       return;
     }
-    const source = node.instanceOf ? getNode(node.instanceOf) : node;
+    const source = node.instanceOf ? getNode(node.instanceOf, scoped) : node;
     // A linked file can disappear or introduce a cycle independently of the edited document.
     if (source?.kind !== 'frame' || (node.instanceOf && (!source.component || activeSources.has(node.instanceOf)))) {
       nodes[id] = node;
@@ -60,7 +81,7 @@ export function projectDesignComponents(authored: DesignDocument, resources?: De
       if (remaining <= 0) break;
       remaining -= 1;
       const projectedId = `${childRoot}/${childId}`;
-      project(projectedId, childId, childRoot, nextScopes, depth + 1);
+      project(projectedId, childId, childRoot, scoped, nextScopes, depth + 1);
       if (Object.hasOwn(nodes, projectedId)) childIds.push(projectedId);
     }
     if (node.instanceOf) activeSources.delete(node.instanceOf);
@@ -70,20 +91,47 @@ export function projectDesignComponents(authored: DesignDocument, resources?: De
       name: node.name ?? source.name,
       x: node.x, y: node.y,
       rotation: node.rotation, flipX: node.flipX, flipY: node.flipY,
-      hidden: node.hidden, locked: node.locked, absolute: node.absolute,
-      minWidth: node.minWidth ?? source.minWidth, maxWidth: node.maxWidth ?? source.maxWidth,
+      hidden: node.hidden ?? (source.variableIds?.hidden ? source.hidden : undefined),
+      locked: node.locked, absolute: node.absolute,
+      ...instanceWidthLimits(source, node),
       interaction: node.interaction ?? source.interaction,
       opacity: node.opacity ?? source.opacity,
       width: node.widthMode ? node.width : source.width,
       height: node.heightMode ? node.height : source.height,
       widthMode: node.widthMode ?? (source.widthMode === 'hug' ? 'hug' : undefined),
       heightMode: node.heightMode ?? (source.heightMode === 'hug' ? 'hug' : undefined),
+      variableModeIds: node.variableModeIds,
+      variableIds: instanceVariableIds(source, node),
       instanceOf: node.instanceOf, component: undefined, childIds, maskId,
     } : { ...node, childIds, maskId };
   }
 
-  for (const [id] of instances) project(id, id, id);
-  return { ...document, nodes };
+  for (const { id, styles } of instances) project(id, id, id, styles);
+  return { ...authored, styles, nodes };
+}
+
+function instanceWidthLimits(source: DesignFrame, instance: DesignFrame) {
+  const limits = { minWidth: instance.minWidth ?? source.minWidth, maxWidth: instance.maxWidth ?? source.maxWidth };
+  // A mode can leave the instance's own limit incompatible with one inherited from its source.
+  return validDesignWidthLimits(limits) ? limits : { minWidth: instance.minWidth, maxWidth: instance.maxWidth };
+}
+
+function instanceVariableIds(source: DesignFrame, instance: DesignFrame): DesignVariableIds | undefined {
+  if (!source.variableIds && !instance.variableIds) return;
+  const ids = { ...source.variableIds };
+  const local = [
+    'x', 'y', 'rotation',
+    ...(instance.minWidth !== undefined || instance.variableIds?.minWidth ? ['minWidth'] as const : []),
+    ...(instance.maxWidth !== undefined || instance.variableIds?.maxWidth ? ['maxWidth'] as const : []),
+    ...(instance.hidden !== undefined ? ['hidden'] as const : []), ...(instance.opacity !== undefined ? ['opacity'] as const : []),
+    ...(instance.widthMode ? ['width'] as const : []), ...(instance.heightMode ? ['height'] as const : []),
+  ] as const;
+  for (const field of local) {
+    const id = instance.variableIds?.[field];
+    if (id) ids[field] = id;
+    else delete ids[field];
+  }
+  return Object.keys(ids).length ? ids : undefined;
 }
 
 export function designInstanceContents(document: DesignDocument, id: string) {
@@ -136,9 +184,10 @@ export function detachDesignInstance(document: DesignDocument, id: string): Desi
     if (child.kind === 'frame') child.childIds.forEach(collect);
   }
   root.childIds.forEach(collect);
-  const persisted = (node: DesignNode) => mapDesignStyleIds(remapDesignLayerReferences(node, ids), (id) =>
+  const persisted = (node: DesignNode) => mapDesignNodeResourceIds(remapDesignLayerReferences(node, ids), (id) =>
     !designResourceParts(id) || linkedDesignPath(document, id) ? id : undefined);
-  const edits: DesignEdit[] = [{ kind: 'update', nodeId: id, node: persisted(independentLayer(root)) }];
+  // The update keeps the authored child list. Insert edits add the children with real layer IDs.
+  const edits: DesignEdit[] = [{ kind: 'update', nodeId: id, node: persisted({ ...independentLayer(root), childIds: [] }) }];
   function append(childId: string, parentId: string) {
     const nodeId = ids.get(childId)!;
     const child = { ...persisted(document.nodes[childId]), componentSlot: undefined };

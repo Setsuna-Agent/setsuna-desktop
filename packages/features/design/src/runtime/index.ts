@@ -3,21 +3,36 @@ import { requiredCapability } from '@setsuna-desktop/feature-core/capability';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { defineRuntimeDependencies, defineRuntimeFeature, runtimeRouteRegistrarCapability } from '@setsuna-desktop/feature-core/runtime';
 import {
-  commitDesignEdits, createDesignDocument, designFeature, designImageExtensions, designWorkspaceFilesCapability, importDesignImage,
-  listDesignDocuments, navigateDesignHistory, readDesignDocument,
+  commitDesignEdits, createDesignDocument, deleteDesignDocument, designFeature, designFontStorageCapability, designImageExtensions,
+  designScriptSandboxCapability, designWorkspaceFilesCapability, importDesignImage, importDesignScript,
+  importDesignShader, listDesignDocuments, maxDesignScriptBytes, maxDesignShaderBytes, moveDesignDocument, navigateDesignHistory,
+  parseDesignShaderSource, readDesignDocument, readDesignScriptParameters, readDesignShader, renderDesignScript, resolveDesignDocumentRoot,
+  type DesignDocumentRef, type DesignScriptParameter,
 } from '../contracts/index.js';
+import { importDesignFont, listDesignFonts, readDesignFont, removeDesignFont } from '../contracts/design-fonts.js';
+import { designScriptParameterValue } from '../contracts/design-script-parameters.js';
 import { DesignDocumentService } from './design-document-service.js';
+import { DesignFontStore } from './design-font-store.js';
+import { parseDesignScriptOutput } from './design-script-output.js';
+import { readScriptParameters } from './design-script-parameters.js';
 
 const dependencies = defineRuntimeDependencies({
   routes: requiredCapability(runtimeRouteRegistrarCapability),
   files: requiredCapability(designWorkspaceFilesCapability),
+  fontStorage: requiredCapability(designFontStorageCapability),
+  scripts: requiredCapability(designScriptSandboxCapability),
 });
 
 export const designRuntimeFeature = defineRuntimeFeature({
   definition: designFeature,
   dependencies,
-  setup({ dependencies: { routes, files }, scope }) {
+  setup({ dependencies: { routes, files, fontStorage, scripts }, scope }) {
     const documents = new DesignDocumentService(files);
+    const fonts = new DesignFontStore(fontStorage.dataDir);
+    routes.register(scope, listDesignFonts, (_, { signal }) => fonts.list(signal));
+    routes.register(scope, importDesignFont, ({ base64 }, { signal }) => fonts.import(base64, signal));
+    routes.register(scope, readDesignFont, ({ id }, { signal }) => fonts.read(id, signal));
+    routes.register(scope, removeDesignFont, ({ id }, { signal }) => fonts.remove(id, signal));
     routes.register(scope, importDesignImage, ({ ref, name, base64 }, { signal }) => {
       const bytes = Buffer.from(base64, 'base64');
       const mimeType = detectWorkspacePreviewImageMimeType(bytes);
@@ -26,9 +41,42 @@ export const designRuntimeFeature = defineRuntimeFeature({
       }
       return files.importImage(ref, { name, extension: designImageExtensions[mimeType], bytes }, signal);
     });
+    routes.register(scope, importDesignScript, ({ ref, name, source }, { signal }) => files.importSource(ref, { name, source, extension: 'js' }, signal));
+    routes.register(scope, importDesignShader, ({ ref, name, source }, { signal }) => files.importSource(ref, { name, source, extension: 'glsl' }, signal));
+    routes.register(scope, readDesignShader, async ({ shaderPath, ...ref }, { signal }) => {
+      try {
+        return parseDesignShaderSource(await files.readSource(ref, shaderPath, maxDesignShaderBytes, signal));
+      } catch {
+        signal.throwIfAborted();
+        throw new FeatureOperationFailure({ code: 'DESIGN_SHADER_FAILED', message: 'The GLSL file could not be loaded.', retryable: false });
+      }
+    });
+    async function withScript<T>(ref: DesignDocumentRef, path: string, signal: AbortSignal,
+      use: (source: string, parameters: readonly DesignScriptParameter[]) => T | Promise<T>): Promise<T> {
+      try {
+        const source = await files.readSource(ref, path, maxDesignScriptBytes, signal);
+        return await use(source, readScriptParameters(source));
+      } catch {
+        signal.throwIfAborted();
+        throw new FeatureOperationFailure({ code: 'DESIGN_SCRIPT_FAILED', message: 'The canvas script could not be loaded or rendered.', retryable: false });
+      }
+    }
+    routes.register(scope, readDesignScriptParameters, ({ scriptPath, ...ref }, { signal }) =>
+      withScript(ref, scriptPath, signal, (_, parameters) => parameters));
+    routes.register(scope, renderDesignScript, ({ ref, scriptPath, width, height, inputs }, { signal }) =>
+      withScript(ref, scriptPath, signal, async (source, parameters) => {
+        const input = Object.fromEntries(parameters.map((parameter) => [parameter.name, designScriptParameterValue(parameter, inputs)]));
+        return parseDesignScriptOutput(await scripts.evaluate(source, { width, height, input }, signal));
+      }));
     routes.register(scope, listDesignDocuments, (workspace, { signal }) => files.list(workspace, signal));
     routes.register(scope, createDesignDocument, (input, { signal }) => documents.create(input, signal));
+    routes.register(scope, moveDesignDocument, (input, { signal }) => files.move(input, signal));
+    routes.register(scope, deleteDesignDocument, async (ref, { signal }) => {
+      await files.delete(ref, signal);
+      return null;
+    });
     routes.register(scope, readDesignDocument, (input, { signal }) => documents.read(input, signal));
+    routes.register(scope, resolveDesignDocumentRoot, (ref, { signal }) => files.resolveResourceRoot(ref, signal));
     routes.register(scope, commitDesignEdits, (input, { signal }) => documents.commit(input, signal));
     routes.register(scope, navigateDesignHistory, (input, { signal }) => documents.navigate(input, signal));
   },
