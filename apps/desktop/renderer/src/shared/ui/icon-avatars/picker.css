@@ -27,13 +27,10 @@
 .icon-avatar-picker__choice {
   justify-content: center;
   min-height: 44px;
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-md);
   padding: 6px;
 }
 
 .icon-avatar-picker__choice[aria-pressed='true'] {
-  border-color: var(--sd-color-accent);
   background: var(--sd-color-surface-muted);
 }
 
@@ -62,10 +59,4 @@
   height: 34px;
   min-height: 34px;
   min-width: 0;
-  background: color-mix(in srgb, var(--icon-avatar-picker-color) 9%, transparent);
-}
-
-.icon-avatar-picker--compact .icon-avatar-picker__choice[aria-pressed='true'] {
-  border-color: var(--icon-avatar-picker-color);
-  background: color-mix(in srgb, var(--icon-avatar-picker-color) 16%, transparent);
 }

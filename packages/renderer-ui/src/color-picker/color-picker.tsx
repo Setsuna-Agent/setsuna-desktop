@@ -35,7 +35,7 @@ import { ColorChannelFields } from './color-channel-fields.js';
 export type PickerColor = Readonly<{ color: string; opacity?: number }>;
 
 export type ColorPickerProps = Readonly<{
-  /** Current opaque hex color. */
+  /** Hex color with an optional intrinsic alpha channel. */
   value: string;
   label: string;
   disabled?: boolean;
@@ -59,15 +59,19 @@ export function ColorPicker({ value, opacity, label, placement, sideOffset, getA
   onValuePreview, onValueCommit, onColorPreview, onColorCommit }: ColorPickerProps) {
   const [preview, setPreview] = useState<{ value: string; opacity: number | undefined; paint: PickerColor }>();
   const active = preview?.value === value && preview.opacity === opacity ? preview.paint : undefined;
+  const hasAlpha = /^#[\da-f]{8}$/iu.test(value);
+  const color = hasAlpha ? value.slice(0, 7) : value;
+  const alpha = hasAlpha ? Number.parseInt(value.slice(7), 16) / 255 : 1;
+  const activeOpacity = active?.opacity ?? opacity;
   return <Popover placement={placement} sideOffset={sideOffset} getAnchorRect={getAnchorRect} className="sd-color-picker" contentLabel={label} hideWhenDetached
-    content={<ColorPickerControls value={value} opacity={opacity} mixed={mixed} disabled={disabled}
+    content={<ColorPickerControls value={color} opacity={opacity} mixed={mixed} disabled={disabled}
       onPreview={(paint) => {
         setPreview(paint ? { value, opacity, paint } : undefined);
         onValuePreview?.(paint?.color);
         onColorPreview?.(paint);
       }} onCommit={onColorCommit ?? ((paint) => onValueCommit?.(paint.color) ?? Promise.resolve(false))} />}>
     <IconButton label={label} size="small" disabled={disabled} className={cn('sd-color-picker__trigger', className)}>
-      <ColorPickerSwatch color={active?.color ?? value} opacity={active?.opacity ?? opacity} mixed={mixed && !active} />
+      <ColorPickerSwatch color={active?.color ?? color} opacity={hasAlpha ? (activeOpacity ?? 1) * alpha : activeOpacity} mixed={mixed && !active} />
     </IconButton>
   </Popover>;
 }
@@ -151,7 +155,7 @@ export function ColorPickerControls({ value, opacity, disabled = false, mixed = 
       onUpdate={(opacity, commit) => update({ opacity }, commit)} onCancel={reset} />}
     <ColorChannelFields hex={hex} color={color} opacity={current.opacity} disabled={blocked}
       leading={<EyeDropperButton disabled={blocked} onSample={(sample) => update(hexToHsv(sample, color), true)} />}
-      onChange={(paint) => update(paint, true)} />
+      onUpdate={update} onCancel={reset} />
   </div>;
 }
 

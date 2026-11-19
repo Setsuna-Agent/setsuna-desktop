@@ -1,7 +1,7 @@
 import { Info } from 'lucide-react';
 import { shellTopbarActionSlot } from '@setsuna-desktop/renderer-contracts/shell';
+import { PanelPlacementIcon } from '@setsuna-desktop/renderer-ui';
 import { RendererOwnedListSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
-import { PanelPlacementIcon } from '../../features/workspace/PanelPlacementIcon.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';

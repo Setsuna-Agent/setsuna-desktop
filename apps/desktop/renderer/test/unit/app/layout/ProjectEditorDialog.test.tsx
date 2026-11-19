@@ -110,7 +110,7 @@ describe('ProjectEditorDialog', () => {
     await waitFor(() => expect(actions.onRemove).toHaveBeenCalledExactlyOnceWith(project));
   });
 
-  it('saves a chosen icon when creating a project', async () => {
+  it('saves the chosen project icon without a color override', async () => {
     const onSave = vi.fn(async () => true);
     render(<ProjectEditorDialog project={null} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
     fireEvent.change(screen.getByRole('textbox', { name: '项目名称' }), { target: { value: 'Travel' } });
@@ -120,7 +120,7 @@ describe('ProjectEditorDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: '更换项目图标' }));
     await userEvent.click(screen.getByRole('button', { name: '保存' }));
     await waitFor(() => expect(onSave).toHaveBeenCalledWith({
-      name: 'Travel', conversationDefaults: {}, roots: [], icon: { key: 'sailboat', color: 'text' },
+      name: 'Travel', conversationDefaults: {}, roots: [], icon: { key: 'sailboat' },
     }));
   });
 

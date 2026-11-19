@@ -1,4 +1,4 @@
-import { Button, Tooltip, useReorderLayout, animateReorderLayout, reorderItemRect } from '@setsuna-desktop/renderer-ui';
+import { Button, PanelPlacementIcon, Tooltip, useReorderLayout, animateReorderLayout, reorderItemRect } from '@setsuna-desktop/renderer-ui';
 import { ChevronDown, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import {
   useEffect,
@@ -16,7 +16,6 @@ import { ShortcutTooltip, ShortcutTooltipContent } from '../../shared/ui/Shortcu
 import { usePanelTabCloseTransition } from './hooks/usePanelTabCloseTransition.js';
 import { usePanelTabScroll } from './hooks/usePanelTabScroll.js';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
-import { PanelPlacementIcon } from './PanelPlacementIcon.js';
 import { PanelTabContextMenu } from './PanelTabContextMenu.js';
 import {
   canMoveDesktopPanelAcrossSlots,

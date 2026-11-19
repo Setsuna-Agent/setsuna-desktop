@@ -1,10 +1,8 @@
-import type { DesktopPanelSlot } from './model.js';
-
 export function PanelPlacementIcon({
   placement,
   size = 14,
 }: {
-  placement: DesktopPanelSlot;
+  placement: 'side' | 'bottom';
   size?: number;
 }) {
   return (

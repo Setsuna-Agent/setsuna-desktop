@@ -33,7 +33,7 @@ const pluginIconById: Partial<Record<string, PluginIconName>> = {
   'openai-vision-recognition': 'vision-recognition',
 };
 
-const fallbackPluginIcon: PluginIconPreset = { Icon: Box, color: ICON_PALETTE.purple };
+const fallbackPluginIcon: PluginIconPreset = { Icon: Box, color: 'text' };
 
 export function resolvePluginIconPreset(name?: string, pluginId?: string): PluginIconPreset {
   return findPreset(name) ?? findPreset(pluginId) ?? findPreset(pluginIconById[pluginId ?? '']) ?? fallbackPluginIcon;

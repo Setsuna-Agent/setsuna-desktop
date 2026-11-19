@@ -13,5 +13,5 @@ export function ProjectIcon({ icon, open = false, size = 14, className }: Readon
     ? (open ? FolderOpen : FolderClosed)
     : PROJECT_ICON_COMPONENTS[icon.key] ?? FolderClosed;
   return <Icon className={className} size={size}
-    style={icon?.color ? { color: iconColorCssValue(icon.color) } : undefined} aria-hidden="true" />;
+    style={icon?.color && icon.color !== 'text' ? { color: iconColorCssValue(icon.color) } : undefined} aria-hidden="true" />;
 }

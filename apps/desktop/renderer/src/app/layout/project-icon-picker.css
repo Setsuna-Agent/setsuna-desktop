@@ -23,13 +23,9 @@
   justify-content: center;
   height: 34px;
   min-width: 0;
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-md);
   padding: 6px;
-  background: color-mix(in srgb, var(--project-icon-color) 9%, transparent);
 }
 
 .desktop-project-icon-picker__choice[aria-pressed='true'] {
-  border-color: var(--project-icon-color);
-  background: color-mix(in srgb, var(--project-icon-color) 16%, transparent);
+  background: var(--sd-color-surface-muted);
 }

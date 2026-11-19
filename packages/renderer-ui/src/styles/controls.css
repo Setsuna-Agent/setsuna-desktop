@@ -107,6 +107,58 @@
   flex-shrink: 0;
 }
 
+.sd-segmented-control {
+  position: relative;
+  isolation: isolate;
+  display: inline-grid;
+  grid-template-columns: repeat(var(--sd-segment-count), minmax(0, 1fr));
+  justify-self: start;
+  padding: 2px;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-segment-track-bg);
+}
+
+/* Keep the indicator the size of one segment throughout the transition. */
+.sd-segmented-control[data-selected]::before {
+  content: '';
+  position: absolute;
+  inset-block: 2px;
+  left: 2px;
+  width: calc((100% - 4px) / var(--sd-segment-count));
+  border-radius: var(--app-radius-xs);
+  background: var(--app-segment-selected-bg);
+  box-shadow: var(--app-segment-selected-shadow);
+  transform: translateX(calc(var(--sd-segment-index) * 100%));
+  transition: transform 160ms linear;
+  pointer-events: none;
+}
+
+.sd-segmented-control > .sd-button {
+  position: relative;
+  justify-content: center;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  background: transparent;
+  font-size: 12px;
+}
+
+.sd-segmented-control > .sd-button:is([aria-pressed='true'], :hover:not(:disabled)) {
+  color: var(--app-text);
+  background: transparent;
+}
+
+.sd-segmented-control[data-icon-only] > .sd-button {
+  min-inline-size: 0;
+  padding-inline: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-segmented-control[data-selected]::before { transition: none; }
+}
+
 /* Document-view choices share the same track and selected surface as animated tabs. */
 .sd-markdown-view-toggle {
   display: inline-flex;
