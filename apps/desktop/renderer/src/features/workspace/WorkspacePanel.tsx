@@ -14,6 +14,8 @@ import {
   type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
 import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
+import { isDesignDocumentPath } from '@setsuna-desktop/feature-design/contracts';
+import { WorkspaceDesignFile } from '../../composition/design/DesignFeatureBoundary.js';
 import { Folders, Search } from 'lucide-react';
 import {
   lazy,
@@ -521,7 +523,9 @@ export function WorkspacePanel({
         <WorkspaceEntryDialog request={entryDialog} onClose={() => setEntryDialog(null)}
           onSubmit={async (name) => {
             const entry = entryDialog.mode === 'create'
-              ? await onCreateEntry({ parentPath: entryDialog.parentPath, type: entryDialog.type, name })
+              ? await onCreateEntry({
+                parentPath: entryDialog.parentPath, type: entryDialog.type === 'directory' ? 'directory' : 'file', name,
+              })
               : await onRenameEntry(entryDialog.entry.path, name);
             if (!entry) return;
             fileTree.applyEntryChange(entry, entryDialog.mode === 'rename' ? entryDialog.entry.path : undefined);
@@ -550,6 +554,7 @@ export function WorkspaceFilePreviewContent({
   onOpenFile?: (path: string, line?: number) => void;
 }) {
   const { t } = useI18n();
+  if (isDesignDocumentPath(file.path)) return <WorkspaceDesignFile file={file} workspaceRoot={workspaceRoot} />;
   const activeFocusRequest = fileFocusRequest?.path === file.path
     ? fileFocusRequest
     : undefined;

@@ -170,7 +170,7 @@ export async function handleRuntimeWorkspaceRequest(
         workspaceTarget(decodeURIComponent(projectEntriesSearchMatch[1]), url.searchParams.get('rootId')),
         url.searchParams.get('q') ?? '',
         url.searchParams.has('parent') ? url.searchParams.get('parent') : undefined,
-        { filesOnly: url.searchParams.get('filesOnly') === 'true' },
+        { filesOnly: url.searchParams.get('filesOnly') === 'true', fileExtensions: searchFileExtensions(url) },
       ),
     );
     return true;
@@ -211,12 +211,6 @@ export async function handleRuntimeWorkspaceRequest(
   const projectSearchMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/search$/u);
   if (projectSearchMatch && request.method === 'GET') {
     const query = url.searchParams.get('q') ?? '';
-    let fileExtensions: string[];
-    try {
-      fileExtensions = normalizeWorkspaceSearchExtensions(url.searchParams.getAll('extension'));
-    } catch {
-      throw new RuntimeHttpError(400, 'Invalid file extension.', 'invalid_file_extension');
-    }
     sendJson(
       response,
       200,
@@ -224,13 +218,21 @@ export async function handleRuntimeWorkspaceRequest(
         runtime.workspaceProjects,
         workspaceTarget(decodeURIComponent(projectSearchMatch[1]), url.searchParams.get('rootId')),
         query,
-        { fileExtensions },
+        { fileExtensions: searchFileExtensions(url) },
       ),
     );
     return true;
   }
 
   return false;
+}
+
+function searchFileExtensions(url: URL): string[] {
+  try {
+    return normalizeWorkspaceSearchExtensions(url.searchParams.getAll('extension'));
+  } catch {
+    throw new RuntimeHttpError(400, 'Invalid file extension.', 'invalid_file_extension');
+  }
 }
 
 async function workspaceEntryMutationForRest<T>(mutation: Promise<T>): Promise<T> {

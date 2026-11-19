@@ -1,0 +1,194 @@
+.sd-color-picker {
+  width: 260px;
+  padding: 12px;
+}
+
+.sd-color-picker:is([data-side='left'], [data-side='right']) {
+  max-width: min(calc(100vw - 24px), calc(var(--radix-popover-content-available-width, 100vw) * var(--app-page-scale-inverse, 1)));
+}
+
+.sd-color-picker__trigger {
+  cursor: pointer;
+}
+
+.sd-color-picker__swatch {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.sd-color-picker__swatch > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sd-color-picker__swatch[data-translucent] {
+  background: repeating-conic-gradient(#a7a7a7 0% 25%, #e3e3e3 0% 50%) 0 0 / 8px 8px;
+}
+
+.sd-color-picker__swatch[data-mixed] {
+  background: linear-gradient(135deg, var(--app-surface-muted) 47%, var(--app-border-strong) 48% 52%, var(--app-surface) 53%);
+}
+
+.sd-color-picker__content {
+  display: grid;
+  gap: 8px;
+}
+
+.sd-color-picker__formats {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sd-color-picker__area,
+.sd-color-picker__hue,
+.sd-color-picker__alpha {
+  position: relative;
+  min-width: 0;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 10%);
+  touch-action: none;
+  user-select: none;
+}
+
+.sd-color-picker__area {
+  height: 146px;
+  border-radius: 9px;
+  cursor: crosshair;
+}
+
+.sd-color-picker__hue,
+.sd-color-picker__alpha {
+  height: 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.sd-color-picker__hue {
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+
+.sd-color-picker__alpha {
+  background: var(--sd-color-alpha), repeating-conic-gradient(#888 0% 25%, #ddd 0% 50%) 0 0 / 10px 10px;
+}
+
+.sd-color-picker__area[data-disabled],
+.sd-color-picker__hue[data-disabled],
+.sd-color-picker__alpha[data-disabled] {
+  cursor: default;
+}
+
+.sd-color-picker__rail {
+  position: absolute;
+  inset: 0 8px;
+}
+
+.sd-color-picker__thumb {
+  position: absolute;
+  width: 17px;
+  height: 17px;
+  transform: translate(-50%, -50%);
+  outline: none;
+  pointer-events: none;
+}
+
+.sd-color-picker__thumb-fill,
+.sd-color-picker__loupe {
+  display: block;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 12%), 0 2px 6px rgb(0 0 0 / 25%);
+}
+
+.sd-color-picker__thumb-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.sd-color-picker__thumb:focus-visible > .sd-color-picker__thumb-fill {
+  box-shadow: 0 0 0 2px var(--app-primary), 0 2px 6px rgb(0 0 0 / 25%);
+}
+
+.sd-color-picker__loupe {
+  position: absolute;
+  z-index: 1;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  rotate: -45deg;
+  border-radius: 50% 50% 50% 2px;
+}
+
+.sd-color-picker__eyedropper.sd-icon-button {
+  width: var(--sd-color-picker-field-height);
+  height: var(--sd-color-picker-field-height);
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+}
+
+.sd-color-picker__numbers {
+  --sd-color-picker-field-height: 28px;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sd-color-picker__numbers[data-format='hex'] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sd-color-picker__numbers[data-format='hex'] > .sd-color-picker__values {
+  flex: 1 1 132px;
+}
+
+.sd-color-picker__formats > .sd-select-field {
+  min-height: var(--sd-color-picker-field-height);
+  padding-inline: 8px;
+  font-size: 11px;
+}
+
+.sd-color-picker__values {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 5px;
+  min-width: 0;
+}
+
+.sd-color-picker__values:has(> :nth-child(2):last-child) {
+  grid-template-columns: minmax(0, 1fr) 54px;
+}
+
+.sd-color-picker__value {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-inline: 6px;
+  border-radius: 6px;
+  background: var(--app-surface-muted);
+  color: var(--app-text-muted);
+  font-size: 10px;
+}
+
+.sd-color-picker__value > input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--sd-color-picker-field-height);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

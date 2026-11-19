@@ -327,6 +327,9 @@ export const WORKSPACE_TEXT_FILE_MAX_BYTES = 256 * 1024;
 /** Maximum complete text file loaded into and saved from the workspace editor. */
 export const WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES = 8 * 1024 * 1024;
 
+/** Maximum image size returned by the workspace preview. */
+export const MAX_WORKSPACE_IMAGE_BYTES = 8 * 1024 * 1024;
+
 export type WorkspaceFileRead = {
   projectId: string;
   rootId?: string;
@@ -409,6 +412,8 @@ export type WorkspaceSearchOptions = {
 export type WorkspaceEntrySearchOptions = {
   /** Exclude directories before applying the result limit. */
   filesOnly?: boolean;
+  /** Include only files with one of these literal suffixes, before applying the result limit. */
+  fileExtensions?: readonly string[];
 };
 
 export type WorkspaceSearchResponse = {

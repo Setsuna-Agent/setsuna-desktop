@@ -1,7 +1,10 @@
 import { canFollowWorkspaceConversationDefaults, normalizeWorkspaceConversationDefaults } from '@setsuna-desktop/contracts';
 import {
+  MAX_WORKSPACE_IMAGE_BYTES,
+  isIgnoredWorkspaceEntryName,
   normalizeWorkspaceProjectName,
   normalizeWorkspaceProjectIcon,
+  normalizeWorkspaceSearchExtensions,
   workspaceProjectForRoot,
   workspaceProjectRoots,
   workspaceTargetProjectId,
@@ -61,16 +64,15 @@ import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 import { createWorkspaceEntry, deleteWorkspaceEntry, moveWorkspaceEntry, renameWorkspaceEntry } from './workspace-entry-mutations.js';
 import { applyWorkspaceFileChanges } from './workspace-file-changes.js';
-import { MAX_WORKSPACE_IMAGE_BYTES, readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
+import { readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
 
 import { assertProjectRootsAvailable, findGitRoot, normalizeProjectPath, normalizeProjectRoots, projectWithRoots } from './workspace-project-roots.js';
 
 const MAX_LIST_ENTRIES = 200;
-export { MAX_WORKSPACE_IMAGE_BYTES } from './workspace-file-preview-reader.js';
+export { MAX_WORKSPACE_IMAGE_BYTES } from '@setsuna-desktop/contracts';
 const MAX_ENTRY_SEARCH_RESULTS = 80;
 const MAX_ENTRY_SEARCH_SCAN = 12000;
 const MAX_SEARCH_RESULTS = 100;
-const IGNORED_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', 'target', 'release-artifacts']);
 const TEMPORARY_WORKSPACE_DATE = /^\d{4}-\d{2}-\d{2}$/u;
 
 type ProjectIndex = {
@@ -367,7 +369,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     if (!targetStat.isDirectory()) throw new Error('Path is not a directory.');
     const entries = await readdir(target, { withFileTypes: true });
     const visible = entries
-      .filter((entry) => !IGNORED_DIRS.has(entry.name) && !entry.isSymbolicLink())
+      .filter((entry) => !isIgnoredWorkspaceEntryName(entry.name) && !entry.isSymbolicLink())
       .slice(0, MAX_LIST_ENTRIES);
     const mapped = await Promise.all(
       visible.map(async (entry): Promise<WorkspaceEntry> => {
@@ -397,6 +399,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   async searchEntries(projectId: WorkspaceProjectTarget, query = '', parent?: string | null, options: WorkspaceEntrySearchOptions = {}): Promise<WorkspaceEntrySearchResponse> {
     const project = await this.requireProject(projectId);
     const search = normalizeEntrySearchText(query);
+    const suffixes = normalizeWorkspaceSearchExtensions(options.fileExtensions).map((extension) => `.${extension}`);
     const parentScoped = parent !== undefined && parent !== null;
     const emptyResult: WorkspaceEntrySearchResponse = {
       entries: [], query: search, scanned: 0, truncated: false, workspaceRoot: project.path,
@@ -431,7 +434,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
       const directoryEntries = await sortedDirectoryEntries(current);
 
       for (const entry of directoryEntries) {
-        if (IGNORED_DIRS.has(entry.name) || entry.isSymbolicLink()) continue;
+        if (isIgnoredWorkspaceEntryName(entry.name) || entry.isSymbolicLink()) continue;
         if (scanned >= MAX_ENTRY_SEARCH_SCAN) {
           truncated = true;
           break traversal;
@@ -447,9 +450,10 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
           continue;
         }
 
-        const haystack = `${relativePath} ${entry.name}`.toLowerCase();
-        if (options.filesOnly && !entry.isFile()) continue;
-        if (search && !haystack.includes(search)) continue;
+        if ((options.filesOnly || suffixes.length) && !entry.isFile()) continue;
+        const name = entry.name.toLowerCase();
+        if (suffixes.length && !suffixes.some((suffix) => name.endsWith(suffix))) continue;
+        if (search && !`${relativePath.toLowerCase()} ${name}`.includes(search)) continue;
         if (entries.length >= maxResults) {
           truncated = true;
           break traversal;
@@ -531,6 +535,10 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   async createEntry(projectId: WorkspaceProjectTarget, input: WorkspaceEntryCreateInput): Promise<WorkspaceEntry> {
     const project = await this.requireProject(projectId);
     return createWorkspaceEntry(project.path, input);
+  }
+
+  async resolveWorkspaceRoot(projectId: WorkspaceProjectTarget): Promise<string> {
+    return realpath((await this.requireProject(projectId)).path);
   }
 
   async renameEntry(projectId: WorkspaceProjectTarget, relativePath: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry> {
@@ -813,14 +821,15 @@ async function countEntries(root: string): Promise<number> {
   return count;
 }
 
-export async function walkWorkspaceFiles(root: string, onFile: (filePath: string) => Promise<boolean>): Promise<boolean> {
+export async function walkWorkspaceFiles(root: string, onFile: (filePath: string) => boolean | Promise<boolean>, signal?: AbortSignal): Promise<boolean> {
+  signal?.throwIfAborted();
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
-    if (IGNORED_DIRS.has(entry.name) || entry.isSymbolicLink()) continue;
+    if (isIgnoredWorkspaceEntryName(entry.name) || entry.isSymbolicLink()) continue;
     const absolutePath = path.join(root, entry.name);
     if (entry.isDirectory()) {
-      if (!(await walkWorkspaceFiles(absolutePath, onFile))) return false;
-    } else if (!(await onFile(absolutePath))) {
+      if (!(await walkWorkspaceFiles(absolutePath, onFile, signal))) return false;
+    } else if (entry.isFile() && !(await onFile(absolutePath))) {
       return false;
     }
   }

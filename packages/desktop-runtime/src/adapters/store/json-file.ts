@@ -23,12 +23,17 @@ export async function writeJsonFile(filePath: string, value: unknown, options: {
   await writeTextFile(filePath, `${JSON.stringify(value, null, 2)}\n`, options);
 }
 
-export async function writeTextFile(filePath: string, content: string, options: { mode?: number } = {}): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
-  await writeFile(tempPath, content, { encoding: 'utf8', mode: options.mode });
+export async function writeTextFile(
+  filePath: string,
+  content: string,
+  options: { mode?: number; beforeReplace?: () => Promise<void> } = {},
+): Promise<void> {
+  const directory = path.dirname(filePath);
+  await mkdir(directory, { recursive: true });
+  const tempPath = path.join(directory, `.setsuna-${randomUUID()}.tmp`);
   try {
-    await renameWithRetry(tempPath, filePath);
+    await writeFile(tempPath, content, { encoding: 'utf8', mode: options.mode });
+    await renameWithRetry(tempPath, filePath, { beforeRename: options.beforeReplace });
   } catch (error) {
     await rm(tempPath, { force: true }).catch(() => undefined);
     throw error;
@@ -52,10 +57,11 @@ export function parseJsonLine<T>(line: string): T | null {
 export async function renameWithRetry(
   sourcePath: string,
   destinationPath: string,
-  options: { platform?: NodeJS.Platform } = {},
+  options: { platform?: NodeJS.Platform; beforeRename?: () => Promise<void> } = {},
 ): Promise<void> {
   const platform = options.platform ?? process.platform;
   for (let attempt = 0; ; attempt += 1) {
+    if (options.beforeRename) await options.beforeRename();
     try {
       await rename(sourcePath, destinationPath);
       return;

@@ -5,7 +5,9 @@ import {
   type CreateThreadInput,
   type RuntimePluginReference,
   type RuntimeConfiguredModelReference,
+  type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import { isDesignDocumentPath } from '@setsuna-desktop/feature-design/contracts';
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import {
   useCallback,
@@ -41,6 +43,7 @@ import { useConversationDebugFeatureEnabled } from '../../composition/Conversati
 import { useUsageFeatureInvalidation } from '../../composition/UsageFeatureBoundary.js';
 import { useCapabilitiesRefreshCoordinator } from '../../composition/CapabilitiesRefreshBoundary.js';
 import { useReviewFeatureService } from '../../composition/ReviewFeatureBoundary.js';
+import { useDesignClient, type DesignWorkspaceLocation } from '../../composition/design/DesignFeatureBoundary.js';
 import type { RuntimeTurnSettlement } from '../../services/runtime-client/useRuntimeThreadState.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
@@ -52,6 +55,11 @@ export function useDesktopAppController() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [newThreadDraftId, setNewThreadDraftId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<MainView>('chat');
+  const [designLocation, setDesignLocation] = useState<DesignWorkspaceLocation | null>(null);
+  const [designSources, setDesignSources] = useState<readonly WorkspaceProject[]>([]);
+  const openDesignView = useRef<() => void>(() => undefined);
+  const latestView = useRef(activeView);
+  latestView.current = activeView;
   const [capabilitySelectionRequest, setCapabilitySelectionRequest] = useState<ChatCapabilitySelectionRequest | null>(null);
   const capabilitySelectionRequestIdRef = useRef(0);
 
@@ -61,6 +69,7 @@ export function useDesktopAppController() {
   const invalidateUsage = useUsageFeatureInvalidation();
   const capabilitiesRefresh = useCapabilitiesRefreshCoordinator();
   const review = useReviewFeatureService();
+  const designClient = useDesignClient();
   const handleTurnSettled = useCallback((settlement: RuntimeTurnSettlement) => {
     if (settlement.usageChanged) invalidateUsage(settlement.threadId);
     void capabilitiesRefresh.refreshAll();
@@ -201,12 +210,25 @@ export function useDesktopAppController() {
   const fileRootId = filePanel?.rootId ?? workspaceProjectRoots(activeWorkspace)[0]?.id;
   const fileRoot = workspaceProjectRoots(activeWorkspace).find((root) => root.id === fileRootId);
   const fileWorkspace = activeWorkspace && fileRoot ? workspaceProjectForRoot(activeWorkspace, fileRoot.id) : undefined;
+  const openWorkspaceFile = useCallback((filePath: string, rootId?: string) => {
+    if (designClient && activeWorkspace && isDesignDocumentPath(filePath)) {
+      // An asynchronous file read belongs to the view that initiated it.
+      if (latestView.current !== activeView) return;
+      if (!projects.some(({ id }) => id === activeWorkspace.id)) {
+        setDesignSources((sources) => [...sources.filter(({ id }) => id !== activeWorkspace.id), activeWorkspace]);
+      }
+      setDesignLocation({ projectId: activeWorkspace.id, rootId, path: filePath });
+      openDesignView.current();
+      return;
+    }
+    openFilePanel(filePath, rootId);
+  }, [activeView, activeWorkspace, designClient, openFilePanel, projects]);
   const projectWorkspace = useProjectWorkspace({
     rootId: fileRootId,
     project: activeWorkspace,
     activeProjectId: activeWorkspace?.id ?? null,
     client,
-    onOpenFilePanel: openFilePanel,
+    onOpenFilePanel: openWorkspaceFile,
     onEntryRenamed: workspacePanels.renameFilePanels,
     onEntryDeleted: workspacePanels.deleteFilePanels,
   });
@@ -257,6 +279,7 @@ export function useDesktopAppController() {
       setError(error instanceof Error ? error.message : String(error));
     });
   }, [navigation.changeView, setError]);
+  openDesignView.current = () => changeView('design');
 
   useGlobalEscapeMenus({
     closeNavigationMenus: navigation.closeNavigationMenus,
@@ -379,6 +402,8 @@ export function useDesktopAppController() {
     chatActions,
     clearCapabilitySelectionRequest,
     composerKey,
+    designLocation,
+    designSources,
     draft,
     globalThreads,
     handleSidebarResizeStep,
@@ -402,6 +427,7 @@ export function useDesktopAppController() {
     selectPluginForChat,
     startPluginAppChat,
     setActiveView: changeView,
+    setDesignLocation,
     setDraft,
     setSidebarCollapsed,
     shellClassName,

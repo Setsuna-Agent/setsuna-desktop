@@ -411,6 +411,15 @@ body.desktop-agent-workspace-resizing .app-topbar {
   grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr) 0;
 }
 
+.app-design-route {
+  display: grid;
+  grid-row: content;
+  grid-column: 1 / -1;
+  min-height: 0;
+  min-width: 0;
+  background: var(--app-bg);
+}
+
 .app-sidebar-slot {
   grid-column: 1;
   grid-row: 1 / -1;

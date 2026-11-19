@@ -50,10 +50,18 @@ export type DesktopWorkspaceFilePreviewResult =
   | { ok: true; url: string; previewId: string }
   | { ok: false; error: string };
 
+export type DesktopWorkspaceEntriesWatchOptions = Readonly<{
+  /** Include entries in descendant directories. */
+  recursive?: boolean;
+  /** Limit content changes by suffix. Additions, removals and moves still invalidate the listing. */
+  contentExtensions?: readonly string[];
+}>;
+
 export type DesktopWorkspaceEntriesWatchInput = {
   subscriptionId: string;
   workspaceRoot: string;
   directoryPaths: string[];
+  options?: DesktopWorkspaceEntriesWatchOptions;
 };
 
 export const WORKSPACE_ENTRIES_WATCH_CHANNELS = {
@@ -72,6 +80,12 @@ export type DesktopImageInput = {
   dataUrl?: string;
   name: string;
 };
+
+export type DesktopDesignHtmlInput = Readonly<{ name: string; html: string }>;
+export type DesktopDesignSvgInput = Readonly<{ name: string; svg: string }>;
+export type DesktopDesignHtmlResult = { ok: true; cancelled?: boolean } | { ok: false; error: string };
+export type DesktopDesignPasteResult = Readonly<{ kind: 'svg'; markup: string }> | Readonly<{ kind: 'issued' | 'unavailable' }>;
+export const MAX_DESIGN_SVG_BYTES = 512 * 1024;
 
 export type DesktopFileDragInput =
   | { kind: 'workspace-file'; workspaceRoot: string; filePath: string }
@@ -170,6 +184,11 @@ export type SetsunaDesktopBridge = {
     readImageAsset(assetId: string): Promise<DesktopImageDataResult>;
     revealImageInFolder(input: DesktopImageInput): Promise<DesktopImageActionResult>;
     saveImageAs(input: DesktopImageInput): Promise<DesktopImageActionResult>;
+    saveDesignHtml(input: DesktopDesignHtmlInput): Promise<DesktopDesignHtmlResult>;
+    saveDesignSvg(input: DesktopDesignSvgInput): Promise<DesktopDesignHtmlResult>;
+    copyDesignLayers(content: string): Promise<void>;
+    readDesignLayers(): Promise<string | null>;
+    pasteDesign(acceptSvg: boolean): Promise<DesktopDesignPasteResult>;
     saveConversationExport(input: DesktopConversationExportInput): Promise<DesktopConversationExportResult>;
     prepareConversationExport(input: DesktopConversationExportInput): Promise<DesktopConversationExportPreviewResult>;
     savePreparedConversationExport(exportId: string): Promise<DesktopConversationExportResult>;
@@ -185,7 +204,7 @@ export type SetsunaDesktopBridge = {
   createWorkspaceFilePreview(workspaceRoot: string, filePath: string, options?: { htmlContent?: string; sandbox?: boolean }): Promise<DesktopWorkspaceFilePreviewResult>;
     releaseWorkspaceFilePreview(previewId: string): Promise<boolean>;
     readWorkspaceDocument(workspaceRoot: string, filePath: string): Promise<DocumentPreviewReadResult>;
-    watchWorkspaceEntries(workspaceRoot: string, directoryPaths: string[], callback: () => void): () => void;
+    watchWorkspaceEntries(workspaceRoot: string, directoryPaths: string[], callback: () => void, options?: DesktopWorkspaceEntriesWatchOptions): () => void;
   };
   dataRoot: {
     getState(): Promise<DesktopDataRootState>;

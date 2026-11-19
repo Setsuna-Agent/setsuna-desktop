@@ -2,6 +2,7 @@ import type { CollaborationRendererStateService } from '@setsuna-desktop/feature
 import type { ThreadPullRequestsStateService } from '@setsuna-desktop/feature-pull-requests/contracts';
 import { PullRequestsFeatureServiceBoundary } from './PullRequestsFeatureBoundary.js';
 import type { ConversationDebugRendererService } from '@setsuna-desktop/feature-conversation-debug/renderer';
+import type { DesignClient } from '@setsuna-desktop/feature-design/renderer';
 import type { ModelProviderRendererStateService } from '@setsuna-desktop/feature-model-provider/renderer';
 import type { NetworkProxyRendererStateService } from '@setsuna-desktop/feature-network-proxy/renderer';
 import type { PluginManagementRendererService } from '@setsuna-desktop/feature-plugin-management/contracts';
@@ -14,6 +15,7 @@ import type { CapabilitiesRefreshCoordinator } from '@setsuna-desktop/renderer-c
 import type { ReactNode } from 'react';
 import { CollaborationFeatureServiceBoundary } from './CollaborationFeatureBoundary.js';
 import { ConversationDebugFeatureServiceBoundary } from './ConversationDebugFeatureBoundary.js';
+import { DesignFeatureServiceBoundary } from './design/DesignFeatureBoundary.js';
 import { CapabilitiesRefreshBoundary } from './CapabilitiesRefreshBoundary.js';
 import { ModelProviderFeatureServiceBoundary } from './ModelProviderFeatureBoundary.js';
 import { NetworkProxyFeatureServiceBoundary } from './NetworkProxyFeatureBoundary.js';
@@ -35,6 +37,7 @@ export type BuiltinRendererFeatureServices = Readonly<{
   collaboration: CollaborationRendererStateService;
   capabilitiesRefresh: CapabilitiesRefreshCoordinator;
   conversationDebug: ConversationDebugRendererService;
+  design?: DesignClient | null;
   modelProvider: ModelProviderRendererStateService;
   networkProxy: NetworkProxyRendererStateService;
   pluginManagement: PluginManagementRendererService;
@@ -70,7 +73,9 @@ export function BuiltinRendererFeatureServicesBoundary({
                         <SkillsFeatureServiceBoundary service={services.skills}>
                           <PullRequestsFeatureServiceBoundary service={services.pullRequests ?? null}>
                             <AutomationFeatureServiceBoundary client={services.automation ?? null}>
-                              <AssistantsFeatureServiceBoundary service={services.assistants ?? null}>{children}</AssistantsFeatureServiceBoundary>
+                              <AssistantsFeatureServiceBoundary service={services.assistants ?? null}>
+                                <DesignFeatureServiceBoundary client={services.design ?? null}>{children}</DesignFeatureServiceBoundary>
+                              </AssistantsFeatureServiceBoundary>
                             </AutomationFeatureServiceBoundary>
                           </PullRequestsFeatureServiceBoundary>
                         </SkillsFeatureServiceBoundary>

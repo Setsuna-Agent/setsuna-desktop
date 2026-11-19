@@ -19,7 +19,6 @@ export function ShellFrame({
   navigationActions,
   applicationMenu,
   toolbarTitle,
-  viewTabs,
   workspaceToolbar,
   actions,
   onNewChat,
@@ -37,7 +36,6 @@ export function ShellFrame({
   navigationActions?: ReactNode;
   applicationMenu?: ReactNode;
   toolbarTitle?: ReactNode;
-  viewTabs?: ReactNode;
   workspaceToolbar?: ReactNode;
   actions?: ReactNode;
   onNewChat?: () => void;
@@ -66,7 +64,7 @@ export function ShellFrame({
   const contentHeader = (
     <div className={insetHeaders ? 'app-content-header' : 'app-topbar__right'}>
       {routeTopbarSlot}
-      {toolbarTitle ? <div className="chat-toolbar-title">{toolbarTitle}</div> : viewTabs}
+      {toolbarTitle ? <div className="chat-toolbar-title">{toolbarTitle}</div> : null}
       {status}
       {actions}
     </div>

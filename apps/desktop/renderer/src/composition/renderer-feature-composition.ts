@@ -23,6 +23,7 @@ import {
 } from '@setsuna-desktop/feature-artifact/contracts';
 import { approvalReviewRendererFeature } from '@setsuna-desktop/feature-approval-review/renderer';
 import { artifactRendererFeature } from '@setsuna-desktop/feature-artifact/renderer';
+import { designAssetsCapability, designClientCapability, designRendererFeature } from '@setsuna-desktop/feature-design/renderer';
 import { computerBridgeCapability } from '@setsuna-desktop/feature-computer-use/contracts';
 import { computerRendererFeature } from '@setsuna-desktop/feature-computer-use/renderer';
 import { browserRendererFeature, browserRendererHostCapability } from '@setsuna-desktop/feature-browser/renderer';
@@ -100,6 +101,7 @@ import {
 } from '@setsuna-desktop/feature-windows-sandbox/renderer';
 import { createDesktopFeatureOperationTransport } from './desktop-feature-operation-transport.js';
 import { createDesktopRuntimeClient } from '../services/runtime-client/client.js';
+import { createDesignAssets } from './design/design-assets.js';
 import { RendererFeatureEventHub } from './renderer-feature-event-hub.js';
 import { usageRendererHost } from './UsageFeatureBoundary.js';
 import { modelProviderRendererHost } from './ModelProviderFeatureBoundary.js';
@@ -142,6 +144,7 @@ const rendererFeatures = defineRendererFeatureHost({
     approvalReviewRendererFeature,
     collaborationRendererFeature,
     conversationDebugRendererFeature,
+    designRendererFeature,
     imageGenerationRendererFeature,
     goalRendererFeature,
     memoryRendererFeature,
@@ -228,6 +231,8 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         rendererFeatureOperationTransportCapability,
         createDesktopFeatureOperationTransport(runtime),
       ),
+      provideHostCapability(designAssetsCapability, createDesignAssets(runtimeClient, desktop,
+        () => window.setsunaDesktop?.windowControls?.executeTextEdit?.('paste') ?? Promise.resolve(false))),
       provideHostCapability(
         rendererFeatureEventFeedCapability,
         events,
@@ -330,6 +335,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
     const dependencies = host.composition.resolveHostDependencies({
       automation: optionalCapability(automationClientCapability, () => null),
       assistants: optionalCapability(assistantsRendererServiceCapability, () => null),
+      design: optionalCapability(designClientCapability, () => null),
       pullRequests: optionalCapability(threadPullRequestsStateCapability, () => null),
       collaboration: optionalCapability(
         collaborationRendererStateCapability,

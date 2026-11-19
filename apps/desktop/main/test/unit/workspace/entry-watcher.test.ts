@@ -47,6 +47,26 @@ it('limits every watched directory to the workspace, including symlink resolutio
   }
 });
 
+it('observes the first design in a preexisting nested directory and an ancestor rename', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'setsuna-watch-designs-'));
+  const inbox = path.join(root, 'screens', 'inbox');
+  const changed = vi.fn();
+  let dispose: (() => void) | undefined;
+  try {
+    await mkdir(inbox, { recursive: true });
+    dispose = await watchWorkspaceEntries(root, ['.'], changed, { recursive: true, contentExtensions: ['design.json'] });
+    await waitForNativeWatch(root, changed);
+    await writeFile(path.join(inbox, 'first.design.json'), '{}');
+    await vi.waitFor(() => expect(changed).toHaveBeenCalled());
+    changed.mockClear();
+    await rename(path.join(root, 'screens'), path.join(root, 'renamed'));
+    await vi.waitFor(() => expect(changed).toHaveBeenCalled());
+  } finally {
+    dispose?.();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it('attaches directories created after subscribing and reattaches when their inodes are replaced', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-watch-recreate-'));
   const directory = path.join(root, 'new-dir');
@@ -90,7 +110,7 @@ it('attaches directories created after subscribing and reattaches when their ino
 async function waitForNativeWatch(root: string, changed: ReturnType<typeof vi.fn>) {
   // macOS fs.watch returns before native observation starts and has no ready event
   // (nodejs/node#52601). Establish observation before testing one-shot mutations.
-  const probe = path.join(root, '.watch-ready');
+  const probe = path.join(root, '.watch-ready.design.json');
   await writeFile(probe, 'starting');
   await vi.waitFor(async () => {
     if (changed.mock.calls.length) return;

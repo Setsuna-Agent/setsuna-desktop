@@ -1,32 +1,46 @@
 import { Slot, HoverCard, Popover as Primitive, Tooltip as TooltipPrimitive } from 'radix-ui';
-import { forwardRef, useEffect, useMemo, useState, type ComponentPropsWithoutRef, type HTMLAttributes, type CSSProperties, type ReactElement, type ReactNode } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef, type HTMLAttributes, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { floatingPlacement, overlayContainer, type Placement } from './portal.js';
 import { cn } from './utils.js';
 
-export type PopoverProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'content'> & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>, 'onOpenAutoFocus' | 'onCloseAutoFocus'> & {
+export type PopoverProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'content'> & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>, 'onOpenAutoFocus' | 'onCloseAutoFocus' | 'hideWhenDetached' | 'sideOffset'> & {
   'data-overlay-open'?: '';
   children: ReactElement; content: ReactNode; contentLabel?: string; open?: boolean; onOpenChange?(open: boolean): void;
   /** Keep outside clicks in the host document, including over embedded webviews. */
   modal?: boolean;
   trigger?: 'click' | 'hover'; placement?: Placement; className?: string; style?: CSSProperties;
   mouseEnterDelay?: number; mouseLeaveDelay?: number;
+  /** Use a viewport-relative rectangle for click popovers with a custom anchor. */
+  getAnchorRect?(trigger: HTMLElement): DOMRect;
 };
-export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ children, content, contentLabel, open, onOpenChange, modal = false, trigger = 'click', placement, className, style, mouseEnterDelay = 0.15, mouseLeaveDelay = 0.15, onOpenAutoFocus, onCloseAutoFocus, ...triggerProps }, ref) {
+export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ children, content, contentLabel, open, onOpenChange, modal = false, trigger = 'click', placement, className, style, mouseEnterDelay = 0.15, mouseLeaveDelay = 0.15,
+  onOpenAutoFocus, onCloseAutoFocus, hideWhenDetached, sideOffset = 6, getAnchorRect, ...triggerProps }, ref) {
   const [internalOpen, setInternalOpen] = useState(false);
   const actualOpen = open ?? internalOpen;
+  const triggerElement = useRef<HTMLElement | null>(null);
+  const setTrigger = useCallback((node: HTMLElement | null) => {
+    triggerElement.current = node;
+    if (typeof ref === 'function') ref(node);
+    else if (ref) ref.current = node;
+  }, [ref]);
+  const anchor = useMemo(() => getAnchorRect ? { current: {
+    get contextElement() { return triggerElement.current ?? undefined; },
+    getBoundingClientRect() { return triggerElement.current ? getAnchorRect(triggerElement.current) : new DOMRect(); },
+  } } : undefined, [getAnchorRect]);
   const changeOpen = (next: boolean) => {
     setInternalOpen(next);
     onOpenChange?.(next);
   };
   // Multiple overlays may share a trigger; any open owner keeps that trigger active.
   const overlayOpen = actualOpen ? '' : triggerProps['data-overlay-open'];
-  const panel = { ...floatingPlacement(placement), className: cn('sd-popover', className), style, sideOffset: 6, collisionPadding: 8 };
+  const panel = { ...floatingPlacement(placement), className: cn('sd-popover', className), style, sideOffset, collisionPadding: 8, hideWhenDetached };
   if (trigger === 'hover') return <HoverCard.Root open={actualOpen} onOpenChange={changeOpen} openDelay={mouseEnterDelay * 1000} closeDelay={mouseLeaveDelay * 1000}>
     <HoverCard.Trigger asChild><Slot.Root {...triggerProps} data-overlay-open={overlayOpen} ref={ref}>{children}</Slot.Root></HoverCard.Trigger>
     <HoverCard.Portal container={overlayContainer()}><HoverCard.Content {...panel} hideWhenDetached>{content}</HoverCard.Content></HoverCard.Portal>
   </HoverCard.Root>;
   return <Primitive.Root open={actualOpen} onOpenChange={changeOpen} modal={modal}>
-    <Primitive.Trigger asChild><Slot.Root {...triggerProps} data-overlay-open={overlayOpen} ref={ref}>{children}</Slot.Root></Primitive.Trigger>
+    {anchor ? <Primitive.Anchor virtualRef={anchor} /> : null}
+    <Primitive.Trigger asChild><Slot.Root {...triggerProps} data-overlay-open={overlayOpen} ref={anchor ? setTrigger : ref}>{children}</Slot.Root></Primitive.Trigger>
     <Primitive.Portal container={overlayContainer()}><Primitive.Content {...panel} aria-label={contentLabel} onOpenAutoFocus={onOpenAutoFocus} onCloseAutoFocus={onCloseAutoFocus}>{content}</Primitive.Content></Primitive.Portal>
   </Primitive.Root>;
 });

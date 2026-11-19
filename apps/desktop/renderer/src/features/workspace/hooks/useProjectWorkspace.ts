@@ -16,6 +16,8 @@ import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { runtimeClientErrorMessage } from '../../../services/runtime-client/runtimeClientErrors.js';
 import type { WorkspaceFileFocusRequest } from '../model.js';
 import { useWorkspaceFileDraft } from './useWorkspaceFileDraft.js';
+import { isDesignDocumentPath } from '@setsuna-desktop/feature-design/contracts';
+import { useDesignClient } from '../../../composition/design/DesignFeatureBoundary.js';
 import { isWorkspaceEntryWithin, renamedWorkspaceEntryPath } from '../workspaceEntryPaths.js';
 
 type ProjectWorkspaceOptions = {
@@ -29,6 +31,7 @@ type ProjectWorkspaceOptions = {
 };
 
 export function useProjectWorkspace({ activeProjectId, rootId, project, client, onOpenFilePanel, onEntryRenamed, onEntryDeleted }: ProjectWorkspaceOptions) {
+  const designClient = useDesignClient();
   const { t } = useI18n();
   const toast = useToast();
   const confirm = useConfirm();
@@ -241,8 +244,10 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
   }, [activeProjectId, entryMutationRequests]);
 
   const createEntry = useCallback((input: WorkspaceEntryCreateInput) => runEntryMutation(
-    (projectId) => client.createProjectEntry(workspaceTarget(projectId, rootId), input),
-  ), [client, rootId, runEntryMutation]);
+    (projectId) => designClient && input.type === 'file' && isDesignDocumentPath(input.name)
+      ? designClient.create({ projectId, rootId, name: input.name, parentPath: input.parentPath })
+      : client.createProjectEntry(workspaceTarget(projectId, rootId), input),
+  ), [client, designClient, rootId, runEntryMutation]);
 
   const relocateEntry = useCallback((entryPath: string, relocate: (projectId: string, isCurrent: () => boolean) => Promise<WorkspaceEntry | null>) => runEntryMutation(async (projectId, isCurrent) => {
     const target = { projectId, rootId, path: entryPath };

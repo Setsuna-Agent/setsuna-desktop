@@ -1,0 +1,126 @@
+import { Search, type LucideIcon } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import { IconButton, TextField, useToast } from '@setsuna-desktop/renderer-ui';
+import { designIconNames, designTextFill } from '../../contracts/index.js';
+import type { DesignLucideSource } from './design-svg-source.js';
+import './design-icon-picker.css';
+
+type IconLoader = () => Promise<{ default: LucideIcon }>;
+type LucideCatalog = Readonly<Record<string, IconLoader>>;
+type Entry = Readonly<{ name: string; label: string; search: string; load: IconLoader }>;
+const commonNames = new Set<string>(designIconNames);
+const tile = 42;
+const gap = 5;
+const rowStep = tile + gap;
+const overscan = 2;
+
+export function designLucideLabel(name: string, translate: RendererTranslate) {
+  return commonNames.has(name) ? translate(`feature.design.icon.${name}`) : name.replaceAll('-', ' ');
+}
+
+export function DesignLucidePicker({ selected, disabled, onPick, translate: t }: Readonly<{
+  selected?: string;
+  disabled: boolean;
+  onPick(source: DesignLucideSource): void;
+  translate: RendererTranslate;
+}>) {
+  const toast = useToast();
+  const [catalog, setCatalog] = useState<LucideCatalog>();
+  const [query, setQuery] = useState('');
+  const entries = useMemo(() => {
+    if (!catalog) return [];
+    const names = [...designIconNames.filter((name) => Object.hasOwn(catalog, name)), ...Object.keys(catalog).filter((name) => !commonNames.has(name))];
+    return names.map((name): Entry => {
+      const label = designLucideLabel(name, t);
+      return { name, label, search: name.replaceAll('-', ' ') + ' ' + label.toLowerCase(), load: catalog[name] };
+    });
+  }, [catalog, t]);
+  const search = query.toLowerCase().replace(/[-\s]+/gu, ' ').trim();
+  const matches = useMemo(() => search ? entries.filter((entry) => entry.search.includes(search)) : entries, [entries, search]);
+
+  useEffect(() => {
+    let active = true;
+    void import('lucide-react/dynamicIconImports.js').then(({ default: icons }) => {
+      // The installed version's declarations also admit a CommonJS default wrapper.
+      if (active) setCatalog((icons.default ?? icons) as LucideCatalog);
+    }).catch(() => { if (active) toast.error(t('feature.design.loadIconsFailed')); });
+    return () => { active = false; };
+  }, [t, toast]);
+
+  return <>
+    <div className="design-icon-picker__search design-panel-scroll">
+      <TextField autoFocus appearance="search" aria-label={t('feature.design.searchIcons')} placeholder={t('feature.design.searchIcons')}
+        leadingIcon={<Search size={15} />} value={query} readOnly={disabled} onChange={(event) => setQuery(event.target.value)} />
+    </div>
+    <DesignIconGrid key={search} entries={matches} selected={selected} disabled={disabled} onPick={onPick} label={t('feature.design.icon')} />
+  </>;
+}
+
+function DesignIconGrid({ entries, label, selected, disabled, onPick }: Readonly<{
+  entries: readonly Entry[];
+  label: string;
+  selected?: string;
+  disabled: boolean;
+  onPick(source: DesignLucideSource): void;
+}>) {
+  const scroll = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 300, height: 272 });
+  const [scrollTop, setScrollTop] = useState(0);
+
+  useLayoutEffect(() => {
+    const element = scroll.current;
+    if (!element) return;
+    function measure() {
+      const width = content.current?.clientWidth || 300;
+      const height = element?.clientHeight || 272;
+      setSize((previous) => previous.width === width && previous.height === height ? previous : { width, height });
+    }
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const columns = Math.max(1, Math.floor((size.width + gap) / rowStep));
+  const rows = Math.ceil(entries.length / columns);
+  const height = Math.max(0, rows * rowStep - gap);
+  const top = Math.max(0, Math.min(scrollTop, height - size.height));
+  const firstRow = Math.max(0, Math.floor(top / rowStep) - overscan);
+  const pastRow = Math.min(rows, Math.ceil((top + size.height) / rowStep) + overscan);
+
+  return <div ref={scroll} className="design-icon-picker__scroll design-panel-scroll" role="group" aria-label={label} tabIndex={0}
+    onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}>
+    <div ref={content} className="design-icon-picker__spacer" style={{ height }}>
+      <div className="design-icon-picker__grid" style={{
+        top: firstRow * rowStep, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridAutoRows: tile, gap,
+      }}>
+        {entries.slice(firstRow * columns, pastRow * columns).map((entry) => <CatalogIcon key={entry.name} entry={entry}
+          selected={entry.name === selected} disabled={disabled} onPick={onPick} />)}
+      </div>
+    </div>
+  </div>;
+}
+
+function CatalogIcon({ entry, selected, disabled, onPick }: Readonly<{
+  entry: Entry;
+  selected: boolean;
+  disabled: boolean;
+  onPick(source: DesignLucideSource): void;
+}>) {
+  const { name, label, load } = entry;
+  const [Icon, setIcon] = useState<LucideIcon>();
+  useEffect(() => {
+    let active = true;
+    void load().then(({ default: glyph }) => { if (active) setIcon(() => glyph); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [load]);
+  return <IconButton label={label} title={label === name ? label : label + ' · ' + name} aria-pressed={selected || undefined}
+    disabled={disabled || !Icon} onClick={(event) => {
+      const svg = event.currentTarget.querySelector('svg');
+      if (svg) onPick({ markup: svg.outerHTML, name: label, icon: name, color: designTextFill });
+    }}>
+    {Icon ? <Icon size={24} aria-hidden="true" /> : null}
+  </IconButton>;
+}

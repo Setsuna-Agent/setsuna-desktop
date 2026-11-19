@@ -21,6 +21,14 @@
 
 .sd-drag-preview[hidden] { display: none; }
 
+.sd-drag-preview__bitmap {
+  position: fixed;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+}
+
+.sd-drag-preview[data-anchor='source'] { scale: 1; }
+
 .sd-drag-preview > .sd-drag-preview__content {
   --sd-file-tree-depth: 0 !important;
   width: 100% !important;

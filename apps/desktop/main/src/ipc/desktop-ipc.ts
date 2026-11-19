@@ -22,6 +22,7 @@ import { registerPluginUiDocumentIpc } from './plugin-ui-document-ipc.js';
 import { registerFileDragIpc } from './file-drag-ipc.js';
 import { readWorkspaceDocument } from '../workspace/document-preview.js';
 import { registerConversationExportIpc } from './conversation-export-ipc.js';
+import { registerDesignOutputIpc } from './design-output-ipc.js';
 
 type DesktopIpcOptions = {
   nativeBridge: DesktopNativeBridgeServer;
@@ -73,6 +74,7 @@ export function registerDesktopIpc({
   });
   registerWorkspaceEntryWatchIpc();
   registerConversationExportIpc();
+  registerDesignOutputIpc();
   registerFileDragIpc(userDataPath, readAttachmentImage);
   registerPluginUiDocumentIpc(interfaceLanguage);
 

@@ -1,7 +1,7 @@
 // beUI's center-modal surface, with Radix owning focus and dismissal.
 import { Dialog as Primitive } from 'radix-ui';
 import { X } from 'lucide-react';
-import { useRef, type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import { useRef, type ClipboardEventHandler, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import { overlayContainer } from './portal.js';
 import { IconButton } from './button.js';
 import { useUiLabels } from './locale.js';
@@ -21,8 +21,9 @@ export type DialogProps = {
   showClose?: boolean;
   onClose(): void;
   'aria-label'?: string;
+  onPaste?: ClipboardEventHandler<HTMLElement>;
 } & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>, 'onCloseAutoFocus'>;
-export function Dialog({ open = true, title, description, headerActions, children, footer, className, width = 640, closeLabel, dismissible = true, showClose = true, onClose, onCloseAutoFocus, 'aria-label': label }: DialogProps) {
+export function Dialog({ open = true, title, description, headerActions, children, footer, className, width = 640, closeLabel, dismissible = true, showClose = true, onClose, onCloseAutoFocus, onPaste, 'aria-label': label }: DialogProps) {
   const labels = useUiLabels();
   const closeText = closeLabel ?? labels.close;
   const contentRef = useRef<HTMLElement | null>(null);
@@ -53,7 +54,7 @@ export function Dialog({ open = true, title, description, headerActions, childre
           // Dismissing feedback must not discard the form that reported the failure.
           if (!dismissible || (target instanceof Element && target.closest('[data-toast-region]'))) event.preventDefault();
         }}>
-        <section ref={contentRef} className={cn('sd-dialog', className)} style={{ width }}>
+        <section ref={contentRef} className={cn('sd-dialog', className)} style={{ width }} onPaste={onPaste}>
           <header className={cn('sd-dialog__header', !title && 'sd-visually-hidden')}>
             {headerActions ? <div className="sd-dialog__header-row">
               {heading}<div className="sd-dialog__header-actions">{headerActions}</div>

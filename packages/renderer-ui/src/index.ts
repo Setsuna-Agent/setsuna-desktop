@@ -2,6 +2,7 @@ export { Button, IconButton, type ButtonProps, type IconButtonProps } from './bu
 export { VIVID_PALETTE } from './styles/palette.js';
 export { ICON_PALETTE, ICON_COLORS, normalizeIconColor, iconColorCssValue, type IconColor } from './icons/colors.js';
 export { IconColorPicker } from './icons/color-picker.js';
+export { ColorPicker, ColorPickerControls, ColorPickerSwatch, type ColorPickerProps, type PickerColor } from './color-picker/color-picker.js';
 export { imageFileError, readImageFile, type ImageFileReadOptions } from './icons/image-file.js';
 export { TextField, TextArea, type TextFieldProps, type TextAreaProps } from './fields.js';
 export { Checkbox, CheckField, Switch, type CheckboxProps } from './selection-controls.js';

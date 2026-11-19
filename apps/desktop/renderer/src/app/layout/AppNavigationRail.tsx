@@ -21,6 +21,7 @@ export function AppNavigationRail({
   runtimeActivityTriggerRef,
   themeToggleTriggerRef,
   onOpenChat,
+  onOpenDesign,
   onOpenCapabilities,
   onOpenPullRequests,
   onOpenAutomation,
@@ -39,6 +40,7 @@ export function AppNavigationRail({
   runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
   themeToggleTriggerRef: RefObject<HTMLButtonElement>;
   onOpenChat: () => void;
+  onOpenDesign?: () => void;
   onOpenCapabilities: () => void;
   onOpenPullRequests: () => void;
   onOpenAutomation: () => void;
@@ -58,6 +60,9 @@ export function AppNavigationRail({
       <div className="app-navigation__viewport" ref={scrollRef}>
         <nav className="app-navigation__routes">
           <NavigationButton icon="chat" label={t('sidebar.chats')} commandId="app.openChat" active={activeView === 'chat'} onClick={onOpenChat} />
+          {onOpenDesign ? (
+            <NavigationButton icon="design" label={t('feature.design.workspace')} active={activeView === 'design'} onClick={onOpenDesign} />
+          ) : null}
           <NavigationButton icon="pull-requests" label="Pull Request" commandId="app.openPullRequests" active={activeView === 'pull-requests'} onClick={onOpenPullRequests} />
           <NavigationButton icon="automation" label={t('feature.automation.title')} commandId="app.openAutomation" active={activeView === 'automation'} onClick={onOpenAutomation} />
           <NavigationButton icon="capabilities" label={t('sidebar.plugins')} commandId="app.openCapabilities" active={activeView === 'capabilities'} onClick={onOpenCapabilities} />

@@ -1,11 +1,13 @@
 import { isValidWorkspaceEntryName, WORKSPACE_ENTRY_EXISTS_ERROR_CODE, type WorkspaceEntry } from '@setsuna-desktop/contracts';
+import { designDocumentFileName } from '@setsuna-desktop/feature-design/contracts';
+import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { Button, Dialog, TextField, ToastNotice } from '@setsuna-desktop/renderer-ui';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { RuntimeClientError, runtimeClientErrorMessage } from '../../services/runtime-client/runtimeClientErrors.js';
 
 export type WorkspaceEntryDialogRequest =
-  | { mode: 'create'; parentPath: string; type: WorkspaceEntry['type'] }
+  | { mode: 'create'; parentPath: string; type: WorkspaceEntry['type'] | 'design' }
   | { mode: 'rename'; entry: Pick<WorkspaceEntry, 'name' | 'path' | 'type'> };
 
 export function WorkspaceEntryDialog({ request, onClose, onSubmit }: {
@@ -23,7 +25,8 @@ export function WorkspaceEntryDialog({ request, onClose, onSubmit }: {
   const formId = useId();
   const errorId = useId();
   const title = t(request.mode === 'rename' ? 'workspace.fileMenu.rename'
-    : request.type === 'directory' ? 'workspace.fileMenu.newFolder' : 'workspace.fileMenu.newFile');
+    : request.type === 'design' ? 'feature.design.newDocument'
+      : request.type === 'directory' ? 'workspace.fileMenu.newFolder' : 'workspace.fileMenu.newFile');
 
   useEffect(() => {
     inputRef.current?.focus({ preventScroll: true });
@@ -41,12 +44,14 @@ export function WorkspaceEntryDialog({ request, onClose, onSubmit }: {
     setPending(true);
     setError(null);
     setOperationError(null);
+    const submittedName = request.mode === 'create' && request.type === 'design' ? designDocumentFileName(name) : name;
     try {
-      await onSubmit(name);
+      await onSubmit(submittedName);
       onClose();
     } catch (cause) {
-      if (cause instanceof RuntimeClientError && cause.code === WORKSPACE_ENTRY_EXISTS_ERROR_CODE) {
-        setError(t('workspace.files.entryAlreadyExists', { name }));
+      if ((cause instanceof RuntimeClientError || cause instanceof FeatureOperationFailure)
+        && cause.code === WORKSPACE_ENTRY_EXISTS_ERROR_CODE) {
+        setError(t('workspace.files.entryAlreadyExists', { name: submittedName }));
       } else {
         setOperationError(runtimeClientErrorMessage(cause));
       }
