@@ -12,6 +12,7 @@ export const BROWSER_KEY_TOOL_NAME = 'browser_key';
 export const BROWSER_NAVIGATE_TOOL_NAME = 'browser_navigate';
 export const BROWSER_WAIT_TOOL_NAME = 'browser_wait';
 export const DESKTOP_BROWSER_PARTITION = 'persist:setsuna-desktop-browser';
+export const DESKTOP_BROWSER_PREVIEW_PARTITION = 'setsuna-desktop-browser-preview';
 
 export type DesktopBrowserTab = {
   active: boolean;

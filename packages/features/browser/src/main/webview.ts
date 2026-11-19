@@ -2,6 +2,7 @@ import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import {
   BROWSER_IPC_CHANNELS,
   DESKTOP_BROWSER_PARTITION,
+  DESKTOP_BROWSER_PREVIEW_PARTITION,
   type BrowserWindowOpenMode,
 } from '../contracts/index.js';
 import {
@@ -13,6 +14,7 @@ import {
   type Event,
   type HandlerDetails,
   type Input,
+  type Session,
   type WebContents,
   type WebPreferences,
 } from 'electron';
@@ -24,6 +26,7 @@ import {
   navigateEmbeddedBrowserCurrentTab,
   requestEmbeddedBrowserNewTab,
 } from './new-tab.js';
+import { browserPreviewSession, isBrowserPreviewUrl, protectBrowserPreview } from './web-preview.js';
 
 const browserFindBindings = new Set(['Control+KeyF', 'Meta+KeyF']);
 
@@ -46,6 +49,7 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
   const hostContents = mainWindow.webContents;
   const guestDisposers = new Map<number, () => void>();
   const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
+  let previewSession: Session | undefined;
   const allowedUrl = (url: string) => isAllowedEmbeddedBrowserUrl(url) || input.isAllowedExtensionUrl?.(url) === true;
   // Keep this deny handler for the process lifetime. Clearing it while guest views
   // are still draining would temporarily broaden their permission surface.
@@ -56,19 +60,34 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     webPreferences: WebPreferences,
     params: Record<string, string>,
   ) => {
+    const preview = params.partition === DESKTOP_BROWSER_PREVIEW_PARTITION;
     // Browser guests must never inherit the desktop renderer preload or Node capabilities.
     delete webPreferences.preload;
     webPreferences.nodeIntegration = false;
     // Sandboxed preloads relay per-frame userscript plans; website frames receive no Node API.
-    webPreferences.nodeIntegrationInSubFrames = true;
+    webPreferences.nodeIntegrationInSubFrames = !preview;
     webPreferences.contextIsolation = true;
     webPreferences.sandbox = true;
     // Chromium's built-in PDF viewer is exposed as a plugin inside webview guests.
-    webPreferences.plugins = true;
-    if (!allowedUrl(params.src ?? '')) event.preventDefault();
+    webPreferences.plugins = !preview;
+    if (!(preview ? params.src === 'about:blank' || isBrowserPreviewUrl(params.src ?? '') : allowedUrl(params.src ?? ''))) {
+      event.preventDefault();
+      return;
+    }
+    if (preview) {
+      previewSession ??= browserPreviewSession();
+      webPreferences.session = previewSession;
+      webPreferences.webviewTag = false;
+      webPreferences.webSecurity = true;
+      webPreferences.allowRunningInsecureContent = false;
+    }
   };
 
   const handleDidAttachWebview = (_event: Event, guestContents: WebContents) => {
+    if (previewSession && guestContents.session === previewSession) {
+      protectBrowserPreview(guestContents);
+      return;
+    }
     const guestId = guestContents.id;
     guestDisposers.get(guestId)?.();
     const disposeExtensionActions = input.onGuestAttached?.(guestContents);

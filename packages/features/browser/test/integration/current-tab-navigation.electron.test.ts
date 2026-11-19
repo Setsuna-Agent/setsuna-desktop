@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { build } from 'esbuild';
 import { expect, it } from 'vitest';
 
-it.skipIf(!['darwin', 'win32'].includes(process.platform))('navigates startup popups, links and POST forms in the registered original guest', async () => {
+it.skipIf(!['darwin', 'win32'].includes(process.platform))('navigates registered guests and isolates interactive web previews', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'setsuna-current-tab-'));
   try {
     const entry = path.join(directory, 'test.cjs');

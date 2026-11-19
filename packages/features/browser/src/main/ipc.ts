@@ -19,6 +19,7 @@ import type { BrowserContextMenuSession } from './context-menu-session.js';
 import { browserMenuPoint } from './webview.js';
 import { loadBrowserFavicon, loadWebsiteFavicon } from './favicon.js';
 import { parseAnnotationMarkers } from './annotations/session.js';
+import { captureBrowserWebPreview, configureBrowserWebPreview } from './web-preview.js';
 
 const handlerChannels = [
   BROWSER_IPC_CHANNELS.requestFindInPage,
@@ -37,6 +38,8 @@ const handlerChannels = [
   BROWSER_IPC_CHANNELS.unregisterTab,
   BROWSER_IPC_CHANNELS.setActiveTab,
   BROWSER_IPC_CHANNELS.setDeviceEmulation,
+  BROWSER_IPC_CHANNELS.configureWebPreview,
+  BROWSER_IPC_CHANNELS.captureWebPreview,
   BROWSER_IPC_CHANNELS.showReloadMenu,
   BROWSER_IPC_CHANNELS.runContextMenuAction,
   BROWSER_IPC_CHANNELS.dismissContextMenu,
@@ -152,6 +155,16 @@ export function registerBrowserIpc(
     if (!isDesktopRendererSender(event.sender, windows)) return false;
     return controller.setDeviceEmulation(String(input?.tabId ?? ''), input?.emulation ?? null);
   }));
+  ipcMain.handle(BROWSER_IPC_CHANNELS.configureWebPreview, (event, input) => scope.runOperation((signal) => {
+    if (event.senderFrame !== event.sender.mainFrame) return false;
+    const guest = resolveOwnedGuest(event.sender, input?.webContentsId, windows);
+    return guest ? configureBrowserWebPreview(guest, input.settings, signal) : false;
+  }));
+  ipcMain.handle(BROWSER_IPC_CHANNELS.captureWebPreview, (event, webContentsId) => scope.runOperation((signal) => {
+    if (event.senderFrame !== event.sender.mainFrame) return null;
+    const guest = resolveOwnedGuest(event.sender, webContentsId, windows);
+    return guest ? captureBrowserWebPreview(guest, signal) : null;
+  }));
   ipcMain.handle(BROWSER_IPC_CHANNELS.showReloadMenu, (event, input) => scope.runOperation(() => {
     const guest = resolveEmbeddedBrowserGuest(event.sender, Number(input?.webContentsId), windows);
     if (!guest) return false;
@@ -182,11 +195,15 @@ function resolveEmbeddedBrowserGuest(
   webContentsId: number,
   windows: ReadonlyMap<number, BrowserWindowSession>,
 ): WebContents | null {
+  const guest = resolveOwnedGuest(sender, webContentsId, windows);
+  const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
+  return guest?.session === browserSession ? guest : null;
+}
+
+function resolveOwnedGuest(sender: WebContents, webContentsId: number, windows: ReadonlyMap<number, BrowserWindowSession>) {
   if (!Number.isSafeInteger(webContentsId) || !isDesktopRendererSender(sender, windows)) return null;
   const guest = electronWebContents.fromId(webContentsId);
-  const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
-  if (!guest || guest.hostWebContents?.id !== sender.id || guest.session !== browserSession) return null;
-  return guest;
+  return guest?.hostWebContents?.id === sender.id ? guest : null;
 }
 
 function isDesktopRendererSender(sender: WebContents, windows: ReadonlyMap<number, BrowserWindowSession>): boolean {

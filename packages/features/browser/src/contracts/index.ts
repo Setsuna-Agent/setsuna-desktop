@@ -6,6 +6,7 @@ export * from './settings.js';
 export * from './passwords.js';
 export * from './extensions.js';
 export * from './browser-control.js';
+export * from './device-profiles.js';
 export * from './control-port.js';
 export * from './definition.js';
 export * from './panel.js';

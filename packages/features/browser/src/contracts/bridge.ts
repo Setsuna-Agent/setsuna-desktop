@@ -46,6 +46,9 @@ export const BROWSER_IPC_CHANNELS = Object.freeze({
   getWebsiteFavicon: 'browser:get-website-favicon',
   setActiveTab: 'browser:set-active-tab',
   setDeviceEmulation: 'browser:set-device-emulation',
+  configureWebPreview: 'browser:configure-web-preview',
+  captureWebPreview: 'browser:capture-web-preview',
+  webPreviewEscape: 'browser:web-preview-escape',
   showReloadMenu: 'browser:show-reload-menu',
   unregisterTab: 'browser:unregister-tab',
 } as const);
@@ -59,6 +62,12 @@ export type BrowserOpenNewTabRequest = Readonly<{
 
 export type BrowserReloadMode = 'normal' | 'hard';
 export type BrowserWindowOpenMode = 'tab' | 'current-tab';
+
+export type BrowserWebPreviewSettings = Readonly<{
+  url: string;
+  device?: Readonly<{ id: string; width: number; height: number }>;
+  interactive: boolean;
+}>;
 
 export type BrowserContextMenuRequest = Readonly<{
   id: string;
@@ -93,6 +102,9 @@ export interface BrowserDesktopBridge extends BrowserPasswordBridge, BrowserExte
   unregisterTab(tabId: string, webContentsId: number): Promise<boolean>;
   setActiveTab(tabId: string | null): Promise<boolean>;
   setDeviceEmulation(tabId: string, emulation: DesktopBrowserDeviceEmulation | null): Promise<boolean>;
+  configureWebPreview(webContentsId: number, settings: BrowserWebPreviewSettings): Promise<boolean>;
+  captureWebPreview(webContentsId: number): Promise<string | null>;
+  onWebPreviewEscape(callback: (webContentsId: number) => void): () => void;
   showReloadMenu(
     webContentsId: number,
     shortcutBindings?: BrowserReloadShortcutBindings,
