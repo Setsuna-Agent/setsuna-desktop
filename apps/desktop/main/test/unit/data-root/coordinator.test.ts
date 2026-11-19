@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import {
   lstat,
   mkdir,
@@ -404,7 +405,7 @@ describe('desktop data root coordinator', () => {
     expect(relaunch).toHaveBeenCalledOnce();
   });
 
-  it('removes pending state when strict runtime shutdown rejects the relaunch', async () => {
+  it('finishes strict shutdown rollback before releasing a waiting dev reload', async () => {
     const fixture = await createMigrationFixture();
     await writeFixture(fixture.sourceRoot, 'Preferences', '{"theme":"dark"}');
     const runtime = {
@@ -415,8 +416,11 @@ describe('desktop data root coordinator', () => {
       }),
       cancelDataMigrationPreparation: vi.fn().mockResolvedValue(undefined),
     } as unknown as RuntimeHost;
+    let failShutdown!: () => void;
     const requestRelaunch = vi.fn()
-      .mockRejectedValueOnce(new Error('Runtime reported an unsuccessful graceful shutdown.'))
+      .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => {
+        failShutdown = () => reject(new Error('Runtime reported an unsuccessful graceful shutdown.'));
+      }))
       .mockResolvedValueOnce(undefined);
     const coordinator = new DesktopDataRootCoordinator({
       appDataRoot: fixture.appDataRoot,
@@ -430,12 +434,21 @@ describe('desktop data root coordinator', () => {
     });
     const plan = await coordinator.scanTarget(fixture.targetRoot);
 
-    await expect(coordinator.beginMigration(plan.planId)).resolves.toMatchObject({
+    const pendingPath = dataRootBootstrapLayout(fixture.appDataRoot).pendingMigrationPath;
+    const migration = coordinator.beginMigration(plan.planId);
+    const pendingAtDevReload = coordinator.activeMigration?.then(() => existsSync(pendingPath));
+    await vi.waitFor(() => expect(requestRelaunch).toHaveBeenCalledOnce());
+    try {
+      expect(existsSync(pendingPath)).toBe(true);
+      await expect(coordinator.beginMigration(plan.planId)).resolves.toMatchObject({ ok: false });
+    } finally {
+      failShutdown();
+    }
+    await expect(migration).resolves.toMatchObject({
       ok: false,
       error: { code: 'schedule_failed' },
     });
-    await expect(lstat(dataRootBootstrapLayout(fixture.appDataRoot).pendingMigrationPath))
-      .rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(pendingAtDevReload).resolves.toBe(false);
     expect(requestRelaunch).toHaveBeenCalledTimes(2);
   });
 

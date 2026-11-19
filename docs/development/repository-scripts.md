@@ -10,12 +10,12 @@
 
 `pnpm dev:electron` 的 supervisor：
 
-1. 依次构建 contracts、feature-core、Feature packages 和 runtime。
+1. 构建自定义应用使用的 app-sdk。
 2. Windows x64 准备原生沙箱与 curl。
-3. 调用 Electron bundle build，并准备当前平台的桌面控制 helper。
+3. 通过 `watch-electron-dev.ts` 增量构建后台 bundle，并准备当前平台的桌面控制 helper。
 4. 注入 Vite URL 和 runtime entry。
 5. macOS 优先启动有效的签名开发应用缓存；否则先启动原 Electron，再后台准备通知应用。
-6. 识别应用内 dev relaunch 专用退出码并原地重启，不结束 Vite。
+6. 保存后台源码后，按产物变化通知 Electron 重启 runtime 或执行计划重启。具体行为见[开发启动](README.md#开发启动)。
 
 ### `prepare-electron-dev-app.ts`
 
@@ -44,7 +44,7 @@ Main/preload/runtime 的 external、format 和 platform 设置在这里统一维
 
 ### `feature-package-aliases.ts`
 
-Vite 与 Vitest 共用的 build-time Feature source alias。它从 `packages/features/*` 派生 package-name 到 `src/` 的映射，避免新增 Feature 时同步两份手写清单；运行时 inventory 仍由四个显式 composition root 决定。
+Vite、Vitest 与后台开发构建共用的 Feature 源码别名。它从 `packages/features/*` 派生 package-name 到 `src/` 的映射，运行时 inventory 由四个显式 composition root 决定。
 
 `pnpm build:features` 同样通过 pnpm workspace filter 构建全部 Feature package，不维护第二份 package path 列表。
 

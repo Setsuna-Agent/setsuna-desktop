@@ -1,10 +1,11 @@
 import { spawn } from 'node:child_process';
-import { EventEmitter } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { RUNTIME_PROCESS_SHUTDOWN_MESSAGE } from '@setsuna-desktop/contracts';
 import type { DiagnosticReporter } from '@setsuna-desktop/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RuntimeHost } from '../../../src/runtime/host.js';
 import { RuntimeProcess } from '../../../src/runtime/runtime-process.js';
 
 vi.mock('node:child_process', async (original) => ({ ...await original<typeof import('node:child_process')>(), spawn: vi.fn() }));
@@ -27,7 +28,7 @@ class RuntimeChild extends EventEmitter {
 }
 
 const children: RuntimeChild[] = [];
-const processes: RuntimeProcess[] = [];
+const processes: Array<RuntimeProcess | RuntimeHost> = [];
 let autoReady = true;
 
 beforeEach(() => {
@@ -180,14 +181,105 @@ describe('runtime crash recovery', () => {
     const { runtime } = fixture(); autoReady = false;
     const starting = runtime.start();
     const rejection = expect(starting).rejects.toThrow('ENOENT');
+    const configRequest = expect(runtime.requestUrl('/v1/config')).rejects.toThrow('ENOENT');
     await settle(() => children.length === 1);
     children[0]!.pid = undefined;
     children[0]!.emit('error', new Error('ENOENT'));
-    await rejection;
+    await Promise.all([rejection, configRequest]);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(spawn).toHaveBeenCalledOnce();
     autoReady = true; await runtime.start();
     expect(runtime.state).toBe('running');
+  });
+
+  it.each(['headers', 'body'] as const)('serves new and interrupted bootstrap reads when the old connection loses its %s', async (phase) => {
+    const host = new RuntimeHost({ appRoot: process.cwd(), appVersion: 'test', dataDir: 'unused', runtimeRequestRetryDelayMs: 0 });
+    processes.push(host);
+    await host.start();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let disconnect: (() => void) | undefined;
+    vi.mocked(fetch).mockImplementationOnce(async () => {
+      if (phase === 'headers') return new Promise<Response>((_resolve, reject) => {
+        disconnect = () => reject(new Error('Old connection closed.'));
+      });
+      // With no prefetch, pull confirms the host is already consuming the response body.
+      return new Response(new ReadableStream<Uint8Array>({
+        pull(controller) { disconnect = () => controller.error(new Error('Old response truncated.')); },
+      }, { highWaterMark: 0 }));
+    });
+    const config = host.request({ path: '/v1/config' });
+    await settle(() => Boolean(disconnect));
+
+    let healthy: (() => void) | undefined;
+    let replacementPort: string | undefined;
+    const dispatched: string[] = [];
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/health') {
+        replacementPort = url.port;
+        await new Promise<void>((resolve) => { healthy = resolve; });
+      } else {
+        dispatched.push(url.pathname);
+      }
+      return Response.json({ port: url.port });
+    });
+    const reload = host.restart();
+    const projects = host.request({ path: '/v1/projects' });
+    disconnect!();
+    await settle(() => Boolean(healthy));
+    try {
+      const cancelled = host.request({ path: '/v1/threads', method: 'POST', requestId: 'cancel-me', responseMode: 'feature-operation' });
+      expect(host.cancelRequest('cancel-me')).toBe(true);
+      await expect(cancelled).resolves.toMatchObject({ ok: false, status: 499 });
+      expect(dispatched).toEqual([]);
+    } finally {
+      healthy!();
+      await reload;
+    }
+    await expect(Promise.all([config, projects])).resolves.toEqual([{ port: replacementPort }, { port: replacementPort }]);
+    expect(dispatched.sort()).toEqual(['/v1/config', '/v1/projects']);
+  });
+
+  it('starts the dev replacement after an unclean exit only once native cleanup finishes', async () => {
+    let release!: () => void;
+    const cleanup = vi.fn(() => new Promise<void>((resolve) => { release = resolve; }));
+    const { runtime, onDiagnostic } = fixture(cleanup);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await runtime.start();
+    const old = children[0]!;
+    old.stdin.removeAllListeners('data');
+    const shutdown = once(old.stdin, 'data');
+    const reload = runtime.restart();
+    await shutdown;
+    old.exit(1);
+    try {
+      await settle(() => onDiagnostic.mock.calls.some(([event]) => event === 'runtime-shutdown-failed'));
+      expect(children).toHaveLength(1);
+    } finally {
+      cleanup.mockResolvedValue(undefined);
+      release();
+      await reload;
+    }
+    expect(children).toHaveLength(2);
+    expect(runtime.state).toBe('running');
+  });
+
+  it('does not resurrect the dev runtime when the host quits during reload', async () => {
+    const { runtime } = fixture();
+    await runtime.start();
+    const child = children[0]!;
+    // Hold the old child at graceful shutdown until the host has also requested a stop.
+    child.stdin.removeAllListeners('data');
+    const shutdown = once(child.stdin, 'data');
+    const reload = runtime.restart();
+    const [command] = await shutdown;
+    expect(command.toString()).toBe(RUNTIME_PROCESS_SHUTDOWN_MESSAGE);
+    const request = expect(runtime.requestUrl('/v1/threads')).rejects.toThrow(/cancelled/u);
+    const stopping = runtime.stop();
+    child.exit(0);
+    await Promise.all([reload, stopping, request]);
+    expect(children).toHaveLength(1);
+    expect(runtime.state).toBe('stopped');
   });
 
   it('reaps a replacement with a stuck health check before the next attempt', async () => {

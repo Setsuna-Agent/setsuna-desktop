@@ -19,16 +19,16 @@ it.each(['render-process-gone', 'destroyed', 'navigation'])('releases subscripti
   const firstId = host.subscribeEvents(first.contents, { threadId: 'first' });
   const otherFirstId = host.subscribeEvents(first.contents, { threadId: 'other' });
   const secondId = host.subscribeEvents(second.contents, { threadId: 'second' });
-  expect(signals).toHaveLength(3);
+  await vi.waitFor(() => expect(signals).toHaveLength(3));
 
   if (event === 'navigation') first.emitter.emit('did-navigate', {}, 'file:///app/index.html', 200, 'OK');
   else first.emitter.emit(event, {}, { reason: 'crashed', exitCode: 1 });
-  await Promise.resolve();
   expect(signals.map(signal => signal.aborted)).toEqual([true, true, false]);
   expect(first.emitter.eventNames()).toEqual([]);
   expect(first.send).not.toHaveBeenCalled();
   // The same WebContents can host a fresh renderer document after reload.
   const replacement = host.subscribeEvents(first.contents, { threadId: 'first', sinceSeq: 9 });
+  await vi.waitFor(() => expect(signals).toHaveLength(4));
   expect(signals[3]!.aborted).toBe(false);
   host.unsubscribe(firstId);
   host.unsubscribe(otherFirstId);
@@ -39,7 +39,7 @@ it.each(['render-process-gone', 'destroyed', 'navigation'])('releases subscripti
   expect(second.emitter.eventNames()).toEqual([]);
 });
 
-it('keeps subscriptions across subframe navigation and same-document history changes, then removes listeners on unsubscribe', () => {
+it('keeps subscriptions across subframe navigation and same-document history changes, then removes listeners on unsubscribe', async () => {
   const signals: AbortSignal[] = [];
   vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
     signals.push(init.signal!);
@@ -48,6 +48,7 @@ it('keeps subscriptions across subframe navigation and same-document history cha
   const host = new RuntimeHost({ appRoot: '/app', appVersion: 'test', dataDir: '/data' });
   const fixture = renderer();
   const id = host.subscribeEvents(fixture.contents, { threadId: 'first' });
+  await vi.waitFor(() => expect(signals).toHaveLength(1));
   fixture.emitter.emit('did-start-navigation', {}, 'https://example.com', false, false);
   fixture.emitter.emit('did-start-navigation', {}, 'file:///app/index.html#chat', true, true);
   fixture.emitter.emit('did-navigate-in-page', {}, 'file:///app/index.html#chat', true);

@@ -46,9 +46,9 @@ import {
 } from './layout.js';
 import {
   buildDataMigrationManifest,
+  buildDataMigrationPlan,
   inspectDataMigrationTarget,
   summarizeMigrationCategories,
-  summarizeMigrationPlanCategories,
 } from './manifest.js';
 import {
   buildLegacyDataImportPlan,
@@ -84,13 +84,11 @@ type DataRootCoordinatorOptions = {
   requestRelaunch: () => Promise<void>;
 };
 
-type CachedPlan = { plan: DesktopDataMigrationPlan; manifest: DataMigrationManifest };
-
 const PROGRESS_EVENT_INTERVAL_MS = 120;
 
 export class DesktopDataRootCoordinator {
   private bootMode: DesktopDataRootBootMode;
-  private cachedPlan: CachedPlan | null = null;
+  private cachedPlan: DesktopDataMigrationPlan | null = null;
   private migrationPromise: Promise<DesktopDataRootActionResult> | null = null;
   private progress: DesktopDataMigrationProgress | null = null;
   private retainedBackups: RetainedDataRootBackup[] = [];
@@ -103,6 +101,10 @@ export class DesktopDataRootCoordinator {
     if (this.bootMode.mode === 'migrating') {
       this.progress = emptyProgress(this.bootMode.pending, 'scanning');
     }
+  }
+
+  get activeMigration(): Promise<DesktopDataRootActionResult> | null {
+    return this.migrationPromise;
   }
 
   getState(): DesktopDataRootState {
@@ -256,44 +258,29 @@ export class DesktopDataRootCoordinator {
     if (this.bootMode.mode !== 'normal') {
       throw new Error('A data location can only be changed during normal startup.');
     }
-    const sourceRoot = this.bootMode.activeRoot;
-    const target = path.resolve(targetRoot);
-    const { manifest, blockers: manifestBlockers } = await buildDataMigrationManifest(sourceRoot);
-    const targetInspection = await inspectDataMigrationTarget({
-      sourceRoot,
-      targetRoot: target,
-      totalBytes: manifest.totalBytes,
-      reservedRoots: this.reservedRoots(),
-    });
-    const plan: DesktopDataMigrationPlan = {
-      planId: randomUUID(),
-      sourceRoot,
-      targetRoot: target,
-      totalFiles: manifest.entries.length,
-      totalBytes: manifest.totalBytes,
-      requiredBytes: targetInspection.requiredBytes,
-      availableBytes: targetInspection.availableBytes,
-      categories: await summarizeMigrationPlanCategories(manifest),
-      blockers: [...manifestBlockers, ...targetInspection.blockers],
-      warnings: targetInspection.warnings,
-      createdAt: new Date().toISOString(),
-    };
-    this.cachedPlan = { plan, manifest };
+    const plan = await buildDataMigrationPlan(this.bootMode.activeRoot, targetRoot, this.reservedRoots());
+    this.cachedPlan = plan;
     return plan;
   }
 
   async beginMigration(planId: string): Promise<DesktopDataRootActionResult> {
-    if (this.bootMode.mode !== 'normal') return failure('invalid_mode', 'Migration is already in progress.');
-    const cached = this.cachedPlan;
-    if (!cached || cached.plan.planId !== planId) {
+    if (this.bootMode.mode !== 'normal' || this.migrationPromise) return failure('invalid_mode', 'Migration is already in progress.');
+    const plan = this.cachedPlan;
+    if (!plan || plan.planId !== planId) {
       return failure('stale_plan', 'The migration plan has expired. Scan the target again.');
     }
-    if (cached.plan.blockers.length) {
-      return failure('blocked_plan', cached.plan.blockers[0].message, cached.plan.blockers[0].path);
+    if (plan.blockers.length) {
+      return failure('blocked_plan', plan.blockers[0].message, plan.blockers[0].path);
     }
 
     const runtime = this.options.getRuntimeHost();
     if (!runtime) return failure('runtime_unavailable', 'The desktop runtime is unavailable.');
+    // Own the whole interval from admission through strict shutdown or pending-marker rollback.
+    this.migrationPromise = this.prepareMigration(plan, runtime).finally(() => { this.migrationPromise = null; });
+    return this.migrationPromise;
+  }
+
+  private async prepareMigration(plan: DesktopDataMigrationPlan, runtime: RuntimeHost): Promise<DesktopDataRootActionResult> {
     const readiness = await runtime.prepareDataMigration();
     if (!readiness.ready) {
       return failure(
@@ -305,9 +292,9 @@ export class DesktopDataRootCoordinator {
     let relaunchAttempted = false;
     try {
       const inspection = await inspectDataMigrationTarget({
-        sourceRoot: cached.plan.sourceRoot,
-        targetRoot: cached.plan.targetRoot,
-        totalBytes: cached.plan.totalBytes,
+        sourceRoot: plan.sourceRoot,
+        targetRoot: plan.targetRoot,
+        totalBytes: plan.totalBytes,
         reservedRoots: this.reservedRoots(),
       });
       if (inspection.blockers.length) {
@@ -315,10 +302,10 @@ export class DesktopDataRootCoordinator {
         const blocker = inspection.blockers[0];
         return failure(blocker.code, blocker.message, blocker.path);
       }
-      const sourceMarker = readDataRootMarkerSync(cached.plan.sourceRoot);
+      const sourceMarker = readDataRootMarkerSync(plan.sourceRoot);
       const pending = newPendingDataMigration(
-        cached.plan.sourceRoot,
-        cached.plan.targetRoot,
+        plan.sourceRoot,
+        plan.targetRoot,
         {
           sourceRootId: sourceMarker?.rootId,
           targetDeviceId: inspection.targetDeviceId,
@@ -341,10 +328,10 @@ export class DesktopDataRootCoordinator {
   }
 
   runMigration(): Promise<DesktopDataRootActionResult> {
-    if (this.migrationPromise) return this.migrationPromise;
     if (this.bootMode.mode !== 'migrating') {
       return Promise.resolve(failure('invalid_mode', 'There is no pending migration.'));
     }
+    if (this.migrationPromise) return this.migrationPromise;
     this.migrationPromise = (
       this.bootMode.pending.kind === 'legacy_import'
         ? this.executeLegacyMigration(this.bootMode.pending)

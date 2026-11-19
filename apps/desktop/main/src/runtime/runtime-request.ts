@@ -1,9 +1,9 @@
+import type { RuntimeProcess } from './runtime-process.js';
+
 type RuntimeTransportRequestOptions = {
-  fetchImpl?: typeof fetch;
   label: string;
   retryDelayMs?: number;
   retryOnce?: boolean;
-  runtimeState: () => 'running' | 'starting' | 'recovering' | 'stopped' | 'stopping';
 };
 
 const DEFAULT_RUNTIME_GET_RETRY_DELAY_MS = 120;
@@ -11,37 +11,41 @@ const DEFAULT_RUNTIME_GET_RETRY_DELAY_MS = 120;
 /**
  * Retries one idempotent localhost request after a transport-level failure.
  *
- * HTTP responses, including 4xx/5xx, are returned directly and never retried here.
+ * The reader consumes the wire data. JSON parsing and domain errors belong to the caller.
+ * Once an HTTP error status has arrived, its request is never retried.
  * Mutating callers must leave retryOnce disabled because a missing response does not
  * prove that the runtime failed to apply the request.
  */
-export async function fetchRuntimeResponse(
-  url: string,
+export async function fetchRuntimeResponse<T>(
+  runtime: RuntimeProcess,
+  path: string,
   init: RequestInit,
   options: RuntimeTransportRequestOptions,
-): Promise<Response> {
-  const fetchImpl = options.fetchImpl ?? fetch;
+  read: (response: Response) => Promise<T>,
+): Promise<T> {
   const maxAttempts = options.retryOnce ? 2 : 1;
-  let lastError: unknown;
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+  for (let attempt = 1; ; attempt += 1) {
+    // Startup failures belong to the lifecycle. Only a dispatched HTTP request can be retried.
+    const url = await runtime.requestUrl(path, init.signal);
+    let response: Response | undefined;
     try {
       throwIfRuntimeRequestCancelled(init.signal);
-      return await fetchImpl(url, init);
+      response = await fetch(url, init);
+      return await read(response);
     } catch (error) {
       // Retrying with the same aborted signal can never succeed. Renderer-driven
       // cancellation is an expected lifecycle outcome, not a transport failure.
       throwIfRuntimeRequestCancelled(init.signal, error);
-      lastError = error;
-      if (attempt >= maxAttempts) break;
+      if (attempt >= maxAttempts || (response && !response.ok)) {
+        throw runtimeTransportError(error, options.label, runtime.state, attempt);
+      }
       console.warn(`[runtime] ${options.label} transport failed; retrying once`, error);
       await runtimeRequestDelay(
         Math.max(0, options.retryDelayMs ?? DEFAULT_RUNTIME_GET_RETRY_DELAY_MS),
       );
     }
   }
-
-  throw runtimeTransportError(lastError, options.label, options.runtimeState(), maxAttempts);
 }
 
 function throwIfRuntimeRequestCancelled(
@@ -55,7 +59,7 @@ function throwIfRuntimeRequestCancelled(
 function runtimeTransportError(
   cause: unknown,
   label: string,
-  runtimeState: ReturnType<RuntimeTransportRequestOptions['runtimeState']>,
+  runtimeState: RuntimeProcess['state'],
   attempts: number,
 ): Error {
   const causeCode = nestedErrorCode(cause);

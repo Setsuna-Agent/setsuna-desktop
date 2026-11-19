@@ -4,7 +4,9 @@ import type { DiagnosticReporter } from '@setsuna-desktop/contracts';
 import { diagnosticErrorFields, reportDiagnostic } from '../diagnostics/report.js';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { abortableDelay, findAvailablePort, stopRuntimeChild, type RuntimeChildProcess } from './runtime-process-control.js';
+import {
+  abortableDelay, allowUncleanExitForDevReload, findAvailablePort, stopRuntimeChild, waitForRuntimeTransition, type RuntimeChildProcess,
+} from './runtime-process-control.js';
 import {
   resolveBuiltinPluginsDir, resolveBuiltinSkillsDir, resolvePackagedRuntimeEntry,
   resolveRuntimeNodeExecutable, resolveRuntimeSpawnCwd, runtimeProcessEnvironment,
@@ -30,16 +32,17 @@ const STABLE_UPTIME_MS = 60_000;
 
 /** Owns one child at a time; transport subscriptions survive an unexpected exit. */
 export class RuntimeProcess {
-  port = 0;
+  private port = 0;
   readonly token = randomBytes(32).toString('hex');
   private child: RuntimeChildProcess | null = null;
   private readyAt: number | null = null;
   private starting: Promise<void> | null = null;
+  private restarting: Promise<void> | null = null;
   private startupAbort: AbortController | null = null;
   private stopping: Promise<void> | null = null;
   private terminating: Promise<void> | null = null;
   private exitCleanup: Promise<void> = Promise.resolve();
-  private recovery: AbortController | null = null;
+  private recovery: { controller: AbortController; ready: Promise<void> } | null = null;
   private attempts = 0;
   private wanted = false;
   private stopRevision = 0;
@@ -48,9 +51,30 @@ export class RuntimeProcess {
 
   get state(): 'running' | 'starting' | 'recovering' | 'stopping' | 'stopped' {
     if (this.stopping) return 'stopping';
+    if (this.restarting) return 'starting';
     if (this.readyAt !== null) return 'running';
     if (this.recovery) return 'recovering';
     return this.starting ? 'starting' : 'stopped';
+  }
+
+  /** A port is allocated before the child listens. Route each attempt after the active handover. */
+  async requestUrl(path: string, signal?: AbortSignal | null): Promise<string> {
+    const revision = this.stopRevision;
+    for (;;) {
+      signal?.throwIfAborted();
+      if (this.stopping || revision !== this.stopRevision) throw new Error('Runtime request cancelled by shutdown.');
+      const ready = this.restarting ?? this.recovery?.ready ?? this.starting;
+      if (!ready) {
+        if (this.wanted && this.readyAt === null) throw new Error('Runtime is not running.');
+        return `http://127.0.0.1:${this.port}${path}`;
+      }
+      try {
+        await waitForRuntimeTransition(ready, signal);
+      } catch (error) {
+        // A newer save can already be replacing the build that just failed.
+        if (!this.restarting || this.restarting === ready) throw error;
+      }
+    }
   }
 
   start(): Promise<void> {
@@ -63,6 +87,23 @@ export class RuntimeProcess {
       if (revision !== this.stopRevision || !this.wanted) throw new Error('Runtime startup was cancelled.');
       return this.ensureStarted();
     });
+  }
+
+  restart(): Promise<void> {
+    const restarting = this.replaceChild(this.stopRevision).finally(() => {
+      if (this.restarting === restarting) this.restarting = null;
+    });
+    this.restarting = restarting;
+    return restarting;
+  }
+
+  private async replaceChild(revision: number): Promise<void> {
+    this.cancelRecovery();
+    // Let startup settle for its original caller. A later host shutdown always wins.
+    await this.starting?.catch(() => undefined);
+    if (!this.wanted || revision !== this.stopRevision) return;
+    await allowUncleanExitForDevReload(this.terminateChild());
+    if (this.wanted && revision === this.stopRevision) await this.start();
   }
 
   stop(): Promise<void> {
@@ -190,6 +231,7 @@ export class RuntimeProcess {
     const readyAt = this.readyAt;
     this.child = null;
     this.readyAt = null;
+    this.port = 0;
     this.exitCleanup = this.cleanupAfterExit();
     void this.exitCleanup.catch((error) => {
       console.error('[runtime] exit cleanup failed', error);
@@ -228,21 +270,22 @@ export class RuntimeProcess {
   }
 
   private cancelRecovery(): void {
-    this.recovery?.abort();
+    this.recovery?.controller.abort();
     this.recovery = null;
   }
 
   private scheduleRecovery(): void {
     if (this.recovery) return;
     const abort = new AbortController();
-    this.recovery = abort;
-    void this.recover(abort.signal).catch((error) => {
+    const ready = this.recover(abort.signal).finally(() => {
+      if (this.recovery?.controller === abort) this.recovery = null;
+    });
+    this.recovery = { controller: abort, ready };
+    void ready.catch((error) => {
       if (!abort.signal.aborted) {
         console.error('[runtime] recovery failed', error);
         reportDiagnostic(this.options.onDiagnostic, 'runtime-recovery-failed', diagnosticErrorFields(error));
       }
-    }).finally(() => {
-      if (this.recovery === abort) this.recovery = null;
     });
   }
 

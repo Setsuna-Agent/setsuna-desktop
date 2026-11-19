@@ -9,9 +9,11 @@ import {
   DESKTOP_DEV_RELAUNCH_EXIT_CODE,
   DESKTOP_DEV_RELAUNCH_EXIT_CODE_ENV,
   isDesktopDevRelaunchExit,
+  type DesktopDevReload,
 } from '../apps/desktop/main/src/dev-relaunch-protocol.js';
-import { buildElectron } from './build-electron.js';
+import { buildNativeComputerHelper } from './build-electron.js';
 import { resolveElectronDevApp, type ElectronDevApp } from './prepare-electron-dev-app.js';
+import { watchElectronDev } from './watch-electron-dev.js';
 
 const rootDir = resolve(import.meta.dirname, '..');
 
@@ -27,17 +29,13 @@ function runPnpm(args: string[]): void {
   execFileSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', args, { cwd: rootDir, stdio: 'inherit' });
 }
 
-runPnpm(['build:contracts']);
-runPnpm(['build:feature-core']);
+// Plugin app projects consume the SDK's on-disk distribution. Backend bundles use workspace sources.
 runPnpm(['build:app-sdk']);
-runPnpm(['build:features']);
-runPnpm(['build:runtime']);
 if (process.platform === 'win32' && process.arch === 'x64') {
   // Dev resolves the sidecar from .cache before Electron starts, just like a packaged build.
   runPnpm(['build:windows-sandbox']);
   runPnpm(['prepare:windows-sandbox-curl']);
 }
-await buildElectron();
 
 let devApp: ElectronDevApp = { executable: String(electronPath) };
 try {
@@ -52,17 +50,26 @@ let terminationSignal: NodeJS.Signals | null = null;
 const preparationAbort = new AbortController();
 let preparation = Promise.resolve();
 
+function reloadBackend(reload: DesktopDevReload): void {
+  const child = activeElectron;
+  if (preparationAbort.signal.aborted || !child?.connected) return;
+  console.info(`[electron-dev] backend rebuilt; ${reload}`);
+  child.send(reload, (error) => {
+    if (error && child === activeElectron && child.connected) console.error('[electron-dev] reload failed', error);
+  });
+}
+
 function startElectron(): void {
   const child = spawn(devApp.executable, ['.'], {
     cwd: rootDir,
-    stdio: 'inherit',
+    stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
     env: {
       ...process.env,
       [DESKTOP_DEV_RELAUNCH_EXIT_CODE_ENV]: String(DESKTOP_DEV_RELAUNCH_EXIT_CODE),
       SETSUNA_DESKTOP_DEV_SERVER_URL:
         process.env.SETSUNA_DESKTOP_DEV_SERVER_URL ?? 'http://127.0.0.1:5174',
       SETSUNA_DESKTOP_RUNTIME_ENTRY:
-        resolve(rootDir, 'packages/desktop-runtime/dist/cli.js'),
+        resolve(rootDir, 'dist/runtime/cli.cjs'),
     },
   });
   activeElectron = child;
@@ -94,8 +101,7 @@ function forwardTerminationSignal(signal: NodeJS.Signals): void {
 
 function finish(code: number): void {
   preparationAbort.abort();
-  // Stop external preparation commands and clean staging before the supervisor exits.
-  void preparation.then(() => process.exit(code));
+  void Promise.all([preparation, backend.dispose()]).then(() => process.exit(code));
 }
 
 function signalExitCode(signal: NodeJS.Signals | null): number {
@@ -104,16 +110,25 @@ function signalExitCode(signal: NodeJS.Signals | null): number {
   return 1;
 }
 
+const backend = await watchElectronDev(rootDir, reloadBackend);
 process.once('SIGINT', () => forwardTerminationSignal('SIGINT'));
 process.once('SIGTERM', () => forwardTerminationSignal('SIGTERM'));
-startElectron();
-// Optional notification setup never delays spawning Electron or a planned relaunch.
-preparation = devApp.prepare?.(preparationAbort.signal).then((executable) => {
-  if (preparationAbort.signal.aborted) return;
-  devApp.executable = executable;
-  console.info('[electron-dev] notification app ready; it will be used on the next Electron launch');
-}).catch((error: unknown) => {
-  if (!preparationAbort.signal.aborted) {
-    console.warn('[electron-dev] notification app preparation failed; Electron continues running:', error);
-  }
-}) ?? Promise.resolve();
+try {
+  await Promise.all([backend.ready, buildNativeComputerHelper()]);
+} catch (error) {
+  await backend.dispose();
+  throw error;
+}
+if (!terminationSignal) {
+  startElectron();
+  // Optional notification setup never delays spawning Electron or a planned relaunch.
+  preparation = devApp.prepare?.(preparationAbort.signal).then((executable) => {
+    if (preparationAbort.signal.aborted) return;
+    devApp.executable = executable;
+    console.info('[electron-dev] notification app ready; it will be used on the next Electron launch');
+  }).catch((error: unknown) => {
+    if (!preparationAbort.signal.aborted) {
+      console.warn('[electron-dev] notification app preparation failed; Electron continues running:', error);
+    }
+  }) ?? Promise.resolve();
+}

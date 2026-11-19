@@ -6,7 +6,10 @@ import { resolveElectronDevApp } from '../prepare-electron-dev-app.js';
 
 vi.mock('electron', () => ({ default: '/original/Electron' }));
 vi.mock('node:child_process', () => ({ execFileSync: vi.fn(), spawn: vi.fn() }));
-vi.mock('../build-electron.js', () => ({ buildElectron: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../build-electron.js', () => ({ buildNativeComputerHelper: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../watch-electron-dev.js', () => ({
+  watchElectronDev: async () => ({ ready: Promise.resolve(), dispose: async () => undefined }),
+}));
 vi.mock('../prepare-electron-dev-app.js', () => ({ resolveElectronDevApp: vi.fn() }));
 
 const children: Array<EventEmitter & { kill: ReturnType<typeof vi.fn>; exitCode: null; signalCode: null }> = [];

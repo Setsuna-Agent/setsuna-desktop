@@ -60,6 +60,11 @@ export class RuntimeHost {
     return this.process.start();
   }
 
+  /** Keep renderer subscriptions and their replay cursors while replacing the dev runtime. */
+  restart(): Promise<void> {
+    return this.process.restart();
+  }
+
   async stop(): Promise<void> {
     for (const subscriptionId of this.subscriptions.keys()) this.unsubscribe(subscriptionId);
     await this.process.stop();
@@ -117,10 +122,9 @@ export class RuntimeHost {
     const method = input.method ?? 'GET';
     const requestLabel = `${method} ${safePath}`;
     // Main keeps the runtime token and port private for both renderer-proxied and internal requests.
-    let response: Response;
     try {
-      response = await fetchRuntimeResponse(
-        `http://127.0.0.1:${this.process.port}${safePath}`,
+      const { response, text } = await fetchRuntimeResponse(
+        this.process, safePath,
         {
           method,
           headers: {
@@ -135,20 +139,18 @@ export class RuntimeHost {
           label: requestLabel,
           retryDelayMs: this.options.runtimeRequestRetryDelayMs,
           retryOnce: !onProgress && method === 'GET',
-          runtimeState: () => this.process.state,
         },
+        async (response) => ({ response, text: onProgress ? '' : await response.text() }),
       );
+      if (onProgress) return readRuntimeProgressResponse(response, onProgress) as Promise<T>;
+      if (input.responseMode === 'feature-operation') return runtimeFeatureOperationResponse(response, text) as T;
+      return runtimeJsonResponse<T>(response, requestLabel, text);
     } catch (error) {
       if (signal?.aborted && input.responseMode === 'feature-operation') {
         return runtimeFeatureOperationCancelledResponse() as T;
       }
       throw error;
     }
-    if (onProgress) return readRuntimeProgressResponse(response, onProgress) as Promise<T>;
-    if (input.responseMode === 'feature-operation') {
-      return runtimeFeatureOperationResponse(response) as Promise<T>;
-    }
-    return runtimeJsonResponse<T>(response, requestLabel);
   }
 
   prepareDataMigration(): Promise<RuntimeDataMigrationReadiness> {
@@ -179,7 +181,7 @@ export class RuntimeHost {
   async uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment> {
     if (!(input.data instanceof Uint8Array)) throw new Error('Attachment bytes are invalid.');
     const params = new URLSearchParams({ name: input.name, type: input.type });
-    const response = await fetch(`http://127.0.0.1:${this.process.port}/v1/attachments?${params}`, {
+    const response = await fetch(await this.process.requestUrl(`/v1/attachments?${params}`), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.process.token}`,
@@ -187,7 +189,7 @@ export class RuntimeHost {
       },
       body: Buffer.from(input.data),
     });
-    return runtimeJsonResponse<RuntimeStoredMessageAttachment>(response, 'POST /v1/attachments');
+    return runtimeJsonResponse<RuntimeStoredMessageAttachment>(response, 'POST /v1/attachments', await response.text());
   }
 
   /** Reads one thread-owned raster image without exposing the runtime token or its local path. */
@@ -196,28 +198,16 @@ export class RuntimeHost {
     const encodedAssetId = encodeURIComponent(assetId.trim());
     if (!encodedThreadId || !encodedAssetId) return { ok: false, error: 'Image attachment id is invalid.' };
     const requestPath = `/v1/threads/${encodedThreadId}/attachments/${encodedAssetId}/image`;
-    const response = await fetchRuntimeResponse(
-      `http://127.0.0.1:${this.process.port}${requestPath}`,
+    return fetchRuntimeResponse(
+      this.process, requestPath,
       { headers: { Authorization: `Bearer ${this.process.token}` } },
       {
         label: `GET ${requestPath}`,
         retryDelayMs: this.options.runtimeRequestRetryDelayMs,
         retryOnce: true,
-        runtimeState: () => this.process.state,
       },
+      readRuntimeImageResponse,
     );
-    if (!response.ok) {
-      return { ok: false, error: await runtimeResponseError(response, 'Image attachment is unavailable.') };
-    }
-    const type = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
-    if (!runtimeImageMimeTypes.has(type)) {
-      return { ok: false, error: 'Runtime returned an unsupported image type.' };
-    }
-    const data = new Uint8Array(await response.arrayBuffer());
-    if (!data.byteLength) {
-      return { ok: false, error: 'Runtime returned invalid image bytes.' };
-    }
-    return { ok: true, data, type };
   }
 
   /**
@@ -313,7 +303,7 @@ export class RuntimeHost {
     const suffix = params.size ? `?${params}` : '';
     // SSE 连接由 main 持有，renderer 重载后可以续订，但不会拿到 runtime token。
     const response = await fetch(
-      `http://127.0.0.1:${this.process.port}/v1/threads/${encodeURIComponent(threadId)}/events${suffix}`,
+      await this.process.requestUrl(`/v1/threads/${encodeURIComponent(threadId)}/events${suffix}`, signal),
       {
         headers: { Authorization: `Bearer ${this.process.token}` },
         signal,
@@ -352,8 +342,7 @@ export class RuntimeHost {
   }
 }
 
-async function runtimeJsonResponse<T>(response: Response, requestLabel: string): Promise<T> {
-  const text = await response.text();
+function runtimeJsonResponse<T>(response: Response, requestLabel: string, text: string): T {
   const body = text ? JSON.parse(text) as { error?: string } : null;
   if (!response.ok) {
     const reason = body?.error ?? `Runtime request failed: ${response.status}`;
@@ -362,10 +351,7 @@ async function runtimeJsonResponse<T>(response: Response, requestLabel: string):
   return body as T;
 }
 
-async function runtimeFeatureOperationResponse(
-  response: Response,
-): Promise<RuntimeFeatureOperationResponse> {
-  const text = await response.text();
+function runtimeFeatureOperationResponse(response: Response, text: string): RuntimeFeatureOperationResponse {
   const body = text ? JSON.parse(text) as unknown : null;
   if (response.ok) return Object.freeze({ ok: true, value: body });
   const record = body && typeof body === 'object' ? body as Record<string, unknown> : {};
@@ -400,6 +386,15 @@ function normalizeRendererRequestId(value: string): string {
 }
 
 const runtimeImageMimeTypes = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp']);
+
+async function readRuntimeImageResponse(response: Response): Promise<DesktopImageDataResult> {
+  if (!response.ok) return { ok: false, error: await runtimeResponseError(response, 'Image attachment is unavailable.') };
+  const type = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  if (!runtimeImageMimeTypes.has(type)) return { ok: false, error: 'Runtime returned an unsupported image type.' };
+  const data = new Uint8Array(await response.arrayBuffer());
+  if (!data.byteLength) return { ok: false, error: 'Runtime returned invalid image bytes.' };
+  return { ok: true, data, type };
+}
 
 async function runtimeResponseError(response: Response, fallback: string): Promise<string> {
   const text = await response.text();
