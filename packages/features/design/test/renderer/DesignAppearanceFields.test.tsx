@@ -82,19 +82,19 @@ it('previews appearance slider changes and only persists a completed drag', asyn
   fireEvent.pointerDown(radius, pointer);
   fireEvent.change(radius, { target: { value: '24' } });
   expect(onPaintPreview.mock.lastCall?.[0]).toMatchObject({ cornerRadius: 24 });
-  expect(radiusValue.valueAsNumber).toBe(24);
+  expect(radiusValue.value).toBe('24');
   fireEvent.keyDown(radius, { key: 'Escape' });
   fireEvent.change(radius, { target: { value: '30' } });
   fireEvent.pointerUp(radius, pointer);
   expect(onPaintPreview).toHaveBeenLastCalledWith(undefined);
-  expect(radiusValue.valueAsNumber).toBe(8);
+  expect(radiusValue.value).toBe('8');
   expect(currentRevision()).toBe(0);
 
   fireEvent.pointerDown(opacity, pointer);
   fireEvent.change(opacity, { target: { value: '38' } });
   fireEvent.change(opacity, { target: { value: '25' } });
   expect(onPaintPreview.mock.lastCall?.[0]).toMatchObject({ opacity: 0.25 });
-  expect(opacityValue.valueAsNumber).toBe(25);
+  expect(opacityValue.value).toBe('25');
   expect(currentRevision()).toBe(0);
   fireEvent.pointerUp(document.body, pointer);
   await waitFor(() => expect(tile()).toMatchObject({ opacity: 0.25, cornerRadius: 8 }));

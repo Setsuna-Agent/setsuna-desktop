@@ -342,12 +342,6 @@
   font-weight: 500;
 }
 
-.design-inspector__field input::-webkit-inner-spin-button,
-.design-inspector__field input::-webkit-outer-spin-button {
-  appearance: none;
-  margin: 0;
-}
-
 .design-inspector__pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

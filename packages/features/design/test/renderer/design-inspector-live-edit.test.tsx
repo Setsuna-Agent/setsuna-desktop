@@ -101,13 +101,20 @@ it('updates a pencil stroke before save and keeps its preview until the save com
     expect(drawnWidth()).toBe(2);
     expect(commit).not.toHaveBeenCalled();
 
-    typeWidth('24');
+    typeWidth('12/(3-3)');
     fireEvent.keyDown(width, { key: 'Enter' });
+    expect(width.value).toBe('2');
+    expect(commit).not.toHaveBeenCalled();
+
+    typeWidth('102.57-50');
+    expect(drawnWidth()).toBe(52.57);
+    fireEvent.keyDown(width, { key: 'Enter' });
+    expect(width.value).toBe('52.57');
     await waitFor(() => expect(replace).toHaveBeenCalledOnce());
-    expect(drawnWidth()).toBe(24);
+    expect(drawnWidth()).toBe(52.57);
     expect((await read()).document.nodes.path.strokes?.[0].width).toBe(2);
     await act(async () => { releaseSave(); await commit.mock.results[0].value; });
-    expect((await read()).document.nodes.path.strokes?.[0].width).toBe(24);
+    expect((await read()).document.nodes.path.strokes?.[0].width).toBe(52.57);
     expect(commit).toHaveBeenCalledOnce();
   } finally {
     releaseSave();

@@ -1,7 +1,7 @@
 import { Eye, EyeOff, Minus, Plus } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ComponentProps, type FocusEvent,
   type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import { IconButton, TextArea, TextField } from '@setsuna-desktop/renderer-ui';
+import { IconButton, parseNumberExpression, TextArea, TextField } from '@setsuna-desktop/renderer-ui';
 
 export function InspectorSection({ title, children, action }: Readonly<{
   title: string; children?: ReactNode; action?: ReactNode;
@@ -79,13 +79,20 @@ export function InspectorField({ label, prefix, suffix, trailing, value, preview
   Omit<ComponentProps<typeof TextField>, 'value' | 'prefix' | 'onBlur' | 'onKeyDown'> & FieldEdit & {
     label: string; prefix?: ReactNode; suffix?: string; trailing?: ReactNode;
 }) {
-  const { input, numberDrag } = useInspectorField<HTMLInputElement>({ value, previewValue, readOnly, onSave, onDraft });
-  const dragPrefix = props.type === 'number' && value !== '' && !input.readOnly && !props.disabled;
+  const numeric = props.type === 'number' ? { min: Number(props.min ?? -Infinity), max: Number(props.max ?? Infinity) } : undefined;
+  const { input, numberDrag } = useInspectorField<HTMLInputElement>({ value, previewValue, readOnly, onSave, onDraft }, numeric);
+  const dragPrefix = numeric && value !== '' && !input.readOnly && !props.disabled;
+  const displayed = previewValue ?? value;
   const Container = trailing ? 'div' : 'label';
   return <Container className="design-inspector__field" title={label}>
     {prefix ? <span aria-hidden="true" className={dragPrefix ? 'design-inspector__number-drag' : undefined}
       {...(dragPrefix ? numberDrag : undefined)}>{prefix}</span> : null}
-    <TextField {...props} {...input} aria-label={label} onChange={(event) => { onChange?.(event); input.onChange(event); }} />
+    <TextField {...props} {...input} {...(numeric ? {
+      type: 'text', role: 'spinbutton', min: undefined, max: undefined, step: undefined, spellCheck: false,
+      'aria-valuemin': props.min === undefined ? undefined : numeric.min,
+      'aria-valuemax': props.max === undefined ? undefined : numeric.max,
+      'aria-valuenow': displayed === '' ? undefined : Number(displayed),
+    } : undefined)} aria-label={label} onChange={(event) => { onChange?.(event); input.onChange(event); }} />
     {suffix ? <span aria-hidden="true">{suffix}</span> : null}
     {trailing}
   </Container>;
@@ -106,7 +113,10 @@ type NumberDrag = {
   release(): void;
 };
 
-function useInspectorField<T extends HTMLInputElement | HTMLTextAreaElement>({ value, previewValue, readOnly, onSave, onDraft }: FieldEdit) {
+function useInspectorField<T extends HTMLInputElement | HTMLTextAreaElement>(
+  { value, previewValue, readOnly, onSave, onDraft }: FieldEdit,
+  numeric?: Readonly<{ min: number; max: number }>,
+) {
   const owner = useId();
   const fieldRef = useRef<T>(null);
   const editing = useRef(false);
@@ -143,22 +153,30 @@ function useInspectorField<T extends HTMLInputElement | HTMLTextAreaElement>({ v
     clearDraft.current = undefined;
   }
 
+  function readEditValue(field: T) {
+    if (!numeric) return field.value;
+    if (!field.value.trim()) return '';
+    const result = parseNumberExpression(field.value);
+    return result === undefined ? undefined : String(result);
+  }
+
   function previewEdit(field: T) {
     editing.current = true;
     editId.current += 1;
     if (onDraft) {
       clearDraft.current = () => onDraft(undefined, owner);
-      onDraft(field.validity.badInput ? undefined : field.value, owner);
+      onDraft(readEditValue(field), owner);
     }
   }
 
   function submitEdit(field: T) {
     if (!editing.current) return;
     editing.current = false;
-    if (field.validity.badInput) field.value = value;
-    if (field.value === value || fieldReadOnly) { discardPreview(); return; }
+    const nextValue = readEditValue(field);
+    if (numeric) field.value = nextValue ?? value;
+    if (nextValue === undefined || nextValue === value || fieldReadOnly) { discardPreview(); return; }
     const attempt = editId.current;
-    void onSave(field.value).then(() => {
+    void onSave(nextValue).then(() => {
       if (attempt !== editId.current) return;
       discardPreview();
       if (field.isConnected) setSettledEdit(attempt);
@@ -181,12 +199,10 @@ function useInspectorField<T extends HTMLInputElement | HTMLTextAreaElement>({ v
   function dragNumber(event: PointerEvent<HTMLSpanElement>) {
     const active = drag.current;
     const field = fieldRef.current;
-    if (!active || active.pointerId !== event.pointerId || !(field instanceof HTMLInputElement)) return;
+    if (!numeric || !active || active.pointerId !== event.pointerId || !field) return;
     const delta = Math.round(event.clientX - active.startX);
     if (!active.changed && Math.abs(delta) < 2) return;
-    const min = field.min === '' ? -Infinity : Number(field.min);
-    const max = field.max === '' ? Infinity : Number(field.max);
-    const next = String(Math.min(max, Math.max(min, Number((active.startValue + delta).toFixed(2)))));
+    const next = String(Math.min(numeric.max, Math.max(numeric.min, Number((active.startValue + delta).toFixed(2)))));
     if (next === field.value) return;
     active.changed = true;
     field.value = next;
@@ -203,8 +219,9 @@ function useInspectorField<T extends HTMLInputElement | HTMLTextAreaElement>({ v
 
   function startNumberDrag(event: PointerEvent<HTMLSpanElement>) {
     const field = fieldRef.current;
-    if (event.button !== 0 || drag.current || fieldReadOnly || !(field instanceof HTMLInputElement)
-      || field.matches(':disabled') || !Number.isFinite(field.valueAsNumber)) return;
+    if (!numeric || event.button !== 0 || drag.current || fieldReadOnly || !field || field.matches(':disabled')) return;
+    const startValue = parseNumberExpression(field.value);
+    if (startValue === undefined) return;
     event.preventDefault();
     const { currentTarget: handle, pointerId, clientX: startX } = event;
     try {
@@ -216,7 +233,7 @@ function useInspectorField<T extends HTMLInputElement | HTMLTextAreaElement>({ v
     const view = handle.ownerDocument.defaultView;
     const cancel = () => { finishDrag(field, false); };
     drag.current = {
-      pointerId, startX, startValue: field.valueAsNumber, changed: false,
+      pointerId, startX, startValue, changed: false,
       release() {
         drag.current = undefined;
         view?.removeEventListener('blur', cancel);
@@ -238,6 +255,17 @@ function useInspectorField<T extends HTMLInputElement | HTMLTextAreaElement>({ v
     onKeyDown(event: KeyboardEvent<T>) {
       event.stopPropagation();
       if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+      if (numeric && !fieldReadOnly && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+        && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+        const field = event.currentTarget;
+        const value = readEditValue(field);
+        if (value === undefined) return;
+        event.preventDefault();
+        const next = Number(value) + (event.key === 'ArrowUp' ? 1 : -1);
+        field.value = String(Math.min(numeric.max, Math.max(numeric.min, next)));
+        previewEdit(field);
+        return;
+      }
       if (event.key === 'Escape') {
         finishDrag(event.currentTarget, false);
         event.currentTarget.value = value;
