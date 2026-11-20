@@ -145,7 +145,8 @@ it('previews a visible imported font on the canvas, discards abandoned hovers an
       tile: { kind: 'rectangle', x: 0, y: 0, width: 12, height: 12, cornerRadius: 0 },
     } }, undefined,
     { fonts: { list, read, import: vi.fn(), remove: vi.fn() } });
-    fireEvent.click(await screen.findByRole('button', { name: 'Body copy' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'feature.design.expandLayer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Body copy' }));
     const picker = screen.getByRole('button', { name: 'feature.design.localFonts' });
     fireEvent.click(picker);
     // The headless DOM has no anchor geometry for the popover's visibility check.
@@ -198,7 +199,8 @@ it('persists a new font weight and italic together and can change the slant of a
       },
     });
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Title' }));
+    await user.click(await screen.findByRole('button', { name: 'feature.design.expandLayer' }));
+    await user.click(screen.getByRole('button', { name: 'Title' }));
     const styleField = () => screen.getByRole('combobox', { name: 'feature.design.fontStyle' });
     const thinItalic = () => screen.findByRole('option', { name: 'feature.design.weight.100 italic' });
 

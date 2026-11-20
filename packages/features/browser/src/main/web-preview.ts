@@ -12,6 +12,7 @@ type Preview = {
   device?: BrowserWebPreviewSettings['device'];
   url?: string;
   loading?: Promise<boolean>;
+  networkAccess?: AbortController;
   interactive: boolean;
   operation: Promise<void>;
 };
@@ -41,7 +42,7 @@ export function protectBrowserPreview(contents: WebContents) {
   previews.set(contents, preview);
   contents.setAudioMuted(true);
   const filter = (event: Event, url: string, mainFrame: boolean) => {
-    if (isBrowserPreviewUrl(url) || (!mainFrame && /^(?:about:(?:blank|srcdoc)$|blob:|data:)/u.test(url))) return;
+    if ((preview.networkAccess && isBrowserPreviewUrl(url)) || (!mainFrame && /^(?:about:(?:blank|srcdoc)$|blob:|data:)/u.test(url))) return;
     event.preventDefault();
   };
   contents.on('will-frame-navigate', (event) => filter(event, event.url, event.isMainFrame));
@@ -56,12 +57,24 @@ export function protectBrowserPreview(contents: WebContents) {
   contents.once('destroyed', () => preview.emulator?.dispose());
 }
 
-export function configureBrowserWebPreview(contents: WebContents, settings: BrowserWebPreviewSettings, signal: AbortSignal): Promise<boolean> {
+export function configureBrowserWebPreview(contents: WebContents, settings: BrowserWebPreviewSettings, requestSignal: AbortSignal): Promise<boolean> {
   const preview = previews.get(contents);
   const { url, device, interactive } = settings ?? {};
-  if (!preview || typeof url !== 'string' || !isBrowserPreviewUrl(url) || typeof interactive !== 'boolean') return Promise.resolve(false);
+  if (!preview) return Promise.resolve(false);
+  if (settings?.networkAccess !== true) {
+    preview.networkAccess?.abort();
+    preview.networkAccess = undefined;
+    contents.stop();
+    preview.url = undefined;
+    return Promise.resolve(false);
+  }
+  if (typeof url !== 'string' || !isBrowserPreviewUrl(url) || typeof interactive !== 'boolean') return Promise.resolve(false);
   const profile = device && browserDeviceProfiles.find(({ id }) => id === device.id);
   if (device && (!profile?.width || !validDimension(device.width) || !validDimension(device.height))) return Promise.resolve(false);
+  if (requestSignal.aborted) return Promise.resolve(false);
+  // Revocation also invalidates device changes and URL loads queued under the old permission.
+  preview.networkAccess ??= new AbortController();
+  const signal = AbortSignal.any([requestSignal, preview.networkAccess.signal]);
   preview.interactive = interactive;
   contents.setAudioMuted(!interactive);
   const operation = preview.operation.then(async () => {
@@ -107,7 +120,7 @@ export function configureBrowserWebPreview(contents: WebContents, settings: Brow
 }
 
 export async function captureBrowserWebPreview(contents: WebContents, signal: AbortSignal): Promise<string | null> {
-  if (!previews.has(contents) || !isBrowserPreviewUrl(contents.getURL())) return null;
+  if (!previews.get(contents)?.networkAccess || !isBrowserPreviewUrl(contents.getURL())) return null;
   try {
     const image = await untilPreviewCancelled(contents.capturePage(undefined, { stayHidden: true, stayAwake: true }), signal, null);
     if (!image || image.isEmpty()) return null;

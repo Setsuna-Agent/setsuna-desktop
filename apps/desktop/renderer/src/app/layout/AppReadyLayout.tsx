@@ -3,6 +3,7 @@ import { BrowserSettingsNavigationProvider } from '../../composition/BrowserWork
 import { useAssistantsFeature } from '../../composition/assistants/AssistantsFeatureBoundary.js';
 import { useAssistantConversationEntry } from '../../composition/assistants/useAssistantConversationEntry.js';
 import { useDesignClient } from '../../composition/design/DesignFeatureBoundary.js';
+import { DesignChatHost } from '../../composition/design/DesignChatHost.js';
 import { DesignWorkspaceRoute } from '../../composition/design/DesignWorkspaceRoute.js';
 import { TerminalActionsHostProvider, type TerminalActionsHost } from '../../composition/TerminalWorkspaceFeatureBoundary.js';
 import { ProjectIcon } from '../../shared/ui/ProjectIcon.js';
@@ -115,7 +116,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     workspaceWidth,
     workspacePanels,
   } = controller;
-  const designAvailable = Boolean(useDesignClient());
+  const designClient = useDesignClient();
+  const designAvailable = Boolean(designClient);
   const designProjects = useMemo(() => {
     const projects = new Map(runtime.projects.map((project) => [project.id, project]));
     for (const source of designSources) if (!projects.has(source.id)) projects.set(source.id, source);
@@ -124,6 +126,11 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     }
     return [...projects.values()];
   }, [activeWorkspace, designLocation?.projectId, designSources, runtime.projects]);
+  const { client, config, saveRuntimePreferences, selectConversationModel } = runtime;
+  const designChat = useMemo(() => ({
+    projects: designProjects, fileWorkspace: activeWorkspace, conversations: designClient?.conversations,
+    runtime: { client, config, saveRuntimePreferences, selectConversationModel },
+  }), [designProjects, activeWorkspace, designClient, client, config, saveRuntimePreferences, selectConversationModel]);
   const [conversationOverviewVisibility, setConversationOverviewVisibility] = useState<ConversationOverviewVisibility>('auto');
   const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
   const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
@@ -518,7 +525,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   }), [setActiveView, workspacePanels.openBrowserPanel]);
 
   return (
-    <BrowserSettingsNavigationProvider value={browserSettingsNavigation}>
+    <DesignChatHost.Provider value={designChat}><BrowserSettingsNavigationProvider value={browserSettingsNavigation}>
     <TerminalActionsHostProvider host={terminalActionsHost}><ShellFrame
       applicationMenu={<AppMenuBar handlers={shortcutHandlers} />}
       rootRef={shellRef}
@@ -764,6 +771,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           ),
         }}
       />
-    </ShellFrame></TerminalActionsHostProvider></BrowserSettingsNavigationProvider>
+    </ShellFrame></TerminalActionsHostProvider></BrowserSettingsNavigationProvider></DesignChatHost.Provider>
   );
 }

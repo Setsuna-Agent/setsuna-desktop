@@ -26,7 +26,7 @@ import {
   navigateEmbeddedBrowserCurrentTab,
   requestEmbeddedBrowserNewTab,
 } from './new-tab.js';
-import { browserPreviewSession, isBrowserPreviewUrl, protectBrowserPreview } from './web-preview.js';
+import { browserPreviewSession, protectBrowserPreview } from './web-preview.js';
 
 const browserFindBindings = new Set(['Control+KeyF', 'Meta+KeyF']);
 
@@ -70,7 +70,7 @@ export function installEmbeddedBrowserWebviews(input: Readonly<{
     webPreferences.sandbox = true;
     // Chromium's built-in PDF viewer is exposed as a plugin inside webview guests.
     webPreferences.plugins = !preview;
-    if (!(preview ? params.src === 'about:blank' || isBrowserPreviewUrl(params.src ?? '') : allowedUrl(params.src ?? ''))) {
+    if (!(preview ? params.src === 'about:blank' : allowedUrl(params.src ?? ''))) {
       event.preventDefault();
       return;
     }

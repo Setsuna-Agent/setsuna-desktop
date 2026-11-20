@@ -107,7 +107,7 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
       // Preserve the proved task origin instead of borrowing the currently active parent's authority.
       const parentTurnId = previous?.parentTurnId;
       const execution = this.newExecution(task.id, this.options.host.id('turn'), parentTurnId);
-      await this.startExecution(task, execution, input.content!, context, false, { userInitiated: true });
+      await this.startExecution(task, execution, input.content!, context, { featureId: child.featureId, index: state.tasks.indexOf(task) }, false, { userInitiated: true });
       return { turnId: execution.turnId };
     });
   }
@@ -227,7 +227,7 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
     const child = await this.options.host.createThread({
       title: collaborationTitle(input, prompt), projectId: parent.projectId, workspaceId: parent.workspaceId,
       parentThreadId: parent.id, memoryMode: parent.memoryMode, modelBinding: configuration.modelBinding,
-    });
+    }, parent.featureId);
     const createdAt = this.options.host.now().toISOString();
     const modelIdentity = { displayName: collaborationDisplayName(input, state.tasks), avatarSeed: avatarSeedForThread(child.id) };
     // Capture appearance for every UI projection, without sending image bytes to the model.
@@ -239,7 +239,7 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
     const execution = this.newExecution(task.id, this.options.host.id('turn'), context.turnId);
     const handoff = buildCollaborationHandoff(parent, context.turnId, execution.turnId, createdAt, contextMode);
     await this.options.host.retainAttachments(parent.id, child.id, handoff.attachments);
-    await this.startExecution(task, execution, prompt, context, true, handoff);
+    await this.startExecution(task, execution, prompt, context, { featureId: child.featureId, index: state.tasks.length }, true, handoff);
     const modelData = {
       tool: 'spawn_agent', senderThreadId: parent.id, childThreadId: child.id, newThreadId: child.id,
       taskId: task.id, turnId: execution.turnId, title: task.title, objective: prompt, identity: modelIdentity, status: 'running', contextMode,
@@ -283,13 +283,13 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
     }, context.interfaceLanguage ?? 'zh-CN');
     const handoff = buildCollaborationHandoff(parent, context.turnId, execution.turnId, this.options.host.now().toISOString(), 'fresh');
     await this.options.host.retainAttachments(parent.id, receiver.id, handoff.attachments);
-    await this.startExecution(task, execution, content, context, false, handoff);
+    await this.startExecution(task, execution, content, context, { featureId: receiver.featureId, index: state.tasks.indexOf(task) }, false, handoff);
     return toolResult('resume_agent', context.threadId, receiver.id, { turnId: execution.turnId, status: 'running', queued: false });
   }
 
   private async startExecution(
     task: CollaborationTask, execution: CollaborationExecution, prompt: string, context: CollaborationToolExecutionContext,
-    newTask: boolean, handoff: Partial<CollaborationSubagentTurnInput> = {},
+    participant: { featureId?: string; index: number }, newTask: boolean, handoff: Partial<CollaborationSubagentTurnInput> = {},
   ): Promise<void> {
     this.ledger.starting.add(execution.turnId);
     try {
@@ -297,7 +297,9 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
       this.assertRunning(context);
       const started = await this.options.host.startTurn(task.childThreadId, {
         ...handoff, name: task.identity.displayName, prompt, title: task.title, turnId: execution.turnId, configuration: task.configuration,
-      }, { unattended: context.unattended });
+      }, { unattended: context.unattended, ...(participant.featureId ? { owner: {
+        featureId: participant.featureId, parentThreadId: context.threadId, participantIndex: participant.index,
+      } } : {}) });
       if (started.turnId !== execution.turnId) {
         await this.options.host.cancelTurn(task.childThreadId, started.turnId);
         throw new Error('Child turn does not match its reserved execution.');

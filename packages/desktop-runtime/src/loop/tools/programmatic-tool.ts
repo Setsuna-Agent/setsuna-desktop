@@ -10,8 +10,8 @@ export function runCodeDefinition(language?: RuntimeInterfaceLanguage): RuntimeT
   return {
     name: RUN_CODE_TOOL_NAME,
     description: text(
-      'Run isolated JavaScript to compose tools and filter large intermediate results. Use await tools.NAME(args); returns {content, tool_call_id, result_id?}. Only text(...), print(...) or console.log(...) enters model context. ALL_TOOLS lists allowed names/descriptions. store(key, value) and load(key) explicitly retain JSON across this thread’s calls (2 MiB/value, 4 MiB/thread, 128 keys); values are volatile and idle threads may be evicted. Ordinary variables never persist. Use search_tools first for unknown schemas. Native tool calls remain available. No Node, filesystem, network or imports. Up to 64 calls, 6 concurrent safe reads, 120 seconds, 64 KiB printed output. Writes and approvals use normal policy; a failed program may have effects, so inspect before retrying. Await all calls. Example: const r = await tools.read_file({file_path:"README.md"}); print(r.content.slice(0,1000));',
-      '执行隔离 JavaScript，组合工具并筛选大型中间结果。使用 await tools.工具名(参数)，返回 {content, tool_call_id, result_id?}；仅 text(...)、print(...) 或 console.log(...) 的内容进入模型上下文。ALL_TOOLS 列出允许工具的名称与描述。通过 store(key, value)/load(key) 显式跨调用保留本线程 JSON 数据（单值 2 MiB、线程 4 MiB、128 个键）；数据不跨重启，闲置线程可能淘汰。普通变量不保留。未知工具先用 search_tools 获取结构，也可继续直接调用工具。没有 Node、文件系统、网络或 import。最多 64 次调用、6 个安全读取并发、120 秒、64 KiB 输出。写入与审批遵循原有策略；程序失败可能已有副作用，重试前检查。必须 await 所有调用。示例：const r = await tools.read_file({file_path:"README.md"}); print(r.content.slice(0,1000));',
+      'Run isolated JavaScript to compose tools and filter large intermediate results. Use await tools.NAME(args); returns {content, tool_call_id, result_id?}; for JSON objects, arrays or strings read result.data directly. Only text(...), print(...) or console.log(...) enters model context. ALL_TOOLS lists allowed names/descriptions. store(key, value) and load(key) explicitly retain JSON across this thread’s calls (2 MiB/value, 4 MiB/thread, 128 keys); values are volatile and idle threads may be evicted. Ordinary variables never persist. Use search_tools first for unknown schemas. Native tool calls remain available. No Node, filesystem, network or imports. Up to 64 calls, 6 concurrent safe reads, 120 seconds, 64 KiB printed output. Writes and approvals use normal policy; a failed program may have effects, so inspect before retrying. Await all calls. Example: const r = await tools.read_file({file_path:"README.md"}); print(r.content.slice(0,1000));',
+      '执行隔离 JavaScript，组合工具并筛选大型中间结果。使用 await tools.工具名(参数)，返回 {content, tool_call_id, result_id?}，JSON 对象、数组和字符串可直接读取 result.data；仅 text(...)、print(...) 或 console.log(...) 的内容进入模型上下文。ALL_TOOLS 列出允许工具的名称与描述。通过 store(key, value)/load(key) 显式跨调用保留本线程 JSON 数据（单值 2 MiB、线程 4 MiB、128 个键）；数据不跨重启，闲置线程可能淘汰。普通变量不保留。未知工具先用 search_tools 获取结构，也可继续直接调用工具。没有 Node、文件系统、网络或 import。最多 64 次调用、6 个安全读取并发、120 秒、64 KiB 输出。写入与审批遵循原有策略；程序失败可能已有副作用，重试前检查。必须 await 所有调用。示例：const r = await tools.read_file({file_path:"README.md"}); print(r.content.slice(0,1000));',
     ),
     inputSchema: { type: 'object', properties: { code: { type: 'string', maxLength: 32_768 } }, required: ['code'], additionalProperties: false },
   };
@@ -32,6 +32,7 @@ export async function runToolProgram(input: {
   const controller = new AbortController();
   const signal = AbortSignal.any([input.signal, controller.signal]);
   const scheduler = new ToolCallScheduler(6, signal);
+  const activeCalls = new Set<AbortController>();
   // Classification can await policy. Serialize admission so an exclusive call remains
   // a barrier even when a later read has a faster policy lookup.
   let admission = Promise.resolve();
@@ -44,15 +45,21 @@ export async function runToolProgram(input: {
           signal.throwIfAborted();
           const parallel = await abortable(input.canRunInParallel(name, args), signal);
           void scheduler.run(parallel, async () => {
-            const result = await input.callTool(name, args, signal, submittedStep);
-            if (Buffer.byteLength(JSON.stringify(result)) > TOOL_PROGRAM_VALUE_BYTES) throw new Error('Result too large; request a smaller range.');
-            return result;
+            // Program teardown cancels unfinished calls. A returned shell session still belongs to the turn.
+            const call = new AbortController();
+            activeCalls.add(call);
+            try {
+              const result = await input.callTool(name, args, AbortSignal.any([input.signal, call.signal]), submittedStep);
+              if (Buffer.byteLength(JSON.stringify(result)) > TOOL_PROGRAM_VALUE_BYTES) throw new Error('Result too large; request a smaller range.');
+              return result;
+            } finally { activeCalls.delete(call); }
           }).then(resolve, reject);
         }).catch(reject);
       }),
     });
   } finally {
     controller.abort(new Error('Tool program ended.'));
+    for (const call of activeCalls) call.abort(signal.reason);
     await admission;
     await scheduler.close();
   }

@@ -3,7 +3,7 @@ import { Button } from '@setsuna-desktop/renderer-ui';
 import { createPortal } from 'react-dom';
 import { forwardRef, useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
 import { useI18n } from '../../../../shared/i18n/I18nProvider.js';
-import { applyComposerRange, composerFragment, composerRange, composerRangeAtTextOffset, extendCommandRange, readComposerDocument, slotText } from './composerDocument.js';
+import { applyComposerRange, composerFragment, composerRange, composerRangeAtTextOffset, extendCommandRange, hasEmptyComposerBreak, readComposerDocument, slotText } from './composerDocument.js';
 import { ChatSubmitIcon } from './ChatSubmitIcon.js';
 import { useComposerCaretScroll } from './useComposerCaretScroll.js';
 import type { ComposerEditor, ComposerSlot } from './types.js';
@@ -72,6 +72,7 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
   const insert = useCallback<ComposerEditor['insert']>((slots, position = 'cursor', replaceCharacters, preventScroll = true) => {
     const element = elementRef.current;
     if (!element) return;
+    if (hasEmptyComposerBreak(element)) element.replaceChildren();
     const range = composerRange(element, position);
     if (replaceCharacters) extendCommandRange(range, element, replaceCharacters);
     const suffix = range.cloneRange();
@@ -120,6 +121,34 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
       if (options.cursor === 'all') range.selectNodeContents(element);
       applyComposerRange(range);
     },
+    setTrailingTag(slot, replace) {
+      const element = elementRef.current;
+      if (!element) return;
+      if (hasEmptyComposerBreak(element)) element.replaceChildren();
+      const slots = readComposerDocument(element, references.current);
+      // The reader merges adjacent text nodes, so at most one trailing slot holds separator whitespace.
+      const last = slots.at(-1);
+      const tail = last?.type === 'text' && !last.value?.trim() ? slots.at(-2) : last;
+      const target = tail?.type === 'tag' && replace(tail)
+        ? [...element.querySelectorAll<HTMLElement>('[data-slot-key]')].find((tag) => tag.dataset.slotKey === tail.key)
+        : undefined;
+      if (!slot) {
+        if (target) {
+          target.remove();
+          if (slots.every((item) => item === tail || (item.type === 'text' && !item.value?.trim()))) element.replaceChildren();
+          synchronize();
+        }
+        return;
+      }
+      const fragment = composerFragment(element.ownerDocument, [slot], references.current);
+      if (target) target.replaceWith(fragment);
+      else {
+        if (last && !/\s$/u.test(slotText(last))) fragment.prepend(' ');
+        fragment.append(' ');
+        element.append(fragment);
+      }
+      synchronize();
+    },
     clear() {
       const element = elementRef.current;
       if (!element) return;
@@ -151,6 +180,7 @@ export const ChatPromptInput = forwardRef<ComposerEditor, Props>(function ChatPr
         insert([{ type: 'text', value: event.clipboardData.getData('text/plain') }]);
       }}
       onKeyDown={(event) => {
+        if (event.target instanceof Element && event.target.closest('[data-slot-key] button')) return;
         if (disabled || composing.current || event.nativeEvent.isComposing) return;
         onKeyDown?.(event);
         if (event.defaultPrevented || composing.current || event.nativeEvent.isComposing || event.key !== 'Enter') return;

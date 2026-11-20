@@ -5,6 +5,10 @@ import { expect, it, vi } from 'vitest';
 import { createDesktopFeatureOperationTransport } from '../../../src/composition/desktop-feature-operation-transport.js';
 import { readGitConflictHistory } from '@setsuna-desktop/feature-review/contracts';
 import { createReviewClient } from '../../../../../../packages/features/review/src/renderer/client.js';
+import { createDesignClient, type DesignAssets } from '../../../../../../packages/features/design/src/renderer/client.js';
+import { deleteDesignDocument } from '@setsuna-desktop/feature-design/contracts';
+import { removeDesignFont } from '../../../../../../packages/features/design/src/contracts/design-fonts.js';
+import { designCommandFromQuery } from '../../../../../../packages/features/design/src/contracts/design-command-key.js';
 
 const input = { threadId: 'thread/一', workspaceRoot: 'C:\\项目 + #1&test\\repo', limit: 0, archived: false, omitted: undefined };
 const codec = defineRuntimeCodec((value) => value);
@@ -36,6 +40,24 @@ it.each(['GET', 'DELETE'] as const)('preserves %s input in URL parameters, indep
   expect(decodeURIComponent(url.pathname)).toBe('/v1/features/test/threads/thread/一/history');
   expect(Object.fromEntries(url.searchParams)).toEqual({ workspaceRoot: input.workspaceRoot, limit: '0', archived: 'false' });
   expect(sent.body).toBeUndefined();
+});
+
+it('round-trips the live command identity for both confirmed design deletions', async () => {
+  const { request, transport } = setup();
+  const client = createDesignClient(transport, {} as DesignAssets);
+  const command = { sessionId: 'session/1', id: 'command+2' };
+  request.mockImplementation(async (sent) => {
+    const url = new URL(sent.path, 'http://localhost');
+    const operation = url.pathname === deleteDesignDocument.path ? deleteDesignDocument : removeDesignFont;
+    const query = Object.fromEntries(url.searchParams);
+    expect(designCommandFromQuery(operation.input.parse(query))).toEqual(command);
+    delete query.commandId;
+    expect(() => operation.input.parse(query)).toThrow();
+    return { ok: true, value: null };
+  });
+  await client.delete({ path: '稿件.design.json', projectId: 'project', expectedRevision: 'rev', command });
+  await client.fonts.remove('a'.repeat(64), undefined, command);
+  expect(request).toHaveBeenCalledTimes(2);
 });
 
 it('keeps mutation input in the body and sends parameterless reads without a query', async () => {

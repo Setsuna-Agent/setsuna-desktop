@@ -24,6 +24,7 @@ import type { ToolResultStore } from '../../ports/tool-result-store.js';
 import type { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 
 export type AgentLoopOptions = {
+  queuedInputEditor?: import('../lifecycle/runtime-queued-turn-coordinator.js').QueuedInputEditor;
   attachmentStore?: AttachmentStore;
   threadStore: ThreadStore;
   modelClient: ModelClient;

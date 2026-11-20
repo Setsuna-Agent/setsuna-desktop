@@ -60,7 +60,7 @@ export interface DesignWorkspaceFiles {
   list(workspace: DesignWorkspace, signal: AbortSignal): Promise<readonly string[]>;
   create(input: CreateDesignDocumentInput, content: string, signal: AbortSignal): Promise<WorkspaceEntry>;
   move(input: MoveDesignDocumentInput, signal: AbortSignal): Promise<DesignDocumentRef>;
-  delete(ref: DesignDocumentRef, signal: AbortSignal): Promise<void>;
+  delete(ref: DesignDocumentRef & { expectedRevision?: string }, signal: AbortSignal): Promise<void>;
   resolveResourceRoot(ref: DesignDocumentRef, signal: AbortSignal): Promise<DesignDocumentRef>;
   importImage(ref: DesignDocumentRef, image: Readonly<{ name: string; extension: DesignImageExtension; bytes: Uint8Array }>,
     signal: AbortSignal): Promise<string>;
@@ -75,3 +75,6 @@ export const designWorkspaceFilesCapability = defineCapability<DesignWorkspaceFi
   id: 'design.workspace-files',
   description: 'Manage design files and their workspace assets.',
 });
+export { designTurnHostCapability, designToolsCapability, designToolNames, type DesignTurnHost, type DesignToolService } from './design-task.js';
+
+export type { DesignConversationOwner, DesignConversation } from './design-conversations.js';

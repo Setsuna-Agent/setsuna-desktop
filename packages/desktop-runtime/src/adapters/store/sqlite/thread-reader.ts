@@ -41,11 +41,13 @@ export class SqliteThreadReader {
       const cached = this.host.cached(threadId);
       if (cached) return {
         id: cached.id, createdAt: cached.createdAt, projectId: cached.projectId,
-        workspaceId: cached.workspaceId, lastSeq: cached.lastSeq,
+        workspaceId: cached.workspaceId, lastSeq: cached.lastSeq, featureId: cached.featureId, origin: cached.origin,
       };
-      const row = database.prepare('SELECT id, created_at, project_id, workspace_id, last_seq FROM threads WHERE id = ?').get(threadId);
+      const row = database.prepare('SELECT id, created_at, project_id, workspace_id, last_seq, feature_id, origin_json FROM threads WHERE id = ?').get(threadId);
       return row ? {
         id: stringColumn(row, 'id'), createdAt: stringColumn(row, 'created_at'),
+        featureId: row.feature_id === null ? undefined : stringColumn(row, 'feature_id'),
+        origin: row.origin_json === null ? undefined : decodeSqliteJson<RuntimeThread['origin']>(row.origin_json),
         projectId: row.project_id === null ? undefined : stringColumn(row, 'project_id'),
         workspaceId: row.workspace_id === null ? undefined : stringColumn(row, 'workspace_id'),
         lastSeq: numberColumn(row, 'last_seq'),

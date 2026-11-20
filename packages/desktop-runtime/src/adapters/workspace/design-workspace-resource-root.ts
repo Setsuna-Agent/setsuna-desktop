@@ -13,6 +13,7 @@ import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 import { readDesignDocumentFile, readValidDesignDocument, resolveDesignFile, withDesignSource } from './design-workspace-document-file.js';
 import { resolveExistingWorkspaceEntry, type WorkspaceEntryRelocation } from './workspace-entry-mutations.js';
 import { walkWorkspaceFiles } from './workspace-file-walk.js';
+import type { DesignConversationRelocation, DesignDestinationProject } from './design-conversation-relocation.js';
 
 export type DesignResourceOwnership = ReturnType<typeof createDesignResourceOwnership>;
 type DraftLocation = Readonly<{ file: string; id: string }>;
@@ -130,17 +131,21 @@ export function createDesignResourceOwnership(dataDir: string) {
   };
 }
 
-export function createDesignWorkspaceEntryRelocation(dataDir: string): WorkspaceEntryRelocation {
+export function createDesignWorkspaceEntryRelocation(dataDir: string, relocateChats?: DesignConversationRelocation,
+  projectAtDestination?: DesignDestinationProject): WorkspaceEntryRelocation {
   const ownership = createDesignResourceOwnership(dataDir);
   return async (source, target, type, relocateEntry) => {
-    if (type === 'file' && !isDesignDocumentPath(source) && !isDesignDocumentPath(target)) return relocateEntry();
     const canonical = await realpath(source);
+    const move = (id?: string) => relocateChats ? relocateChats({ source: canonical, target, documentId: id, projectAtDestination }, relocateEntry) : relocateEntry();
+    if (target === null) return move();
     if (type === 'file') {
+      // A chat follows its draft through temporary filenames. Only probe an ordinary file if a chat owns its path.
+      if (!isDesignDocumentPath(source) && !isDesignDocumentPath(target)) return move();
       const id = await readDraftId(canonical);
-      return id === undefined ? relocateEntry() : ownership.relocate(canonical, target, [{ file: canonical, id }], relocateEntry);
+      return id === undefined ? relocateEntry() : ownership.relocate(canonical, target, [{ file: canonical, id }], () => move(id));
     }
     const drafts = await ownership.findInDirectory(canonical);
-    return ownership.relocate(canonical, target, drafts, relocateEntry);
+    return ownership.relocate(canonical, target, drafts, () => move());
   };
 }
 
@@ -161,7 +166,7 @@ function isUnreadable(error: unknown) {
   return isNodeError(error) && (error.code === 'EACCES' || error.code === 'EPERM');
 }
 
-async function readDraftId(file: string) {
+export async function readDraftId(file: string) {
   try {
     // A replaced directory or symlink must not make a stale binding apply to another file.
     if (path.relative(file, await realpath(file)) || !(await lstat(file)).isFile()) return;

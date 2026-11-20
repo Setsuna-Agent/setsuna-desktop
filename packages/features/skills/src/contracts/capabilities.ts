@@ -26,6 +26,8 @@ export type SkillInjection = {
 export type SkillActivationContext = {
   /** Persistent defaults join the current turn's explicitly selected Skills. */
   defaultSkillIds?: readonly string[];
+  /** Feature defaults only match the bundled copy, even if an extra root contains the same ID. */
+  builtinSkillIds?: readonly string[];
   /** 与当前采样步骤使用同一语言，避免配置在异步加载中切换。 */
   interfaceLanguage?: RuntimeInterfaceLanguage;
 };

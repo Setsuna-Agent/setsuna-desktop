@@ -34,10 +34,11 @@ import {
   artifactWorkspaceFilesCapability,
 } from '@setsuna-desktop/feature-artifact/contracts';
 import { artifactRuntimeFeature } from '@setsuna-desktop/feature-artifact/runtime';
-import { designFontStorageCapability, designScriptSandboxCapability, designWorkspaceFilesCapability } from '@setsuna-desktop/feature-design/contracts';
+import { createDesignTurnHost, designCollaborationHost } from './design-turn-host.js';
+import { designToolsCapability, designTurnHostCapability, designFontStorageCapability, designScriptSandboxCapability, designWorkspaceFilesCapability } from '@setsuna-desktop/feature-design/contracts';
+import { createDesignWorkspaceFiles } from '../adapters/workspace/design-workspace-files.js';
 import { designRuntimeFeature } from '@setsuna-desktop/feature-design/runtime';
 import { createDesignScriptSandbox } from '../adapters/tool-program/design-script-sandbox.js';
-import { createDesignWorkspaceFiles } from '../adapters/workspace/design-workspace-files.js';
 import { computerRuntimeToolsCapability } from '@setsuna-desktop/feature-computer-use/contracts';
 import { computerRuntimeFeature } from '@setsuna-desktop/feature-computer-use/runtime';
 import { browserRuntimeToolServiceCapability } from '@setsuna-desktop/feature-browser/contracts';
@@ -207,7 +208,8 @@ export async function activateBuiltinRuntimeFeatures(
         runtime.configStore.approvalReviewLegacySettingsAdapter(),
       ),
       provideHostCapability(artifactWorkspaceFilesCapability, runtime.workspaceProjects),
-      provideHostCapability(designWorkspaceFilesCapability, createDesignWorkspaceFiles(runtime.workspaceProjects, runtime.dataDir)),
+      provideHostCapability(designWorkspaceFilesCapability, createDesignWorkspaceFiles(runtime.workspaceProjects, runtime.dataDir, runtime.relocateDesignChats)),
+      provideHostCapability(designTurnHostCapability, createDesignTurnHost(runtime)),
       provideHostCapability(designFontStorageCapability, { dataDir: runtime.dataDir }),
       provideHostCapability(designScriptSandboxCapability, createDesignScriptSandbox()),
       provideHostCapability(
@@ -294,7 +296,7 @@ export async function activateBuiltinRuntimeFeatures(
       ),
       provideHostCapability(
         collaborationRuntimeHostCapability,
-        runtime.agentLoop.collaborationRuntimeHost(),
+        designCollaborationHost(runtime),
       ),
       provideHostCapability(
         goalRuntimeHostCapability,
@@ -467,6 +469,8 @@ export async function activateBuiltinRuntimeFeatures(
     host.bind({
       sampling: requiredCapability(modelProviderSamplingCapability),
     }, ({ sampling }) => runtime.providerModelClient.bind(sampling));
+
+    host.bind({ tools: requiredCapability(designToolsCapability) }, ({ tools }) => runtime.designToolHost.bind(tools));
 
     host.bind({
       tools: requiredCapability(artifactRuntimeToolServiceCapability),

@@ -20,6 +20,7 @@ import { defaultImageCrop, designImageFit, moveImageCrop } from './design-image-
 import { findDesignFrameAtPoint } from './design-layer-drop.js';
 import type { DesignLayerBox, DesignScene } from './design-layout.js';
 
+export type CanvasInteraction = 'edit' | 'navigate' | 'disabled';
 export type CanvasViewport = Point & Readonly<{ scale: number }>;
 export type DrawingTool = 'frame' | 'rectangle' | 'ellipse' | 'text' | 'web' | 'script' | VectorDrawingTool;
 export type DesignTool = 'select' | 'hand' | 'pen' | FreehandTool | DrawingTool;
@@ -32,7 +33,8 @@ export const designAnchors: readonly Anchor[] = [
   { x: -1, y: 1 }, { x: 0, y: 1 }, { x: 1, y: 1 },
 ];
 
-type Start = Readonly<{ pointerId: number; revision: string; screen: Point; world: Point; viewport: CanvasViewport }>;
+export type BeginCanvasPick = (additive: boolean) => ((ids: readonly string[]) => void) | undefined;
+type Start = Readonly<{ pick?: ReturnType<BeginCanvasPick>; pointerId: number; revision: string; screen: Point; world: Point; viewport: CanvasViewport }>;
 type LayoutGesture = Start & Readonly<{ kind: 'layout'; id: string; handle: LayoutHandle; layout: DesignLayout; value: number; box: DesignLayerBox }>;
 type MoveSnap = Readonly<{ outline: Bounds; targets: DesignSnapTargets }>;
 type ResizeSnap = Readonly<{ anchors: ReturnType<typeof resizeSnapAnchors>; targets: DesignSnapTargets }>;
@@ -67,7 +69,7 @@ type Preview = Readonly<{
 }>;
 
 export function useDesignCanvasGestures({
-  stage, document, projected = document, scene, revision, tool, selectedIds, croppingId, layoutAdjustmentId, disabled, viewport, setViewport, onSelect, onEditText, onAction,
+  stage, document, projected = document, scene, revision, tool, selectedIds, croppingId, layoutAdjustmentId, interaction, viewport, setViewport, onSelect, beginPick, onEditText, onAction,
   settings = defaultDesignCanvasSettings,
 }: Readonly<{
   stage: RefObject<Konva.Stage>;
@@ -79,10 +81,11 @@ export function useDesignCanvasGestures({
   selectedIds: readonly string[];
   croppingId?: string;
   layoutAdjustmentId?: string;
-  disabled: boolean;
+  interaction: CanvasInteraction;
   viewport: CanvasViewport;
   settings?: DesignCanvasSettings;
   setViewport: Dispatch<SetStateAction<CanvasViewport>>;
+  beginPick?: BeginCanvasPick;
   onSelect(ids: readonly string[]): void;
   onEditText(id: string, node: DesignText): void;
   onAction(action: CanvasAction, revision: string): Promise<boolean>;
@@ -97,7 +100,7 @@ export function useDesignCanvasGestures({
   useLayoutEffect(() => {
     drawingHandlers.current = { calculateDrawing, commit };
     const active = gesture.current;
-    if (active?.kind === 'draw' && !isCurrent(active)) cancel();
+    if (active && !isCurrent(active)) cancel();
   });
   useLayoutEffect(() => () => {
     const active = gesture.current;
@@ -108,15 +111,21 @@ export function useDesignCanvasGestures({
   }, []);
 
   function onPointerDown(event: PointerEvent<HTMLElement>, handle?: Readonly<{ id: string; surface: HTMLDivElement }>) {
-    if (disabled || finishing.current || gesture.current || (event.button !== 0 && event.button !== 1)) return;
+    if (interaction === 'disabled' || finishing.current || gesture.current || (event.button !== 0 && event.button !== 1)) return;
     const surface = handle?.surface ?? event.currentTarget;
+    const wantsPan = space || tool === 'hand' || event.button === 1;
+    if (interaction === 'navigate' && !wantsPan && tool !== 'select') {
+      surface.focus({ preventScroll: true });
+      return;
+    }
     const screen = toCanvasScreen(surface, { x: event.clientX, y: event.clientY });
     const world = toCanvasWorld(viewport, screen);
-    const start: Start = { pointerId: event.pointerId, revision, screen, world, viewport };
+    // Capture the draft caret before focusing the canvas. Only a completed pick consumes it.
+    const pick = !handle && !wantsPan && tool === 'select' ? beginPick?.(event.shiftKey) : undefined;
+    const start: Start = { pointerId: event.pointerId, revision, screen, world, viewport, pick };
     const hit = handle ? undefined : stage.current?.getIntersection(screen);
     const hitId = handle?.id ?? hit?.findAncestor('.design-hit-layer', true)?.id();
     const layerId = hitId && Object.hasOwn(document.nodes, hitId) && scene[hitId]?.visible && !scene[hitId]?.locked ? hitId : null;
-    const wantsPan = space || tool === 'hand' || event.button === 1;
     if (handle && (wantsPan || tool !== 'select' || layerId === null)) return;
     const selected = selectedBranches(selectedIds, scene);
     const primary = selected.length === 1 ? selected[0] : null;
@@ -129,6 +138,8 @@ export function useDesignCanvasGestures({
       gesture.current = { ...start, kind: 'pan' };
       surface.style.cursor = '';
       setPanning(true);
+    } else if (interaction === 'navigate') {
+      gesture.current = { ...start, kind: 'marquee', additive: event.shiftKey, clickedId: layerId };
     } else if (tool === 'pen' || isFreehandTool(tool)) {
       return;
     } else if (tool !== 'select') {
@@ -325,7 +336,7 @@ export function useDesignCanvasGestures({
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
     const active = gesture.current;
     if (!active) {
-      const hit = tool === 'select' && !space && !disabled ? stage.current?.getIntersection(pointer(event)) : null;
+      const hit = tool === 'select' && !space && interaction === 'edit' ? stage.current?.getIntersection(pointer(event)) : null;
       const index = designAnchors.findIndex((_, index) => hit?.hasName(`design-anchor-${index}`));
       const anchor = designAnchors[index];
       const pose = selectedIds.length === 1 ? scene[selectedIds[0]] : undefined;
@@ -389,10 +400,17 @@ export function useDesignCanvasGestures({
           const box = scene[id];
           return box.visible && !box.locked && box.visibleBounds && containsBounds(area, box.visibleBounds);
         }), scene);
-        onSelect(active.additive ? [...new Set([...selectedIds, ...matching])] : matching);
+        const selection = active.additive ? [...new Set([...selectedIds, ...matching])] : matching;
+        onSelect(selection);
+        active.pick?.(selection);
       } else if (active.additive && active.clickedId) {
-        onSelect(toggleSelection(selectedIds, active.clickedId));
-      } else if (!active.additive) onSelect(matching);
+        const selection = toggleSelection(selectedIds, active.clickedId);
+        onSelect(selection);
+        active.pick?.(selection);
+      } else if (!active.additive) {
+        onSelect(matching);
+        if (matching.length || selectedIds.length) active.pick?.(matching);
+      }
     }
     if (active.kind === 'move') {
       if (next?.layerDrop?.phase === 'hover') {
@@ -405,10 +423,13 @@ export function useDesignCanvasGestures({
         return { kind: 'move', placements: next.placements };
       }
       if (active.fromHandle) return;
-      onSelect(active.additive ? toggleSelection(selectedIds, active.id) : [active.id]);
-      const node = document.nodes[active.id];
+      const selection = active.additive ? toggleSelection(selectedIds, active.id) : [active.id];
+      onSelect(selection);
       const screen = pointer(event);
-      if (node.kind === 'text' && !active.additive && Math.hypot(screen.x - active.screen.x, screen.y - active.screen.y) < 4) {
+      if (Math.hypot(screen.x - active.screen.x, screen.y - active.screen.y) >= 4) return;
+      active.pick?.(selection);
+      const node = document.nodes[active.id];
+      if (node.kind === 'text' && !active.additive) {
         const at = event.timeStamp;
         // Pointer capture routes release to the canvas surface, so detect the second click here.
         if (lastClick?.id === active.id && lastClick.revision === revision && at - lastClick.at < 460
@@ -423,11 +444,13 @@ export function useDesignCanvasGestures({
   }
 
   function isCurrent(active: Gesture | DrawGesture) {
+    if (interaction === 'disabled') return false;
+    // Panning changes only the viewport and can continue across an AI commit.
     if (active.kind === 'pan') return true;
-    if (active.revision !== revision) return false;
-    if (active.kind === 'draw') return !disabled && active.tool === tool;
+    if (active.revision !== revision || (interaction === 'navigate' && active.kind !== 'marquee')) return false;
+    if (active.kind === 'draw') return active.tool === tool;
     if (active.kind !== 'layout' && active.kind !== 'crop') return true;
-    return !disabled && tool === 'select' && selectedIds.length === 1 && selectedIds[0] === active.id
+    return tool === 'select' && selectedIds.length === 1 && selectedIds[0] === active.id
       && active.id === (active.kind === 'crop' ? croppingId : layoutAdjustmentId);
   }
 

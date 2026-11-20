@@ -90,8 +90,11 @@ export type RuntimeToolRouterOptions = {
   context: RuntimeToolExecutionContext;
   approvalPolicy: RuntimeConfigState['approvalPolicy'];
   allowTool?(tool: RuntimeToolDefinition): boolean;
+  /** Plugin-owned tools may need installed MCP/extension provenance before scope filtering. */
+  filterBySource?: boolean;
   /** Set when a host confined this turn to its own tools; runtime feature tools must not run either. */
   exclusiveScope?: boolean;
+  includeCollaboration?: boolean;
   strictApprovalRequiresSerial?: boolean;
   toolResultStore?: ToolResultStore;
   programsEnabled?: boolean;
@@ -134,7 +137,7 @@ export class RuntimeToolRouter {
     const catalogTools: RuntimeToolDefinition[] = [];
 
     for (const tool of allTools) {
-      if (options.allowTool && !options.allowTool(tool)) continue;
+      if (!options.filterBySource && options.allowTool && !options.allowTool(tool)) continue;
       const profile = await runtimeProfileForTool(options.toolHost, options.context, tool.name);
       profiles.set(tool.name, profile);
       if (toolIsHidden(profile)) continue;
@@ -143,11 +146,16 @@ export class RuntimeToolRouter {
 
     const plugins = options.context.features?.plugins === false || !catalogTools.some((tool) => tool.source || profiles.get(tool.name)?.plugin || isCliCommandTool(tool.name))
       ? [] : (await options.pluginStore?.listPlugins())?.plugins ?? [];
+    const attributed = catalogTools.map((tool) => withToolDiscoverySource(tool, profiles.get(tool.name)?.plugin, plugins));
     return new RuntimeToolRouter(options,
-      catalogTools.map((tool) => withToolDiscoverySource(tool, profiles.get(tool.name)?.plugin, plugins)), profiles, plugins);
+      options.filterBySource && options.allowTool ? attributed.filter(options.allowTool) : attributed, profiles, plugins);
   }
 
-  /** Collaboration, Goal and App Server dynamic tools are withheld from exclusively scoped turns. */
+  /** Feature scopes can opt in to collaboration while keeping Goal and dynamic tools withheld. */
+  get withholdsCollaborationTools(): boolean {
+    return this.withholdsRuntimeFeatureTools && !this.options.includeCollaboration;
+  }
+
   get withholdsRuntimeFeatureTools(): boolean {
     return this.options.exclusiveScope === true;
   }

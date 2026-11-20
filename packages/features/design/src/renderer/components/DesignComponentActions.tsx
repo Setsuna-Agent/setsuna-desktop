@@ -27,6 +27,7 @@ export function DesignComponentActions({ sourceId, library, librarySource, onIns
   translate: RendererTranslate;
 }>) {
   if (!sourceId && !library.length) return null;
+  const insertLabel = t('feature.design.insertComponent');
   return <div className="design-inspector__component-actions">
     {definition ? <>
       <InspectorField label={t('feature.design.variant')} value={definition.name} placeholder={t('feature.design.variant.default')}
@@ -46,9 +47,8 @@ export function DesignComponentActions({ sourceId, library, librarySource, onIns
         {t('feature.design.detachComponent')}
       </Button>
     </div> : null}
-    {library.length ? <SelectField aria-label={t('feature.design.insertComponent')} title={t('feature.design.insertComponent')}
-      value="" disabled={disabled} onValueChange={(id) => { if (id) void onInsert(id); }}>
-      <option value="" disabled>{t('feature.design.insertComponent')}</option>
+    {library.length ? <SelectField aria-label={insertLabel} title={insertLabel} value="" valueContent={insertLabel}
+      disabled={disabled} onValueChange={(id) => { if (id) void onInsert(id); }}>
       {library.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
     </SelectField> : null}
   </div>;

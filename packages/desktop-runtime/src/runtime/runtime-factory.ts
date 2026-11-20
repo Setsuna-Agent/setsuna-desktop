@@ -46,6 +46,7 @@ import { ArtifactToolHost } from '../adapters/tool/artifact-tool-host.js';
 import { AutomationToolHost } from '../adapters/tool/automation-tool-host.js';
 import { AssistantToolHost } from '../adapters/tool/assistant-tool-host.js';
 import { ComputerToolHost } from '../adapters/tool/computer-tool-host.js';
+import { DesignToolHost } from '../adapters/tool/design-tool-host.js';
 import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
 import { CompositeToolHost } from '../adapters/tool/composite-tool-host.js';
 import { ExtensionToolHost } from '../adapters/tool/extension-tool-host.js';
@@ -62,6 +63,7 @@ import type { RuntimeApi } from '../ports/runtime-api.js';
 import { FileProjectInstructionLoader } from '../adapters/workspace/file-project-instruction-loader.js';
 import { FileProjectWorkflowResolver } from '../adapters/workspace/file-project-workflow-resolver.js';
 import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-project-store.js';
+import { createDesignConversationRelocation } from '../adapters/workspace/design-conversation-relocation.js';
 import { GitWorkspaceFork } from '../adapters/workspace/git-workspace-fork.js';
 import type { WorkspaceFork } from '../ports/workspace-fork.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../adapters/workspace/workspace-runtime-environment-resolver.js';
@@ -182,7 +184,12 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     requireBundledRipgrep: options.requireBundledRipgrep,
   });
   const workspaceFork: WorkspaceFork = new GitWorkspaceFork(path.join(runtimeDataDir, 'worktrees'));
-  const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock, { searchEngine: workspaceSearchEngine, worktrees: workspaceFork });
+  const relocateDesignChats = createDesignConversationRelocation(threadStore, (threadId, origin, projectId) =>
+    eventWriter.append(threadId, { id: ids.id('event'), threadId, createdAt: clock.now().toISOString(),
+      type: 'thread.updated', payload: { origin, projectId } }));
+  const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock, {
+    searchEngine: workspaceSearchEngine, worktrees: workspaceFork, relocateDesignChats,
+  });
   const environmentResolver = new WorkspaceRuntimeEnvironmentResolver(workspaceProjects);
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
@@ -243,6 +250,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const assistantToolHost = new AssistantToolHost();
   const notificationToolHost = new NotificationToolHost();
   const pullRequestToolHost = new PullRequestToolHost();
+  const designToolHost = new DesignToolHost();
   const browserToolHost = new BrowserToolHost();
   const computerToolHost = new ComputerToolHost();
   const memoryToolHost = new MemoryToolHost();
@@ -255,6 +263,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     assistantToolHost,
     notificationToolHost,
     pullRequestToolHost,
+    designToolHost,
     browserToolHost,
     computerToolHost,
     mcpToolHost,
@@ -270,6 +279,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     if (context.features?.plugins !== false && context.selectedPluginIds?.some(isBuilderId)) await builtinPlugins.ensureReady();
   });
   const agentLoop = new AgentLoop({
+    queuedInputEditor: designToolHost,
     toolProgramRuntime: new QuickJsToolProgramRuntime(),
     attachmentStore,
     threadStore,
@@ -322,6 +332,8 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     approvalGate,
     appServerNotificationBus,
     backgroundShellProcesses,
+    designToolHost,
+    relocateDesignChats,
     browserToolHost,
     computerToolHost,
     configStore,

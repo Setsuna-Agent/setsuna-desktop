@@ -5,10 +5,13 @@ export type ComposerSlot =
   | { type: 'text'; value?: string; key?: string }
   | { type: 'tag'; key: string; props: { label?: ReactNode; value?: string } };
 
+export type ComposerTag = Extract<ComposerSlot, { type: 'tag' }>;
+
 export type ComposerEditor = {
   readonly inputElement: HTMLDivElement | null;
   focus(options?: { cursor?: 'start' | 'end' | 'all'; preventScroll?: boolean }): void;
   getValue(): { value: string; slotConfig: ComposerSlot[] };
   clear(): void;
+  setTrailingTag(slot: ComposerTag | null, replace: (tail: ComposerTag) => boolean): void;
   insert(slots: ComposerSlot[], position?: 'start' | 'end' | 'cursor', replaceCharacters?: string, preventScroll?: boolean): void;
 };

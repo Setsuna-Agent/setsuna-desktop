@@ -41,7 +41,7 @@ import {
   type RuntimeDebugTraceSink,
 } from '../../ports/runtime-debug-trace.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import type { RuntimeToolExecutionContext, ToolHost } from '../../ports/tool-host.js';
+import type { ExclusiveToolScope, RuntimeToolExecutionContext, ToolHost } from '../../ports/tool-host.js';
 import type { ToolResultStore } from '../../ports/tool-result-store.js';
 import {
   estimateRuntimeMessageTokens,
@@ -257,6 +257,8 @@ export class RuntimeSamplingContextBuilder {
       threadId,
       projectId: thread.projectId,
       featureId: thread.featureId,
+      inputClientId: thread.featureId === 'design'
+        ? conversationMessages.filter((message) => message.turnId === turnId && message.role === 'user' && message.clientId).at(-1)?.clientId : undefined,
       turnId,
       modelCapabilities: {
         supportsImages: activeModelSupportsImages,
@@ -291,18 +293,22 @@ export class RuntimeSamplingContextBuilder {
     const skillActivationText = currentTurnSkillActivationText(orderedConversationMessages, turnId);
     // A Feature-owned conversation (e.g. an assistant) may confine the turn to its own tools.
     const exclusiveTools = toolAccess === 'none' ? null : await this.options.toolHost?.exclusiveToolScope?.(toolContext) ?? null;
-    const allowTool = runtimeToolFilter(toolAccess, exclusiveTools);
+    const selectedPluginIds = selectedPluginIdsForInput(skillActivationText);
+    const scopedPlugins = exclusiveTools?.includeSelectedPlugins && selectedPluginIds.length && toolContext.features?.plugins !== false
+      ? new Set(selectedPluginIds) : undefined;
+    const allowTool = runtimeToolFilter(toolAccess, exclusiveTools, scopedPlugins);
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
           toolHost: this.options.toolHost,
           pluginStore: this.options.pluginStore,
           loadedToolNames,
-          selectedPluginIds: selectedPluginIdsForInput(skillActivationText),
+          selectedPluginIds,
+          filterBySource: Boolean(scopedPlugins),
           orchestrator: this.options.toolExecutor.toolOrchestratorFor(toolContext, stepRuntimeConfig),
           context: toolContext,
           approvalPolicy: stepRuntimeConfig?.approvalPolicy ?? 'on-request',
           ...(allowTool ? { allowTool } : {}),
-          ...(exclusiveTools ? { exclusiveScope: true } : {}),
+          ...(exclusiveTools ? { exclusiveScope: true, includeCollaboration: exclusiveTools.includeCollaboration } : {}),
           strictApprovalRequiresSerial: Boolean(this.options.approvalGate && (stepRuntimeConfig?.approvalPolicy ?? 'on-request') === 'strict'),
           toolResultStore: this.options.toolResultStore,
           programsEnabled: this.options.toolExecutor.programsEnabled,
@@ -313,7 +319,7 @@ export class RuntimeSamplingContextBuilder {
       : modelFacingTools(
           toolRouter?.tools,
           exclusiveTools ? undefined : dynamicTools,
-          exclusiveTools ? [] : collaborationTools,
+          exclusiveTools && !exclusiveTools.includeCollaboration ? [] : collaborationTools,
           exclusiveTools ? [] : goalTools,
           toolRouter?.catalogToolDefinitions,
         );
@@ -354,6 +360,7 @@ export class RuntimeSamplingContextBuilder {
       skillCatalogContextWindowTokens: contextBudget?.maxContextTokens,
       skillActivationText,
       skillIds,
+      builtinSkillIds: exclusiveTools?.builtinSkillIds,
       referenceMessages: orderedConversationMessages,
       thread,
       toolContext,
@@ -593,10 +600,13 @@ function goalExecutionForTurn({
 /** Combines the turn's read-only policy with an exclusive Feature tool scope; undefined allows the full catalog. */
 function runtimeToolFilter(
   toolAccess: 'all' | 'read-only' | 'none',
-  exclusiveTools: ReadonlySet<string> | null,
+  exclusiveTools: ExclusiveToolScope | null,
+  selectedPlugins?: ReadonlySet<string>,
 ): ((tool: RuntimeToolDefinition) => boolean) | undefined {
   if (toolAccess !== 'read-only' && !exclusiveTools) return undefined;
-  return (tool) => (toolAccess !== 'read-only' || isRuntimeReadOnlyTool(tool.name)) && (!exclusiveTools || exclusiveTools.has(tool.name));
+  return (tool) => (toolAccess !== 'read-only' || isRuntimeReadOnlyTool(tool.name)) && (
+    !exclusiveTools || exclusiveTools.has(tool.name) || Boolean(tool.source?.plugins?.some(({ id }) => selectedPlugins?.has(id)))
+  );
 }
 
 function runtimeToolFeatureFlags(

@@ -216,8 +216,9 @@ export class SqliteThreadStore implements ThreadStore {
       SELECT id, kind, feature_id, origin_json, active_turn_id, forked_from_id, parent_thread_id, project_id, workspace_id, title,
              created_at, updated_at, archived, memory_mode, git_info_json, goal_json,
              message_count, last_message_preview
-      FROM threads ORDER BY created_at DESC, id ASC -- 创建时间稳定排序；按 updated_at 排序会被并行对话活动跳乱；依赖活跃顺序的消费方自行显式排序
-    `).all();
+      FROM threads ${query.featureId ? 'WHERE feature_id = ?' : ''}
+      ORDER BY created_at DESC, id ASC -- 创建时间稳定排序；按 updated_at 排序会被并行对话活动跳乱；依赖活跃顺序的消费方自行显式排序
+    `).all(...(query.featureId ? [query.featureId] : []));
     const summaries = rows.map((row) => normalizeThreadSummary(summaryFromRow(row)));
     const search = normalizedThreadSearch(query.search);
     const messagePreviews = search

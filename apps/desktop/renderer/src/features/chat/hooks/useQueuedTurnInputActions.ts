@@ -13,10 +13,13 @@ export type ChatQueuedTurnActions = {
   sendQueuedTurnInputNow: (inputId: string) => Promise<boolean>;
 };
 
+export type PrepareChatTurn = (threadId: string, content: string, clientId?: string, queued?: RuntimeQueuedTurnInput) => Promise<void>;
+
 export function useQueuedTurnInputActions({
   actionRequests,
   client,
   currentThread,
+  prepareTurn,
   reloadThreads,
   setActiveTurnId,
   setCurrentThread,
@@ -26,6 +29,7 @@ export function useQueuedTurnInputActions({
   actionRequests: IdentityRequestGuard;
   client: DesktopRuntimeClient;
   currentThread: RuntimeThread | null;
+  prepareTurn?: PrepareChatTurn;
   reloadThreads: () => Promise<unknown>;
   setActiveTurnId: Dispatch<SetStateAction<string | null>>;
   setCurrentThread: Dispatch<SetStateAction<RuntimeThread | null>>;
@@ -93,6 +97,12 @@ export function useQueuedTurnInputActions({
     const isCurrentRequest = actionRequests.begin();
     try {
       if (isCurrentRequest()) setError(null);
+      if (prepareTurn) {
+        const queued = currentThread?.queuedTurnInputs?.find((item) => item.id === inputId);
+        if (!queued) return false;
+        await prepareTurn(threadId, queued.input, queued.clientId, queued);
+        if (!isCurrentRequest()) return false;
+      }
       const response = await client.sendQueuedTurnInputNow(threadId, inputId);
       if (
         isCurrentRequest()
@@ -107,7 +117,7 @@ export function useQueuedTurnInputActions({
       if (isCurrentRequest()) setError(runtimeActionError(unknownError));
       return false;
     }
-  }, [actionRequests, client, reloadThreads, setActiveTurnId, setError, terminalTurnIdsRef, threadId]);
+  }, [actionRequests, client, currentThread, prepareTurn, reloadThreads, setActiveTurnId, setError, terminalTurnIdsRef, threadId]);
 
   return {
     deleteQueuedTurnInput,

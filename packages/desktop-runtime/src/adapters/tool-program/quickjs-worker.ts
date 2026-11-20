@@ -87,7 +87,17 @@ async function execute(code: string, toolNames: string[], snapshot: [string, str
     const bootstrap = `
       const tools = Object.create(null);
       for (const name of ${JSON.stringify(toolNames)}) {
-        tools[name] = async (args = {}) => JSON.parse(await __call(name, JSON.stringify(args)));
+        tools[name] = async (args = {}) => {
+          const result = JSON.parse(await __call(name, JSON.stringify(args)));
+          const content = result.content?.trimStart();
+          if (content?.startsWith('{') || content?.startsWith('[') || content?.startsWith('"')) {
+            try {
+              // Keep printing the original envelope from duplicating the payload.
+              Object.defineProperty(result, 'data', { value: JSON.parse(content) });
+            } catch { /* Text and truncated tool output stay available in content. */ }
+          }
+          return result;
+        };
       }
       Object.freeze(tools);
       const print = (...values) => { if (${!returnValue}) __print(values.map(value => typeof value === 'string' ? value : JSON.stringify(value)).join(' ')); };

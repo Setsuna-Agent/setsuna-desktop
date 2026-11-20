@@ -12,11 +12,12 @@ import { designDocumentCodec, parseAssetPath, parseDesignEdit, type DesignDocume
 import { isDesignDocumentPath } from './design-resource-id.js';
 import { parseDesignScriptInputs, parseDesignScriptParameters, type DesignScriptInputs } from './design-script-parameters.js';
 import { parseDesignShaderName, parseDesignShaderPath, parseDesignShaderSource } from './design-shader.js';
+import { designCommandFromQuery, designCommandQuery, readDesignCommandKey, type DesignCommandKey } from './design-command-key.js';
 
 export type DesignWorkspace = Readonly<{ projectId: string; rootId?: string }>;
 export type DesignDocumentRef = DesignWorkspace & Readonly<{ path: string }>;
-export type CreateDesignDocumentInput = DesignWorkspace & Readonly<{ parentPath: string; name: string }>;
-export type MoveDesignDocumentInput = Readonly<{ ref: DesignDocumentRef; destination: DesignWorkspace }>;
+export type CreateDesignDocumentInput = DesignWorkspace & Readonly<{ parentPath: string; name: string; command?: DesignCommandKey }>;
+export type MoveDesignDocumentInput = Readonly<{ ref: DesignDocumentRef; destination: DesignWorkspace; command?: DesignCommandKey; expectedRevision?: string }>;
 export type DesignSnapshot = Readonly<{ document: DesignDocument; revision: string; canUndo: boolean; canRedo: boolean }>;
 
 export const designImageExtensions = {
@@ -55,7 +56,7 @@ const createCodec = defineRuntimeCodec<CreateDesignDocumentInput>((input) => {
   const name = requiredString(value.name);
   if (!isValidWorkspaceEntryName(name) || !isDesignDocumentPath(name)) throw new Error('Invalid design file name.');
   if (typeof value.parentPath !== 'string') throw new Error('Design parent path is required.');
-  return { ...workspace(value), parentPath: value.parentPath, name };
+  return { ...workspace(value), parentPath: value.parentPath, name, command: readDesignCommandKey(value.command) };
 });
 
 const entryCodec = defineRuntimeCodec<WorkspaceEntry>((input) => {
@@ -174,7 +175,7 @@ export const moveDesignDocument = defineFeatureOperation({
   id: 'design.document.move', path: `${documentsRoute}/move`, method: 'POST',
   input: defineRuntimeCodec<MoveDesignDocumentInput>((input) => {
     const value = record(input);
-    return { ref: refCodec.parse(value.ref), destination: workspace(record(value.destination)) };
+    return { ref: refCodec.parse(value.ref), destination: workspace(record(value.destination)), command: readDesignCommandKey(value.command), ...optionalRevision(value) };
   }),
   output: refCodec,
   errors: { ...documentErrors, ...resourceRootErrors, [WORKSPACE_ENTRY_EXISTS_ERROR_CODE]: { status: 409 },
@@ -183,7 +184,11 @@ export const moveDesignDocument = defineFeatureOperation({
 });
 
 export const deleteDesignDocument = defineFeatureOperation({
-  id: 'design.document.delete', path: documentsRoute, method: 'DELETE', input: refCodec,
+  id: 'design.document.delete', path: documentsRoute, method: 'DELETE',
+  input: defineRuntimeCodec((input) => {
+    const value = record(input);
+    return { ...refCodec.parse(value), ...optionalRevision(value), ...designCommandQuery(designCommandFromQuery(value)) };
+  }),
   output: defineRuntimeCodec<null>((input) => {
     if (input !== null) throw new Error('Invalid design deletion result.');
     return null;
@@ -210,6 +215,10 @@ export const navigateDesignHistory = defineFeatureOperation({
   id: 'design.document.history', path: `${documentsRoute}/history`, method: 'POST', input: historyCodec, output: snapshotCodec,
   errors: documentErrors, idempotency: 'non-idempotent',
 });
+
+function optionalRevision(value: Record<string, unknown>) {
+  return value.expectedRevision === undefined ? {} : { expectedRevision: requiredString(value.expectedRevision) };
+}
 
 function mutation(value: Record<string, unknown>): DesignMutation {
   return { ref: refCodec.parse(value.ref), expectedRevision: requiredString(value.expectedRevision) };

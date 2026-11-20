@@ -59,6 +59,7 @@ import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { RendererOwnedSingleSlot } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
 
 export function ChatWorkspace({
+  readOnly = false,
   conversationInfo,
   composerHeader,
   presentation = 'workspace',
@@ -117,6 +118,7 @@ export function ChatWorkspace({
   plugins = [],
   variant = 'main',
 }: {
+  readOnly?: boolean;
   conversationInfo?: ReactNode;
   composerHeader?: ReactNode;
   presentation?: ChatPresentation;
@@ -208,7 +210,7 @@ export function ChatWorkspace({
     || (conversationOverviewVisibility === 'auto' && overviewLayout !== 'hidden');
   const overviewShiftsContent = overviewVisible && overviewLayout === 'shifted';
   const hasOverview = Boolean(conversationInfo || conversationOverview);
-  const starterSourceVisible = variant === 'main' && !activeTurnId && !pendingMessages.length
+  const starterSourceVisible = !readOnly && variant === 'main' && !activeTurnId && !pendingMessages.length
     && (starterPresentation?.visible ?? messages.length === 0);
   const starterIdentity = currentThread?.id ?? composerKey;
   const starterTransition = useChatStarterTransition({
@@ -369,13 +371,12 @@ export function ChatWorkspace({
               showThinkingInTranscript={showThinkingInTranscript}
               skills={skills}
               onAnswerApproval={onAnswerApproval}
-              onDeleteMessages={onDeleteMessages}
-              onExportMessages={currentThread ? (ids, format) => exportPreview.prepare(currentThread.id, format, ids) : undefined}
-              onSelectionModeChange={setSelectionModeActive}
-              onFileChangesAction={onFileChangesAction}
-              onEditUserMessage={onEditUserMessage}
-              renderMessageEditor={(props) => <UserMessageEditor key={props.message.id} {...props} client={client}
-                activeProject={activeProject} skills={skills} plugins={plugins} onSearchProjectEntries={onSearchProjectEntries} />}
+              {...(readOnly ? { readOnly: true } : {
+                onDeleteMessages, onEditUserMessage, onFileChangesAction, onSelectionModeChange: setSelectionModeActive,
+                onExportMessages: currentThread ? (ids, format) => exportPreview.prepare(currentThread.id, format, ids) : undefined,
+                renderMessageEditor: (props) => <UserMessageEditor key={props.message.id} {...props} client={client}
+                  activeProject={activeProject} skills={skills} plugins={plugins} onSearchProjectEntries={onSearchProjectEntries} />,
+              })}
               onOpenFileReview={onOpenFileReview}
             />
           ))}
@@ -402,7 +403,7 @@ export function ChatWorkspace({
               />
             </div>
           ) : null}
-          {(showEmptyStarter && !messenger) || selectionModeActive ? null : composer()}
+          {readOnly || (showEmptyStarter && !messenger) || selectionModeActive ? null : composer()}
         </div>
       </div>
       <ConversationExportOverlay state={exportPreview.state} onClose={exportPreview.close} />

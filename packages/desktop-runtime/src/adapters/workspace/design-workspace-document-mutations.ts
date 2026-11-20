@@ -12,29 +12,35 @@ import { readWorkspaceDesignSource } from './design-workspace-source.js';
 import { createWorkspaceFile, resolveEntryParent, resolveExistingWorkspaceEntry } from './workspace-entry-mutations.js';
 import { readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
 import { walkWorkspaceFiles } from './workspace-file-walk.js';
+import type { DesignConversationRelocation, DesignDestinationProject } from './design-conversation-relocation.js';
 
 type TrackedFile = DesignFile & { root: string; relativePath: string; revision?: string };
+type MoveOptions = { expectedRevision?: string; projectAtDestination?: DesignDestinationProject; relocateChats?: DesignConversationRelocation };
 
 export function deleteDesignWorkspaceDocument(root: string, relativePath: string, boundRoots: readonly string[],
-  ownership: DesignResourceOwnership, signal: AbortSignal) {
+  ownership: DesignResourceOwnership, signal: AbortSignal, expectedRevision?: string, relocateChats?: DesignConversationRelocation) {
   return withDesignSource(root, relativePath, boundRoots, undefined, signal, async (source, roots) => {
     // A damaged draft can still be removed. It cannot serve resources to another draft.
     const original = await readDependency(relativePath, () => readValidDesignDocument(source.target, relativePath));
+    if (expectedRevision !== undefined && original?.revision !== expectedRevision) throw designChanged();
     const canonical = await realpath(source.target);
     if (original) await assertLibraryNotUsed(roots, boundRoots, canonical, original.document.documentId, ownership, signal);
-    await removeUnchangedFile({ ...source, root, relativePath, revision: original?.revision }, signal);
+    const remove = () => removeUnchangedFile({ ...source, root, relativePath, revision: original?.revision }, signal);
+    if (relocateChats) await relocateChats({ source: canonical, target: null }, remove);
+    else await remove();
     if (original) await ownership.forget(canonical, original.document.documentId).catch(() => undefined);
   }, { lockNestedRoots: true });
 }
 
 export function moveDesignWorkspaceDocument(sourceRoot: string, sourcePath: string, destinationRoot: string,
-  boundRoots: readonly string[], ownership: DesignResourceOwnership, signal: AbortSignal) {
+  boundRoots: readonly string[], ownership: DesignResourceOwnership, signal: AbortSignal, options: MoveOptions = {}) {
   return withDesignSource(sourceRoot, sourcePath, boundRoots, destinationRoot, signal, (source, roots) =>
-    moveDocument(sourceRoot, sourcePath, destinationRoot, source, roots, boundRoots, ownership, signal), { lockNestedRoots: true });
+    moveDocument(sourceRoot, sourcePath, destinationRoot, source, roots, boundRoots, ownership, signal, options), { lockNestedRoots: true });
 }
 
 async function moveDocument(sourceRoot: string, sourcePath: string, destinationRoot: string, source: DesignFile,
-  roots: readonly string[], boundRoots: readonly string[], ownership: DesignResourceOwnership, signal: AbortSignal) {
+  roots: readonly string[], boundRoots: readonly string[], ownership: DesignResourceOwnership, signal: AbortSignal,
+  { expectedRevision, projectAtDestination, relocateChats }: MoveOptions) {
   const name = path.basename(source.target);
   if (process.platform === 'win32' && !isValidWorkspaceEntryName(name)) {
     throw new FeatureOperationFailure({ code: 'INVALID_INPUT', message: 'The design requires a valid destination file name.', retryable: false });
@@ -43,6 +49,7 @@ async function moveDocument(sourceRoot: string, sourcePath: string, destinationR
   if (await existingEntry(target)) throw destinationConflict(name);
 
   const original = await readDesignDocumentFile(source.target, sourcePath);
+  if (expectedRevision !== undefined && original.revision !== expectedRevision) throw designChanged();
   const canonical = await realpath(source.target);
   const { documentId } = original.document;
   const resourceRoot = await designResourceDirectory(sourceRoot, canonical, original.document, roots, ownership, signal);
@@ -96,7 +103,9 @@ async function moveDocument(sourceRoot: string, sourcePath: string, destinationR
     const copy = await write(name, { content: original.content, documentId });
     // Later copies can introduce a second match for an existing library with no saved binding.
     for (const [relativePath, revision] of reusedLibraries) await assertReusableLibrary(relativePath, revision);
-    await removeUnchangedFile({ ...source, root: sourceRoot, relativePath: sourcePath, revision: original.revision }, signal, copy);
+    const commit = () => removeUnchangedFile({ ...source, root: sourceRoot, relativePath: sourcePath, revision: original.revision }, signal, copy);
+    if (relocateChats) await relocateChats({ source: canonical, target, documentId, projectAtDestination }, commit);
+    else await commit();
   } catch (error) {
     // The copies are visible to external editors before the transfer commits.
     for (const file of createdFiles.reverse()) {

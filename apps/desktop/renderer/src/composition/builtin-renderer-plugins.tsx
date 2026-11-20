@@ -129,23 +129,22 @@ const routePlugin = defineRendererPlugin({
       id: 'routes.pull-requests', key: 'pull-requests', priority: 0,
       render: () => <FeatureRecoveryShell candidateFeatureIds={['pull-requests']} reason="view-missing" />,
     });
-    registerRoute(ui, 'chat', [
+    const chatSurfaceSlots = [
       declareRendererChildSlot(chatConversationSlot, { required: true }),
       declareRendererChildSlot(chatComposerSlot, { required: true }),
       declareRendererChildSlot(chatDetailsSlot, { required: true }),
+    ];
+    const chatWorkspaceSlots = [
+      ...chatSurfaceSlots,
       declareRendererChildSlot(workspacePanelSlot, { requiredKeys: RENDERER_WORKSPACE_PANEL_TYPES }),
-    ]);
-    registerRoute(ui, 'design', []);
+    ];
+    registerRoute(ui, 'chat', chatWorkspaceSlots);
+    registerRoute(ui, 'design', chatSurfaceSlots);
     registerRoute(ui, 'settings', [
       declareRendererChildSlot(settingsPageSlot, { requiredKeys: REQUIRED_SETTINGS_PAGE_KEYS }),
       declareRendererChildSlot(settingsPageExtensionSlot),
     ]);
-    registerRoute(ui, 'automation', [
-      declareRendererChildSlot(chatConversationSlot, { required: true }),
-      declareRendererChildSlot(chatComposerSlot, { required: true }),
-      declareRendererChildSlot(chatDetailsSlot, { required: true }),
-      declareRendererChildSlot(workspacePanelSlot, { requiredKeys: RENDERER_WORKSPACE_PANEL_TYPES }),
-    ]);
+    registerRoute(ui, 'automation', chatWorkspaceSlots);
     registerRoute(ui, 'capabilities', [
       declareRendererChildSlot(capabilitiesSidebarSlot),
       declareRendererChildSlot(settingsPageSlot, {

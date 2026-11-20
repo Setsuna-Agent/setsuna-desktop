@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import type { Yoga } from 'yoga-layout/load';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { useToast } from '@setsuna-desktop/renderer-ui';
-import { designLayerImagePaths, designLayerShaderPaths, type DesignDocument, type DesignDocumentRef, type DesignEdit, type DesignFrame } from '../../contracts/index.js';
+import { type DesignDocument, type DesignDocumentRef, type DesignEdit, type DesignFrame } from '../../contracts/index.js';
 import type { DesignAssets } from '../client.js';
 import { previewDesignNode, type InspectorFieldEdits } from '../inspector/design-inspector-edit.js';
 import type { ComponentActions } from '../components/DesignComponentActions.js';
@@ -10,11 +10,10 @@ import { detachDesignInstance } from '../components/design-components.js';
 import { changeDesignVariant, createDesignVariant, designComponentDefinitions, designComponentVariants, planDesignComponentInsertion } from '../components/design-library.js';
 import { designResourceNode, linkedDesignPath, type DesignLibraryResources } from '../components/design-library-resources.js';
 import { canGroupDesignLayers, changeDesignLayout, groupDesignLayers, orderDesignBranches, selectedBranches, ungroupDesignLayer } from '../design-canvas-edits.js';
-import { toWorld, unionBounds, type Bounds, type Point } from '../design-geometry.js';
-import { resolveDesignInsertion } from '../design-insertion.js';
+import { unionBounds, type Bounds, type Point } from '../design-geometry.js';
 import type { DesignScene } from '../design-layout.js';
-import { copyDesignBranches, designClipboardSharesRoot, parseDesignClipboard, pasteDesignBranches } from './design-layer-clipboard.js';
-import { canContainDesignLayers, defaultDesignAutoLayout, restackDesignLayers, type DesignLayerActions } from './design-layer-commands.js';
+import { copyDesignBranches, parseDesignClipboard, planClipboardPaste } from './design-layer-clipboard.js';
+import { defaultDesignAutoLayout, restackDesignLayers, type DesignLayerActions } from './design-layer-commands.js';
 import { isClosedDesignShape } from '../vectors/design-shape-outline.js';
 
 export type DesignLayerMenuTarget = Readonly<{ id: string | null; point: Point; world?: Point }>;
@@ -127,42 +126,8 @@ export function useDesignLayerActions({ document, projected, resources, scene, l
         return;
       }
       const copied = parseDesignClipboard(content);
-      if (!designClipboardSharesRoot(copied, documentRef)) {
-        const nodes = Object.values(copied.document.nodes);
-        if (nodes.some((item) => item.kind === 'script' && item.scriptPath)) {
-          toast.error(t('feature.design.clipboardScriptRoot'));
-          return;
-        }
-        if (nodes.some((item) => designLayerShaderPaths(item).length)) {
-          toast.error(t('feature.design.clipboardShaderRoot'));
-          return;
-        }
-        if (nodes.some((item) => designLayerImagePaths(item).length)) {
-          toast.error(t('feature.design.clipboardImageRoot'));
-          return;
-        }
-      }
-      const id = target ? target.id : selectedId;
-      const hit = id ? scene[id] : undefined;
-      const inside = !replace && id && !hit?.locked && canContainDesignLayers(document.nodes[id]);
-      const contextualParent = inside ? id : hit?.parentId ?? null;
-      const copiedElements = copied.document.rootIds.some((root) => {
-        const layer = copied.document.nodes[root];
-        return layer.kind !== 'frame' || layer.group;
-      });
-      const fallback = area && !contextualParent && copiedElements ? resolveDesignInsertion(document, scene, area, selectedId) : undefined;
-      const parentId = contextualParent ?? fallback?.parentId ?? null;
-      const parent = parentId ? scene[parentId] : undefined;
-      if (parent?.locked || (replace && (!id || hit?.locked))) return;
-      const origin = replace && hit ? hit.paintBounds : target?.world ?? (inside
-        ? toWorld(parent, { x: 24, y: 24 })
-        : { x: (hit?.paintBounds.x ?? 0) + 16, y: (hit?.paintBounds.y ?? 0) + 16 });
-      const parentNode = parentId ? document.nodes[parentId] : undefined;
-      const absolute = replace && id ? document.nodes[id].absolute : parentNode?.kind === 'frame' && parentNode.layout ? Boolean(target?.world) : undefined;
-      const placement = fallback?.parentId ? { center: fallback.center } : { origin };
-      const { ids, edits } = pasteDesignBranches(copied, document, documentRef, { ...placement, parentId, parent, beforeId: replace ? id : null, absolute });
-      if (replace && id && ids.length) edits.push({ kind: 'remove', nodeId: id });
-      await apply(edits, ids);
+      const plan = planClipboardPaste({ copied, document, documentRef, scene, selectedId, target, area, replace, translate: t });
+      if (plan) await apply(plan.edits, plan.ids);
     });
   }
 

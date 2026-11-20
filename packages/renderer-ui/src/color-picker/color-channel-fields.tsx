@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { useUiLabels } from '../locale.js';
+import { parseNumberExpression } from '../fields/number-expression.js';
 import { SelectField } from '../select.js';
 import { TextField } from '../fields.js';
 import { hexToHsv, type Hsv } from './color.js';
@@ -15,14 +16,17 @@ export function ColorChannelFields({ hex, color, opacity, disabled, leading, onU
   const labels = useUiLabels().colorPicker;
   const edit = { disabled, onUpdate, onCancel };
   const alpha = opacity === undefined ? null : <Channel {...edit} label="A" value={String(Number(opacity.toFixed(2)))}
-    parse={(value) => value.trim() && Number(value) >= 0 && Number(value) <= 1 ? { opacity: Number(value) } : undefined} />;
+    parse={(value) => {
+      const opacity = parseNumberExpression(value);
+      return opacity !== undefined && opacity >= 0 && opacity <= 1 ? { opacity } : undefined;
+    }} />;
   const rgb = [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16));
   const lightness = color.v * (1 - color.s / 200);
   const hsl = [color.h, lightness <= 0 || lightness >= 100 ? 0 : (color.v - lightness) * 100 / Math.min(lightness, 100 - lightness), lightness];
   function parseChannel(index: number, value: string) {
-    const channel = Number(value);
+    const channel = parseNumberExpression(value);
     const limit = format === 'rgb' ? 255 : index === 0 ? 360 : 100;
-    if (!value.trim() || !Number.isFinite(channel) || channel < 0 || channel > limit) return;
+    if (channel === undefined || channel < 0 || channel > limit) return;
     if (format === 'rgb') {
       const hex = rgb.map((byte, at) => (at === index ? Math.round(channel) : byte).toString(16).padStart(2, '0')).join('');
       return hexToHsv(`#${hex}`, color);

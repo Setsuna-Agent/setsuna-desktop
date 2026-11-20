@@ -1,3 +1,4 @@
+import { flushSync } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
 import { workspaceFileKey } from '@setsuna-desktop/contracts';
 import { FeatureOperationFailure, isFeatureOperationCancelled } from '@setsuna-desktop/feature-core/operation';
@@ -146,6 +147,29 @@ export function useDesignDocument({ client, documentRef, fileRevision, readOnly 
     return submit(edits, expectedRevision, false);
   }
 
+  // A tool request can arrive before the file watcher, or while a manual optimistic edit is saving.
+  // Bind the returned disk revision to the React scene that is actually used to plan this command.
+  async function synchronize(signal: AbortSignal) {
+    for (let task = pending.get(documentKey); task; task = pending.get(documentKey)) {
+      signal.throwIfAborted();
+      if (!await task) throw new Error('A pending design edit could not be saved.');
+    }
+    const generation = ++readGeneration.current;
+    const next = await client.read(documentRef, signal);
+    signal.throwIfAborted();
+    if (!mounted.current || pending.has(documentKey)
+      || (generation !== readGeneration.current && saved.current?.revision !== next.revision)) throw new Error('The editor changed. Inspect again.');
+    const current = shown.current;
+    if (!current || saved.current?.revision !== next.revision) {
+      saved.current = next;
+      flushSync(() => publish({ ...next, drawingRevision: next.revision }));
+    } else {
+      // A watcher may have advanced the refs before React paints that revision.
+      flushSync(() => setSnapshot(current));
+    }
+    return saved.current!;
+  }
+
   function appendStroke(edit: LayerInsertion, drawingRevision: string): Promise<boolean> {
     const current = shown.current;
     return current?.drawingRevision === drawingRevision ? submit([edit], current.revision, false, drawingRevision) : Promise.resolve(false);
@@ -153,6 +177,7 @@ export function useDesignDocument({ client, documentRef, fileRevision, readOnly 
 
   return {
     snapshot,
+    synchronize,
     busy: busy || readOnly,
     editFields,
     appendStroke,

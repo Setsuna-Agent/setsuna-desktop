@@ -10,7 +10,7 @@ import path from 'node:path';
 import { isPathWithin } from '../search/workspace-search-policy.js';
 import { withFileStateUpdate, withFileStateUpdates } from '../store/file-state-coordinator.js';
 
-export type WorkspaceEntryRelocation = (source: string, target: string, type: WorkspaceEntry['type'], relocateEntry: () => Promise<void>) => Promise<void>;
+export type WorkspaceEntryRelocation = (source: string, target: string | null, type: WorkspaceEntry['type'], relocateEntry: () => Promise<void>) => Promise<void>;
 type RelocationOptions = Readonly<{ boundRoots: readonly string[]; relocate: WorkspaceEntryRelocation }>;
 
 export async function createWorkspaceEntry(
@@ -50,8 +50,7 @@ export function moveWorkspaceEntry(root: string, relativePath: string, input: Wo
 function relocateWorkspaceEntry(root: string, relativePath: string, input: { name?: string; parentPath?: string },
   { boundRoots, relocate }: RelocationOptions): Promise<WorkspaceEntry> {
   // A directory can contain another bound root where writes would otherwise bypass this lock.
-  const overlappingRoots = boundRoots.filter((directory) => isPathWithin(root, directory) || isPathWithin(directory, root));
-  return withFileStateUpdates([root, ...overlappingRoots], async () => {
+  return withFileStateUpdates(overlappingRoots(root, boundRoots), async () => {
     const { target: source, stats: sourceStat } = await resolveExistingWorkspaceEntry(root, relativePath);
     const parent = input.parentPath === undefined ? path.dirname(source) : await resolveEntryParent(root, input.parentPath);
     const type = sourceStat.isDirectory() ? 'directory' : 'file';
@@ -91,11 +90,21 @@ function relocateWorkspaceEntry(root: string, relativePath: string, input: { nam
   });
 }
 
-export async function deleteWorkspaceEntry(root: string, relativePath: string): Promise<void> {
-  await withFileStateUpdate(root, async () => {
+function overlappingRoots(root: string, boundRoots: readonly string[]) {
+  return [root, ...boundRoots.filter((directory) => isPathWithin(root, directory) || isPathWithin(directory, root))];
+}
+
+export async function deleteWorkspaceEntry(root: string, relativePath: string, { boundRoots, relocate }: RelocationOptions): Promise<void> {
+  await withFileStateUpdates(overlappingRoots(root, boundRoots), async () => {
     const { target, stats } = await resolveExistingWorkspaceEntry(root, relativePath);
-    // rm does not follow symlinks nested inside a directory being removed.
-    await rm(target, { recursive: stats.isDirectory() });
+    await relocate(target, null, stats.isDirectory() ? 'directory' : 'file', async () => {
+      const current = await resolveExistingWorkspaceEntry(root, relativePath);
+      if (current.target !== target || current.stats.ino !== stats.ino || current.stats.dev !== stats.dev) {
+        throw new Error('The workspace entry changed before deletion.');
+      }
+      // rm does not follow symlinks nested inside a directory being removed.
+      await rm(target, { recursive: stats.isDirectory() });
+    });
   });
 }
 

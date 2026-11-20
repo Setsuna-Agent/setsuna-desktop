@@ -1,20 +1,21 @@
 import {
   ChevronDown, ChevronRight, Circle, CodeXml, Component, Diamond, Eye, EyeOff, Frame, Globe, Group,
-  ImageIcon, Lock, LockOpen, Square, Type,
+  History, ImageIcon, Layers, Lock, LockOpen, Maximize2, MessageCircle, Minimize2, Square, Type,
 } from 'lucide-react';
-import { useCallback, useId, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type MutableRefObject, type ReactElement } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useId, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type MutableRefObject, type ReactElement } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { IconButton, useNativeDragPreview, useReorderLayout } from '@setsuna-desktop/renderer-ui';
+import { IconButton, SegmentedControl, useNativeDragPreview, useReorderLayout } from '@setsuna-desktop/renderer-ui';
 import type { DesignDocument } from '../contracts/index.js';
 import { DesignThumbnail, useDesignThumbnails } from './canvas/DesignThumbnail.js';
 import { DesignPanelToggle, DesignSidePanel } from './canvas/DesignSidePanels.js';
-import { useDesignLayerExpansion } from './canvas/use-design-layer-expansion.js';
+import { useDesignLayerTree } from './canvas/use-design-layer-tree.js';
 import type { DesignLayerMenuTarget } from './context/use-design-layer-actions.js';
 import { activeDesignLayerDrag, canDropDesignLayer, changesDesignLayerOrder, designLayerDragType, designLayerOrder,
   type DesignLayerDestination, type DesignLayerDrag } from './design-layer-drop.js';
 import type { LoadDesignImage } from './design-images.js';
 import type { DesignScene } from './design-layout.js';
+import { DesignChatFullscreenContext, DesignChatPanelContext } from './agent/design-chat-layout.js';
+import { designSavedLocation } from './agent/design-resume.js';
 import { designVectorIcons } from './vectors/design-vector-icons.js';
 import { designLucideIcon } from './vectors/design-vector.js';
 
@@ -47,7 +48,7 @@ function layerDepth(depth: number): CSSProperties {
 }
 
 export function DesignLayers({
-  document, projected, scene, loadImage, revision, drag, selectedIds, open, disabled, toggleTarget,
+  document, projected, scene, loadImage, revision, drag, selectedIds, open, disabled, chat,
   onTogglePanel, onSelect, onHoverLayer, onToggle, onDrop, onContextMenu, translate: t,
 }: Readonly<{
   document: DesignDocument;
@@ -59,7 +60,7 @@ export function DesignLayers({
   selectedIds: readonly string[];
   open: boolean;
   disabled: boolean;
-  toggleTarget?: HTMLElement;
+  chat?: ReactElement;
   onTogglePanel(): void;
   onSelect(id: string, additive: boolean): void;
   onHoverLayer(id: string | undefined): void;
@@ -69,25 +70,40 @@ export function DesignLayers({
   translate: RendererTranslate;
 }>) {
   const panelId = useId();
+  const focusNextToggle = useRef(false);
+  const restoreToggleFocus = useCallback((button: HTMLButtonElement | null) => {
+    if (button && focusNextToggle.current) {
+      focusNextToggle.current = false;
+      button.focus({ preventScroll: true });
+    }
+  }, []);
+  const [view, setView] = useState<'chat' | 'layers'>('chat');
+  const [chatFullscreen, setChatFullscreen] = useState(false);
+  const showChat = Boolean(chat) && view === 'chat';
+  const fullscreen = showChat && chatFullscreen;
+  const layersVisible = open && !showChat;
   const list = useRef<HTMLDivElement>(null);
   const selectThumbnail = useCallback((id: string) => scene[id]?.visible ? { document: projected, scene, ids: [id] } : undefined, [projected, scene]);
-  const observeThumbnail = useDesignThumbnails(list, selectThumbnail, loadImage, { open });
-  const panelHeight = useRef(0);
+  const observeThumbnail = useDesignThumbnails(list, selectThumbnail, loadImage, { open: layersVisible });
   const lastHover = useRef<LayerHover>();
-  const { collapsed, updateLayerExpansion } = useDesignLayerExpansion(document.documentId);
   const [hoverDrop, setHoverDrop] = useState<LayerDrop | null>(null);
   const [pendingDrop, setPendingDrop] = useState<Readonly<{ source: DesignLayerDrag; target: LayerDrop }>>();
   const [confirmedDrag, setConfirmedDrag] = useState<DesignLayerDrag>();
   const preview = useNativeDragPreview({ anchor: 'source', liveWithin: list });
-  const activeDrag = preview.dragging && open && !disabled && drag.current?.revision === revision ? drag.current : undefined;
-  const saving = open && pendingDrop?.source.revision === revision ? pendingDrop : undefined;
+  const activeDrag = preview.dragging && layersVisible && !disabled && drag.current?.revision === revision ? drag.current : undefined;
+  const saving = layersVisible && pendingDrop?.source.revision === revision ? pendingDrop : undefined;
+  const reordering = Boolean(activeDrag || saving);
+  const { expandedLayerIds, expandLayers, toggleLayer, revealId, revealRow } = useDesignLayerTree({
+    documentId: document.documentId, scene, selectedIds, visible: layersVisible, reordering,
+  });
   const liftedId = activeDrag === confirmedDrag ? activeDrag?.id : undefined;
   const slot = (liftedId ? hoverDrop : null) ?? saving?.target;
   const movingId = liftedId ?? saving?.source.id;
+  const saved = layersVisible && !selectedIds.length ? designSavedLocation(document, scene) : undefined;
   const rootOrder = designLayerOrder(document, null);
   const roots = displayOrder(rootOrder);
   const layoutKey = movingId ? JSON.stringify([revision, movingId, slot?.parentId, slot?.beforeId]) : revision;
-  useReorderLayout(list, layoutKey, Boolean(activeDrag || saving));
+  useReorderLayout(list, layoutKey, reordering);
 
   useLayoutEffect(() => {
     const owner = list.current?.ownerDocument.defaultView;
@@ -170,7 +186,7 @@ export function DesignLayers({
     const pending = { source, target };
     setPendingDrop(pending);
     void onDrop(source.id, target, source.revision).then((applied) => {
-      if (applied && target.placement === 'inside') updateLayerExpansion(target.id, 'expand');
+      if (applied && target.placement === 'inside') expandLayers([target.id]);
     }).finally(() => {
       setPendingDrop((current) => current === pending ? undefined : current);
     });
@@ -194,7 +210,7 @@ export function DesignLayers({
     const hidden = resolved.hidden;
     const { locked } = scene[id];
     const hasChildren = node.kind === 'frame' && node.childIds.length > 0;
-    const expanded = !collapsed.has(id);
+    const expanded = expandedLayerIds.has(id);
     const isGroup = node.kind === 'frame' && node.group;
     const isComponent = node.kind === 'frame' && node.component;
     const isInstance = node.kind === 'frame' && node.instanceOf;
@@ -206,6 +222,7 @@ export function DesignLayers({
     const kindName = isComponent ? 'component' : isInstance ? 'instance' : isGroup ? 'group' : depth === 0 && node.kind === 'frame' ? 'artboard'
       : node.kind === 'vector' ? (designLucideIcon(node.geometry) ? 'icon' : node.geometry.kind) : node.kind;
     const name = node.name || (resolved.kind === 'text' && resolved.text.trim().split('\n', 1)[0]) || t(`feature.design.${kindName}`);
+    const recent = id === saved?.board || id === saved?.section;
     const receivesLayer = slot?.id === id && slot.placement === 'inside';
     const order = designLayerOrder(document, id);
     const lifted = movingId === id;
@@ -223,8 +240,9 @@ export function DesignLayers({
           onContextMenu({ id, point: { x: event.clientX, y: event.clientY } });
         }}>
         {hasChildren ? <IconButton className="design-layer__expand" label={t(expanded ? 'feature.design.collapseLayer' : 'feature.design.expandLayer')}
-          aria-expanded={expanded} size="small" onClick={() => updateLayerExpansion(id, 'toggle')}><Chevron size={12} /></IconButton> : null}
-        <button className="design-layer__select" type="button" title={name} aria-pressed={selectedIds.includes(id)} draggable={!disabled && !locked}
+          aria-expanded={expanded} size="small" onClick={() => toggleLayer(id)}><Chevron size={12} /></IconButton> : null}
+        <button ref={id === revealId ? revealRow : undefined} className="design-layer__select" type="button" title={name} aria-label={name}
+          aria-description={recent ? t('feature.design.lastSaved') : undefined} aria-pressed={selectedIds.includes(id)} draggable={!disabled && !locked}
           onDragStart={(event) => {
             if (disabled || locked) {
               event.preventDefault();
@@ -233,8 +251,6 @@ export function DesignLayers({
             event.dataTransfer.effectAllowed = 'move';
             event.dataTransfer.setData(designLayerDragType, id);
             drag.current = { id, revision };
-            // Keep the panel's blank drop area available after its source row is lifted.
-            panelHeight.current = list.current?.parentElement?.offsetHeight ?? 0;
             onHoverLayer(undefined);
             clearHover();
             preview.start(event, event.currentTarget.parentElement ?? event.currentTarget);
@@ -250,6 +266,7 @@ export function DesignLayers({
           <Icon aria-hidden="true" />
           <DesignThumbnail id={id} observe={observeThumbnail} />
           <span className="design-layer__name">{name}</span>
+          {recent ? <span aria-hidden="true" title={t('feature.design.lastSaved')}><History size={12} /></span> : null}
         </button>
         <div className="design-layer__actions" data-visible={Boolean(hidden || locked)}>
           <IconButton label={t(hidden ? 'feature.design.showLayer' : 'feature.design.hideLayer')} size="small"
@@ -263,19 +280,43 @@ export function DesignLayers({
     </li>;
   };
 
-  const label = t('feature.design.layers');
-  const toggle = <DesignPanelToggle side="layers" label={label} aria-expanded={open} aria-controls={panelId} onClick={() => {
+  const label = t(chat ? 'feature.design.sidebar' : 'feature.design.layers');
+  const navigation = chat && <SegmentedControl<'chat' | 'layers'> className="design-panel-navigation" label={label}
+    value={view} options={[
+      { value: 'chat', label: t('feature.design.chat.tab'), icon: <MessageCircle size={12} aria-hidden="true" /> },
+      { value: 'layers', label: t('feature.design.layers'), icon: <Layers size={12} aria-hidden="true" /> },
+    ]} onChange={(next) => {
+      onHoverLayer(undefined);
+      if (next === 'layers') setChatFullscreen(false);
+      setView(next);
+    }} />;
+  const fullscreenButton = showChat ? <IconButton className="design-panel__toggle" size="small" aria-controls={panelId}
+    label={t(fullscreen ? 'feature.design.chat.restore' : 'feature.design.chat.maximize')} aria-pressed={fullscreen}
+    onClick={() => setChatFullscreen((current) => !current)}>
+    {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+  </IconButton> : null;
+  function togglePanel(event: MouseEvent<HTMLButtonElement>) {
+    // Keyboard focus follows the control between the panel header and the canvas edge.
+    focusNextToggle.current = event.detail === 0;
     onHoverLayer(undefined);
     onTogglePanel();
-  }} />;
+  }
   return <>
-    {toggleTarget ? createPortal(toggle, toggleTarget) : <div className="design-layers-toggle">{toggle}</div>}
-    <DesignSidePanel side="layers" id={panelId} label={label} resizeLabel={t('feature.design.resizeLayers')}
-      open={open} style={movingId && panelHeight.current ? { height: panelHeight.current } : undefined}>
-      <div className="design-layer-list design-panel-scroll" ref={list} data-dragging={Boolean(movingId) || undefined}
+    {!open && <DesignPanelToggle side="layers" buttonRef={restoreToggleFocus} label={t('feature.design.expandSidebar')}
+      aria-expanded={false} aria-controls={panelId} onClick={togglePanel} />}
+    <DesignSidePanel side="layers" id={panelId} open={open} label={label} title={navigation} resizeLabel={t('feature.design.resizeLayers')}
+      fullscreen={fullscreen} actions={fullscreenButton}
+      collapse={{ label: t('feature.design.collapseSidebar'), onClick: togglePanel, buttonRef: restoreToggleFocus }}>
+      <div className="design-layer-list design-panel-scroll" hidden={showChat} ref={list} data-dragging={Boolean(movingId) || undefined}
         onDragOver={onDragOver} onDrop={dropLayer} onDragLeave={onDragLeave}>
-        {open ? renderList(null, 0, rootOrder, roots) : null}
+        {layersVisible ? renderList(null, 0, rootOrder, roots) : null}
       </div>
+      {/* Keep drafts and active tasks mounted when switching tabs or collapsing the sidebar. */}
+      {chat && <div className="design-layers-chat" hidden={!showChat}>
+        <DesignChatPanelContext.Provider value={{ visible: open && showChat, showCanvas: fullscreen ? () => setChatFullscreen(false) : undefined }}>
+          <DesignChatFullscreenContext.Provider value={fullscreen}>{chat}</DesignChatFullscreenContext.Provider>
+        </DesignChatPanelContext.Provider>
+      </div>}
     </DesignSidePanel>
   </>;
 }

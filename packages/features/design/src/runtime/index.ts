@@ -1,5 +1,5 @@
 import { detectWorkspacePreviewImageMimeType, MAX_WORKSPACE_IMAGE_BYTES } from '@setsuna-desktop/contracts';
-import { requiredCapability } from '@setsuna-desktop/feature-core/capability';
+import { declareCapabilityProvider, requiredCapability } from '@setsuna-desktop/feature-core/capability';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { defineRuntimeDependencies, defineRuntimeFeature, runtimeRouteRegistrarCapability } from '@setsuna-desktop/feature-core/runtime';
 import {
@@ -11,12 +11,17 @@ import {
 } from '../contracts/index.js';
 import { importDesignFont, listDesignFonts, readDesignFont, removeDesignFont } from '../contracts/design-fonts.js';
 import { designScriptParameterValue } from '../contracts/design-script-parameters.js';
+import { designToolsCapability, designTurnHostCapability, startDesignTask, replyDesignTask, bindDesignInput, watchDesignCommand, stopDesignTask } from '../contracts/design-task.js';
+import { createDesignConversation, listDesignConversations } from '../contracts/design-conversations.js';
+import { designCommandFromQuery } from '../contracts/design-command-key.js';
+import { DesignTasks } from './design-tasks.js';
 import { DesignDocumentService } from './design-document-service.js';
 import { DesignFontStore } from './design-font-store.js';
 import { parseDesignScriptOutput } from './design-script-output.js';
 import { readScriptParameters } from './design-script-parameters.js';
 
 const dependencies = defineRuntimeDependencies({
+  turns: requiredCapability(designTurnHostCapability),
   routes: requiredCapability(runtimeRouteRegistrarCapability),
   files: requiredCapability(designWorkspaceFilesCapability),
   fontStorage: requiredCapability(designFontStorageCapability),
@@ -26,13 +31,29 @@ const dependencies = defineRuntimeDependencies({
 export const designRuntimeFeature = defineRuntimeFeature({
   definition: designFeature,
   dependencies,
-  setup({ dependencies: { routes, files, fontStorage, scripts }, scope }) {
+  provides: [declareCapabilityProvider(designToolsCapability)],
+  setup({ dependencies: { routes, files, fontStorage, scripts, turns }, scope, provide }) {
     const documents = new DesignDocumentService(files);
+    const tasks = new DesignTasks(turns, documents);
+    provide(declareCapabilityProvider(designToolsCapability), tasks);
+    scope.add(() => tasks.dispose());
+    routes.register(scope, listDesignConversations, (owner) => turns.list(owner));
+    // Keep file identity and chat creation under the same workspace lock as a rename or transfer.
+    routes.register(scope, createDesignConversation, (owner, { signal }) =>
+      documents.withSnapshot(owner.ref, signal, ({ document }) => {
+        if (document.documentId !== owner.documentId) throw new Error('Design document changed.');
+        return turns.create(owner);
+      }));
+    routes.register(scope, startDesignTask, (input, { signal }) => tasks.start(input, signal));
+    routes.register(scope, replyDesignTask, (input, { signal }) => tasks.reply(input, signal));
+    routes.register(scope, watchDesignCommand, (input, { signal }) => tasks.watchCommand(input, signal));
+    routes.register(scope, bindDesignInput, (input) => tasks.bindInput(input));
+    routes.register(scope, stopDesignTask, ({ sessionId }) => tasks.stop(sessionId));
     const fonts = new DesignFontStore(fontStorage.dataDir);
     routes.register(scope, listDesignFonts, (_, { signal }) => fonts.list(signal));
     routes.register(scope, importDesignFont, ({ base64 }, { signal }) => fonts.import(base64, signal));
     routes.register(scope, readDesignFont, ({ id }, { signal }) => fonts.read(id, signal));
-    routes.register(scope, removeDesignFont, ({ id }, { signal }) => fonts.remove(id, signal));
+    routes.register(scope, removeDesignFont, (input, { signal }) => fonts.remove(input.id, tasks.fileOperationSignal(designCommandFromQuery(input), signal)));
     routes.register(scope, importDesignImage, ({ ref, name, base64 }, { signal }) => {
       const bytes = Buffer.from(base64, 'base64');
       const mimeType = detectWorkspacePreviewImageMimeType(bytes);
@@ -69,10 +90,10 @@ export const designRuntimeFeature = defineRuntimeFeature({
         return parseDesignScriptOutput(await scripts.evaluate(source, { width, height, input }, signal));
       }));
     routes.register(scope, listDesignDocuments, (workspace, { signal }) => files.list(workspace, signal));
-    routes.register(scope, createDesignDocument, (input, { signal }) => documents.create(input, signal));
-    routes.register(scope, moveDesignDocument, (input, { signal }) => files.move(input, signal));
+    routes.register(scope, createDesignDocument, (input, { signal }) => documents.create(input, tasks.fileOperationSignal(input.command, signal)));
+    routes.register(scope, moveDesignDocument, (input, { signal }) => files.move(input, tasks.fileOperationSignal(input.command, signal)));
     routes.register(scope, deleteDesignDocument, async (ref, { signal }) => {
-      await files.delete(ref, signal);
+      await files.delete(ref, tasks.fileOperationSignal(designCommandFromQuery(ref), signal));
       return null;
     });
     routes.register(scope, readDesignDocument, (input, { signal }) => documents.read(input, signal));

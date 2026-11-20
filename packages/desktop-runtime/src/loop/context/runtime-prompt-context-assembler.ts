@@ -72,6 +72,7 @@ export class RuntimePromptContextAssembler {
     skillActivationText = '',
     referenceMessages = [],
     skillIds,
+    builtinSkillIds,
     thread,
     toolContext,
     toolRouter,
@@ -85,6 +86,7 @@ export class RuntimePromptContextAssembler {
     skillActivationText?: string;
     referenceMessages?: RuntimeMessage[];
     skillIds: string[];
+    builtinSkillIds?: readonly string[];
     thread: RuntimeThread;
     toolContext: RuntimeToolExecutionContext;
     toolRouter: RuntimeToolRouter | null;
@@ -103,7 +105,7 @@ export class RuntimePromptContextAssembler {
         [...new Set([...skillIds, ...pluginContext.skillIds])],
         config,
         language,
-        { defaultSkillIds: thread.defaultSkillIds },
+        { defaultSkillIds: thread.defaultSkillIds, builtinSkillIds },
         skillCatalogContextWindowTokens,
         tools,
       ), toolContext.signal),

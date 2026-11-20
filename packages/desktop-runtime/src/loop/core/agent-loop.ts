@@ -260,6 +260,7 @@ export class AgentLoop {
       runTurn: (input) => this.turnRunner.run(input),
     });
     this.queuedTurns = new RuntimeQueuedTurnCoordinator({
+      editor: options.queuedInputEditor,
       clock: options.clock,
       ids: options.ids,
       inputGuard: this.inputGuard,

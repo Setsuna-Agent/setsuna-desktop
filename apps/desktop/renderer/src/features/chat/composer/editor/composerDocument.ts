@@ -4,7 +4,13 @@ export function slotText(slot: ComposerSlot): string {
   return slot.type === 'text' ? slot.value ?? '' : slot.props.value ?? '';
 }
 
+/** Chromium can keep a lone BR, including inside a block wrapper, after Select All + Delete. */
+export function hasEmptyComposerBreak(element: HTMLElement): boolean {
+  return !element.textContent && element.getElementsByTagName('br').length === 1 && !element.querySelector('[data-slot-key]');
+}
+
 export function readComposerDocument(element: HTMLElement, references: Map<string, ComposerSlot>): ComposerSlot[] {
+  if (hasEmptyComposerBreak(element)) return [];
   const slots: ComposerSlot[] = [];
   const text = (value: string) => {
     if (!value) return;

@@ -101,7 +101,7 @@ async function main() {
     const previewUrl = origin + '/preview';
     const configure = owner.webContents.executeJavaScript(`(async () => {
       const bridge = window.navigationFixture;
-      if (await bridge.configureWebPreview(${guest.id}, { url: ${JSON.stringify(previewUrl)}, interactive: true })) {
+      if (await bridge.configureWebPreview(${guest.id}, { url: ${JSON.stringify(previewUrl)}, networkAccess: true, interactive: true })) {
         throw new Error('The preview bridge accepted a normal browser tab');
       }
       const view = document.createElement('webview');
@@ -112,8 +112,10 @@ async function main() {
       const ready = new Promise(resolve => view.addEventListener('dom-ready', resolve, { once: true }));
       document.body.append(view);
       await ready;
+      if (await bridge.configureWebPreview(view.getWebContentsId(), { url: ${JSON.stringify(previewUrl)}, networkAccess: false, interactive: false })
+        || view.getURL() !== 'about:blank') throw new Error('Restricted preview did not stay blank');
       return bridge.configureWebPreview(view.getWebContentsId(), {
-        url: ${JSON.stringify(previewUrl)}, interactive: false,
+        url: ${JSON.stringify(previewUrl)}, networkAccess: true, interactive: false,
         device: { id: 'iphone-15-pro', width: 314, height: 682 },
       });
     })()`);
@@ -138,7 +140,7 @@ async function main() {
       view.style.opacity = '1';
       view.focus();
       return bridge.configureWebPreview(view.getWebContentsId(), {
-        url: ${JSON.stringify(previewUrl)}, interactive: true,
+        url: ${JSON.stringify(previewUrl)}, networkAccess: true, interactive: true,
         device: { id: 'iphone-15-pro', width: 314, height: 682 },
       });
     })()`), true);

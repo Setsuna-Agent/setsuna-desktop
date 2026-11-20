@@ -9,6 +9,7 @@ vi.mock('electron', () => ({
 }));
 import { BrowserContextMenuSession } from '../../src/main/context-menu-session.js';
 import { installEmbeddedBrowserWebviews } from '../../src/main/webview.js';
+import { configureBrowserWebPreview } from '../../src/main/web-preview.js';
 import { BROWSER_IPC_CHANNELS } from '../../src/contracts/bridge.js';
 import { DESKTOP_BROWSER_PREVIEW_PARTITION } from '../../src/contracts/browser-control.js';
 
@@ -52,13 +53,16 @@ it('only attaches extension documents authorized by the installed-extension serv
   host.close();
 });
 
-it('isolates live previews and applies their navigation policy instead of tab hooks', () => {
+it('isolates live previews and applies their navigation policy instead of tab hooks', async () => {
   const host = windowFixture(() => true, 'browser-tab');
   const partition = DESKTOP_BROWSER_PREVIEW_PARTITION;
   const attach = { preventDefault: vi.fn() };
   const preferences = { preload: '/desktop/preload.js', nodeIntegration: true, nodeIntegrationInSubFrames: true,
     webSecurity: false, allowRunningInsecureContent: true, session: undefined };
-  host.contents.emit('will-attach-webview', attach, preferences, { src: 'https://example.test/', partition });
+  const direct = { preventDefault: vi.fn() };
+  host.contents.emit('will-attach-webview', direct, preferences, { src: 'https://example.test/', partition });
+  expect(direct.preventDefault).toHaveBeenCalledOnce();
+  host.contents.emit('will-attach-webview', attach, preferences, { src: 'about:blank', partition });
   expect(attach.preventDefault).not.toHaveBeenCalled();
   expect(preferences).toMatchObject({ nodeIntegration: false, nodeIntegrationInSubFrames: false, contextIsolation: true,
     webSecurity: true, allowRunningInsecureContent: false, sandbox: true });
@@ -66,6 +70,7 @@ it('isolates live previews and applies their navigation policy instead of tab ho
   expect(preferences.session).toBeDefined();
   const send = vi.fn();
   const guest = Object.assign(new EventEmitter(), {
+    stop: vi.fn(), loadURL: vi.fn().mockResolvedValue(undefined), isDestroyed: () => false, getURL: () => 'about:blank',
     session: preferences.session, setWindowOpenHandler: vi.fn(), getUserAgent: () => 'fixture',
     setAudioMuted: vi.fn(), hostWebContents: { isDestroyed: () => false, send },
   });
@@ -74,6 +79,18 @@ it('isolates live previews and applies their navigation policy instead of tab ho
   guest.emit('before-input-event', { preventDefault: vi.fn() }, { type: 'keyDown', code: 'KeyF', key: 'f', meta: true });
   expect(send).not.toHaveBeenCalled();
   expect(guest.setWindowOpenHandler.mock.calls[0][0]()).toEqual({ action: 'deny' });
+  const native = guest as unknown as WebContents;
+  const settings = { url: 'https://example.test/', networkAccess: false, interactive: false };
+  const signal = new AbortController().signal;
+  expect(await configureBrowserWebPreview(native, settings, signal)).toBe(false);
+  expect(guest.loadURL).not.toHaveBeenCalled();
+  expect(await configureBrowserWebPreview(native, { ...settings, networkAccess: true }, signal)).toBe(true);
+  const redirect = { isMainFrame: true, url: 'https://redirect.test/', preventDefault: vi.fn() };
+  guest.emit('will-redirect', redirect);
+  expect(redirect.preventDefault).not.toHaveBeenCalled();
+  await configureBrowserWebPreview(native, settings, signal);
+  guest.emit('will-redirect', redirect);
+  expect(redirect.preventDefault).toHaveBeenCalledOnce();
   for (const type of ['will-frame-navigate', 'will-redirect']) {
     const event = { isMainFrame: true, url: 'file:///private/test', preventDefault: vi.fn() };
     guest.emit(type, event);

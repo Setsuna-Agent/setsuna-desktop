@@ -65,6 +65,7 @@ export type BrowserWindowOpenMode = 'tab' | 'current-tab';
 
 export type BrowserWebPreviewSettings = Readonly<{
   url: string;
+  networkAccess: boolean;
   device?: Readonly<{ id: string; width: number; height: number }>;
   interactive: boolean;
 }>;

@@ -239,16 +239,16 @@ it('lists a new draft after a directory change arrives during the refresh follow
   }
 });
 
-it('deletes the active draft only after confirmation and returns to its previous filter', async () => {
+it('deletes a draft only after confirmation and keeps the catalog filter', async () => {
   const remove = vi.fn<DesignWorkspaceProps['client']['delete']>().mockResolvedValue(null);
   const onLocationChange = vi.fn<DesignWorkspaceProps['onLocationChange']>();
   const scope = { projectId: 'project', rootId: 'secondary' };
   const ref = { ...scope, path: 'screens/overview.design.json' };
-  const view = render(<ToastProvider><DesignWorkspace client={testClient({ delete: remove })} projects={projects}
-    location={{ ...ref, homeFilter: scope }} onLocationChange={onLocationChange} translate={(key) => key}
+  const view = render(<ToastProvider><DesignWorkspace client={testClient({ list: async () => [ref.path], delete: remove })} projects={projects}
+    location={scope} onLocationChange={onLocationChange} translate={(key) => key}
     watchDirectories={() => () => undefined} onAddProject={vi.fn()} /></ToastProvider>);
   const openDelete = async () => {
-    fireEvent.keyDown(view.getByRole('button', { name: 'feature.design.documentActions' }), { key: 'Enter' });
+    fireEvent.keyDown(await view.findByRole('button', { name: 'feature.design.documentActions' }), { key: 'Enter' });
     fireEvent.click(await view.findByRole('menuitem', { name: 'feature.design.deleteDocument' }));
     return within(await view.findByRole('dialog'));
   };
@@ -260,6 +260,7 @@ it('deletes the active draft only after confirmation and returns to its previous
 
   const second = await openDelete();
   fireEvent.click(second.getByRole('button', { name: 'feature.design.deleteDocument' }));
-  await waitFor(() => expect(onLocationChange).toHaveBeenCalledExactlyOnceWith(scope));
+  await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
   expect(remove).toHaveBeenCalledExactlyOnceWith(ref);
+  expect(onLocationChange).not.toHaveBeenCalled();
 });

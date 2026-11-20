@@ -12,6 +12,7 @@
 | `create-skill-in-chat/` | 在对话中生成完整 Skill 内容并保存为用户 Skill |
 | `goal-writer/` | 把用户显式 Goal 请求改写成持久、可验证且无 Token 预算的目标 |
 | `display-in-chat/` | 生成对话内的 OpenUI 图表、卡片、表格和本地交互展示 |
+| `design-canvas/` | 在设计画布中批量建层、绑定主题变量，按当前改动选择检查或预览 |
 
 具体行为以各目录的 `SKILL.md` 为准。
 
@@ -94,6 +95,7 @@ Skill 目录页按已继承目录和 Skill 文件路径分组，每个 extra roo
 - 用户在当前输入显式选择的 Skill。
 - 用户在当前输入显式引用的已安装 Plugin 所属 Skill。
 - 会话创建时绑定的项目默认 Skill，持续参与每轮上下文。
+- 已绑定编辑器的设计聊天自动带入内置「画布设计」正文。普通聊天仍按需发现，关闭此 Skill 后，后续设计回合也会跳过。
 
 各来源合并后按 Skill ID 去重，禁用或缺失的项会跳过。其他已启用 Skill 只进入路由元数据目录；模型根据当前请求的目标和 `description` 的适用范围判断是否需要，再通过 `read_skill` 读取完整正文。
 

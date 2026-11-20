@@ -1,5 +1,6 @@
 import { useComposerModelSelection } from './composer/preferences/useComposerModelSelection.js';
 import type { ChatPresentation } from './conversation/chat-workspace-types.js';
+import { useDesignSelectionInsertion } from './mentions/DesignSelectionReference.js';
 import { ChatPromptInput } from './composer/editor/ChatPromptInput.js';
 import type { WorkspaceDraftReference } from './session/chatDraftReferences.js';
 import type { ComposerSlot } from './composer/editor/types.js';
@@ -305,6 +306,7 @@ export function ChatComposer({
     retrievingControl: retrievingQueuedInput === undefined ? undefined : { value: retrievingQueuedInput, onChange: setRetrievingQueuedInput },
     submitting,
   });
+  useDesignSelectionInsertion(getComposerEditor, submitting || queuedTurnEdit.retrieving || modeController.reviewModeEnabled);
   const attachmentPickerDisabled = attachmentLimitReached
     || submitting
     || queuedTurnEdit.retrieving

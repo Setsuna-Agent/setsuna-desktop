@@ -1,4 +1,4 @@
-import { ArrowUpRight, Check, ChevronDown, Circle, CodeXml, Frame, Globe, Hand, ImageIcon, LibraryBig, MousePointer2, Paintbrush, Pencil,
+import { ArrowUpRight, Check, ChevronDown, Circle, CodeXml, Frame, Globe, Hand, ImageIcon, LibraryBig, ListChecks, MousePointer2, Paintbrush, Pencil,
   Pentagon, PenTool, Shapes, Signature, Slash, Square, Star, Type, Variable, type LucideIcon } from 'lucide-react';
 import { useRef, useState, type ReactElement, type ReactNode } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
@@ -35,11 +35,12 @@ const panels = [
   { id: 'icon', icon: Shapes, label: 'feature.design.addIcon' },
   { id: 'variables', icon: Variable, label: 'feature.design.variables' },
   { id: 'library', icon: LibraryBig, label: 'feature.design.library' },
+  { id: 'audit', icon: ListChecks, label: 'feature.design.audit' },
 ] as const;
 
 type ToolPanelDefinition = typeof imagePanel | (typeof panels)[number];
 export type DesignToolPanel = ToolPanelDefinition['id'];
-export const designToolPopoverPosition = { placement: 'bottom', sideOffset: 8 } as const;
+export const designToolPopoverPosition = { placement: 'rightTop', sideOffset: 8 } as const;
 export type DesignToolPanels = Readonly<{
   active: DesignToolPanel | undefined;
   content: ReactNode;
@@ -65,35 +66,29 @@ export function isDesignImagePickerShortcut(event: Pick<KeyboardEvent, 'key' | '
   return event.shiftKey && (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toUpperCase() === imageShortcutKey;
 }
 
-export function DesignTools({ tool, disabled, drawingMode, onToggleDrawing, onChange, toolPanels, actions, translate: t }: ToolControls & Readonly<{
+export function DesignTools({ tool, disabled, navigationDisabled, drawingMode, onToggleDrawing, onChange, toolPanels, actions, translate: t }: ToolControls & Readonly<{
   drawingMode: boolean;
+  navigationDisabled: boolean;
   onToggleDrawing(): void;
   toolPanels: DesignToolPanels;
   actions: ReactNode;
 }>) {
   const controls = { tool, disabled, onChange, translate: t };
   const drawingLabel = t('feature.design.drawingMode');
-  return <div className="design-tools" role="toolbar" aria-label={t('feature.design.tools')}>
+  return <div className="design-tools" role="toolbar" aria-orientation="vertical" aria-label={t('feature.design.tools')}>
+    <ToolGroup {...controls} disabled={navigationDisabled} choices={navigationTools} label={t('feature.design.navigationTools')} />
+    <ToolGroup {...controls} choices={shapeTools} label={t('feature.design.shapeTools')}
+      panel={drawingMode ? undefined : { definition: imagePanel, state: toolPanels }} />
     <IconButton size="small" label={drawingLabel} title={drawingLabel} aria-pressed={drawingMode} disabled={disabled} onClick={onToggleDrawing}>
       <Signature size={17} strokeWidth={1.8} />
     </IconButton>
-    <span className="design-tools__divider" aria-hidden="true" />
-    <ToolGroup {...controls} choices={navigationTools} label={t('feature.design.navigationTools')} />
-    <span className="design-tools__divider" aria-hidden="true" />
-    {drawingMode ? <>
-      {[pen, ...freehandTools].map((item) => <ToolButton key={item.id} {...controls} item={item} />)}
-      <span className="design-tools__divider" aria-hidden="true" />
-    </> : null}
+    {drawingMode ? [pen, ...freehandTools].map((item) => <ToolButton key={item.id} {...controls} item={item} />) : null}
     <ToolButton {...controls} item={frame} />
-    <ToolGroup {...controls} choices={shapeTools} label={t('feature.design.shapeTools')}
-      panel={drawingMode ? undefined : { definition: imagePanel, state: toolPanels }} />
     {!drawingMode ? <ToolButton {...controls} item={pen} /> : null}
     <ToolButton {...controls} item={text} />
-    <span className="design-tools__divider" aria-hidden="true" />
     {!drawingMode ? panels.map((panel) => <ToolPanelPopover key={panel.id} definition={panel} state={toolPanels} translate={t}>
-      <IconButton size="small" label={t(panel.label)} disabled={disabled}><panel.icon size={17} strokeWidth={1.8} /></IconButton>
+      <IconButton size="small" label={t(panel.label)} disabled={panel.id === 'audit' ? navigationDisabled : disabled}><panel.icon size={17} strokeWidth={1.8} /></IconButton>
     </ToolPanelPopover>) : null}
-    {!drawingMode ? <span className="design-tools__divider" aria-hidden="true" /> : null}
     {actions}
   </div>;
 }
@@ -120,7 +115,7 @@ function ToolGroup({ choices, label, panel, ...controls }: ToolControls & Readon
   const primary = active ?? last;
   const panelOpen = Boolean(panel && panel.state.active === panel.definition.id);
 
-  const menu = <Dropdown open={menuOpen} disabled={disabled || panelOpen} placement="bottomRight"
+  const menu = <Dropdown open={menuOpen} disabled={disabled || panelOpen} placement={designToolPopoverPosition.placement}
     align={{ offset: [0, designToolPopoverPosition.sideOffset] }} rootClassName="sd-menu-surface--neutral"
     onOpenChange={(open) => {
       setMenuOpen(open);

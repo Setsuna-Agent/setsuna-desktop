@@ -23,7 +23,8 @@ import {
 } from './vector-geometry.js';
 
 type Position = Readonly<{ x: number; y: number }>;
-export type DesignSizeMode = 'fixed' | 'hug' | 'fill';
+const sizeModes = ['fixed', 'hug', 'fill'] as const;
+export type DesignSizeMode = typeof sizeModes[number];
 export type DesignQuad = readonly [number, number, number, number];
 
 export type DesignLayout = DesignVariableTarget & Readonly<{
@@ -177,6 +178,7 @@ export const designDocumentVersion = 12;
 export type DesignDocument = Readonly<{
   schemaVersion: typeof designDocumentVersion;
   documentId: string;
+  lastEditedLayerId?: string;
   rootIds: readonly string[];
   nodes: Readonly<Record<string, DesignNode>>;
   styles?: Readonly<Record<string, DesignStyle>>;
@@ -208,6 +210,7 @@ export const designDocumentCodec = defineRuntimeCodec<DesignDocument>((input) =>
   const legacyArrows = version === 10;
   const nodes = Object.fromEntries(Object.entries(record(value.nodes)).map(([id, node]) => [nodeId(id), parseNode(node, legacyPaint, legacyArrows)]));
   const document = { schemaVersion: designDocumentVersion, documentId: nodeId(value.documentId), rootIds: idList(value.rootIds), nodes,
+    lastEditedLayerId: typeof value.lastEditedLayerId === 'string' && Object.hasOwn(nodes, value.lastEditedLayerId) ? value.lastEditedLayerId : undefined,
     styles: optional(value.styles, (value) => Object.fromEntries(Object.entries(record(value)).map(([id, style]) => [nodeId(id), parseDesignStyle(style)]))),
     variableCollections: parseDesignVariableCollections(value.variableCollections, value.variableModes, shortName),
     libraries: optional(value.libraries, (value) => Object.fromEntries(Object.entries(record(value)).map(([id, path]) => [nodeId(id), parseDesignLibraryPath(path)]))) } as const;
@@ -311,7 +314,7 @@ function parseNode(input: unknown, legacyPaint = false, legacyArrows = false): D
   const layer = { ...position(value), width: dimension(value.width),
     variableIds: parseDesignVariableIds(value.variableIds, value.variableIds === undefined ? [] : designLayerVariableFields(value.kind, value.geometry)),
     name: optional(value.name, text), context: optional(value.context, parseDesignLayerContext),
-    widthMode: optional(value.widthMode, sizeMode), minWidth, maxWidth,
+    widthMode: option(value.widthMode, sizeModes, 'widthMode'), minWidth, maxWidth,
     rotation: optional(value.rotation, degrees),
     flipX: optional(value.flipX, flag),
     flipY: optional(value.flipY, flag),
@@ -328,7 +331,7 @@ function parseNode(input: unknown, legacyPaint = false, legacyArrows = false): D
     return { ...layer, ...paint, ...parseTypography(value), kind: 'text', text: content,
       textStyleId: optional(value.textStyleId, parseDesignResourceId), runs: optional(value.runs, (runs) => parseTextRuns(runs, content.length)) };
   }
-  const box = { ...layer, height: dimension(value.height), heightMode: optional(value.heightMode, sizeMode) };
+  const box = { ...layer, height: dimension(value.height), heightMode: option(value.heightMode, sizeModes, 'heightMode') };
   switch (value.kind) {
     case 'frame': {
       const instanceOf = optional(value.instanceOf, parseDesignResourceId);
@@ -342,7 +345,7 @@ function parseNode(input: unknown, legacyPaint = false, legacyArrows = false): D
         cornerRadii: optional(value.cornerRadii, quad),
         clip: optional(value.clip, flag),
         group: optional(value.group, flag),
-        layout: optional(value.layout, parseLayout) };
+        layout: optional(value.layout, parseDesignLayout) };
     }
     case 'rectangle':
       return { ...box, ...paint, kind: 'rectangle', cornerRadius: spacing(value.cornerRadius),
@@ -350,7 +353,7 @@ function parseNode(input: unknown, legacyPaint = false, legacyArrows = false): D
     case 'ellipse':
       return { ...box, ...paint, kind: 'ellipse' };
     case 'image':
-      return { ...box, kind: 'image', assetPath: parseAssetPath(value.assetPath), fit: option(value.fit, designImageFits),
+      return { ...box, kind: 'image', assetPath: parseAssetPath(value.assetPath), fit: option(value.fit, designImageFits, 'fit'),
         crop: optional(value.crop, (input) => { const { x, y } = record(input); return { x: unitInterval(x), y: unitInterval(y) }; }) };
     case 'web':
       return { ...box, ...paint, kind: 'web', url: optional(value.url, parseDesignWebUrl),
@@ -372,7 +375,7 @@ function parseVectorGeometry(input: unknown, legacyArrows: boolean): DesignVecto
     const sides = coordinate(value.sides);
     if (Number.isInteger(sides) && sides >= minDesignPolygonSides && sides <= maxDesignPolygonSides) return { kind: 'polygon', sides };
   } else if (value.kind === 'icon') {
-    const icon = option(value.icon, designIconNames);
+    const icon = option(value.icon, designIconNames, 'icon');
     if (icon) return { kind: 'icon', icon };
   } else if (value.kind === 'svg') {
     const svg = parseSvgGeometry(value);
@@ -382,12 +385,12 @@ function parseVectorGeometry(input: unknown, legacyArrows: boolean): DesignVecto
     if (Array.isArray(value.anchors) && value.anchors.length >= (closed ? 3 : 2) && value.anchors.length <= maxDesignPathAnchors) {
       const freehand = optional(value.freehand, (input) => {
         const style = record(input);
-        const preset = option(style.preset, designFreehandPresets);
+        const preset = option(style.preset, designFreehandPresets, 'preset');
         if (!preset) throw new Error('Invalid drawing preset.');
         return { preset, width: dimension(style.width) };
       });
       const path: DesignPathGeometry = { kind: 'path', closed, anchors: value.anchors.map(parsePathAnchor), ...(freehand ? { freehand } : undefined) };
-      const endMarker = option(value.endMarker, ['arrow'] as const);
+      const endMarker = option(value.endMarker, ['arrow'] as const, 'endMarker');
       if (endMarker && !isStraightDesignPath(path)) throw new Error('An arrow needs two distinct endpoints.');
       return endMarker ? { ...path, endMarker } : path;
     }
@@ -406,8 +409,8 @@ function parseSvgGeometry(value: Record<string, unknown>): DesignSvgGeometry {
     const data = parseDesignSvgPathData(path.data);
     length += data.length;
     if (length > MAX_DESIGN_SVG_BYTES) throw new Error('SVG path data is too large.');
-    return { data, fillRule: option(path.fillRule, ['nonzero', 'evenodd']), fillFromStroke: optional(path.fillFromStroke, flag),
-      lineCap: option(path.lineCap, ['butt', 'round', 'square']),
+    return { data, fillRule: option(path.fillRule, ['nonzero', 'evenodd'], 'fillRule'), fillFromStroke: optional(path.fillFromStroke, flag),
+      lineCap: option(path.lineCap, ['butt', 'round', 'square'], 'lineCap'),
       transform: optional(path.transform, parseSvgMatrix), dash: optional(path.dash, (dash) => {
         if (!Array.isArray(dash) || dash.length > 32) throw new Error('Invalid SVG dash pattern.');
         return dash.map((distance) => spacing(parseDesignSvgNumber(distance)));
@@ -433,10 +436,13 @@ function parsePathAnchor(input: unknown): DesignPathAnchor {
   return { ...position(value), incoming: optional(value.incoming, handle), outgoing: optional(value.outgoing, handle) };
 }
 
-function option<T extends string | number>(input: unknown, values: readonly T[]): T | undefined {
-  if (input === undefined) return undefined;
+function option<T extends string | number>(input: unknown, values: readonly T[], field: string): T | undefined {
+  return input === undefined ? undefined : requiredOption(input, values, field);
+}
+
+function requiredOption<T extends string | number>(input: unknown, values: readonly T[], field: string): T {
   const value = values.find((candidate) => candidate === input);
-  if (value === undefined) throw new Error('Invalid design style option.');
+  if (value === undefined) throw new Error(`Invalid ${field}: ${JSON.stringify(input)?.slice(0, 80)}. Expected one of: ${values.join(', ')}.`);
   return value;
 }
 
@@ -456,20 +462,21 @@ function parseContentOverrides(input: unknown): Readonly<Record<string, DesignCo
   return overrides;
 }
 
-function parseLayout(input: unknown): DesignLayout {
+export function parseDesignLayout(input: unknown): DesignLayout {
   const { direction, gap, padding, paddingX, paddingY, paddingSides, align, justify, wrap, variableIds } = record(input);
-  if ((direction !== 'horizontal' && direction !== 'vertical') || (align !== 'start' && align !== 'center' && align !== 'end')) {
-    throw new Error('Invalid automatic layout.');
-  }
-  if (justify !== undefined && justify !== 'start' && justify !== 'center' && justify !== 'end'
-    && justify !== 'space-between' && justify !== 'space-around') throw new Error('Invalid layout distribution.');
-  return { direction, gap: spacing(gap), padding: spacing(padding), align, justify,
+  return { direction: requiredOption(direction, ['horizontal', 'vertical'], 'layout.direction'), gap: spacing(gap), padding: spacing(padding),
+    align: requiredOption(align, ['start', 'center', 'end'], 'layout.align'),
+    justify: option(justify, ['start', 'center', 'end', 'space-between', 'space-around'], 'layout.justify'),
     variableIds: parseDesignVariableIds(variableIds, designLayoutVariableFields),
     paddingX: optional(paddingX, spacing), paddingY: optional(paddingY, spacing), paddingSides: optional(paddingSides, quad), wrap: optional(wrap, flag) };
 }
 
 function parseStrokes({ strokes, stroke }: Record<string, unknown>): readonly DesignStroke[] | undefined {
   if (strokes === undefined) return stroke === undefined ? undefined : [parseStroke(stroke)];
+  return parseDesignStrokeStack(strokes);
+}
+
+export function parseDesignStrokeStack(strokes: unknown): readonly DesignStroke[] {
   if (!Array.isArray(strokes) || strokes.length > maxDesignStrokes) throw new Error('Invalid design stroke stack.');
   return strokes.map(parseStroke);
 }
@@ -477,11 +484,8 @@ function parseStrokes({ strokes, stroke }: Record<string, unknown>): readonly De
 function parseStroke(input: unknown): DesignStroke {
   const value = record(input);
   const { width, alignment, join } = value;
-  if (alignment !== undefined && alignment !== 'inside' && alignment !== 'center' && alignment !== 'outside') {
-    throw new Error('Invalid stroke alignment.');
-  }
-  if (join !== undefined && join !== 'miter' && join !== 'round' && join !== 'bevel') throw new Error('Invalid stroke join.');
-  return { ...parsePaint(value, 'stroke'), width: dimension(width), alignment, join };
+  return { ...parsePaint(value, 'stroke'), width: dimension(width), alignment: option(alignment, ['inside', 'center', 'outside'], 'stroke.alignment'),
+    join: option(join, ['miter', 'round', 'bevel'], 'stroke.join') };
 }
 
 function parseShadow(input: unknown): DesignShadow {
@@ -521,9 +525,9 @@ function parsePaint(value: Record<string, unknown>, kind: 'fill' | 'stroke'): De
     variableIds: parseDesignVariableIds(value.variableIds, kind === 'stroke' ? ['width', 'opacity'] : ['opacity']),
     styleId: optional(value.styleId, parseDesignResourceId), gradient: optional(value.gradient, parseGradient),
     ...(value.shader === undefined ? {} : { shader: parseDesignShaderPaint(value.shader, parseAssetPath) }),
-    blendMode: option(value.blendMode, designBlendModes), image: optional(value.image, (input): DesignFillImage => {
+    blendMode: option(value.blendMode, designBlendModes, 'blendMode'), image: optional(value.image, (input): DesignFillImage => {
       const image = record(input);
-      return { assetPath: parseAssetPath(image.assetPath), fit: option(image.fit, designFillImageFits) ?? 'cover' };
+      return { assetPath: parseAssetPath(image.assetPath), fit: option(image.fit, designFillImageFits, 'fit') ?? 'cover' };
     }) };
 }
 
@@ -533,7 +537,7 @@ function legacyFillColor(kind: unknown): string {
 
 function parseGradient(input: unknown): DesignGradient {
   const { kind: mode, angle, axis, stops } = record(input);
-  const kind = option(mode, designGradientKinds);
+  const kind = option(mode, designGradientKinds, 'gradient.kind');
   if (!kind || !Array.isArray(stops) || stops.length < 2 || stops.length > maxDesignGradientStops) {
     throw new Error('Invalid design gradient.');
   }
@@ -550,9 +554,9 @@ function parseGradient(input: unknown): DesignGradient {
 
 function parseTypography(value: Record<string, unknown>): DesignTypography {
   return { fontSize: dimension(value.fontSize), fontFamily: optional(value.fontFamily, shortName),
-    fontWeight: option(value.fontWeight, designFontWeights), fontStyle: option(value.fontStyle, designFontStyles),
+    fontWeight: option(value.fontWeight, designFontWeights, 'fontWeight'), fontStyle: option(value.fontStyle, designFontStyles, 'fontStyle'),
     lineHeight: optional(value.lineHeight, dimension),
-    letterSpacing: optional(value.letterSpacing, coordinate), textAlign: option(value.textAlign, designTextAlignments) };
+    letterSpacing: optional(value.letterSpacing, coordinate), textAlign: option(value.textAlign, designTextAlignments, 'textAlign') };
 }
 
 function parseDesignStyle(input: unknown): DesignStyle {
@@ -578,7 +582,7 @@ function parseTextRuns(input: unknown, length: number): readonly DesignTextRun[]
     }
     end = nextEnd;
     return { start, end, color: optional(run.color, color), styleId: optional(run.styleId, parseDesignResourceId),
-      fontSize: optional(run.fontSize, dimension), fontWeight: option(run.fontWeight, designFontWeights), fontFamily: optional(run.fontFamily, shortName) };
+      fontSize: optional(run.fontSize, dimension), fontWeight: option(run.fontWeight, designFontWeights, 'fontWeight'), fontFamily: optional(run.fontFamily, shortName) };
   });
 }
 
@@ -607,11 +611,6 @@ function unitInterval(value: unknown): number {
 
 function degrees(value: unknown): number {
   return normalizeDesignRotation(coordinate(value));
-}
-
-function sizeMode(value: unknown): DesignSizeMode {
-  if (value === 'fixed' || value === 'hug' || value === 'fill') return value;
-  throw new Error('Invalid layout sizing mode.');
 }
 
 export function parseAssetPath(value: unknown): string {

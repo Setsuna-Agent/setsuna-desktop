@@ -1,9 +1,11 @@
 import type {
   QueueTurnInput,
   QueuedTurnInputResponse,
+  RuntimeEditorSelection,
   RuntimeMessage,
   RuntimeQueuedTurnInput,
   RuntimeTaskKind,
+  RuntimeThread,
   RuntimeThreadModelBinding,
   SendTurnInput,
   SendTurnResponse,
@@ -25,7 +27,13 @@ type QueuedTurnRun = {
   turnId: string;
 };
 
+export type QueuedInputEditor = {
+  captureSelection(threadId: string, clientId: string): RuntimeEditorSelection | undefined;
+  restoreQueuedSelection(threadId: string, clientId: string, input: RuntimeQueuedTurnInput): boolean;
+};
+
 type RuntimeQueuedTurnCoordinatorOptions = {
+  editor?: QueuedInputEditor;
   clock: Clock;
   ids: IdGenerator;
   inputGuard: Pick<
@@ -93,6 +101,7 @@ export class RuntimeQueuedTurnCoordinator {
   }
 
   enqueue(threadId: string, input: QueueTurnInput): Promise<QueuedTurnInputResponse> {
+    const editorSelection = input.clientId ? this.options.editor?.captureSelection(threadId, input.clientId) : undefined;
     return this.runExclusive(threadId, async () => {
       this.assertRunning();
       const text = input.input.trim();
@@ -127,6 +136,7 @@ export class RuntimeQueuedTurnCoordinator {
         kind,
         input: text,
         clientId: input.clientId,
+        ...(editorSelection ? { editorSelection } : {}),
         attachments,
         modelSelection: nextTurnModel ? modelReference(nextTurnModel.binding) : undefined,
         skillIds,
@@ -152,7 +162,7 @@ export class RuntimeQueuedTurnCoordinator {
       const updated = await this.requireThread(threadId);
       const next = updated.queuedTurnInputs?.find((item) => !this.dispatchingInputIds.has(item.id));
       if (!next) return queuedResponse(queuedInput.id);
-      const response = await this.dispatchInputIfIdle(threadId, next);
+      const response = await this.dispatchInputIfIdle(updated, next);
       // 恢复暂停队列时必须先发旧项；新入队项仍按自己的状态返回，避免把旧 turn
       // 错认成新项已经发送。
       return next.id === queuedInput.id ? response : queuedResponse(queuedInput.id);
@@ -207,7 +217,7 @@ export class RuntimeQueuedTurnCoordinator {
   retrieve(threadId: string, inputId: string): Promise<RuntimeQueuedTurnInput> {
     return this.runExclusive(threadId, async () => {
       this.assertRunning();
-      const queuedInput = await this.requireQueuedInput(threadId, inputId);
+      const queuedInput = requireQueuedInput(await this.requireThread(threadId), inputId);
       this.assertNotDispatching(queuedInput.id);
       await this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
@@ -223,7 +233,8 @@ export class RuntimeQueuedTurnCoordinator {
   sendNow(threadId: string, inputId: string): Promise<QueuedTurnInputResponse> {
     return this.runExclusive(threadId, async () => {
       this.assertRunning();
-      const queuedInput = await this.requireQueuedInput(threadId, inputId);
+      const thread = await this.requireThread(threadId);
+      const queuedInput = requireQueuedInput(thread, inputId);
       this.assertNotDispatching(queuedInput.id);
 
       const active = this.options.turnTasks.activeForThread(threadId);
@@ -237,10 +248,12 @@ export class RuntimeQueuedTurnCoordinator {
       this.pausedThreads.delete(threadId);
       if (active) {
         try {
+          const prepared = this.prepareEditorInput(thread, queuedInput);
+          if (!prepared) return queuedResponse(inputId);
           const response = await this.options.steerQueuedInput(
             threadId,
             active.turnId,
-            queuedInput,
+            prepared,
           );
           return {
             accepted: true,
@@ -254,7 +267,7 @@ export class RuntimeQueuedTurnCoordinator {
         }
       }
 
-      return this.dispatchInputIfIdle(threadId, queuedInput);
+      return this.dispatchInputIfIdle(thread, queuedInput);
     });
   }
 
@@ -297,7 +310,7 @@ export class RuntimeQueuedTurnCoordinator {
         const thread = await this.requireThread(threadId);
         if (!this.isLatestObservedRun(threadId, settledRun)) return;
         const next = thread.queuedTurnInputs?.find((input) => !this.dispatchingInputIds.has(input.id));
-        if (next) await this.dispatchInputIfIdle(threadId, next);
+        if (next) await this.dispatchInputIfIdle(thread, next);
       } finally {
         if (this.latestObservedRuns.get(threadId) === settledRun) {
           this.latestObservedRuns.delete(threadId);
@@ -307,16 +320,16 @@ export class RuntimeQueuedTurnCoordinator {
   }
 
   private async dispatchInputIfIdle(
-    threadId: string,
-    input: RuntimeQueuedTurnInput,
+    thread: RuntimeThread,
+    queued: RuntimeQueuedTurnInput,
   ): Promise<QueuedTurnInputResponse> {
-    if (this.pausedThreads.has(threadId)) {
-      return queuedResponse(input.id);
-    }
-    if (this.options.turnTasks.activeForThread(threadId)) {
-      return queuedResponse(input.id);
+    const threadId = thread.id;
+    if (this.pausedThreads.has(threadId) || this.options.turnTasks.activeForThread(threadId)) {
+      return queuedResponse(queued.id);
     }
 
+    const input = this.prepareEditorInput(thread, queued);
+    if (!input) return queuedResponse(queued.id);
     this.dispatchingInputIds.add(input.id);
     try {
       const kind = normalizeRuntimeQueuedTurnInputKind(input.kind);
@@ -345,20 +358,19 @@ export class RuntimeQueuedTurnCoordinator {
     }
   }
 
+  private prepareEditorInput(thread: RuntimeThread, input: RuntimeQueuedTurnInput) {
+    if (thread.featureId !== 'design' && !input.editorSelection) return input;
+    // Legacy design inputs can predate both snapshots and client IDs. Sampling must use the same key as the editor.
+    const clientId = input.clientId ?? input.id;
+    if (!this.options.editor) throw new Error('The editor is unavailable for this queued input.');
+    if (!this.options.editor.restoreQueuedSelection(thread.id, clientId, input)) return undefined;
+    return input.clientId ? input : { ...input, clientId };
+  }
+
   private async requireThread(threadId: string) {
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
     return thread;
-  }
-
-  private async requireQueuedInput(
-    threadId: string,
-    inputId: string,
-  ): Promise<RuntimeQueuedTurnInput> {
-    const thread = await this.requireThread(threadId);
-    const queuedInput = thread.queuedTurnInputs?.find((input) => input.id === inputId);
-    if (!queuedInput) throw new Error(`Queued input not found: ${inputId}`);
-    return cloneQueuedInput(queuedInput);
   }
 
   private assertNotDispatching(inputId: string): void {
@@ -385,6 +397,12 @@ export class RuntimeQueuedTurnCoordinator {
     });
     return result;
   }
+}
+
+function requireQueuedInput(thread: RuntimeThread, inputId: string) {
+  const input = thread.queuedTurnInputs?.find((item) => item.id === inputId);
+  if (!input) throw new Error(`Queued input not found: ${inputId}`);
+  return cloneQueuedInput(input);
 }
 
 function terminalOutcome(

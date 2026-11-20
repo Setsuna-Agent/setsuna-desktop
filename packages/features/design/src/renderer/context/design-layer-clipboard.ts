@@ -1,4 +1,6 @@
-import { designDocumentCodec, designDocumentVersion, type DesignDocument, type DesignDocumentRef, type DesignEdit, type DesignNode } from '../../contracts/index.js';
+import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import { canContainDesignLayers } from './design-layer-commands.js';
+import { designLayerImagePaths, designLayerShaderPaths, designDocumentCodec, designDocumentVersion, type DesignDocument, type DesignDocumentRef, type DesignEdit, type DesignNode } from '../../contracts/index.js';
 import { remapDesignLayerReferences } from '../../contracts/design-references.js';
 import { designResourceId, designResourceParts } from '../../contracts/design-resource-id.js';
 import { bindDesignVariable } from '../../contracts/design-variables.js';
@@ -6,7 +8,7 @@ import { independentLayer } from '../components/design-components.js';
 import { linkedDesignPath, mapDesignNodeResourceIds } from '../components/design-library-resources.js';
 import { layerTransform, orientationInParent, roundDesignValue, toLocal, toWorld, transformedBounds, unionBounds,
   type Bounds, type Point } from '../design-geometry.js';
-import { centerDesignLayer } from '../design-insertion.js';
+import { centerDesignLayer, resolveDesignInsertion } from '../design-insertion.js';
 import type { DesignLayerBox, DesignScene } from '../design-layout.js';
 import { measureDesignText } from '../design-text.js';
 
@@ -128,5 +130,44 @@ export function pasteDesignBranches(clipboard: LayerClipboard, destination: Desi
       ...edit, node: { ...edit.node, x: roundDesignValue(edit.node.x + position.x - bounds.x), y: roundDesignValue(edit.node.y + position.y - bounds.y) },
     } : edit) };
   }
+  return { ids, edits };
+}
+
+export function planClipboardPaste({ copied, document, documentRef, scene, selectedId, target, area, replace, translate: t }: {
+  copied: LayerClipboard; document: DesignDocument; documentRef: DesignDocumentRef; scene: DesignScene; selectedId: string | null;
+  target?: { id: string | null; world?: Point }; area?: Bounds; replace: boolean; translate: RendererTranslate;
+}) {
+  if (!designClipboardSharesRoot(copied, documentRef)) {
+    const nodes = Object.values(copied.document.nodes);
+    if (nodes.some((item) => item.kind === 'script' && item.scriptPath)) {
+      throw new Error(t('feature.design.clipboardScriptRoot'));
+    }
+    if (nodes.some((item) => designLayerShaderPaths(item).length)) {
+      throw new Error(t('feature.design.clipboardShaderRoot'));
+    }
+    if (nodes.some((item) => designLayerImagePaths(item).length)) {
+      throw new Error(t('feature.design.clipboardImageRoot'));
+    }
+  }
+  const id = target ? target.id : selectedId;
+  const hit = id ? scene[id] : undefined;
+  const inside = !replace && id && !hit?.locked && canContainDesignLayers(document.nodes[id]);
+  const contextualParent = inside ? id : hit?.parentId ?? null;
+  const copiedElements = copied.document.rootIds.some((root) => {
+    const layer = copied.document.nodes[root];
+    return layer.kind !== 'frame' || layer.group;
+  });
+  const fallback = area && !contextualParent && copiedElements ? resolveDesignInsertion(document, scene, area, selectedId) : undefined;
+  const parentId = contextualParent ?? fallback?.parentId ?? null;
+  const parent = parentId ? scene[parentId] : undefined;
+  if (parent?.locked || (replace && (!id || hit?.locked))) return;
+  const origin = replace && hit ? hit.paintBounds : target?.world ?? (inside
+    ? toWorld(parent, { x: 24, y: 24 })
+    : { x: (hit?.paintBounds.x ?? 0) + 16, y: (hit?.paintBounds.y ?? 0) + 16 });
+  const parentNode = parentId ? document.nodes[parentId] : undefined;
+  const absolute = replace && id ? document.nodes[id].absolute : parentNode?.kind === 'frame' && parentNode.layout ? Boolean(target?.world) : undefined;
+  const placement = fallback?.parentId ? { center: fallback.center } : { origin };
+  const { ids, edits } = pasteDesignBranches(copied, document, documentRef, { ...placement, parentId, parent, beforeId: replace ? id : null, absolute });
+  if (replace && id && ids.length) edits.push({ kind: 'remove', nodeId: id });
   return { ids, edits };
 }

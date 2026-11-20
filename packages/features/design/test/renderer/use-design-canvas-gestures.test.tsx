@@ -20,6 +20,7 @@ function mountGestures(design: DesignDocument, scene: DesignScene, selected: rea
   } as unknown as Konva.Stage };
   const commit = vi.fn<(action: CanvasAction, revision: string) => Promise<boolean>>().mockResolvedValue(true);
   const editText = vi.fn();
+  const pick = vi.fn();
   let preview: ReturnType<typeof useDesignCanvasGestures>['preview'];
 
   function CanvasGestureTarget() {
@@ -27,7 +28,7 @@ function mountGestures(design: DesignDocument, scene: DesignScene, selected: rea
     const [viewport, setViewport] = useState<CanvasViewport>({ x: 0, y: 0, scale });
     const controls = useDesignCanvasGestures({
       stage, document: design, scene, revision: 'base', tool, selectedIds,
-      disabled: false, viewport, setViewport, onSelect, onEditText: editText, onAction: commit,
+      interaction: 'edit', viewport, setViewport, onSelect, beginPick: () => pick, onEditText: editText, onAction: commit,
     });
     useLayoutEffect(() => { preview = controls.preview; }, [controls.preview]);
     return <div tabIndex={0} role="region" aria-label="Canvas" ref={(element) => {
@@ -38,7 +39,7 @@ function mountGestures(design: DesignDocument, scene: DesignScene, selected: rea
 
   const canvas = render(<CanvasGestureTarget />).getByRole('region', { name: 'Canvas' });
   Object.defineProperties(canvas, { clientWidth: { value: 1200 }, clientHeight: { value: 900 } });
-  return { canvas, commit, editText, preview: () => preview };
+  return { canvas, commit, editText, pick, preview: () => preview };
 }
 
 it('draws backwards from one frame corner to the other and keeps the snapped bounds inside auto layout', async () => {
@@ -100,6 +101,32 @@ it('prefers the frame border over a nearer interior guide and bypasses it with A
   expect(commit).toHaveBeenLastCalledWith({ kind: 'move', placements: { tile: { x: 9, y: 32 } } }, 'base');
 });
 
+it('references a completed marquee as one group of editable layers inside its board', async () => {
+  const rect = { kind: 'rectangle', x: 10, y: 10, width: 8, height: 12, cornerRadius: 0 } as const;
+  const design: DesignDocument = { schemaVersion: designDocumentVersion, documentId: 'draft', rootIds: ['board'], nodes: {
+    board: { kind: 'frame', x: 0, y: 0, width: 200, height: 200, childIds: ['rail', 'other', 'locked', 'third'] },
+    rail: rect, other: { ...rect, y: 36 }, locked: { ...rect, locked: true }, third: { ...rect, y: 80 },
+  } };
+  const scene = resolveDesignScene(await loadYoga(), design, () => ({ width: 1, height: 1 }));
+  const { canvas, pick, commit } = mountGestures(design, scene, []);
+  const start = { pointerId: 1, button: 0, clientX: 4, clientY: 4 };
+  const end = { ...start, clientX: 24, clientY: 52 };
+  fireEvent.pointerDown(canvas, start);
+  fireEvent.pointerUp(canvas, start);
+  fireEvent.pointerDown(canvas, start);
+  fireEvent.pointerMove(canvas, end);
+  expect(pick).not.toHaveBeenCalled();
+  fireEvent.pointerUp(canvas, end);
+  expect(pick).toHaveBeenCalledExactlyOnceWith(['rail', 'other']);
+  const extend = { ...start, clientY: 72, shiftKey: true };
+  const extended = { ...extend, clientX: 24, clientY: 96 };
+  fireEvent.pointerDown(canvas, extend);
+  fireEvent.pointerMove(canvas, extended);
+  fireEvent.pointerUp(canvas, extended);
+  expect(pick).toHaveBeenLastCalledWith(['rail', 'other', 'third']);
+  expect(commit).not.toHaveBeenCalled();
+});
+
 it('snaps a resized edge to the true outline of a rotated and reflected frame', async () => {
   const design: DesignDocument = {
     schemaVersion: designDocumentVersion, documentId: 'resize-snap', rootIds: ['board'],
@@ -138,7 +165,7 @@ it('distinguishes cancelled drags, batch moves in a reflected frame, and text ed
     },
   };
   const scene = resolveDesignScene(await loadYoga(), design, () => ({ width: 1, height: 1 }));
-  const { canvas, commit, editText } = mountGestures(design, scene, ['primary', 'secondary']);
+  const { canvas, commit, editText, pick } = mountGestures(design, scene, ['primary', 'secondary']);
   const start = { pointerId: 1, button: 0, clientX: 150, clientY: 40 };
   const end = { ...start, clientY: 60, altKey: true };
   fireEvent.pointerDown(canvas, start);
@@ -155,6 +182,7 @@ it('distinguishes cancelled drags, batch moves in a reflected frame, and text ed
     kind: 'move', placements: { primary: { x: 10, y: 40 }, secondary: { x: 50, y: 60 } },
   }, 'base');
   expect(editText).not.toHaveBeenCalled();
+  expect(pick).not.toHaveBeenCalled();
 
   for (const at of [100, 220]) {
     fireEvent.pointerDown(canvas, start);
@@ -162,6 +190,7 @@ it('distinguishes cancelled drags, batch moves in a reflected frame, and text ed
     Object.defineProperty(release, 'timeStamp', { value: at });
     fireEvent(canvas, release);
   }
+  expect(pick).toHaveBeenLastCalledWith(['primary']);
   expect(editText).toHaveBeenCalledExactlyOnceWith('primary', design.nodes.primary);
   expect(commit).toHaveBeenCalledTimes(1);
 });

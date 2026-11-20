@@ -21,6 +21,7 @@ export type ToolExecutionContext = {
   interfaceLanguage?: RuntimeInterfaceLanguage;
   projectId?: string;
   turnId?: string;
+  inputClientId?: string;
   toolCallId?: string;
   /** Runtime-owned identity shared by all tools generated in one model sampling step. */
   samplingStepId?: string;
@@ -142,13 +143,21 @@ export type ToolApprovalRequirement = {
   rejectWhenApprovalDisabled?: boolean;
 };
 
+export type ExclusiveToolScope = {
+  has(name: string): boolean;
+  includeSelectedPlugins?: boolean;
+  includeCollaboration?: boolean;
+  /** Bundled workflows supplied while this tool scope is active. The Skill registry owns enablement. */
+  builtinSkillIds?: readonly string[];
+};
+
 export type ToolHost = {
   listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]>;
   /**
    * A Feature-owned conversation can confine its turns to this host's tools. When a scope is returned,
    * every other host tool and the runtime's own feature tools (collaboration, goals, dynamic tools) are withheld.
    */
-  exclusiveToolScope?(context: ToolExecutionContext): Promise<ReadonlySet<string> | null> | ReadonlySet<string> | null;
+  exclusiveToolScope?(context: ToolExecutionContext): Promise<ExclusiveToolScope | null> | ExclusiveToolScope | null;
   environmentForToolContext?(context: ToolExecutionContext): Promise<ToolExecutionEnvironment | null> | ToolExecutionEnvironment | null;
   systemPrompt?(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> | string | null;
   externalContext?(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<ToolExternalContext[]> | ToolExternalContext[];

@@ -6,6 +6,7 @@ export { PanelPlacementIcon } from './icons/panel-placement-icon.js';
 export { ColorPicker, ColorPickerControls, ColorPickerSwatch, type ColorPickerProps, type PickerColor } from './color-picker/color-picker.js';
 export { imageFileError, readImageFile, type ImageFileReadOptions } from './icons/image-file.js';
 export { TextField, TextArea, type TextFieldProps, type TextAreaProps } from './fields.js';
+export { parseNumberExpression } from './fields/number-expression.js';
 export { Checkbox, CheckField, SegmentedControl, Switch, type CheckboxProps } from './selection-controls.js';
 export { Dialog, type DialogProps } from './dialog.js';
 export { Dropdown, PointMenu, type DropdownProps, type MenuProps, type MenuItem } from './menu.js';

@@ -28,10 +28,10 @@ export function DesignDrawingControls({ tool, ink, disabled, onChange, translate
   const previewPaint = (next: DesignPaint | undefined) => setPreview(next ? { source: paint, paint: next } : undefined);
   const solidPaint = (next: PickerColor): DesignPaint => ({ ...paint, color: next.color, opacity: next.opacity });
   const savePaint = async (next: DesignPaint) => { setPreview(undefined); onChange({ ...ink, paint: next }); return true; };
-  return <div className="design-drawing-controls" role="toolbar" aria-label={t('feature.design.drawingControls')}
+  return <div className="design-drawing-controls" role="toolbar" aria-orientation="vertical" aria-label={t('feature.design.drawingControls')}
     onKeyDown={(event) => event.stopPropagation()}>
     <DesignPaintPicker paint={paint} display={display} color={color} opacity={opacity * (paint.opacity ?? 1)}
-      label={t('feature.design.color')} disabled={disabled} placement="bottomLeft" translate={t}
+      label={t('feature.design.color')} disabled={disabled} placement="rightTop" translate={t}
       onColorPreview={(next) => previewPaint(next && solidPaint(next))}
       onColorCommit={(next) => savePaint(solidPaint(next))} onPreview={previewPaint} onSave={savePaint} />
     <div className="design-drawing-controls__width">
@@ -54,7 +54,7 @@ function DrawingPresetPicker({ presets, selected, disabled, onChange, translate:
 }>) {
   const [open, setOpen] = useState(false);
   const label = t('feature.design.drawingPreset');
-  return <Popover className="design-drawing-presets" placement="bottomRight" contentLabel={label} open={open} onOpenChange={setOpen}
+  return <Popover className="design-drawing-presets" placement="rightTop" contentLabel={label} open={open} onOpenChange={setOpen}
     content={<div className="design-drawing-presets__list" role="group" aria-label={label}>
       {presets.map((preset) => <Button key={preset} size="small" className="design-drawing-presets__option"
         aria-pressed={preset === selected} onClick={() => { onChange(preset); setOpen(false); }}>

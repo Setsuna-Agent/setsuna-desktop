@@ -11,7 +11,7 @@ import type { DesignFontRequest } from '../text/design-font-loader.js';
 import { designTextSegments } from '../text/design-rich-text.js';
 import { designArrowInkBounds } from '../vectors/design-vector.js';
 
-export type DesignExportSelection = Readonly<{ document: DesignDocument; scene: DesignScene; ids: readonly string[]; webImages?: DesignWebImages }>;
+export type DesignExportSelection = Readonly<{ document: DesignDocument; scene: DesignScene; ids: readonly string[]; networkAccess?: boolean; webImages?: DesignWebImages }>;
 
 function visitDesignExportLayers({ document, scene, ids }: DesignExportSelection, apply: (node: DesignNode, id: string) => void) {
   function visit(id: string) {
@@ -51,7 +51,7 @@ export function designExportWebLayers(selection: DesignExportSelection): readonl
 export async function loadExportWebImages(selection: DesignExportSelection, capture: CaptureDesignWebImages, signal: AbortSignal, t: RendererTranslate) {
   const layers = designExportWebLayers(selection);
   if (!layers.length) return;
-  const images = await capture(layers, signal);
+  const images = await capture(layers, signal, selection.networkAccess);
   if (!images || layers.some(({ id }) => !images.has(id))) throw new Error(t('feature.design.webLoadFailed'));
   return images;
 }

@@ -58,9 +58,9 @@ export function DesignLibraryPanel({ document, documentRef, client, disabled, co
 function LibraryComponents({ document, components, componentPreviews, componentDrag, revision, disabled, translate: t }:
   Pick<LibraryProps, 'document' | 'components' | 'componentPreviews' | 'componentDrag' | 'revision' | 'disabled' | 'translate'>) {
   const results = useRef<HTMLDivElement>(null);
-  const { projected, scene, resources, layoutEngine, loadImage } = componentPreviews;
-  const selectThumbnail = useMemo(() => createDesignComponentThumbnailSelection(document, { projected, scene, resources, layoutEngine }),
-    [document, projected, scene, resources, layoutEngine]);
+  const { projected, resources, layoutEngine, loadImage } = componentPreviews;
+  const selectThumbnail = useMemo(() => createDesignComponentThumbnailSelection(document, { projected, resources, layoutEngine }),
+    [document, projected, resources, layoutEngine]);
   const observeThumbnail = useDesignThumbnails(results, selectThumbnail, loadImage, { pixels: 512 });
   const dragPreview = useNativeDragPreview();
   useEffect(() => {
