@@ -163,7 +163,8 @@ it('previews and saves segment measurements in the inspector against the actual 
       geometry: { kind: 'path', endMarker: 'arrow', closed: false, anchors: [{ x: 0, y: 0 }, { x: 1, y: 0 }] },
       strokes: [{ color: '#000000', width: 1 }] },
   } });
-  fireEvent.click(await screen.findByRole('button', { name: 'Arrow' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'feature.design.expandLayer' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Arrow' }));
   const length = screen.getByRole<HTMLInputElement>('spinbutton', { name: 'feature.design.segment.length' });
   const angle = screen.getByRole<HTMLInputElement>('spinbutton', { name: 'feature.design.segment.angle' });
   expect([length.value, angle.value]).toEqual(['40', '-90']);

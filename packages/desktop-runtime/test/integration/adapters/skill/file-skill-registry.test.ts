@@ -84,6 +84,23 @@ describe('file skill registry', () => {
     ]);
   });
 
+  it('selects only the bundled workflow when an inherited directory contains a skill with the same ID', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    const extraRoot = path.join(dataDir, 'inherited');
+    const inherited = path.join(extraRoot, 'builtin-demo');
+    await mkdir(inherited, { recursive: true });
+    await writeFile(path.join(inherited, 'SKILL.md'), '# Personal workflow');
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+    try {
+      await registry.setExtraRoots([extraRoot]);
+      expect((await registry.resolvePromptContext()).availableSkills.filter((skill) => skill.id === 'builtin-demo')).toHaveLength(2);
+      const selected = await registry.selectedSkillInjections([], { builtinSkillIds: ['builtin-demo'] });
+      expect(selected.map((skill) => skill.path)).toEqual([path.join(builtinDir, 'builtin-demo', 'SKILL.md')]);
+    } finally {
+      await rm(path.dirname(builtinDir), { recursive: true, force: true });
+    }
+  });
+
   it('preserves the exact source through the detail codec while keeping frontmatter out of instructions and catalog data', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const skillDir = path.join(builtinDir, 'windows-skill');

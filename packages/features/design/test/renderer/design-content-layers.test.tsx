@@ -38,7 +38,7 @@ it('loads a saved web address automatically and only reports snapshot failures o
   Object.defineProperty(guest, 'getWebContentsId', { value: () => 1 });
   fireEvent(guest, new Event('dom-ready'));
   await waitFor(() => expect(capture).toHaveBeenCalledWith(1));
-  expect(configure).toHaveBeenCalledWith(1, { url, device: undefined, interactive: false });
+  expect(configure).toHaveBeenCalledWith(1, { url, device: undefined, networkAccess: true, interactive: false });
   await waitFor(() => expect(document.querySelector('webview')).toBeNull());
   expect(screen.queryByText('feature.design.webLoadFailed')).toBeNull();
 
@@ -181,28 +181,29 @@ it('refreshes stale and offscreen web snapshots for PNG and reports a capture fa
     const save = screen.getByRole<HTMLButtonElement>('button', { name: 'feature.design.exportLayer' });
     await user.click(save);
     const handsetGuest = await readyGuest(2);
-    expect(configure).toHaveBeenCalledWith(2, { url: visibleUrl, interactive: false, device: { id: 'phone', width: 400, height: 800 } });
+    expect(configure).toHaveBeenCalledWith(2, { url: visibleUrl, networkAccess: true, interactive: false, device: { id: 'phone', width: 400, height: 800 } });
     expect(saveImageAs).not.toHaveBeenCalled();
     await act(async () => { handsetCapture.resolve(phone); });
     const failedGuest = await readyGuest(3, handsetGuest);
-    expect(configure).toHaveBeenCalledWith(3, { url: offscreenUrl, interactive: false, device: undefined });
+    expect(configure).toHaveBeenCalledWith(3, { url: offscreenUrl, networkAccess: true, interactive: false, device: undefined });
     await screen.findByText('feature.design.exportFailed');
     expect(saveImageAs).not.toHaveBeenCalled();
 
     await user.click(save);
     await readyGuest(4, failedGuest);
-    expect(configure).toHaveBeenCalledWith(4, { url: offscreenUrl, interactive: false, device: undefined });
+    expect(configure).toHaveBeenCalledWith(4, { url: offscreenUrl, networkAccess: true, interactive: false, device: undefined });
     await waitFor(() => expect(saveImageAs).toHaveBeenCalledOnce());
     expect(drawing.exportedImages.get('browser')?.src).toBe(phone);
     expect(drawing.exportedImages.get('offscreen')?.src).toBe(offscreen);
 
+    await user.click(screen.getByRole('button', { name: 'feature.design.expandLayer' }));
     await user.click(screen.getByRole('button', { name: 'Primary page' }));
     await user.click(screen.getByRole('combobox', { name: 'feature.design.webZoom' }));
     await user.click(await screen.findByRole('option', { name: '125%' }));
     await user.click(screen.getByRole('button', { name: 'Dashboard' }));
     await user.click(screen.getByRole('button', { name: 'feature.design.exportLayer' }));
     await readyGuest(5);
-    expect(configure).toHaveBeenCalledWith(5, { url: visibleUrl, interactive: false, device: { id: 'phone', width: 320, height: 640 } });
+    expect(configure).toHaveBeenCalledWith(5, { url: visibleUrl, networkAccess: true, interactive: false, device: { id: 'phone', width: 320, height: 640 } });
     await waitFor(() => expect(saveImageAs).toHaveBeenCalledTimes(2));
     expect(drawing.exportedImages.get('browser')?.src).toBe(zoomed);
   } finally { handsetCapture.resolve(phone); }
@@ -267,7 +268,7 @@ it('uses the browser toolbar before selection and keeps dragging available while
   });
   fireEvent(guest, new Event('dom-ready'));
   await waitFor(() => expect(configure).toHaveBeenCalledWith(1, {
-    url: address, device: { id: 'phone', width: 320, height: 640 }, interactive: true,
+    url: address, device: { id: 'phone', width: 320, height: 640 }, networkAccess: true, interactive: true,
   }));
   fireEvent(guest, Object.assign(new Event('did-navigate-in-page'), { url: currentAddress, isMainFrame: true }));
   expect(addressField().value).toBe(currentAddress);
@@ -389,6 +390,7 @@ it('exports and previews the current generated content of a board after its scri
     await waitFor(() => expect(copyText).toHaveBeenLastCalledWith(expect.stringContaining('Independent note')));
 
     await act(async () => { first.resolve(generated('Initial chart label')); });
+    await user.click(screen.getByRole('button', { name: 'feature.design.expandLayer' }));
     await select('Chart');
     const parameter = await screen.findByRole('spinbutton', { name: 'value' });
     parameter.focus();

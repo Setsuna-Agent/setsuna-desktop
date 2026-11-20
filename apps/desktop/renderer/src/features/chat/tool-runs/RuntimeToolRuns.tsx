@@ -333,7 +333,7 @@ function toolRunPanelNode(
         <>
           <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
           <span className="chat-tool-run__summary-text">
-            <span className="chat-tool-run__title">{summary.title}</span>
+            <span className="chat-tool-run__title" title={run.name}>{summary.title}</span>
             <ToolRunSummaryTarget inspectionKind={summaryInspectionKind} kind={kind} target={summary.target} />
           </span>
           <ToolRunStatus status={run.status} summaryTitle={summary.title} />
@@ -372,6 +372,7 @@ function toolRunGroupPanelNode(
   const heading = (expanded: boolean) => (
     <ToolRunGroupHeading
       icon={group.kind === 'generic' && group.runs[0] ? toolRunIcon(group.runs[0]) : toolRunGroupIcon(group.kind, sharedPlugin)}
+      runs={group.runs}
       status={status}
       summary={expanded
         ? mixedToolRunGroupSummary([group], 'aggregate', t)
@@ -425,7 +426,7 @@ function toolRunGroupPanelNode(
               <div className="chat-tool-run__group-item" key={run.id}>
                 <div className="chat-tool-run__group-title">
                   <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">{toolRunIcon(run)}</span>
-                  <span className="chat-tool-run__title">{runSummary.title}</span>
+                  <span className="chat-tool-run__title" title={run.name}>{runSummary.title}</span>
                   <ToolRunSummaryTarget kind={group.kind} target={runSummary.target} />
                 </div>
                 <ToolRunDetails run={run} onAnswerApproval={onAnswerApproval} pendingApprovalId={pendingApprovalId} />
@@ -455,6 +456,7 @@ function mixedToolRunGroupPanelNode(
       summary={(expanded) => (
         <ToolRunGroupHeading
           icon={firstRun ? toolRunIcon(firstRun) : null}
+          runs={runs}
           status={status}
           summary={mixedToolRunGroupSummary(group.groups, expanded ? 'aggregate' : group.summaryMode, t)}
         />
@@ -470,8 +472,9 @@ function mixedToolRunGroupPanelNode(
 }
 
 /** Expanded groups summarize all work; only collapsed groups repeat the current target. */
-function ToolRunGroupHeading({ icon, status, summary }: {
+function ToolRunGroupHeading({ icon, runs, status, summary }: {
   icon: ReactNode;
+  runs: RuntimeToolRun[];
   status: RuntimeToolRun['status'];
   summary: CompactToolRunSummary;
 }) {
@@ -482,7 +485,7 @@ function ToolRunGroupHeading({ icon, status, summary }: {
     <>
       <span className="chat-tool-run__icon">{icon}</span>
       <span className="chat-tool-run__summary-text">
-        <span className="chat-tool-run__title">{summary.title}</span>
+        <span className="chat-tool-run__title" title={[...new Set(runs.map((run) => run.name))].join(', ')}>{summary.title}</span>
         <ToolRunSummaryTarget inspectionKind={summary.inspectionKind} kind={summary.targetKind} target={summary.target} />
         {changeCounts ? <ChangeCounts {...changeCounts} /> : null}
       </span>
@@ -549,7 +552,7 @@ function FlatToolRunRow({
     <>
       <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
       <span className="chat-tool-run__summary-text">
-        <span className="chat-tool-run__title">{summary.title}</span>
+        <span className="chat-tool-run__title" title={run.name}>{summary.title}</span>
         <ToolRunSummaryTarget
           inspectionKind={kind === 'inspection' ? inspectionEntryKind(run) : undefined}
           kind={kind}

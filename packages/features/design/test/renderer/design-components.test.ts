@@ -7,7 +7,6 @@ import { designInstanceContents, detachDesignInstance, projectDesignComponents, 
 import { applyDesignEdits } from '../../src/contracts/apply-design-edits.js';
 import { changeDesignVariant, createDesignVariant, designComponentVariants } from '../../src/renderer/components/design-library.js';
 import { buildDesignLibraryResources } from '../../src/renderer/components/design-library-resources.js';
-import { resolveDesignScene } from '../../src/renderer/design-layout.js';
 import { designExportImagePaths } from '../../src/renderer/export/design-export-scene.js';
 
 it('keeps nested instances linked until they are detached and rejects edits that break those links', () => {
@@ -158,8 +157,7 @@ it('previews the local and shared components independently using the shared vari
   const resources = buildDesignLibraryResources(local.documentId, [shared]);
   const layoutEngine = await loadYoga();
   const projected = projectDesignComponents(local, resources);
-  const scene = resolveDesignScene(layoutEngine, projected, () => ({ width: 0, height: 0 }));
-  const select = createDesignComponentThumbnailSelection(local, { projected, scene, resources, layoutEngine });
+  const select = createDesignComponentThumbnailSelection(local, { projected, resources, layoutEngine });
   const localPreview = select('loading');
   const sharedPreview = select('controls:loading');
   if (!localPreview || !sharedPreview) throw new Error('Both component previews must be available.');

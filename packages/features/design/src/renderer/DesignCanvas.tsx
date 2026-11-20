@@ -6,6 +6,7 @@ import type { Yoga } from 'yoga-layout/load';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { DesignDocument, DesignEdit, DesignNode, DesignText } from '../contracts/index.js';
 import { clearDesignChangedBindings } from '../contracts/design-variables.js';
+import type { DesignAgentFocus } from './agent/design-agent-focus.js';
 import type { DesignCanvasSettings } from './context/design-canvas-settings.js';
 import type { DesignLayerMenuTarget } from './context/use-design-layer-actions.js';
 import { DesignCanvasLayoutHandles } from './DesignCanvasLayoutHandles.js';
@@ -14,6 +15,7 @@ import { useDesignCanvasShaders } from './shaders/use-design-canvas-shaders.js';
 import { DesignCanvasSelection, designSelectionColor, DimensionTag, drawingPreview } from './DesignCanvasSelection.js';
 import { DesignTools, type DesignToolPanels } from './DesignTools.js';
 import { DesignZoomControls } from './DesignZoomControls.js';
+import { DesignAgentFocusOverlays } from './canvas/DesignAgentFocusOverlay.js';
 import { DesignDrawingControls } from './canvas/DesignDrawingControls.js';
 import { DesignWebPreview, type DesignWebPreviewHandle } from './canvas/DesignWebPreview.js';
 import { DesignWebToolbar, designWebToolbarGap, designWebToolbarHeight, type DesignWebLayerControls } from './canvas/DesignWebToolbar.js';
@@ -25,7 +27,7 @@ import { useDesignFreehand } from './canvas/use-design-freehand.js';
 import { projectDesignComponents } from './components/design-components.js';
 import type { DesignLibraryResources } from './components/design-library-resources.js';
 import { dropDesignLayer, isFlowChild, planDesignLayerUpdate, previewDesignCanvasDrop, selectedBranches, transformDesignLayer, type LayerPlacement } from './design-canvas-edits.js';
-import { intersectBounds, toWorld, toWorldVector, unionBounds, unreflect, type Bounds, type Point } from './design-geometry.js';
+import { containsBounds, intersectBounds, toWorld, toWorldVector, unionBounds, unreflect, type Bounds, type Point } from './design-geometry.js';
 import type { LoadDesignImage } from './design-images.js';
 import { designDrawingPlacement } from './design-insertion.js';
 import type { DesignFieldUpdates, InspectorCanvasPreview } from './inspector/design-inspector-edit.js';
@@ -36,7 +38,7 @@ import { colorWithOpacity, type DesignPaintPreview } from './design-paint.js';
 import { measureDesignText } from './design-text.js';
 import { DesignCanvasGradient } from './styles/DesignCanvasGradient.js';
 import { useDesignCanvasGradient } from './styles/use-design-canvas-gradient.js';
-import { canvasLayoutHandle, toCanvasScreen, toCanvasWorld, useDesignCanvasGestures, type CanvasAction, type CanvasViewport, type DesignTool } from './use-design-canvas-gestures.js';
+import { canvasLayoutHandle, toCanvasScreen, toCanvasWorld, useDesignCanvasGestures, type BeginCanvasPick, type CanvasAction, type CanvasInteraction, type CanvasViewport, type DesignTool } from './use-design-canvas-gestures.js';
 import { useDesignCanvasLayerDrag } from './use-design-canvas-layer-drag.js';
 import { DesignPathOverlay } from './vectors/DesignPathOverlay.js';
 import { designVectorShape } from './vectors/design-vector.js';
@@ -55,6 +57,9 @@ const marqueeFill = colorWithOpacity(designSelectionColor, 0.13);
 export type DesignCanvasHandle = Readonly<{
   focus(): void;
   insertionArea(): Bounds;
+  fitLayers(ids: readonly string[]): void;
+  zoomTo(scale: number): void;
+  panBy(delta: Point): void;
   captureWebImages: CaptureDesignWebImages;
   highlightLayer(id: string | undefined): void;
   previewPaint(revision: string, nodes: ReadonlyMap<string, DesignNode> | undefined): void;
@@ -73,8 +78,10 @@ type DesignCanvasProps = Readonly<{
   onLayerDrop(id: string, edits: readonly DesignEdit[], revision: string): Promise<boolean>;
   onComponentDrop(id: string, point: Point, revision: string): Promise<void>;
   selectedIds: readonly string[];
+  agentFocus?: DesignAgentFocus;
   scriptResults: DesignScriptResults;
   webHost?: DesignWebPreviewHost;
+  automaticWebAccess?: boolean;
   webSession?: DesignWebSession;
   webControlsFor(id: string): DesignWebLayerControls | undefined;
   croppingId?: string;
@@ -84,8 +91,8 @@ type DesignCanvasProps = Readonly<{
   onExitAdjustment(): void;
   onInspectorPreview(preview: InspectorCanvasPreview | undefined): void;
   editingId: string | null;
-  disabled: boolean;
-  fitRequest: number;
+  interaction: CanvasInteraction;
+  fitRequest: readonly string[] | null;
   loadImage: LoadDesignImage;
   tool: DesignTool;
   drawing: Readonly<{
@@ -102,6 +109,7 @@ type DesignCanvasProps = Readonly<{
   onToolChange(tool: DesignTool): void;
   toolPanels: DesignToolPanels;
   toolbarActions: ReactNode;
+  beginPick?: BeginCanvasPick;
   onSelect(ids: readonly string[]): void;
   onEditText(nodeId: string, node: DesignText): void;
   onAction(action: CanvasAction, expectedRevision: string): Promise<boolean>;
@@ -111,9 +119,9 @@ type DesignCanvasProps = Readonly<{
 
 export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(function DesignCanvas({
   document, projected, resources, scene, layoutEngine, revision, layerDrag, componentDrag, onLayerDrop, onComponentDrop,
-  selectedIds, scriptResults, webHost, webSession, webControlsFor, croppingId, layoutAdjustmentId, pathEditingId, straightPathId, onExitAdjustment,
-  onInspectorPreview, editingId, disabled, fitRequest, loadImage, tool, drawing: drawingMode, onToolChange, toolPanels, toolbarActions,
-  settings, onContextMenu, onSelect, onEditText, onAction, renderTextInput, translate: t,
+  selectedIds, agentFocus, scriptResults, webHost, automaticWebAccess = true, webSession, webControlsFor, croppingId, layoutAdjustmentId, pathEditingId, straightPathId, onExitAdjustment,
+  onInspectorPreview, editingId, interaction, fitRequest, loadImage, tool, drawing: drawingMode, onToolChange, toolPanels, toolbarActions,
+  settings, onContextMenu, onSelect, beginPick, onEditText, onAction, renderTextInput, translate: t,
 }, ref) {
   const surface = useRef<HTMLDivElement>(null);
   const workArea = useRef<HTMLDivElement>(null);
@@ -130,11 +138,12 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
   const [hoveredLayerId, setHoveredLayerId] = useState<string>();
   const [paintPreview, setPaintPreview] = useState<DesignPaintPreview>();
   const [fieldDrafts, setFieldDrafts] = useState<ReadonlyMap<string, DesignFieldUpdates>>(() => new Map());
-  const lastFit = useRef<number>();
+  const lastFit = useRef<typeof fitRequest>();
   const { scale } = viewport;
-  const blocked = disabled || Boolean(editingId);
+  const blocked = interaction !== 'edit';
+  const navigationBlocked = interaction === 'disabled';
   const controls = useDesignCanvasGestures({ stage, document, projected, scene, revision, tool, selectedIds, croppingId, layoutAdjustmentId,
-    disabled: blocked, viewport, setViewport, onSelect, onEditText, onAction, settings });
+    interaction, viewport, setViewport, onSelect, beginPick, onEditText, onAction, settings });
   const pen = useDesignPen({ enabled: tool === 'pen', disabled: blocked, document: projected, scene, revision, viewport,
     snapToPixelGrid: settings.snapToPixelGrid, onAction });
   const ink = drawingMode.ink;
@@ -154,7 +163,9 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
   const layerDragEvents = useDesignCanvasLayerDrag({ surface, drag: layerDrag, componentDrag, document, projected, scene, revision, viewport,
     disabled: blocked, isGestureActive: (): boolean => controls.isActive() || Boolean(pen.preview) || pathEdit.isDragging() || freehand.isDrawing(),
     onDrop: onLayerDrop, onComponentDrop });
-  const visibleIds = selectedBranches(selectedIds, scene).filter((id) => scene[id].visible && scene[id].visibleBounds);
+  const focusedBoards = interaction === 'navigate' ? agentFocus : undefined;
+  const visibleIds = useMemo(() => (focusedBoards ? focusedBoards.flatMap(({ ids }) => ids) : selectedBranches(selectedIds, scene))
+    .filter((id) => scene[id]?.visible && scene[id].visibleBounds), [focusedBoards, selectedIds, scene]);
   const preview = controls.preview;
   const dropPreview = preview?.layerDrop ?? layerDragEvents.preview;
   const hoverDrop = dropPreview?.phase === 'hover' ? dropPreview.drop : undefined;
@@ -241,6 +252,7 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
   const showEndpoints = Boolean(straightPathId && !gradientEdit && !dropPreview && !controls.space && !controls.isActive());
   const outlinedPathId = pathEditingId ?? (showEndpoints ? straightPathId : undefined);
   const showSelection = !outlinedPathId && (tool === 'select' || tool === 'hand');
+  const showSelectionOverlays = !editingId && !dropPreview && !preview?.marquee;
   const hoverOutlineId = hoveredLayerId && hoveredLayerId !== outlinedPathId && (!showSelection || !visibleIds.includes(hoveredLayerId))
     ? hoveredLayerId : undefined;
   const placements = resize ? undefined : preview?.placements;
@@ -267,6 +279,12 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
   }, [croppingId, layoutAdjustmentId, pathEditingId]);
   const range: Bounds = { ...toCanvasWorld(viewport, { x: -96, y: -96 }),
     width: (size.width + 192) / scale, height: (size.height + 192) / scale };
+  // Mount animated overlays only near the viewport, including a held cursor after its layer was deleted.
+  const onscreenFocus = agentFocus?.filter(({ ids, point }) => containsBounds(range, { ...point, width: 0, height: 0 })
+    || ids.some((id) => {
+      const bounds = displayedScene[id]?.visibleBounds;
+      return bounds && intersectBounds(range, bounds);
+    }));
   const screenRange = {
     ...toCanvasWorld(viewport, { x: 0, y: 0 }), width: size.width / scale, height: size.height / scale,
   };
@@ -311,6 +329,15 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
   useImperativeHandle(ref, () => ({
     focus: () => surface.current?.focus({ preventScroll: true }),
     insertionArea,
+    fitLayers: (ids) => {
+      const area = readWorkArea(workArea.current, size);
+      setViewport((current) => fittedViewport(sceneBounds(scene, ids), area, current));
+    },
+    zoomTo: (level) => {
+      const center = areaCenter(readWorkArea(workArea.current, size));
+      setViewport((current) => zoomViewport(current, center, level));
+    },
+    panBy: ({ x, y }) => setViewport((current) => ({ ...current, x: current.x + x, y: current.y + y })),
     captureWebImages: web.captureExportImages,
     highlightLayer: setHoveredLayerId,
     previewPaint(base, nodes) {
@@ -325,17 +352,18 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
         return next;
       });
     },
-  }), [insertionArea, web.captureExportImages]);
+  }), [insertionArea, scene, size, web.captureExportImages]);
 
   useLayoutEffect(() => {
     if (!size.width || !size.height || lastFit.current === fitRequest || (!document.rootIds.length && !drawingMode.enabled)) return;
     lastFit.current = fitRequest;
     // Keep the first stroke on an empty canvas under the pointer.
     if (!document.rootIds.length) return;
-    const ids = fitRequest === 0 ? document.rootIds : visibleIds;
+    const ids = fitRequest ?? document.rootIds;
+    if (!ids.every((id) => scene[id])) return;
     const area = readWorkArea(workArea.current, size);
     setViewport((current) => fittedViewport(sceneBounds(scene, ids), area, current));
-  }, [document.rootIds, drawingMode.enabled, fitRequest, scene, size, visibleIds]);
+  }, [document.rootIds, drawingMode.enabled, fitRequest, scene, size]);
 
   function fit(selection: boolean) {
     const area = readWorkArea(workArea.current, size);
@@ -371,7 +399,7 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
     '--design-web-toolbar-height': `${designWebToolbarHeight}px`,
     '--design-web-toolbar-gap': `${designWebToolbarGap}px`,
   } as CSSProperties}>
-    <DesignTools tool={tool} disabled={blocked} onChange={changeTool} toolPanels={toolPanels} actions={toolbarActions}
+    <DesignTools tool={tool} disabled={blocked} navigationDisabled={navigationBlocked} onChange={changeTool} toolPanels={toolPanels} actions={toolbarActions}
       drawingMode={drawingMode.enabled} onToggleDrawing={() => {
         pen.cancel();
         freehand.cancel();
@@ -468,14 +496,14 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
           event.stopPropagation();
           return;
         }
-        if (blocked) return;
-        if ((croppingId || layoutAdjustmentId || pathEditingId) && event.key === 'Escape') {
+        if (navigationBlocked) return;
+        if (!blocked && (croppingId || layoutAdjustmentId || pathEditingId) && event.key === 'Escape') {
           onExitAdjustment();
           event.preventDefault();
           event.stopPropagation();
           return;
         }
-        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+        if (!blocked && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
           event.preventDefault();
           const area = readWorkArea(workArea.current, size);
           const { left, top, width, height } = event.currentTarget.getBoundingClientRect();
@@ -518,14 +546,16 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
                 floating: hoverDrop, pathPreview: pathEdit.preview, drawingPreviews,
                 inlineWebId: web.live?.mode === 'inline' ? web.live.id : undefined, loadImage, translate: t }} />
             {settings.showPixelGrid && scale >= 4 ? <PixelGrid range={range} scale={scale} /> : null}
-            {dropFrameId ? <DesignCanvasSelection document={draftDocument} scene={displayedScene}
+            {dropFrameId ? <DesignCanvasSelection projected={displayedDocument} scene={displayedScene}
               ids={[dropFrameId]} scale={scale} handles={false} /> : null}
-            {!editingId && !dropPreview && !preview?.marquee ? <>
-              {hoverOutlineId ? <DesignCanvasSelection document={draftDocument} scene={displayedScene}
+            {showSelectionOverlays ? <>
+              {hoverOutlineId ? <DesignCanvasSelection projected={displayedDocument} scene={displayedScene}
                 ids={[hoverOutlineId]} placements={placements} scale={scale} handles={false} outlineOpacity={0.55} /> : null}
-              {showSelection ? <DesignCanvasSelection document={draftDocument} scene={displayedScene} ids={visibleIds}
+              {focusedBoards ? onscreenFocus?.map(({ boardId, ids, agent }) => <DesignCanvasSelection key={JSON.stringify([agent?.threadId, boardId])}
+                projected={displayedDocument} scene={displayedScene} ids={ids} scale={scale} handles={false} />)
+                : showSelection ? <DesignCanvasSelection projected={displayedDocument} scene={displayedScene} ids={visibleIds}
                 placements={placements} scale={scale} handles={tool === 'select' && !web.live && !controls.space && !controls.panning
-                  && !straightPathId && !disabled && !croppingId && !layoutAdjustmentId && !gradientEdit} /> : null}
+                  && !straightPathId && !blocked && !croppingId && !layoutAdjustmentId && !gradientEdit} /> : null}
             </> : null}
             {layoutAdjustmentId && !dropPreview && !controls.space && !controls.panning && !preview?.marquee && !preview?.placements
               ? <DesignCanvasLayoutHandles id={layoutAdjustmentId} document={displayedDocument} scene={displayedScene} scale={scale}
@@ -553,22 +583,23 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
           </Group>
         </Layer>
       </Stage>
+      {showSelectionOverlays && onscreenFocus && <DesignAgentFocusOverlays targets={onscreenFocus} scene={displayedScene} viewport={viewport} />}
       {gradientEdit ? <DesignCanvasGradient key={gradientEdit.key} {...gradientEdit.guides}
         viewport={viewport} surface={surface} disabled={blocked} translate={t} /> : null}
     </div>
-    {webHost && webRequest ?
+    {webHost && webRequest && automaticWebAccess ?
       <DesignWebPreview ref={webGuest} key={web.live ? `live:${webRequest.id}:${webRequest.node.url}` : `snapshot:${webRequest.id}:${webRequest.key}`}
-        request={webRequest} session={web.live}
+        networkAccess={automaticWebAccess} request={webRequest} session={web.live}
         viewport={viewport} size={size}
         expandedSize={{ width: expandedSize.width, height: Math.max(0, expandedSize.height - designWebToolbarHeight - designWebToolbarGap) }}
         host={webHost} reportFailure={web.reportFailure} onSnapshot={web.record} onNavigate={onWebNavigate} translate={t} /> : null}
     {webHost && web.exportCapture ? <DesignWebPreview key={`export:${web.exportCapture.request.id}:${web.exportCapture.request.key}`}
-      request={web.exportCapture.request} viewport={viewport} size={size} expandedSize={expandedSize} host={webHost}
+      networkAccess={web.exportCapture.networkAccess} request={web.exportCapture.request} viewport={viewport} size={size} expandedSize={expandedSize} host={webHost}
       reportFailure={false} onSnapshot={web.exportCapture.onSnapshot} onNavigate={onWebNavigate} translate={t} /> : null}
     {webToolbars}
     <div className="design-canvas__work-area" ref={workArea} aria-hidden="true" />
     {editingId ? renderTextInput(viewport) : null}
-    <DesignZoomControls scale={scale} disabled={blocked} canZoomIn={scale < maxScale} canZoomOut={scale > minScale}
+    <DesignZoomControls scale={scale} disabled={navigationBlocked} canZoomIn={scale < maxScale} canZoomOut={scale > minScale}
       canFit={document.rootIds.length > 0} canFitSelection={visibleIds.length > 0} onZoom={zoom} onFit={fit}
       onZoomTo={(level) => zoomAtCenter(() => level)} translate={t} />
   </div>;

@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { FileToolResultStore } from '../../../src/adapters/store/file-tool-result-store.js';
+import { CompositeToolHost } from '../../../src/adapters/tool/composite-tool-host.js';
+import { DesignToolHost } from '../../../src/adapters/tool/design-tool-host.js';
 import { RuntimeApiToolHost } from '../../../src/adapters/tool/runtime-api-tool-host.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
@@ -22,10 +24,10 @@ import { installedAppBuilder } from '../../support/app-builder.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 
 describe('agent loop tool catalog and stored results', () => {
-  it.each(['builder', 'app'] as const)('loads authoring tools for a %s reference on the first model step and persists ownership in a projectless chat', async (referenceKind) => {
+  it.each(['builder', 'app', 'design'] as const)('loads the selected plugin on the first %s chat step and persists tool ownership', async (referenceKind) => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Build an app' });
+    const thread = await threadStore.createThread({ title: 'Build an app', featureId: referenceKind === 'design' ? 'design' : undefined });
     const builder = installedAppBuilder();
     const app = { ...builder, id: 'my-table', name: 'My table', skills: [], tools: [],
       extension: { apiVersion: 1 as const, runtime: 'node-worker' as const, capabilities: ['ui' as const], trust: 'trusted' as const,
@@ -38,10 +40,13 @@ describe('agent loop tool catalog and stored results', () => {
     const toolHost = new RuntimeApiToolHost({
       request: async () => ({ ok: true, status: 200, data: { projects: [] } }),
     }, pluginStore);
+    const design = new DesignToolHost();
+    design.bind({ captureSelection: () => undefined, restoreSelection() {}, join() {}, leave: async () => undefined, scope: () => ({ kind: 'selection', root: '/project', path: 'page.design.json' }), definitions: [], execute: async () => { throw new Error('Unexpected canvas command'); } });
     const loop = new AgentLoop({
-      threadStore, modelClient, pluginStore, toolHost, eventBus: new InMemoryEventBus(), clock: systemClock, ids,
+      threadStore, modelClient, pluginStore, toolHost: referenceKind === 'design'
+        ? new CompositeToolHost([design, toolHost, new CapturingToolHost()]) : toolHost, eventBus: new InMemoryEventBus(), clock: systemClock, ids,
     });
-    const reference = referenceKind === 'builder' ? pluginMentionText(builder)
+    const reference = referenceKind !== 'app' ? pluginMentionText(builder)
       : pluginAppMentionText({ pluginId: app.id, contributionId: 'table.page', name: app.name });
     await loop.sendTurn(thread.id, { input: `${reference} Show my projects in this app.` });
     expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toContain('read_runtime_api');
@@ -51,6 +56,10 @@ describe('agent loop tool catalog and stored results', () => {
     expect(events.find((event) => event.type === 'tool.started')?.payload).toMatchObject({
       toolName: 'read_runtime_api', plugin: { id: builder.id, name: builder.name, icon: builder.icon },
     });
+    if (referenceKind === 'design') {
+      await loop.sendTurn(thread.id, { input: 'Continue on the canvas.' });
+      expect(modelClient.requests.at(-1)?.tools?.map((tool) => tool.name)).not.toContain('read_runtime_api');
+    }
     const saved = await threadStore.getThread(thread.id);
     expect(saved?.messages.flatMap((message) => message.toolRuns ?? [])).toMatchObject([{
       name: 'read_runtime_api', status: 'success', plugin: { id: builder.id, name: builder.name },

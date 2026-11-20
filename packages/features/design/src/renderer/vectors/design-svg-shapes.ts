@@ -1,7 +1,8 @@
 import { Transform } from 'konva/lib/Util.js';
 import { designSvgNumberPattern, parseDesignSvgNumber, type DesignSvgMatrix, type DesignSvgViewBox } from '../../contracts/index.js';
 
-const numberWithUnit = new RegExp('^(' + designSvgNumberPattern + ')(px|%)?$', 'iu');
+const numberWithUnit = new RegExp('^(' + designSvgNumberPattern + ')(px|%|in|cm|mm|q|pt|pc)?$', 'iu');
+const pixelsPerUnit: Record<string, number> = { px: 1, in: 96, cm: 96 / 2.54, mm: 96 / 25.4, q: 96 / 101.6, pt: 96 / 72, pc: 16 };
 const numberTokens = new RegExp(designSvgNumberPattern, 'gu');
 
 export function svgNumbers(text: string): number[] {
@@ -13,7 +14,9 @@ export function svgLength(text: string | undefined, basis?: number) {
   if (text === undefined) return undefined;
   const match = numberWithUnit.exec(text);
   if (!match || (match[2] === '%' && basis === undefined)) return undefined;
-  return parseDesignSvgNumber(Number(match[1]) * (match[2] === '%' ? (basis ?? 0) / 100 : 1));
+  const unit = match[2]?.toLowerCase() ?? 'px';
+  const scale = unit === '%' ? (basis ?? 0) / 100 : pixelsPerUnit[unit];
+  return parseDesignSvgNumber(Number(match[1]) * scale);
 }
 
 export function svgViewBox(text: string): DesignSvgViewBox {
@@ -21,6 +24,30 @@ export function svgViewBox(text: string): DesignSvgViewBox {
   const [x, y, width, height] = values;
   if (values.length !== 4 || width <= 0 || height <= 0) throw new Error('Invalid SVG viewBox.');
   return { x, y, width, height };
+}
+
+export function svgSize(basis: Pick<DesignSvgViewBox, 'width' | 'height'>, explicitWidth?: number, explicitHeight?: number) {
+  const width = explicitWidth ?? (explicitHeight === undefined ? basis.width : explicitHeight * basis.width / basis.height);
+  const height = explicitHeight ?? (explicitWidth === undefined ? basis.height : explicitWidth * basis.height / basis.width);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) throw new Error('Invalid SVG dimensions.');
+  return { width, height };
+}
+
+// The editor maps a vector's viewBox to its layer bounds. Include the SVG viewport's
+// letterbox margins in that box so paths keep their original coordinates and transforms.
+export function svgViewport(viewBox: DesignSvgViewBox, naturalWidth: number | undefined, naturalHeight: number | undefined, aspect = 'xMidYMid meet') {
+  const { width, height } = svgSize(viewBox, naturalWidth, naturalHeight);
+  if (/^(?:defer\s+)?none(?:\s+(?:meet|slice))?$/u.test(aspect)) return { width, height, viewBox, clip: false };
+  const align = /^(?:defer\s+)?x(Min|Mid|Max)Y(Min|Mid|Max)(?:\s+(meet|slice))?$/u.exec(aspect);
+  if (!align) throw new Error('Invalid SVG preserveAspectRatio.');
+  const slice = align[3] === 'slice';
+  const scale = (slice ? Math.max : Math.min)(width / viewBox.width, height / viewBox.height);
+  const viewportWidth = width / scale;
+  const viewportHeight = height / scale;
+  const offset = (extra: number, alignment: string) => alignment === 'Min' ? 0 : alignment === 'Max' ? extra : extra / 2;
+  return { width, height, clip: slice && (viewportWidth < viewBox.width || viewportHeight < viewBox.height),
+    viewBox: { x: viewBox.x - offset(viewportWidth - viewBox.width, align[1]), y: viewBox.y - offset(viewportHeight - viewBox.height, align[2]),
+      width: viewportWidth, height: viewportHeight } };
 }
 
 export function svgTransform(text: string) {

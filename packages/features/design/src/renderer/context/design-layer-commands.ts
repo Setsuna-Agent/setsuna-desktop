@@ -22,12 +22,14 @@ export function restackDesignLayers(document: DesignDocument, scene: DesignScene
   });
 }
 
+export const designLayoutDefaults = { direction: 'vertical', gap: 12, padding: 16, align: 'start' } as const satisfies DesignLayout;
+
 export function defaultDesignAutoLayout(scene: DesignScene, ids: readonly string[]): DesignLayout {
   const boxes = ids.map((id) => scene[id]);
   const xs = boxes.map((box) => box.x + box.width / 2);
   const ys = boxes.map((box) => box.y + box.height / 2);
   const direction = Math.max(...xs) - Math.min(...xs) > Math.max(...ys) - Math.min(...ys) ? 'horizontal' : 'vertical';
-  return { direction, gap: 12, padding: 16, align: 'start' };
+  return { ...designLayoutDefaults, direction };
 }
 
 export function canContainDesignLayers(node: DesignNode | undefined) {

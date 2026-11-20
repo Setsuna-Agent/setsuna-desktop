@@ -1,3 +1,4 @@
+import type { RenderDesignChat } from './agent/DesignChatBridge.js';
 import { ArrowLeft, Frame, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { workspaceFileKey, workspaceFilePathKey, workspaceProjectRoots, workspaceRootName, type WorkspaceProject } from '@setsuna-desktop/contracts';
@@ -22,6 +23,7 @@ export type DesignWorkspaceLocation = DesignScope & Readonly<{ path?: string; ho
 
 export type DesignWorkspaceProps = Readonly<{
   client: DesignClient;
+  renderChat?: RenderDesignChat;
   projects: readonly WorkspaceProject[];
   location: DesignWorkspaceLocation | null;
   onLocationChange(location: DesignWorkspaceLocation | null): void;
@@ -68,7 +70,6 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
   const [actionRequest, setActionRequest] = useState<DocumentActionRequest>();
   const [actionPending, setActionPending] = useState(false);
   const mutatingFiles = useRef<ReadonlySet<string>>();
-  const [layersToggleTarget, setLayersToggleTarget] = useState<HTMLSpanElement | null>(null);
   const mounted = useRef(false);
   const toast = useToast();
   const reportListFailure = useCallback((error: unknown) => {
@@ -152,7 +153,7 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
         <div className="design-popover-form__actions">
           <Button size="small" disabled={actionPending} onClick={closeAction}>{t('feature.design.cancel')}</Button>
           <Button size="small" variant="danger" loading={actionPending}
-            onClick={() => { void runDocumentAction(client.delete, () => { if (documentRef) backToDocuments(); }); }}>
+            onClick={() => { void runDocumentAction(client.delete); }}>
             {t('feature.design.deleteDocument')}
           </Button>
         </div>
@@ -170,7 +171,7 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
       }} />;
   }
 
-  async function runDocumentAction<T>(operation: (ref: DesignDocumentRef) => Promise<T>, complete: (result: T) => void) {
+  async function runDocumentAction<T>(operation: (ref: DesignDocumentRef) => Promise<T>, complete?: (result: T) => void) {
     if (!actionRequest || mutatingFiles.current) return;
     const { source, menuKey, kind, location: startedAt } = actionRequest;
     const isCurrent = () => mounted.current && latestLocation.current === startedAt;
@@ -184,7 +185,7 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
         if (!isCurrent()) return;
         setActionRequest(undefined);
         refreshLists();
-        complete(result);
+        complete?.(result);
       });
     } catch (error: unknown) {
       if (isCurrent() && !isFeatureOperationCancelled(error)) reportActionFailure(kind, error);
@@ -219,12 +220,11 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
     {documentRef ? (
       <div className="design-workspace__editing">
         <nav className="design-workspace__bar" aria-label={t('feature.design.documents')}>
-          <span className="design-workspace__layers-slot" ref={setLayersToggleTarget} />
           <IconButton size="small" label={t('feature.design.backToDocuments')} onClick={backToDocuments}>
             <ArrowLeft size={17} />
           </IconButton>
           {scopeControls}
-          <span className="design-tools__divider" aria-hidden="true" />
+          <span className="design-workspace__bar-divider" aria-hidden="true" />
           <SelectField className="design-workspace__current-file" aria-label={t('feature.design.documents')}
             title={documentRef.path} value={documentRef.path} valueContent={designFileParts(documentRef.path).name}
             menuAlign="start" renderOptionIcon={() => <Frame size={15} />} onValueChange={openFile}>
@@ -233,15 +233,16 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
               return <option key={item} value={item}>{folder ? `${folder}/${name}` : name}</option>;
             })}
           </SelectField>
-          {documentMenu(documentRef)}
-          {createAction(<IconButton size="small" className="design-workspace__bar-create" label={t('feature.design.newDocument')}>
+          {createAction(<IconButton size="small" label={t('feature.design.newDocument')}>
             <Plus size={17} />
           </IconButton>)}
         </nav>
         <div className="design-workspace__editor">
-          <DesignDocumentSurface client={client} readOnly={mutatingFiles.current?.has(workspaceFileKey(documentRef))}
+          <DesignDocumentSurface renderChat={props.renderChat} client={client} projects={projects} onFileAction={(destination) => {
+            if (destination) openDocument(destination); else backToDocuments();
+          }} readOnly={mutatingFiles.current?.has(workspaceFileKey(documentRef))}
             documentRef={documentRef} watchChanges={watchChanges} watchAssetDirectories={watchAssetDirectories}
-            layersToggleTarget={layersToggleTarget ?? undefined} onOpenLibrary={openFile} onDocumentMissing={backToDocuments} translate={t} />
+            onOpenLibrary={openFile} onDocumentMissing={backToDocuments} translate={t} />
         </div>
       </div>
     ) : <DesignWorkspaceHome scopeControls={scopeControls} files={files} onOpen={openListedDocument} renderFileAction={documentMenu} translate={t}

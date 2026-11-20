@@ -8,8 +8,8 @@ import { designAnchors, type LayerPlacements } from './use-design-canvas-gesture
 export const designSelectionColor = '#3d99ff';
 export const designSelectionLabelColor = '#2376cc';
 
-export function DesignCanvasSelection({ document, scene, ids, placements, scale, handles, outlineOpacity = 1 }: Readonly<{
-  document: DesignDocument;
+export function DesignCanvasSelection({ projected, scene, ids, placements, scale, handles, outlineOpacity = 1 }: Readonly<{
+  projected: DesignDocument;
   scene: DesignScene;
   ids: readonly string[];
   placements?: LayerPlacements;
@@ -17,7 +17,8 @@ export function DesignCanvasSelection({ document, scene, ids, placements, scale,
   handles: boolean;
   outlineOpacity?: number;
 }>) {
-  const visible = ids.filter((id) => scene[id]?.visible && scene[id].visibleBounds);
+  // Instance descendants exist only in the projection. A held focus can also outlive its target.
+  const visible = ids.filter((id) => projected.nodes[id] && scene[id]?.visible && scene[id].visibleBounds);
   const selected = visible.length === 1 ? visible[0] : null;
   const aggregate = !placements && visible.length > 1 ? unionBounds(visible.map((id) => scene[id].paintBounds)) : undefined;
   const sw = 1 / scale;
@@ -26,7 +27,7 @@ export function DesignCanvasSelection({ document, scene, ids, placements, scale,
     {aggregate ? <Rect {...aggregate} stroke={designSelectionColor} strokeWidth={outlineWidth}
       dash={[4 * sw, 4 * sw]} opacity={outlineOpacity} listening={false} /> : null}
     {visible.map((id) => {
-      const node = document.nodes[id];
+      const node = projected.nodes[id];
       const box = scene[id];
       const move = placements?.[id];
       const width = move?.width ?? box.width;

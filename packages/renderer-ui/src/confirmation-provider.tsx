@@ -7,7 +7,7 @@ type ConfirmationRequest = {
   resolve(confirmed: boolean): void;
 };
 type ConfirmationApi = {
-  request(options: ConfirmationOptions, owner: string): Promise<boolean>;
+  request(options: ConfirmationOptions, owner: string, signal?: AbortSignal): Promise<boolean>;
   cancel(owner: string): void;
 };
 const ConfirmationContext = createContext<ConfirmationApi | null>(null);
@@ -22,11 +22,16 @@ export function ConfirmationProvider({ children }: { children: ReactNode }) {
     pending?.resolve(confirmed);
   }, []);
   const api = useMemo<ConfirmationApi>(() => ({
-    request(options, owner) {
+    request(options, owner, signal) {
       // A modal already owns the interaction; never queue another destructive action behind it.
-      if (current.current) return Promise.resolve(false);
+      if (current.current || signal?.aborted) return Promise.resolve(false);
       return new Promise<boolean>((resolve) => {
-        current.current = { options, owner, resolve };
+        const cancel = () => settle(false);
+        current.current = { options, owner, resolve(confirmed) {
+          signal?.removeEventListener('abort', cancel);
+          resolve(confirmed);
+        } };
+        signal?.addEventListener('abort', cancel, { once: true });
         setRequest(current.current);
       });
     },
@@ -49,8 +54,8 @@ export function useConfirm() {
   const api = useContext(ConfirmationContext);
   const owner = useId();
   useEffect(() => () => api?.cancel(owner), [api, owner]);
-  return useCallback((options: ConfirmationOptions) => {
+  return useCallback((options: ConfirmationOptions, signal?: AbortSignal) => {
     if (!api) throw new Error('useConfirm requires ConfirmationProvider.');
-    return api.request(options, owner);
+    return api.request(options, owner, signal);
   }, [api, owner]);
 }

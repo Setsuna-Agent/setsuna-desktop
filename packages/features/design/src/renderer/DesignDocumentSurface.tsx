@@ -1,5 +1,6 @@
+import type { RenderDesignChat } from './agent/DesignChatBridge.js';
 import { lazy, Suspense } from 'react';
-import { workspaceFileKey } from '@setsuna-desktop/contracts';
+import { workspaceFileKey, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { DesignDocumentRef } from '../contracts/index.js';
 import type { DesignClient } from './client.js';
@@ -13,12 +14,14 @@ const LazyDesignEditor = lazy(async () => {
 
 export type DesignDocumentSurfaceProps = Readonly<{
   client: DesignClient;
+  renderChat?: RenderDesignChat;
   documentRef: DesignDocumentRef;
+  projects?: readonly WorkspaceProject[];
+  onFileAction?(destination?: DesignDocumentRef): void;
   readOnly?: boolean;
   fileRevision?: string;
   watchChanges?: (changed: () => void) => () => void;
   watchAssetDirectories?: WatchDesignDirectories;
-  layersToggleTarget?: HTMLElement;
   onOpenLibrary?(path: string): void;
   onDocumentMissing?(): void;
   translate: RendererTranslate;

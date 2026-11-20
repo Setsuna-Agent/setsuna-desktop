@@ -13,6 +13,7 @@ type PreviewGuest = HTMLWebViewElement & { getWebContentsId(): number; getURL():
 export type DesignWebPreviewHandle = Readonly<{ reload(): boolean }>;
 
 type PreviewProps = Readonly<{
+  networkAccess: boolean;
   request: DesignWebRequest;
   session?: DesignWebSession;
   viewport: CanvasViewport;
@@ -26,7 +27,7 @@ type PreviewProps = Readonly<{
 }>;
 
 export const DesignWebPreview = forwardRef<DesignWebPreviewHandle, PreviewProps>(function DesignWebPreview({
-  request, session, viewport, size, expandedSize, host, reportFailure, onSnapshot, onNavigate, translate: t,
+  networkAccess, request, session, viewport, size, expandedSize, host, reportFailure, onSnapshot, onNavigate, translate: t,
 }, ref) {
   const webview = useRef<PreviewGuest>(null);
   const manualReload = useRef<AbortController>();
@@ -121,7 +122,7 @@ export const DesignWebPreview = forwardRef<DesignWebPreviewHandle, PreviewProps>
     if (guestId !== undefined) {
       void (async () => {
         const ready = await host.configure(guestId, {
-          url, interactive: live, device: deviceId ? { id: deviceId, width: deviceWidth, height: deviceHeight } : undefined,
+          url, networkAccess, interactive: live, device: deviceId ? { id: deviceId, width: deviceWidth, height: deviceHeight } : undefined,
         });
         if (cancelled) return;
         if (!ready) return failed();
@@ -136,7 +137,7 @@ export const DesignWebPreview = forwardRef<DesignWebPreviewHandle, PreviewProps>
       })().catch(failed);
     }
     return () => { cancelled = true; window.clearTimeout(timeout); };
-  }, [close, deviceHeight, deviceId, deviceWidth, guestId, host, id, key, live, onSnapshot, reportFailure, t, toast, url]);
+  }, [close, deviceHeight, deviceId, deviceWidth, guestId, host, id, key, live, networkAccess, onSnapshot, reportFailure, t, toast, url]);
 
   const { scale, x, y } = viewport;
   const visible = box.visibleBounds;

@@ -13,8 +13,7 @@
 }
 
 .design-workspace__editing {
-  --design-workspace-bar-width: min(360px, calc(50cqi - 2 * var(--design-panel-edge)));
-  --design-workspace-bar-space: calc(var(--design-workspace-bar-width) + 8px);
+  --design-file-bar-space: calc(var(--design-toolbar-height) + var(--design-tool-gap));
   position: relative;
   grid-template-rows: minmax(0, 1fr);
   isolation: isolate;
@@ -34,16 +33,12 @@
   inset-block-start: var(--design-panel-edge);
   inset-inline-start: var(--design-panel-edge);
   box-sizing: border-box;
-  width: max-content;
-  max-width: var(--design-workspace-bar-width);
-  min-block-size: calc(var(--design-toolbar-content-height) + 2px);
+  width: calc(var(--design-default-layers-width, 384px) + var(--design-tool-gap) + var(--design-toolbar-height));
+  max-width: calc(100% - 2 * var(--design-panel-edge));
+  min-block-size: var(--design-toolbar-height);
   gap: 4px;
   padding: 4px;
-  border-radius: 14px;
-}
-
-.design-workspace__layers-slot {
-  display: contents;
+  border-radius: var(--app-radius-container);
 }
 
 .design-workspace__bar > .sd-icon-button {
@@ -53,6 +48,18 @@
   min-height: 32px;
   padding: 0;
   border-radius: 9px;
+}
+
+.design-workspace__editing:has(.design-editor__layers[data-fullscreen]) > .design-workspace__bar {
+  visibility: hidden;
+}
+
+.design-workspace__bar-divider {
+  flex: none;
+  width: 1px;
+  height: 15px;
+  margin-inline: 2px;
+  background: var(--design-line);
 }
 
 .design-workspace__scope {
@@ -90,36 +97,17 @@
   padding: 0 6px;
   border-radius: 8px;
   background: transparent;
-  color: var(--app-text-muted);
-  font-size: 12px;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .design-workspace__bar .sd-select-field:is(:hover, .is-open) {
   background: var(--design-control);
-  color: var(--app-text);
 }
 
 .design-workspace__bar .design-workspace__current-file {
-  flex: 0 1 auto;
-  max-width: 18rem;
-  gap: 7px;
-  padding-inline: 3px 7px;
-  color: var(--app-text);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.design-workspace__current-file .sd-select-field__icon {
-  flex-basis: 24px;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  background: var(--design-accent-soft);
-  color: var(--design-ink);
-}
-
-.design-workspace__bar > .design-workspace__bar-create {
-  color: var(--design-ink);
+  flex: 1 1 auto;
 }
 
 .design-workspace__editor {
@@ -238,12 +226,4 @@
   color: var(--app-text-muted);
   font-size: 11px;
   line-height: 16px;
-}
-
-/* Leave a separate row for file navigation when it cannot share the toolbar's lane. */
-@container design-workspace (width <= 1420px) {
-  .design-workspace__editing {
-    --design-workspace-bar-space: 0px;
-    --design-toolbar-offset: var(--design-toolbar-row);
-  }
 }

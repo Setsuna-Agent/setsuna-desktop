@@ -264,9 +264,11 @@ export class RuntimeToolCallExecutor {
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'success', content);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'success', programAttachments, toolRouter);
       }
+      const collaborationCall = this.options.collaborationControl().isToolName(toolCall.name);
+      const featureToolWithheld = collaborationCall ? toolRouter?.withholdsCollaborationTools : toolRouter?.withholdsRuntimeFeatureTools;
       if (
-        (this.options.collaborationControl().isToolName(toolCall.name) || this.options.goalCoordinator().isToolName(toolCall.name))
-        && (toolRouter?.withholdsRuntimeFeatureTools || (await this.options.threadStore.getThread(context.threadId))?.kind === 'side')
+        (collaborationCall || this.options.goalCoordinator().isToolName(toolCall.name))
+        && (featureToolWithheld || (await this.options.threadStore.getThread(context.threadId))?.kind === 'side')
       ) {
         content = `Tool ${toolCall.name} is unavailable in this conversation.`;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);

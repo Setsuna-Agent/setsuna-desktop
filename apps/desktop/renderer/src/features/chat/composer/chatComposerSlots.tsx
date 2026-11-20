@@ -7,6 +7,8 @@ import type {
   RuntimeThreadReference,
   WorkspaceEntrySearchItem,
 } from '@setsuna-desktop/contracts';
+import { parseDesignSelectionMentions } from '@setsuna-desktop/feature-design/contracts/design-selection-mention';
+import { designSelectionSlot } from '../mentions/DesignSelectionReference.js';
 import { WorkspaceMentionLabel } from '../mentions/WorkspaceMentionLabel.js';
 import { parseWorkspaceMentionText } from '../mentions/workspaceMentionParser.js';
 import { BrowserTabReferenceLabel } from '../mentions/BrowserTabReference.js';
@@ -23,6 +25,7 @@ const selectedSkillSlotKeyPrefix = 'skill:';
 export type ChatComposerSlotReference =
   | { type: 'skill'; skillId: string }
   | { type: 'plugin'; pluginId: string; contributionId?: string }
+  | { type: 'design-selection'; value: string }
   | { type: 'browser-tab'; tab: BrowserTabReference }
   | { type: 'thread'; thread: RuntimeThreadReference }
   | { type: 'workspace'; entry: WorkspaceEntrySearchItem };
@@ -107,6 +110,7 @@ export function createReferenceDraftSlots(
   }).map((reference) => ({ ...reference, slot: createSkillReferenceSlot(reference.skillId, value.slice(reference.start, reference.end), skillsById.get(reference.skillId)) }));
   const selectedReferences = [
     ...references,
+    ...parseDesignSelectionMentions(value).map(({ reference, start, end }) => ({ start, end, slot: designSelectionSlot(reference, value.slice(start, end)) })),
     ...normalizeWorkspaceDraftReferences(value, workspaceReferences)
       .map((reference) => ({ ...reference, slot: createWorkspaceMentionReferenceSlot(reference.entry) })),
   ].sort((first, second) => first.start - second.start);

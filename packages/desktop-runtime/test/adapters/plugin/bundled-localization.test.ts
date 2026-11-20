@@ -154,7 +154,7 @@ describe('bundled content localization', () => {
     const { skills, language } = await fixture();
     const chinese = await skills.listSkills();
     const ids = chinese.skills.map((skill) => skill.id).sort();
-    expect(ids).toEqual(['create-mcp-in-chat', 'create-skill-in-chat', 'display-in-chat', 'goal-writer']);
+    expect(ids).toEqual(['create-mcp-in-chat', 'create-skill-in-chat', 'design-canvas', 'display-in-chat', 'goal-writer']);
     for (const skill of chinese.skills) {
       expect(skill.name).toMatch(han);
       expect(skill.description).toMatch(han);

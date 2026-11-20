@@ -538,6 +538,8 @@ export function normalizeRuntimeQueuedTurnInputKind(value: unknown): RuntimeQueu
   return value === 'goal' ? 'goal' : 'message';
 }
 
+export type RuntimeEditorSelection = Readonly<{ documentId: string; ids: readonly string[] }>;
+
 /**
  * 等待当前轮次结束后再作为独立用户轮次发送的输入。
  *
@@ -545,6 +547,8 @@ export function normalizeRuntimeQueuedTurnInputKind(value: unknown): RuntimeQueu
  * 模型请求消费；只有被调度或手动立即发送后才会生成真正的用户消息。
  */
 export type RuntimeQueuedTurnInput = {
+  /** Editor target captured when this input entered the queue. */
+  editorSelection?: RuntimeEditorSelection;
   id: string;
   /** 旧版本持久化项可能缺失该字段，读取时按 message 归一化。 */
   kind?: RuntimeQueuedTurnInputKind;
@@ -644,8 +648,8 @@ export type RuntimeToolRun = {
 
 export type RuntimeThreadKind = 'regular' | 'side';
 
-/** Records the feature entity that created a conversation without owning its navigation. */
-export type RuntimeThreadOrigin = { featureId: string; entityId: string };
+/** A null entity ID keeps the feature provenance after its originating entity is deleted. */
+export type RuntimeThreadOrigin = { featureId: string; entityId: string | null };
 
 export type RuntimeActiveTurnState = 'running' | 'waiting_for_approval' | 'waiting_for_input';
 

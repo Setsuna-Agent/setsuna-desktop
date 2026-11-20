@@ -3,10 +3,18 @@
   --design-inspector-control-radius: 7px;
   --design-inspector-gap: 4px;
   --design-inspector-focus: var(--design-accent-soft);
+  position: absolute;
   z-index: 2;
-  inset-block-start: calc(var(--design-tools-top) + var(--design-toolbar-row) + 2px);
+  inset-block-start: var(--design-tools-top);
+  inset-inline-start: var(--design-left-inset);
+  box-sizing: border-box;
+  inline-size: max-content;
+  max-inline-size: calc(100% - var(--design-left-inset) - var(--design-right-inset));
+  max-block-size: calc(100% - var(--design-tools-top) - var(--design-panel-edge));
+  overflow: auto;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: start;
   gap: 4px;
   padding: 4px 6px;
   border-radius: 11px;
@@ -22,10 +30,12 @@
 .design-drawing-controls__width {
   display: grid;
   grid-auto-flow: column;
-  grid-template-columns: 68px;
+  grid-template-columns: minmax(0, 68px);
   grid-auto-columns: minmax(0, 76px);
   align-items: center;
   min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   padding-inline-end: 8px;
   border-radius: var(--design-inspector-control-radius);
   background: var(--design-control);
@@ -40,6 +50,7 @@
 .design-drawing-controls__preset.sd-button {
   gap: 4px;
   min-width: 0;
+  max-width: 100%;
   padding-inline: 6px;
 }
 
@@ -77,5 +88,9 @@
 
   .design-drawing-controls__width .sd-slider {
     display: none;
+  }
+
+  .design-drawing-controls__preset .design-drawing-preset-stroke {
+    min-width: 0;
   }
 }

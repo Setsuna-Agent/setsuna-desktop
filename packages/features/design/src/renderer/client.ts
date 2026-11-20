@@ -1,3 +1,6 @@
+import { designCommandQuery, type DesignCommandKey } from '../contracts/design-command-key.js';
+import { createDesignConversation, listDesignConversations, type DesignConversationOwner, type DesignConversation } from '../contracts/design-conversations.js';
+import { startDesignTask, replyDesignTask, bindDesignInput, watchDesignCommand, stopDesignTask, type DesignTaskClient } from '../contracts/design-task.js';
 import { defineCapability } from '@setsuna-desktop/feature-core/capability';
 import type { FeatureOperationTransport } from '@setsuna-desktop/feature-core/operation';
 import type { SetsunaDesktopBridge, WorkspaceEntry, WorkspaceFilePreview } from '@setsuna-desktop/contracts';
@@ -17,7 +20,7 @@ export type DesignWebPreviewHost = Readonly<{
   partition: string;
   devices: readonly DesignWebPreviewDevice[];
   configure(id: number, settings: Readonly<{
-    url: string; device?: Readonly<{ id: string; width: number; height: number }>; interactive: boolean;
+    url: string; networkAccess: boolean; device?: Readonly<{ id: string; width: number; height: number }>; interactive: boolean;
   }>): Promise<boolean>;
   capture(id: number): Promise<string | null>;
   onEscape(callback: (id: number) => void): () => void;
@@ -35,12 +38,17 @@ export type DesignAssets = Readonly<{
 }>;
 
 export type DesignClient = Readonly<{
+  conversations?: {
+    list(owner: DesignConversationOwner, signal?: AbortSignal): Promise<DesignConversation[]>;
+    create(owner: DesignConversationOwner): Promise<DesignConversation>;
+  };
+  tasks?: DesignTaskClient;
   assets: DesignAssets;
   fonts: DesignFontClient;
   list(workspace: DesignWorkspace, signal?: AbortSignal): Promise<readonly string[]>;
-  create(input: CreateDesignDocumentInput): Promise<WorkspaceEntry>;
-  move(input: MoveDesignDocumentInput): Promise<DesignDocumentRef>;
-  delete(ref: DesignDocumentRef): Promise<null>;
+  create(input: CreateDesignDocumentInput, signal?: AbortSignal): Promise<WorkspaceEntry>;
+  move(input: MoveDesignDocumentInput, signal?: AbortSignal): Promise<DesignDocumentRef>;
+  delete(ref: DesignDocumentRef & { expectedRevision?: string; command?: DesignCommandKey }, signal?: AbortSignal): Promise<null>;
   resolveResourceRoot(ref: DesignDocumentRef, signal?: AbortSignal): Promise<DesignDocumentRef>;
   importImage(input: ImportDesignImageInput, signal?: AbortSignal): Promise<string>;
   importScript(input: ImportDesignScriptInput, signal?: AbortSignal): Promise<string>;
@@ -55,9 +63,9 @@ export type DesignClient = Readonly<{
 
 export type DesignFontClient = Readonly<{
   list(signal?: AbortSignal): Promise<readonly DesignCustomFont[]>;
-  import(base64: string): Promise<DesignCustomFont>;
+  import(base64: string, signal?: AbortSignal): Promise<DesignCustomFont>;
   read(id: string, signal?: AbortSignal): Promise<{ base64: string }>;
-  remove(id: string): Promise<null>;
+  remove(id: string, signal?: AbortSignal, command?: DesignCommandKey): Promise<null>;
 }>;
 
 export const designClientCapability = defineCapability<DesignClient>({
@@ -73,16 +81,27 @@ export const designAssetsCapability = defineCapability<DesignAssets>({
 export function createDesignClient(transport: FeatureOperationTransport, assets: DesignAssets): DesignClient {
   return {
     assets,
+    conversations: {
+      list: (owner, signal) => transport.call(listDesignConversations, owner, { signal }),
+      create: (owner) => transport.call(createDesignConversation, owner),
+    },
+    tasks: {
+      watchCommand: (input, signal) => transport.call(watchDesignCommand, input, { signal }),
+      bindInput: (input, signal) => transport.call(bindDesignInput, input, { signal }),
+      start: (input, signal) => transport.call(startDesignTask, input, { signal }),
+      reply: (input, signal) => transport.call(replyDesignTask, input, { signal }),
+      stop: (sessionId) => transport.call(stopDesignTask, { sessionId }),
+    },
     fonts: {
       list: (signal) => transport.call(listDesignFonts, undefined, { signal }),
-      import: (base64) => transport.call(importDesignFont, { base64 }),
+      import: (base64, signal) => transport.call(importDesignFont, { base64 }, { signal }),
       read: (id, signal) => transport.call(readDesignFont, { id }, { signal }),
-      remove: (id) => transport.call(removeDesignFont, { id }),
+      remove: (id, signal, command) => transport.call(removeDesignFont, { id, ...designCommandQuery(command) }, { signal }),
     },
     list: (workspace, signal) => transport.call(listDesignDocuments, workspace, { signal }),
-    create: (input) => transport.call(createDesignDocument, input),
-    move: (input) => transport.call(moveDesignDocument, input),
-    delete: (ref) => transport.call(deleteDesignDocument, ref),
+    create: (input, signal) => transport.call(createDesignDocument, input, { signal }),
+    move: (input, signal) => transport.call(moveDesignDocument, input, { signal }),
+    delete: ({ command, ...ref }, signal) => transport.call(deleteDesignDocument, { ...ref, ...designCommandQuery(command) }, { signal }),
     resolveResourceRoot: (ref, signal) => transport.call(resolveDesignDocumentRoot, ref, { signal }),
     importImage: (input, signal) => transport.call(importDesignImage, input, { signal }),
     importScript: (input, signal) => transport.call(importDesignScript, input, { signal }),

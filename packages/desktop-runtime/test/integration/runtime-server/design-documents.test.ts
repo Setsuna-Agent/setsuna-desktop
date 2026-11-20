@@ -1,11 +1,53 @@
 import { workspaceFilePathKey, workspaceProjectRoots, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { designDocumentVersion, type DesignDocumentRef, type DesignEdit, type DesignSnapshot } from '@setsuna-desktop/feature-design/contracts';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { access, chmod, mkdir, readFile, readdir, realpath, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, it } from 'vitest';
 import { createRuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 import { ONE_PIXEL_PNG_BASE64 } from '../../support/runtime-server/rest-capabilities.js';
+
+it('keeps design chats with a renamed or transferred file and isolates an identical copy', async () => {
+  const harness = await createRuntimeServerTestHarness();
+  try {
+    const source = path.join(harness.runtimeDataDir, 'source');
+    const target = path.join(harness.runtimeDataDir, 'target');
+    await mkdir(path.join(source, 'boards'), { recursive: true });
+    await mkdir(target);
+    const post = (route: string, input: unknown) => harness.runtimeFetch(route, { method: 'POST', body: JSON.stringify(input) });
+    const from = await post('/v1/projects', { name: 'Source', path: source });
+    const to = await post('/v1/projects', { name: 'Target', path: target });
+    const original = { projectId: from.id, path: 'boards/first.design.json' };
+    const copy = { ...original, path: 'boards/copy.design.json' };
+    const documentId = 'same-document';
+    const content = JSON.stringify({ schemaVersion: designDocumentVersion, documentId, rootIds: [], nodes: {} });
+    for (const ref of [original, copy]) await writeFile(path.join(source, ref.path), content);
+    const chats = '/v1/features/design/conversations';
+    const list = (ref: DesignDocumentRef) => post(chats + '/list', { ref, documentId });
+    const originalChat = await post(chats, { ref: original, documentId });
+    const copyChat = await post(chats, { ref: copy, documentId });
+    const rename = (entry: string, name: string) => harness.runtimeFetch('/v1/projects/' + from.id + '/entries?' + new URLSearchParams({ path: entry }),
+      { method: 'PATCH', body: JSON.stringify({ name }) });
+    await expect(rename(original.path, 'copy.design.json')).rejects.toThrow();
+    expect(await list(copy)).toEqual([copyChat]);
+    expect(await list(original)).toEqual([originalChat]);
+    await rename('boards', 'screens');
+    const renamed = { ...original, path: 'screens/home.design.json' };
+    await rename('screens/first.design.json', 'home.design.json');
+    expect(await list(renamed)).toEqual([originalChat]);
+    const moved = await post('/v1/features/design/documents/move', { ref: renamed, destination: { projectId: to.id } });
+    await harness.server.close();
+    await harness.startRuntimeServer(harness.runtimeDataDir);
+    expect(await list(renamed)).toEqual([]);
+    expect(await list(moved)).toEqual([originalChat]);
+    expect(await list({ ...copy, path: 'screens/copy.design.json' })).toEqual([copyChat]);
+    const expired = new URLSearchParams({ ...moved, sessionId: 'expired', commandId: 'old' });
+    await expect(harness.runtimeFetch('/v1/features/design/documents?' + expired, { method: 'DELETE' })).rejects.toThrow('OPERATION_CANCELLED');
+    const session = { sessionId: randomUUID(), ref: moved, documentId, threadId: originalChat.id, selection: [] };
+    expect(await post('/v1/features/design/tasks', session)).toMatchObject({ kind: 'ready' });
+    await post('/v1/features/design/tasks/stop', { sessionId: session.sessionId });
+  } finally { await harness.close(); }
+});
 
 it('moves and deletes a design in the chosen root while preserving shared resources', async () => {
   const harness = await createRuntimeServerTestHarness();
@@ -69,6 +111,9 @@ void main() { gl_FragColor = texture2D(u_texture, gl_FragCoord.xy / u_resolution
     expect(await readFile(path.join(target, photo), 'utf8')).toBe('destination file');
 
     await writeFile(path.join(target, photo), sourceAsset);
+    await expect(post(`${route}/move`, { ref, destination, expectedRevision: 'stale' })).rejects.toThrow('REVISION_CONFLICT');
+    await expect(harness.runtimeFetch(`${route}?${new URLSearchParams({ ...ref, expectedRevision: 'stale' })}`, { method: 'DELETE' }))
+      .rejects.toThrow('REVISION_CONFLICT');
     const moved: DesignDocumentRef = await move();
     expect(moved).toEqual({ ...destination, path: 'screen.design.json' });
     const opened: DesignSnapshot = await harness.runtimeFetch(`${route}?${new URLSearchParams(moved)}`);
@@ -636,7 +681,7 @@ it('opens a v1 file and preserves nested layout and image references through edi
       { kind: 'reorder', nodeId: 'badge', beforeId: 'avatar' },
     ]);
     expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({
-      schemaVersion: designDocumentVersion, nodes: {
+      schemaVersion: designDocumentVersion, lastEditedLayerId: 'badge', nodes: {
         title: migratedNodes.title, artboard: { childIds: ['title', 'row'] }, row: { childIds: ['badge', 'avatar'], heightMode: 'hug', layout },
         avatar: image, badge,
       },
@@ -654,6 +699,7 @@ it('opens a v1 file and preserves nested layout and image references through edi
     expect((await read()).revision).toBe(updated.revision);
 
     const removed = await commit(updated.revision, [{ kind: 'remove', nodeId: 'row' }]);
+    expect(removed.document.lastEditedLayerId).toBe('artboard');
     expect(removed.document.nodes).toEqual(migratedNodes);
     const restored: DesignSnapshot = await post(`${route}/history`, {
       ref, expectedRevision: removed.revision, direction: 'undo',

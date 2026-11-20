@@ -20,6 +20,8 @@ it('keeps one usable copy of a font after concurrent imports and restart, and re
     await harness.startRuntimeServer(harness.runtimeDataDir);
     await expect(harness.runtimeFetch(route)).resolves.toEqual([first]);
     const query = new URLSearchParams({ id: first.id });
+    await expect(harness.runtimeFetch(`${route}?${query}&sessionId=expired&commandId=old`, { method: 'DELETE' }))
+      .rejects.toThrow('OPERATION_CANCELLED');
     await expect(harness.runtimeFetch(`${route}/data?${query}`)).resolves.toEqual({ base64 });
     await harness.runtimeFetch(`${route}?${query}`, { method: 'DELETE' });
     await expect(harness.runtimeFetch(route)).resolves.toEqual([]);

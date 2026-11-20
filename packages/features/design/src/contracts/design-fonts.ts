@@ -1,3 +1,4 @@
+import { designCommandFromQuery, designCommandQuery } from './design-command-key.js';
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { defineFeatureOperation } from '@setsuna-desktop/feature-core/operation';
 
@@ -99,7 +100,8 @@ export const readDesignFont = defineFeatureOperation({
 });
 
 export const removeDesignFont = defineFeatureOperation({
-  id: 'design.font.remove', path: route, method: 'DELETE', input: fontRef,
+  id: 'design.font.remove', path: route, method: 'DELETE',
+  input: defineRuntimeCodec((input) => ({ ...fontRef.parse(input), ...designCommandQuery(designCommandFromQuery(record(input))) })),
   output: defineRuntimeCodec<null>((value) => {
     if (value !== null) throw new Error('Invalid design font removal result.');
     return null;

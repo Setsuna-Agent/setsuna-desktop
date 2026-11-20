@@ -1,5 +1,9 @@
 const RUNTIME_READ_ONLY_TOOL_NAMES = new Set([
   'read_thread',
+  'design_inspect',
+  'design_preview',
+  'design_resources',
+  'design_prototype',
   'read_runtime_api',
   'list_directory',
   'find_files',

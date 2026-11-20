@@ -1,4 +1,6 @@
 import { defineRendererMessageBundle } from '@setsuna-desktop/feature-core/renderer';
+import { designAuditMessages } from './agent/design-audit-messages.js';
+import { designChatMessages } from './agent/design-chat-messages.js';
 import { designContentMessages } from './canvas/design-content-messages.js';
 
 export const designMessages = defineRendererMessageBundle({
@@ -6,6 +8,7 @@ export const designMessages = defineRendererMessageBundle({
   fallbackLocale: 'zh-CN',
   messages: {
     'zh-CN': {
+      ...designChatMessages['zh-CN'],
       'feature.design.rotateQuarter': '旋转 90°',
       'feature.design.flipHorizontal': '水平翻转',
       'feature.design.flipVertical': '垂直翻转',
@@ -52,6 +55,8 @@ export const designMessages = defineRendererMessageBundle({
       'feature.design.navigationTools': '导航工具',
       'feature.design.shapeTools': '形状工具',
       'feature.design.layerActions': '图层操作',
+      'feature.design.queuedSelectionMissing': '这条排队消息未保存选区。请取回消息，选好目标后重新发送。',
+      'feature.design.selectionUnavailable': '引用的图层已不存在于当前设计稿。',
       'feature.design.drawingControls': '笔触设置',
       'feature.design.drawingPreset': '笔触预设',
       'feature.design.drawingPreset.tapered': '墨笔',
@@ -210,7 +215,9 @@ export const designMessages = defineRendererMessageBundle({
       'feature.design.layers': '图层',
       'feature.design.properties': '属性',
       'feature.design.collapseProperties': '收起属性栏',
-      'feature.design.resizeLayers': '调整图层栏宽度',
+      'feature.design.collapseSidebar': '收起侧栏',
+      'feature.design.expandSidebar': '展开侧栏',
+      'feature.design.resizeLayers': '调整左侧栏宽度',
       'feature.design.resizeProperties': '调整属性栏宽度',
       'feature.design.expandLayer': '展开图层',
       'feature.design.collapseLayer': '折叠图层',
@@ -222,6 +229,7 @@ export const designMessages = defineRendererMessageBundle({
       'feature.design.textStyle': '文字样式',
       'feature.design.localStyle': '局部样式',
       'feature.design.localValue': '局部值',
+      ...designAuditMessages['zh-CN'],
       'feature.design.variables': '变量',
       'feature.design.openVariables': '打开变量表',
       'feature.design.addVariable': '添加变量',
@@ -442,6 +450,7 @@ export const designMessages = defineRendererMessageBundle({
       'feature.design.clipboardFailed': '剪贴板操作失败。{error}',
     },
     'en-US': {
+      ...designChatMessages['en-US'],
       'feature.design.rotateQuarter': 'Rotate 90°',
       'feature.design.flipHorizontal': 'Flip horizontally',
       'feature.design.flipVertical': 'Flip vertically',
@@ -488,6 +497,8 @@ export const designMessages = defineRendererMessageBundle({
       'feature.design.navigationTools': 'Navigation tools',
       'feature.design.shapeTools': 'Shape tools',
       'feature.design.layerActions': 'Layer actions',
+      'feature.design.queuedSelectionMissing': 'This queued message has no saved selection. Retrieve it, choose the target, and send it again.',
+      'feature.design.selectionUnavailable': 'The referenced layers are unavailable in this design.',
       'feature.design.drawingControls': 'Stroke settings',
       'feature.design.drawingPreset': 'Stroke preset',
       'feature.design.drawingPreset.tapered': 'Ink',
@@ -646,7 +657,9 @@ export const designMessages = defineRendererMessageBundle({
       'feature.design.layers': 'Layers',
       'feature.design.properties': 'Properties',
       'feature.design.collapseProperties': 'Hide properties',
-      'feature.design.resizeLayers': 'Resize layers panel',
+      'feature.design.collapseSidebar': 'Collapse sidebar',
+      'feature.design.expandSidebar': 'Expand sidebar',
+      'feature.design.resizeLayers': 'Resize left sidebar',
       'feature.design.resizeProperties': 'Resize properties panel',
       'feature.design.expandLayer': 'Expand layer',
       'feature.design.collapseLayer': 'Collapse layer',
@@ -658,6 +671,7 @@ export const designMessages = defineRendererMessageBundle({
       'feature.design.textStyle': 'Text style',
       'feature.design.localStyle': 'Local style',
       'feature.design.localValue': 'Local value',
+      ...designAuditMessages['en-US'],
       'feature.design.variables': 'Variables',
       'feature.design.openVariables': 'Open variable table',
       'feature.design.addVariable': 'Add variable',

@@ -1,4 +1,7 @@
-import { defaultDesignPolygonSides, type DesignVectorGeometry } from '../../contracts/index.js';
+import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import type { DrawingTool } from '../use-design-canvas-gestures.js';
+import { defaultDesignStroke } from '../design-paint.js';
+import { defaultDesignPolygonSides, type DesignNode, type DesignVectorGeometry } from '../../contracts/index.js';
 import type { Bounds, Point } from '../design-geometry.js';
 import { fitDesignPath } from '../vectors/design-vector.js';
 
@@ -24,4 +27,30 @@ export function designDrawnVector(tool: string, { bounds, start, end }: Readonly
   if (tip.x === start.x && tip.y === start.y) return;
   const { bounds: shaft, geometry } = fitDesignPath([start, tip], false);
   return { bounds: shaft, geometry: tool === 'arrow' ? { ...geometry, endMarker: 'arrow' } : geometry };
+}
+
+export function drawnDesignLayer(drawingTool: DrawingTool, size: Bounds, parentId: string | null, click: boolean,
+  geometry: DesignVectorGeometry | undefined, t: RendererTranslate, outlined = true): DesignNode {
+  const strokes = outlined ? [defaultDesignStroke] : undefined;
+  if (drawingTool === 'web' || drawingTool === 'script') return {
+    ...size, kind: drawingTool, name: t(`feature.design.${drawingTool}`), strokes,
+    width: click ? (drawingTool === 'web' ? 720 : 240) : size.width,
+    height: click ? (drawingTool === 'web' ? 480 : 160) : size.height,
+  };
+  if (drawingTool === 'frame') return {
+    ...size, kind: 'frame', name: t(parentId === null ? 'feature.design.artboard' : 'feature.design.frame'),
+    width: click ? (parentId === null ? 960 : 280) : size.width,
+    height: click ? (parentId === null ? 600 : 160) : size.height, childIds: [], strokes,
+  };
+  if (drawingTool === 'text') {
+    const { height: _height, ...placement } = size;
+    return { ...placement, kind: 'text', width: click ? 216 : Math.max(24, size.width),
+      widthMode: click ? 'hug' : 'fixed', fontSize: 24, text: t('feature.design.text') };
+  }
+  const shape = { ...(click && !isSegmentDrawingTool(drawingTool) ? { ...size, width: 128, height: 96 } : size), strokes };
+  if (geometry) return { ...shape, kind: 'vector', geometry,
+    name: drawingTool === 'polygon' ? undefined : t(`feature.design.tool.${drawingTool}`) };
+  return drawingTool === 'ellipse'
+    ? { kind: 'ellipse', ...shape }
+    : { kind: 'rectangle', ...shape, cornerRadius: 0 };
 }

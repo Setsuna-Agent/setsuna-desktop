@@ -60,9 +60,8 @@ it('resizes each panel independently and restores its chosen width after reopeni
   fireEvent.click(screen.getByRole('button', { name: 'feature.design.collapseProperties' }));
   fireEvent.click(layer);
   expect(width(properties())).toBe(resizedProperties);
-  const layersToggle = screen.getByRole('button', { name: 'feature.design.layers' });
-  fireEvent.click(layersToggle);
-  fireEvent.click(layersToggle);
+  fireEvent.click(screen.getByRole('button', { name: 'feature.design.collapseSidebar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'feature.design.expandSidebar' }));
   expect(width(screen.getByRole('separator', { name: 'feature.design.resizeLayers' }))).toBe(resizedLayers);
 });
 
@@ -231,6 +230,7 @@ it('ungroups a frame wrapper without losing the component or its position and re
   } };
   const { read } = await mountEditor(source);
   const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'feature.design.expandLayer' }));
   fireEvent.contextMenu(await screen.findByRole('button', { name: 'Main card' }), { clientX: 150, clientY: 90 });
   await user.click(await screen.findByRole('menuitem', { name: /^feature\.design\.wrapInFrame /u }));
 
@@ -311,6 +311,7 @@ it.each([
     },
   };
   const { commit, read } = await mountEditor(source);
+  if (!into) fireEvent.click(await screen.findByRole('button', { name: 'feature.design.expandLayer' }));
   const moving = await screen.findByRole('button', { name: 'Moving layer' });
   const target = screen.getByRole('button', { name: 'Target component' });
   vi.spyOn(target.parentElement!, 'getBoundingClientRect').mockReturnValue(new DOMRect(16, 100, 200, 32));
@@ -338,7 +339,8 @@ it('reflows canvas siblings when a layer is dropped in the same-group preview sl
       first: { ...shape, name: 'First tile' }, second: { ...shape, name: 'Second tile' },
     },
   });
-  const source = await screen.findByRole('button', { name: 'Second tile' });
+  fireEvent.click(await screen.findByRole('button', { name: 'feature.design.expandLayer' }));
+  const source = screen.getByRole('button', { name: 'Second tile' });
   const target = screen.getByRole('button', { name: 'First tile' }).parentElement!;
   vi.spyOn(target, 'getBoundingClientRect').mockReturnValue(new DOMRect(16, 100, 200, 31));
   expect([drawing.localX.get('first'), drawing.localX.get('second')]).toEqual([0, 16]);

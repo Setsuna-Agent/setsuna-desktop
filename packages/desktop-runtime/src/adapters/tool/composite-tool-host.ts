@@ -1,6 +1,7 @@
 import type { RuntimeMessage, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { abortable, throwIfAborted } from '../../loop/core/runtime-turn-errors.js';
 import type {
+  ExclusiveToolScope,
   ToolExecutionContext,
   ToolExecutionResult,
   ToolExternalContext,
@@ -27,7 +28,7 @@ export class CompositeToolHost implements ToolHost {
     return toolGroups.flat();
   }
 
-  async exclusiveToolScope(context: ToolExecutionContext): Promise<ReadonlySet<string> | null> {
+  async exclusiveToolScope(context: ToolExecutionContext): Promise<ExclusiveToolScope | null> {
     for (const host of this.hosts) {
       const scope = await host.exclusiveToolScope?.(context);
       if (scope) return scope;

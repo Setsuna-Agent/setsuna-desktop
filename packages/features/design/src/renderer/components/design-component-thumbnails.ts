@@ -1,7 +1,7 @@
 import type { Yoga } from 'yoga-layout/load';
 import type { DesignDocument } from '../../contracts/index.js';
 import { designResourceParts } from '../../contracts/design-resource-id.js';
-import { resolveDesignScene, type DesignLayerBox, type DesignScene } from '../design-layout.js';
+import { resolveDesignScene } from '../design-layout.js';
 import { measureDesignText } from '../design-text.js';
 import type { DesignExportSelection } from '../export/design-export-scene.js';
 import { projectDesignComponents } from './design-components.js';
@@ -9,49 +9,40 @@ import { buildDesignLibraryResources, type DesignLibraryResources } from './desi
 
 export type DesignComponentPreviewContext = Readonly<{
   projected: DesignDocument;
-  scene: DesignScene;
   resources: DesignLibraryResources;
   layoutEngine: Yoga;
 }>;
 
-type ComponentView = Pick<DesignExportSelection, 'document' | 'scene'>;
-
 export function createDesignComponentThumbnailSelection(document: DesignDocument,
-  { projected, scene, resources, layoutEngine }: DesignComponentPreviewContext,
+  { projected, resources, layoutEngine }: DesignComponentPreviewContext,
 ): (id: string) => DesignExportSelection | undefined {
-  const views = new Map<string, ComponentView>();
-  const local = { document: projected, scene };
+  const libraries = new Map<string, DesignDocument>();
 
   return (id) => {
     const reference = designResourceParts(id);
-    if (!reference) return componentSelection(local, id);
+    if (!reference) return componentSelection(projected, id, layoutEngine);
     const source = resources.documents.get(reference.documentId);
     if (!source) return;
-    let view = views.get(reference.documentId);
-    if (!view) {
-      // Project the authored draft so a component keeps its source layout and variable modes.
+    let drawing = libraries.get(reference.documentId);
+    if (!drawing) {
+      // Resolve source-board variable modes before measuring the component on its own.
       const linked = source.libraries ? [document, ...resources.documents.values()].filter((draft) => draft !== source) : [];
-      const drawing = projectDesignComponents(source, buildDesignLibraryResources(source.documentId, linked));
-      view = { document: drawing, scene: resolveDesignScene(layoutEngine, drawing, measureDesignText) };
-      views.set(reference.documentId, view);
+      drawing = projectDesignComponents(source, buildDesignLibraryResources(source.documentId, linked));
+      libraries.set(reference.documentId, drawing);
     }
-    return componentSelection(view, reference.id);
+    return componentSelection(drawing, reference.id, layoutEngine);
   };
 }
 
-function componentSelection({ document, scene }: ComponentView, id: string): DesignExportSelection | undefined {
-  if (!scene[id]) return;
-  if (scene[id].visible) return { document, scene, ids: [id] };
+function componentSelection(projected: DesignDocument, id: string, layoutEngine: Yoga): DesignExportSelection | undefined {
+  const node = projected.nodes[id];
+  if (node?.kind !== 'frame' || !node.component) return;
 
-  // A hidden master is still available for insertion. Keep hidden descendants out of its preview.
-  const visible: Record<string, DesignLayerBox> = Object.create(scene);
-  function reveal(layerId: string) {
-    visible[layerId] = { ...scene[layerId], visible: true };
-    const node = document.nodes[layerId];
-    if (node.kind === 'frame') for (const child of node.childIds) {
-      if (!document.nodes[child].hidden) reveal(child);
-    }
-  }
-  reveal(id);
-  return { document, scene: visible, ids: [id] };
+  // A fresh instance starts upright and outside the master's parent layout and clipping.
+  const ids = [id];
+  const document = node.hidden || node.rotation || node.flipX || node.flipY
+    ? { ...projected, nodes: { ...projected.nodes, [id]: { ...node, hidden: false, rotation: 0, flipX: false, flipY: false } } }
+    : projected;
+  const scene = resolveDesignScene(layoutEngine, document, measureDesignText, { rootIds: ids });
+  return { document, scene, ids };
 }

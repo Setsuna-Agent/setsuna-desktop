@@ -5,6 +5,7 @@ import type { PropsWithChildren } from 'react';
 import { afterEach, vi } from 'vitest';
 import { loadYoga } from 'yoga-layout/load';
 import { commitDesignEdits, type DesignDocument } from '../../../src/contracts/index.js';
+import type { RenderDesignChat } from '../../../src/renderer/agent/DesignChatBridge.js';
 import DesignEditor from '../../../src/renderer/DesignEditor.js';
 import type { DesignAssets, DesignClient } from '../../../src/renderer/client.js';
 import type { Bounds, Point } from '../../../src/renderer/design-geometry.js';
@@ -127,6 +128,8 @@ afterEach(() => {
 });
 
 export async function mountEditor(source: Omit<DesignDocument, 'schemaVersion'> & { schemaVersion: number }, saveGate = Promise.resolve(), options: Readonly<{
+  renderChat?: RenderDesignChat;
+  tasks?: (service: DesignDocumentService) => NonNullable<DesignClient['tasks']>;
   documentPath?: string;
   translate?: RendererTranslate;
   fonts?: DesignClient['fonts'];
@@ -158,6 +161,7 @@ export async function mountEditor(source: Omit<DesignDocument, 'schemaVersion'> 
   const signal = new AbortController().signal;
   const commit = vi.fn<DesignClient['commit']>((input) => service.commit(commitDesignEdits.input.parse(input), signal));
   const client: DesignClient = {
+    tasks: options.tasks?.(service),
     fonts: options.fonts ?? { list: vi.fn().mockResolvedValue([]), read: vi.fn(), import: vi.fn(), remove: vi.fn() },
     assets: {
       webPreview: options.webPreview,
@@ -180,7 +184,7 @@ export async function mountEditor(source: Omit<DesignDocument, 'schemaVersion'> 
   };
   const layoutEngine = await loadYoga();
   render(<UiProvider locale="en-US"><ToastProvider>
-    <DesignEditor client={client} documentRef={documentRef} layoutEngine={layoutEngine} translate={options.translate ?? ((key) => key)} />
+    <DesignEditor renderChat={options.renderChat} client={client} documentRef={documentRef} layoutEngine={layoutEngine} translate={options.translate ?? ((key) => key)} />
   </ToastProvider></UiProvider>);
   return { documentRef, commit, replace, revision: () => revision, read: () => service.read(documentRef, signal) };
 }

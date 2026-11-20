@@ -61,7 +61,7 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
   ): Promise<SkillPromptContextSnapshot> {
     await this.prepare?.(skillIds ?? []);
     const snapshot = await this.skills.resolvePromptContext(skillIds, activation);
-    if (!snapshot.selectedInjections.length) return snapshot;
+    if (!snapshot.selectedInjections.some((skill) => skill.mcpDependencies?.length)) return snapshot;
     const servers = await this.mcpStore.listServerInputs();
     return {
       availableSkills: snapshot.availableSkills,

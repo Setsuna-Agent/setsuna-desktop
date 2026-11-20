@@ -16,11 +16,13 @@ import { readWorkspaceDesignSource } from './design-workspace-source.js';
 import type { FileWorkspaceProjectStore } from './file-workspace-project-store.js';
 import { createWorkspaceFile, resolveEntryParent, resolveExistingWorkspaceEntry } from './workspace-entry-mutations.js';
 import { walkWorkspaceFiles } from './workspace-file-walk.js';
+import type { DesignConversationRelocation } from './design-conversation-relocation.js';
 
 const designAssetDirectory = 'design-assets';
 
 export function createDesignWorkspaceFiles(
   projects: Pick<FileWorkspaceProjectStore, 'resolveWorkspaceRoot' | 'listBoundWorkspaceRoots' | 'listProjects'>, dataDir: string,
+  relocateChats?: DesignConversationRelocation,
 ): DesignWorkspaceFiles {
   const ownership = createDesignResourceOwnership(dataDir);
 
@@ -111,20 +113,21 @@ export function createDesignWorkspaceFiles(
         }
       });
     },
-    async move({ ref, destination }, signal) {
+    async move({ ref, destination, expectedRevision }, signal) {
       const [sourceRoot, destinationRoot, boundRoots] = await Promise.all([
         projects.resolveWorkspaceRoot(workspaceTarget(ref.projectId, ref.rootId)),
         projects.resolveWorkspaceRoot(workspaceTarget(destination.projectId, destination.rootId)),
         projects.listBoundWorkspaceRoots(),
       ]);
-      const name = await moveDesignWorkspaceDocument(sourceRoot, ref.path, destinationRoot, boundRoots.all, ownership, signal);
+      const name = await moveDesignWorkspaceDocument(sourceRoot, ref.path, destinationRoot, boundRoots.all, ownership, signal,
+        { expectedRevision, projectAtDestination: () => destination.projectId, relocateChats });
       return { ...destination, path: name };
     },
     async delete(ref, signal) {
       const [root, boundRoots] = await Promise.all([
         projects.resolveWorkspaceRoot(workspaceTarget(ref.projectId, ref.rootId)), projects.listBoundWorkspaceRoots(),
       ]);
-      await deleteDesignWorkspaceDocument(root, ref.path, boundRoots.all, ownership, signal);
+      await deleteDesignWorkspaceDocument(root, ref.path, boundRoots.all, ownership, signal, ref.expectedRevision, relocateChats);
     },
     async resolveResourceRoot(ref, signal) {
       const [root, listing] = await Promise.all([

@@ -24,3 +24,6 @@ export const designRendererFeature = defineRendererFeature({
     context.provide(clientProvider, createDesignClient(context.dependencies.transport, context.dependencies.assets));
   },
 });
+
+export type { DesignChatBinding } from './agent/DesignChatBridge.js';
+export { DesignChatFullscreenContext } from './agent/design-chat-layout.js';

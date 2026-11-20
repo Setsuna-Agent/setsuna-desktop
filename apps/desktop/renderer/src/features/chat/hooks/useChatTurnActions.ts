@@ -14,7 +14,7 @@ import {
   createChatTurnClientId,
   reconcileChatTurnSubmission,
 } from './chatTurnSubmission.js';
-import { useQueuedTurnInputActions } from './useQueuedTurnInputActions.js';
+import { useQueuedTurnInputActions, type PrepareChatTurn } from './useQueuedTurnInputActions.js';
 import { chatThreadModelSelection } from '../chatModelSelection.js';
 import type { SetChatComposerDraft } from './useChatComposerSession.js';
 import type { ChatComposerSendOptions } from '../composer/chatComposerSendOptions.js';
@@ -31,6 +31,7 @@ export function useChatTurnActions({
   activeProjectId,
   activeTurnId,
   beforeSend,
+  prepareTurn,
   claimComposerForThread,
   client,
   config = null,
@@ -49,6 +50,7 @@ export function useChatTurnActions({
   activeProjectId: string | null;
   activeTurnId: string | null;
   beforeSend?: () => Promise<boolean>;
+  prepareTurn?: PrepareChatTurn;
   claimComposerForThread: (threadId: string) => void;
   client: DesktopRuntimeClient;
   config?: RuntimeConfigState | null;
@@ -70,6 +72,7 @@ export function useChatTurnActions({
     actionRequests,
     client,
     currentThread,
+    prepareTurn,
     reloadThreads,
     setActiveTurnId,
     setCurrentThread,
@@ -126,6 +129,11 @@ export function useChatTurnActions({
           // in the empty side composer before starting its first turn.
           thread = await client.updateThread(threadId, { modelSelection });
           if (isCurrentRequest()) setCurrentThread(thread);
+        }
+        if (prepareTurn) {
+          if (!isCurrentRequest()) return false;
+          await prepareTurn(threadId, input, clientId);
+          if (!isCurrentRequest()) return false;
         }
         submissionThreadId = threadId;
         // A hidden draft may have been edited again while its first thread was being created.
@@ -203,7 +211,7 @@ export function useChatTurnActions({
         return false;
       }
     },
-    [actionRequests, activeProjectId, activeTurnId, beforeSend, claimComposerForThread, client, config, createThread, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
+    [actionRequests, activeProjectId, activeTurnId, beforeSend, prepareTurn, claimComposerForThread, client, config, createThread, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
   );
 
   const cancelActiveTurn = useCallback(async () => {
@@ -249,6 +257,10 @@ export function useChatTurnActions({
         const { provider, model } = chatThreadModelSelection(config, currentThread);
         // Regeneration bypasses composer submission, so read its model preference at click time.
         const thinking = readChatModelThinkingSelection(createChatComposerModelCapabilities(provider, model));
+        if (prepareTurn) {
+          await prepareTurn(currentThread.id, nextContent);
+          if (!isCurrentRequest()) return;
+        }
         const response = await client.regenerateFromMessage(currentThread.id, messageId, {
           ...input,
           content: nextContent,
@@ -267,7 +279,7 @@ export function useChatTurnActions({
         throw new Error(message);
       }
     },
-    [actionRequests, activeTurnId, client, config, currentThread, reloadThreads, setActiveTurnId, setCurrentThread, setError, t, terminalTurnIdsRef],
+    [actionRequests, activeTurnId, client, config, currentThread, prepareTurn, reloadThreads, setActiveTurnId, setCurrentThread, setError, t, terminalTurnIdsRef],
   );
 
   return {

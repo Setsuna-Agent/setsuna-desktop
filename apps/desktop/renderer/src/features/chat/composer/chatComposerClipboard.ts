@@ -1,3 +1,5 @@
+import { parseDesignSelectionMentions } from '@setsuna-desktop/feature-design/contracts/design-selection-mention';
+import { designSelectionSlot } from '../mentions/DesignSelectionReference.js';
 import type { ComposerSlot } from './editor/types.js';
 import { isBrowserTabReference } from '@setsuna-desktop/feature-browser/contracts';
 import { isRuntimeThreadReference } from '@setsuna-desktop/contracts';
@@ -76,6 +78,12 @@ export function createChatComposerClipboardPastePlan(
     }
     if (part.type === 'workspace') {
       slots.push(createWorkspaceMentionReferenceSlot(part.entry));
+      continue;
+    }
+    if (part.type === 'design-selection') {
+      const [mention] = parseDesignSelectionMentions(part.value);
+      if (!mention || mention.start !== 0 || mention.end !== part.value.length) return null;
+      slots.push(designSelectionSlot(mention.reference, part.value));
       continue;
     }
     if (part.type === 'browser-tab') {
@@ -249,7 +257,7 @@ function parseClipboardPayload(serializedPayload: string): ChatComposerClipboard
 
 function isClipboardPart(value: unknown): value is ChatComposerClipboardPart {
   if (!isRecord(value) || typeof value.type !== 'string') return false;
-  if (value.type === 'text') return typeof value.value === 'string';
+  if (value.type === 'text' || value.type === 'design-selection') return typeof value.value === 'string';
   if (value.type === 'skill') return typeof value.skillId === 'string' && Boolean(value.skillId);
   if (value.type === 'plugin') return typeof value.pluginId === 'string' && Boolean(value.pluginId)
     && (value.contributionId === undefined || (typeof value.contributionId === 'string' && Boolean(value.contributionId)));

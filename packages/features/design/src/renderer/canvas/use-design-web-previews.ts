@@ -20,8 +20,8 @@ export type DesignWebSnapshotHandler = (id: string, key: string, url: string, im
 type Snapshot = Readonly<{ key?: string; url: string; image: HTMLImageElement | null }>;
 export type DesignWebImage = Readonly<{ image: HTMLImageElement; device?: Device }>;
 export type DesignWebImages = ReadonlyMap<string, DesignWebImage>;
-export type CaptureDesignWebImages = (layers: readonly DesignWebLayer[], signal: AbortSignal) => Promise<DesignWebImages | undefined>;
-type ExportCapture = Readonly<{ request: DesignWebRequest; onSnapshot: DesignWebSnapshotHandler }>;
+export type CaptureDesignWebImages = (layers: readonly DesignWebLayer[], signal: AbortSignal, networkAccess?: boolean) => Promise<DesignWebImages | undefined>;
+type ExportCapture = Readonly<{ networkAccess: boolean; request: DesignWebRequest; onSnapshot: DesignWebSnapshotHandler }>;
 const maxSnapshots = 24;
 
 export function useDesignWebPreviews(host: DesignWebPreviewHost | undefined, document: DesignDocument, scene: DesignScene,
@@ -90,7 +90,7 @@ export function useDesignWebPreviews(host: DesignWebPreviewHost | undefined, doc
       return next;
     });
   }, []);
-  const captureExportImages = useCallback<CaptureDesignWebImages>(async (layers, signal) => {
+  const captureExportImages = useCallback<CaptureDesignWebImages>(async (layers, signal, networkAccess = true) => {
     if (!host) return;
     const images = new Map<string, DesignWebImage>();
     for (const layer of layers) {
@@ -99,13 +99,14 @@ export function useDesignWebPreviews(host: DesignWebPreviewHost | undefined, doc
       const snapshot = snapshots.get(request.id);
       let image = snapshot?.key === request.key ? snapshot.image : null;
       if (!image) {
+        if (!networkAccess) throw new Error('Network access is required to load this web preview.');
         image = await new Promise<HTMLImageElement | null>((resolve, reject) => {
           const clear = () => {
             signal.removeEventListener('abort', abort);
             setCaptureQueue((queue) => queue.filter((queued) => queued !== job));
           };
           const abort = () => { clear(); reject(signal.reason); };
-          const job: ExportCapture = { request, onSnapshot: (_id, _key, _url, image) => { clear(); resolve(image); } };
+          const job: ExportCapture = { request, networkAccess, onSnapshot: (_id, _key, _url, image) => { clear(); resolve(image); } };
           signal.addEventListener('abort', abort, { once: true });
           setCaptureQueue((queue) => [...queue, job]);
         });

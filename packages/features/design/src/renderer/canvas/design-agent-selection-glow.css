@@ -1,0 +1,86 @@
+.design-agent-selection-glow,
+.design-agent-cursor {
+  position: absolute;
+  pointer-events: none;
+}
+
+.design-agent-selection-glow {
+  min-width: 1px;
+  min-height: 1px;
+  overflow: visible;
+  transform-origin: top left;
+  fill: none;
+  stroke-linecap: round;
+}
+
+.design-agent-selection-glow rect {
+  animation: design-agent-edge-trace 2.8s linear infinite;
+}
+
+.design-agent-selection-glow__trail {
+  stroke: var(--design-agent-color, var(--sd-palette-purple));
+  stroke-width: 3px;
+  stroke-opacity: 0.55;
+  stroke-dasharray: 20 80;
+}
+
+.design-agent-selection-glow__tip {
+  stroke: color-mix(in srgb, var(--design-agent-color, var(--sd-palette-purple)) 36%, white);
+  stroke-width: 2px;
+  stroke-dasharray: 7 93;
+}
+
+@keyframes design-agent-edge-trace {
+  to { stroke-dashoffset: 100; }
+}
+
+.design-agent-cursor::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--design-agent-color, var(--sd-palette-purple)), transparent 72%);
+  animation: design-agent-cursor-halo 1.8s ease-in-out infinite;
+}
+
+.design-agent-cursor svg {
+  position: relative;
+  display: block;
+  fill: var(--design-agent-color, var(--sd-palette-purple));
+  stroke: white;
+  filter: drop-shadow(0 1px 1px rgb(32 16 52 / 28%));
+}
+
+.design-agent-cursor__leader {
+  position: absolute;
+  bottom: 100%;
+  border-left: 1px solid var(--design-agent-color, var(--sd-palette-purple));
+  opacity: 0.6;
+}
+
+.design-agent-cursor__name {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: white;
+  background: color-mix(in srgb, var(--design-agent-color) 70%, #191923);
+  font: 600 11px/16px var(--app-font-family, sans-serif);
+  white-space: nowrap;
+}
+
+@keyframes design-agent-cursor-halo {
+  0%, 100% { opacity: 0.24; transform: scale(0.75); }
+  50% { opacity: 0.7; transform: scale(1.35); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .design-agent-selection-glow,
+  .design-agent-cursor::before { display: none; }
+
+  .design-agent-selection-glow rect { animation: none; }
+}

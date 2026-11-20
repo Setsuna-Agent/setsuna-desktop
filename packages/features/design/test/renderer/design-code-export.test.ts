@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Util } from 'konva/lib/Util.js';
+import { Transform, Util } from 'konva/lib/Util.js';
 import { expect, it, vi } from 'vitest';
 import { loadYoga } from 'yoga-layout/load';
 import { applyDesignEdits } from '../../src/contracts/apply-design-edits.js';
@@ -10,6 +10,7 @@ import { measureDesignText } from '../../src/renderer/design-text.js';
 import { designExportBounds, loadExportImages } from '../../src/renderer/export/design-export-scene.js';
 import { renderDesignHtml } from '../../src/renderer/export/export-design-html.js';
 import { renderDesignSvg } from '../../src/renderer/export/export-design-svg.js';
+import { designShapeOutline } from '../../src/renderer/vectors/design-shape-outline.js';
 import { insertDesignSvg, readDesignSvg } from '../../src/renderer/vectors/design-svg-import.js';
 
 it('exports plain text with the same hyphen and whitespace breaks as the canvas', async () => {
@@ -131,29 +132,43 @@ it('hands off an auto-layout search bar with fluid width, wrapping and intrinsic
 });
 
 it('resizes each editable SVG layer and exports only the converted geometry', async () => {
-  const markup = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="2 3 32 20" onload="recordLoad()">'
+  const markup = '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="480" viewBox="2 3 32 20" onload="recordLoad()">'
     + '<title>Badge</title><script>recordLoad()</script>'
+    + '<defs><linearGradient id="wash" x2="0%" y2="100%"><stop offset="0" stop-color="#6c5da1"/><stop offset="100%" stop-color="#6c5da1" stop-opacity=".1"/></linearGradient></defs>'
     + '<foreignObject><div xmlns="http://www.w3.org/1999/xhtml">foreign content</div></foreignObject>'
-    + '<g transform="translate(4 3)" fill="#6c5da1"><rect id="base" width="20" height="12" rx="2"/>'
-    + '<path id="trim" d="M2 4h16" style="fill:none;stroke:#134;stroke-width:2;stroke-dasharray:3 2"/></g></svg>';
-  const asset = await readDesignSvg({ markup });
+    + '<g transform="translate(4 3)" fill="url(#wash)"><g transform="scale(.5 1.5)"><rect id="base" width="20" height="12" rx="2"/>'
+    + '<path id="trim" d="M2 4h16" style="fill:none;stroke:#134;stroke-width:2;stroke-dasharray:3 2"/></g></g></svg>';
   const canvasProbe = vi.spyOn(Util, 'isCanvasFarblingActive').mockReturnValue(false);
-  const { id, edits } = (() => {
-    try { return insertDesignSvg(asset, null, { x: 16, y: 10 }, undefined, 'SVG'); }
+  const { id, edits } = await (async () => {
+    try { return insertDesignSvg(await readDesignSvg({ markup }), null, { x: 480, y: 240 }, undefined, 'SVG'); }
     finally { canvasProbe.mockRestore(); }
   })();
   const source = designDocumentCodec.parse({ schemaVersion: 4, documentId: 'svg', rootIds: [], nodes: {} });
   const document = designDocumentCodec.parse(JSON.parse(JSON.stringify(applyDesignEdits(source, edits))));
   const group = document.nodes[id];
   if (group.kind !== 'frame') throw new Error('Expected separately editable SVG paths.');
-  expect(group.name).toBe('Badge');
+  expect(group).toMatchObject({ name: 'Badge', x: 0, y: 0, width: 960, height: 480 });
   expect(group.childIds.map((child) => document.nodes[child])).toMatchObject([
-    { kind: 'vector', name: 'base', fills: [{ color: '#6c5da1' }] },
-    { kind: 'vector', name: 'trim', fills: [], strokes: [{ color: '#113344', width: 2 }] },
+    { kind: 'vector', name: 'base', fills: [{ gradient: { kind: 'linear', stops: [
+      { offset: 0, color: '#6c5da1' }, { offset: 1, color: '#6c5da1', opacity: 0.1 },
+    ] } }] },
+    { kind: 'vector', name: 'trim', fills: [], strokes: [{ color: '#113344', width: 48 }] },
   ]);
   const yoga = await loadYoga();
   const measure = () => ({ width: 1, height: 1 });
   const scene = resolveDesignScene(yoga, document, measure);
+  // Resolve both the layer placement and its drawable path. A second application of the
+  // nested SVG transform would leave the layer bounds correct but move the actual artwork.
+  const baseId = group.childIds[0];
+  const base = scene[baseId];
+  const [outline] = designShapeOutline(document.nodes[baseId], base.width, base.height);
+  const local = new Transform(outline.transform && [...outline.transform]);
+  const world = (x: number, y: number) => {
+    const point = local.point({ x, y });
+    return [base.absoluteX + point.x, base.absoluteY + point.y];
+  };
+  expect(world(0, 0)).toEqual([144, 0]);
+  expect(world(20, 12)).toEqual([384, 432]);
   const box = scene[id];
   const expanded = transformDesignLayer(document, scene, id, { x: box.x, y: box.y, width: box.width * 2 });
   if (!expanded) throw new Error('Expected a resized group.');
@@ -170,7 +185,7 @@ it('resizes each editable SVG layer and exports only the converted geometry', as
   const html = new DOMParser().parseFromString(renderDesignHtml(selection, bounds, new Map(), 'Badge', 'html'), 'text/html');
   expect(html.querySelector('script, foreignObject, [onload]')).toBeNull();
   const path = html.querySelector('[data-layer="trim"] path');
-  expect(path?.getAttribute('transform')).toBe('matrix(1 0 0 1 4 3)');
+  expect(path?.getAttribute('transform')).toBe('matrix(0.5 0 0 1.5 4 3)');
   expect(path?.getAttribute('stroke-dasharray')).toBe('3 2');
 });
 

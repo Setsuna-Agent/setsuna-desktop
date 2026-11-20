@@ -9,6 +9,10 @@
       "types": "./dist/contracts/index.d.ts",
       "default": "./dist/contracts/index.js"
     },
+    "./contracts/design-selection-mention": {
+      "types": "./dist/contracts/design-selection-mention.d.ts",
+      "default": "./dist/contracts/design-selection-mention.js"
+    },
     "./runtime": {
       "types": "./dist/runtime/index.d.ts",
       "default": "./dist/runtime/index.js"

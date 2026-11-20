@@ -18,7 +18,7 @@ import type {
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
 
-export type RuntimeThreadMetadata = Pick<RuntimeThread, 'id' | 'createdAt' | 'projectId' | 'workspaceId' | 'lastSeq'>;
+export type RuntimeThreadMetadata = Pick<RuntimeThread, 'id' | 'createdAt' | 'projectId' | 'workspaceId' | 'lastSeq' | 'featureId' | 'origin'>;
 
 export type ThreadStorePatch = Omit<ThreadPatch, 'modelSelection'> & {
   featureId?: string | null;
@@ -38,6 +38,8 @@ export type ThreadStoreCreateInput = Omit<CreateThreadInput, 'workspaceMode'> & 
 };
 
 export type ThreadStoreQuery = ThreadQuery & {
+  /** Limit feature maintenance queries to the owning feature's rows. */
+  featureId?: string;
   /** Internal recovery paths include transient side conversations; user-facing lists do not. */
   includeSide?: boolean;
 };

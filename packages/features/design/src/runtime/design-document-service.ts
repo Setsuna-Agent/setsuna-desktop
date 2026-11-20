@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES } from '@setsuna-desktop/contracts';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import {
-  designDocumentCodec, designDocumentVersion, type CommitDesignEditsInput, type CreateDesignDocumentInput, type DesignDocument,
+  designDocumentCodec, designDocumentVersion, indexDesignParents, type DesignEdit, type CommitDesignEditsInput, type CreateDesignDocumentInput, type DesignDocument,
   type DesignDocumentRef, type DesignSnapshot, type DesignWorkspaceDocument, type DesignWorkspaceFiles,
   type NavigateDesignHistoryInput,
 } from '../contracts/index.js';
@@ -29,17 +29,31 @@ export class DesignDocumentService {
   }
 
   read(ref: DesignDocumentRef, signal: AbortSignal): Promise<DesignSnapshot> {
-    return this.files.withDocument(ref, signal, async (file) => toSnapshot(await this.readHistory(file)));
+    return this.withSnapshot(ref, signal, (snapshot) => snapshot);
   }
 
-  commit(input: CommitDesignEditsInput, signal: AbortSignal): Promise<DesignSnapshot> {
+  withSnapshot<T>(ref: DesignDocumentRef, signal: AbortSignal, use: (snapshot: DesignSnapshot) => T | Promise<T>): Promise<T> {
+    return this.files.withDocument(ref, signal, async (file) => {
+      const snapshot = toSnapshot(await this.readHistory(file));
+      signal.throwIfAborted();
+      return use(snapshot);
+    });
+  }
+
+  commit(input: CommitDesignEditsInput, signal: AbortSignal, check?: (document: DesignDocument) => void, dryRun = false): Promise<DesignSnapshot> {
     return this.files.withDocument(input.ref, signal, async (file) => {
       const state = await this.readHistory(file);
       assertRevision(state, input.expectedRevision);
-      const document = applyDesignEdits(state.document, input.edits);
-      const content = serializeDocument(document);
+      signal.throwIfAborted();
+      check?.(state.document);
+      const edited = applyDesignEdits(state.document, input.edits);
+      const content = serializeDocument(edited);
       if (content === serializeDocument(state.document)) return toSnapshot(state);
-      return this.replace(file, state, content, {
+      const lastEditedLayerId = lastSavedLayer(state.document, edited, input.edits);
+      const document = lastEditedLayerId === edited.lastEditedLayerId ? edited : { ...edited, lastEditedLayerId };
+      const savedContent = document === edited ? content : serializeDocument(document);
+      if (dryRun) return toSnapshot(state);
+      return this.replace(file, state, savedContent, {
         document, undo: [...state.undo, state.document].slice(-historyDepth), redo: [],
       });
     });
@@ -86,6 +100,23 @@ export class DesignDocumentService {
     }
     return toSnapshot(state);
   }
+}
+
+function lastSavedLayer(before: DesignDocument, after: DesignDocument, edits: readonly DesignEdit[]) {
+  let parents: ReadonlyMap<string, string | null> | undefined;
+  for (let index = edits.length - 1; index >= 0; index--) {
+    const edit = edits[index];
+    if (!('nodeId' in edit)) continue;
+    let id: string | null = edit.nodeId;
+    // A deleted block can still lead back to the surviving card or board.
+    while (id && !Object.hasOwn(after.nodes, id)) {
+      parents ??= indexDesignParents(before);
+      id = parents.get(id) ?? null;
+    }
+    if (id) return id;
+  }
+  const previous = before.lastEditedLayerId;
+  return previous && Object.hasOwn(after.nodes, previous) ? previous : undefined;
 }
 
 function assertRevision(state: DesignHistory, expected: string): void {

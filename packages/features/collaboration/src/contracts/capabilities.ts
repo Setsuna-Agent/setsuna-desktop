@@ -73,7 +73,7 @@ export interface CollaborationRuntimeHost {
     projectId?: string;
     workspaceId?: string;
     title: string;
-  }>): Promise<RuntimeThread>;
+  }>, parentFeatureId?: string): Promise<RuntimeThread>;
   /** Includes cancelled/finalizing tasks until their done promise settles, to prevent early reuse. */
   activeTask(threadId: string): CollaborationActiveTask | null;
   /** Resolves for queued model input, including input that arrived before subscription. */
@@ -88,7 +88,10 @@ export interface CollaborationRuntimeHost {
     toAgentId: string;
     triggerTurn: boolean;
   }>, execution?: CollaborationTurnExecutionPolicy): Promise<Readonly<{ queued?: boolean; turnId: string | null }>>;
-  startTurn(threadId: string, input: CollaborationSubagentTurnInput, execution?: CollaborationTurnExecutionPolicy): Promise<Readonly<{ turnId: string }>>;
+  startTurn(threadId: string, input: CollaborationSubagentTurnInput, execution?: CollaborationTurnExecutionPolicy & {
+    /** The coordinator derives the stable participant index from the parent’s task history. */
+    owner?: Readonly<{ featureId: string; parentThreadId: string; participantIndex: number }>;
+  }): Promise<Readonly<{ turnId: string }>>;
   appendEvents(
     threadId: string,
     events: readonly PendingStoredThreadEvent[],

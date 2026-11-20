@@ -3,6 +3,13 @@
   padding-bottom: 18px;
 }
 
+.desktop-capabilities-skill-detail > :is(.sd-detail__metadata, .sd-markdown-document, .desktop-capabilities-skill-section) {
+  background-color: light-dark(
+    var(--app-surface-muted),
+    color-mix(in srgb, var(--app-surface), var(--app-text) 5%)
+  );
+}
+
 .desktop-capabilities-skill-description {
   margin: 0;
   color: var(--app-text-muted);
@@ -23,7 +30,6 @@
 .desktop-capabilities-skill-section {
   min-width: 0;
   border-radius: var(--app-radius-group);
-  background: var(--app-surface-muted);
 }
 
 .desktop-capabilities-skill-section > header {

@@ -63,7 +63,8 @@ import { isPathWithin } from '../search/workspace-search-policy.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 import { createDesignWorkspaceEntryRelocation } from './design-workspace-resource-root.js';
-import { createWorkspaceEntry, deleteWorkspaceEntry, moveWorkspaceEntry, renameWorkspaceEntry, type WorkspaceEntryRelocation } from './workspace-entry-mutations.js';
+import type { DesignConversationRelocation } from './design-conversation-relocation.js';
+import { createWorkspaceEntry, deleteWorkspaceEntry, moveWorkspaceEntry, renameWorkspaceEntry } from './workspace-entry-mutations.js';
 import { applyWorkspaceFileChanges } from './workspace-file-changes.js';
 import { readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
 import { walkWorkspaceFiles } from './workspace-file-walk.js';
@@ -83,6 +84,7 @@ type ProjectIndex = {
 };
 
 type FileWorkspaceProjectStoreOptions = {
+  relocateDesignChats?: DesignConversationRelocation;
   worktrees?: Pick<WorkspaceFork, 'getWorkspace'>;
   searchEngine?: WorkspaceSearchEngine;
   temporaryWorkspacePath?: string;
@@ -90,18 +92,16 @@ type FileWorkspaceProjectStoreOptions = {
 
 export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   private readonly indexPath: string;
-  private readonly relocateWithOwnership: WorkspaceEntryRelocation;
   private readonly searchEngine: WorkspaceSearchEngine;
   private readonly temporaryWorkspacePath: string;
   private readonly temporaryWorkspaceDates = new Map<string, string>();
 
   constructor(
-    dataDir: string,
+    private readonly dataDir: string,
     private readonly clock: Clock,
     private readonly options: FileWorkspaceProjectStoreOptions = {},
   ) {
     this.indexPath = path.join(dataDir, 'projects.json');
-    this.relocateWithOwnership = createDesignWorkspaceEntryRelocation(dataDir);
     this.searchEngine = options.searchEngine ?? new JavaScriptWorkspaceSearchEngine();
     this.temporaryWorkspacePath = path.resolve(options.temporaryWorkspacePath ?? path.join(dataDir, 'temporary-workspace'));
   }
@@ -558,19 +558,35 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     return { all: [...all], active };
   }
 
+  private async entryMutationContext(target: WorkspaceProjectTarget) {
+    const [root, bindings] = await Promise.all([this.resolveWorkspaceRoot(target), this.listBoundWorkspaceRoots()]);
+    const actingProjectId = workspaceTargetProjectId(target);
+    const ownerRoots = new Map<string, readonly string[]>();
+    const relocate = createDesignWorkspaceEntryRelocation(this.dataDir, this.options.relocateDesignChats, async (ownerId, destinationFile) => {
+      if (ownerId === actingProjectId) return ownerId;
+      let roots = ownerRoots.get(ownerId);
+      if (!roots) {
+        roots = workspaceProjectRoots(await this.findProject(ownerId)).map((directory) => directory.path);
+        ownerRoots.set(ownerId, roots);
+      }
+      return roots.some((directory) => isPathWithin(directory, destinationFile)) ? ownerId : actingProjectId;
+    });
+    return { root, boundRoots: bindings.all, relocate };
+  }
+
   async renameEntry(projectId: WorkspaceProjectTarget, relativePath: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry> {
-    const [root, boundRoots] = await Promise.all([this.resolveWorkspaceRoot(projectId), this.listBoundWorkspaceRoots()]);
-    return renameWorkspaceEntry(root, relativePath, input, { boundRoots: boundRoots.all, relocate: this.relocateWithOwnership });
+    const context = await this.entryMutationContext(projectId);
+    return renameWorkspaceEntry(context.root, relativePath, input, context);
   }
 
   async deleteEntry(projectId: WorkspaceProjectTarget, relativePath: string): Promise<void> {
-    const project = await this.requireProject(projectId);
-    return deleteWorkspaceEntry(project.path, relativePath);
+    const context = await this.entryMutationContext(projectId);
+    return deleteWorkspaceEntry(context.root, relativePath, context);
   }
 
   async moveEntry(projectId: WorkspaceProjectTarget, relativePath: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry> {
-    const [root, boundRoots] = await Promise.all([this.resolveWorkspaceRoot(projectId), this.listBoundWorkspaceRoots()]);
-    return moveWorkspaceEntry(root, relativePath, input, { boundRoots: boundRoots.all, relocate: this.relocateWithOwnership });
+    const context = await this.entryMutationContext(projectId);
+    return moveWorkspaceEntry(context.root, relativePath, input, context);
   }
 
   async writeBinaryFile(projectId: WorkspaceProjectTarget, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite> {

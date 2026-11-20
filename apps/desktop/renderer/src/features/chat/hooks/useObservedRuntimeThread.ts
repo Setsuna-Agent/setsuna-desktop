@@ -63,22 +63,18 @@ export function useObservedRuntimeThread({
   );
 
   useEffect(() => {
-    setCurrentThread(null);
+    if (currentThreadRef.current?.id !== threadId) {
+      setCurrentThread(null);
+      setActiveTurnId(null);
+      terminalTurnIdsRef.current.clear();
+    }
     lastThreadEventAtRef.current = null;
     lastThreadPollAtRef.current = null;
-    setActiveTurnId(null);
-    terminalTurnIdsRef.current.clear();
-  }, [threadId]);
-
-  useEffect(() => {
     if (!threadId) return undefined;
     let cancelled = false;
-    setCurrentThread(null);
-    setActiveTurnId(null);
-    terminalTurnIdsRef.current.clear();
-    currentThreadLastSeqRef.current = 0;
     client.getThread(threadId).then((snapshot) => {
       if (cancelled || threadIdRef.current !== threadId) return;
+      if ((currentThreadRef.current?.lastSeq ?? 0) > snapshot.lastSeq) return;
       setCurrentThread(snapshot);
       setActiveTurnId(activeTurnIdFromThreadSnapshot(snapshot, terminalTurnIdsRef.current));
     }).catch((error: unknown) => {
@@ -216,6 +212,7 @@ export function useObservedRuntimeThread({
   }, [adoptSnapshot, client, effectiveActiveTurnId, threadId]);
 
   return useMemo(() => ({
+    setCurrentThread, terminalTurnIdsRef,
     activeTurnId: effectiveActiveTurnId,
     adoptSnapshot,
     answerApproval,
@@ -226,7 +223,7 @@ export function useObservedRuntimeThread({
     answerApproval,
     currentThread,
     effectiveActiveTurnId,
-    setActiveTurnId,
+    setCurrentThread, setActiveTurnId,
   ]);
 }
 

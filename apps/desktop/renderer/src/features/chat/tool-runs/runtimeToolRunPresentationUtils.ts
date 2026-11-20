@@ -84,7 +84,7 @@ export function isWebContentRun(
 ): boolean {
   if (!url) return false;
   return /(^|\s|_|-)fetch(web)?content($|\s|_|-)/iu.test(run.name)
-    || /^https?:\/\//iu.test(url);
+    || ((run.plugin || !builtinToolNameKey(run.name)) && /^https?:\/\//iu.test(url));
 }
 
 export function genericToolRunDiagnostic(run: RuntimeToolRun): string {

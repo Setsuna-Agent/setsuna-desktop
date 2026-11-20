@@ -19,7 +19,7 @@ export function designComponentDefinitions(document: DesignDocument, resources?:
 
 export function planDesignComponentInsertion({ document, projected, resources, scene, layoutEngine, sourceId, target }: Readonly<{
   document: DesignDocument; projected: DesignDocument; resources: DesignLibraryResources; scene: DesignScene; layoutEngine: Yoga;
-  sourceId: string; target: Readonly<{ point: Point } | { area?: Bounds; selectedId: string | null }>;
+  sourceId: string; target: Readonly<{ root: true } | { point: Point } | { area?: Bounds; selectedId: string | null }>;
 }>): Readonly<{ id: string; edits: readonly DesignEdit[] }> | undefined {
   const source = designResourceNode(document, sourceId, resources);
   if (source?.kind !== 'frame' || !source.component) return;
@@ -29,7 +29,7 @@ export function planDesignComponentInsertion({ document, projected, resources, s
   const point = 'point' in target ? target.point : undefined;
   const underPointer = point && findDesignFrameAtPoint(projected, scene, point);
   const anchor = ('selectedId' in target && target.selectedId ? scene[target.selectedId]?.paintBounds : undefined) ?? sourceBox?.paintBounds;
-  const { parentId, center } = 'point' in target
+  const { parentId, center } = 'root' in target ? { parentId: null, center: { x: 0, y: 0 } } : 'point' in target
     ? { parentId: underPointer && canInsert(underPointer) ? underPointer : null, center: target.point }
     : resolveDesignInsertion(document, scene, target.area ?? anchor ?? { x: 0, y: 0, ...size }, target.selectedId, canInsert);
   const nodeId = crypto.randomUUID();
