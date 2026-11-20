@@ -1,0 +1,37 @@
+.sd-popover.design-font-picker {
+  height: 336px;
+}
+
+.sd-icon-button.design-font-field__picker {
+  flex: none;
+  inline-size: var(--design-inspector-field-action-size, 22px);
+  block-size: var(--design-inspector-field-action-size, 22px);
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: 0;
+  color: var(--app-text-muted);
+}
+
+.design-font-picker__manage-actions,
+.design-font-picker__font {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.design-font-picker__font {
+  padding-inline-start: 8px;
+  font-size: 12px;
+}
+
+.design-font-picker__font > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.design-font-picker__confirm {
+  --design-form-popover-width: 258px;
+}

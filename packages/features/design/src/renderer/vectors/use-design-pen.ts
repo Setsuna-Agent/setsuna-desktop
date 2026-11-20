@@ -61,6 +61,7 @@ export function useDesignPen({ enabled, disabled, document, scene, viewport, rev
 
   function finish(current: Draft, closed: boolean) {
     if (saving.current || current.revision !== revision || current.anchors.length < (closed ? 3 : 2)) return;
+    press.current = undefined;
     saving.current = true;
     const pending = { ...current, cursor: undefined, closing: false, closed };
     publish(pending);
@@ -75,6 +76,7 @@ export function useDesignPen({ enabled, disabled, document, scene, viewport, rev
 
   return {
     preview: enabled && preview?.revision === revision ? preview : undefined,
+    cancel,
     isPlacingAnchor: () => Boolean(press.current),
     onPointerDown(event: PointerEvent<HTMLDivElement>) {
       if (!enabled || disabled || event.button !== 0) return false;
@@ -134,10 +136,11 @@ export function useDesignPen({ enabled, disabled, document, scene, viewport, rev
     },
     onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
       const current = draft.current;
-      if (!enabled || current?.revision !== revision || saving.current) return false;
-      if (event.key === 'Escape') cancel();
-      else if (disabled) return false;
-      else if (event.key === 'Enter' && !press.current) finish(current, false);
+      if (!enabled || disabled || current?.revision !== revision || saving.current) return false;
+      if (event.key === 'Escape') {
+        if (current.anchors.length >= 2) finish(current, false);
+        else cancel();
+      } else if (event.key === 'Enter' && !press.current) finish(current, false);
       else if (event.key === 'Backspace' || ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'z')) {
         if (press.current) return true;
         const anchors = current.anchors.slice(0, -1);

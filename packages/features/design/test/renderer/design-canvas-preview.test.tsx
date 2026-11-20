@@ -1,123 +1,70 @@
 // @vitest-environment happy-dom
 
-import { ToastProvider, UiProvider } from '@setsuna-desktop/renderer-ui';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { PropsWithChildren } from 'react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { flushSync } from 'react-dom';
-import { afterEach, expect, it, vi } from 'vitest';
-import { loadYoga } from 'yoga-layout/load';
-import { commitDesignEdits, designDocumentVersion, type DesignDocument, type DesignFrame } from '../../src/contracts/index.js';
-import DesignEditor from '../../src/renderer/DesignEditor.js';
+import { expect, it, vi } from 'vitest';
+import { designDocumentVersion, type DesignDocument, type DesignFrame } from '../../src/contracts/index.js';
 import type { DesignAssets, DesignClient } from '../../src/renderer/client.js';
-import type { Bounds, Point } from '../../src/renderer/design-geometry.js';
-import { DesignDocumentService } from '../../src/runtime/design-document-service.js';
-
-const drawing = vi.hoisted(() => ({
-  frameFills: new Map<string, string>(),
-  localX: new Map<string, number>(),
-  images: new Map<string, { image: HTMLImageElement; name?: string; crop?: Bounds }>(),
-  paths: new Map<string, string>(),
-  handles: new Set<string>(),
-  hit: undefined as string | undefined,
-}));
-
-vi.mock('react-konva', async () => {
-  const { createContext, forwardRef, useContext, useImperativeHandle } = await import('react');
-  const LayerId = createContext<string | undefined>(undefined);
-  const Container = ({ children }: PropsWithChildren) => <>{children}</>;
-  const Stage = forwardRef(function Stage({ children }: PropsWithChildren, ref) {
-    useImperativeHandle(ref, () => ({
-      getIntersection() {
-        const hit = drawing.hit;
-        const image = hit ? drawing.images.get(hit) : undefined;
-        if (hit && image) return { hasName: (name: string) => name === image.name,
-          findAncestor: () => ({ id: () => hit }), getAttr: (key: string) => key === 'image' ? image.image : undefined };
-        if (hit && drawing.handles.has(hit)) return { hasName: (name: string) => name === hit, findAncestor: () => null };
-        return hit && drawing.localX.has(hit) ? { hasName: () => false, findAncestor: () => ({ id: () => hit }) } : null;
-      },
-    }), []);
-    return <>{children}</>;
-  });
-  function Group({ id, x = 0, offsetX = 0, children }: PropsWithChildren<{ id?: string; x?: number; offsetX?: number }>) {
-    if (!id) return <>{children}</>;
-    drawing.localX.set(id, x - offsetX);
-    return <LayerId.Provider value={id}>{children}</LayerId.Provider>;
-  }
-  function Rect({ name, fill }: { name?: string; fill?: string }) {
-    const id = useContext(LayerId);
-    if (id && name === 'design-frame-interior' && fill) drawing.frameFills.set(id, fill);
-    if (name?.startsWith('design-layout-') || name?.startsWith('design-anchor-')) drawing.handles.add(name);
-    return null;
-  }
-  function Image(props: { image: HTMLImageElement; name?: string; crop?: Bounds }) {
-    const id = useContext(LayerId);
-    if (id) drawing.images.set(id, props);
-    return null;
-  }
-  function Path({ data }: { data: string }) {
-    const id = useContext(LayerId);
-    if (id) drawing.paths.set(id, data);
-    return null;
-  }
-  const shape = () => null;
-  return { Stage, Group, Layer: Container, Rect, Circle: shape, Ellipse: shape, Line: shape,
-    Shape: shape, Path, Image, Label: Container, Tag: shape, Text: shape };
-});
-
-afterEach(() => {
-  cleanup();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-  drawing.frameFills.clear();
-  drawing.localX.clear();
-  drawing.images.clear();
-  drawing.paths.clear();
-  drawing.handles.clear();
-  drawing.hit = undefined;
-});
-
-async function mountEditor(source: DesignDocument, saveGate = Promise.resolve(), assets: Readonly<{
-  searchImages?: DesignAssets['search'];
-  readImage?: DesignAssets['read'];
-  importImage?: DesignClient['importImage'];
-  requestClipboardPaste?: DesignAssets['requestClipboardPaste'];
-  readDesignLayers?: DesignAssets['output']['readDesignLayers'];
-}> = {}) {
-  const documentRef = { projectId: 'project', rootId: 'root', path: 'test.design.json' };
-  let content = JSON.stringify(source);
-  let revision = 0;
-  const replace = vi.fn(async (next: string) => {
-    await saveGate;
-    content = next;
-    return String(++revision);
-  });
-  const service = new DesignDocumentService({
-    create: vi.fn(),
-    withDocument: (_ref, _signal, operation) => operation({ key: source.documentId,
-      read: async () => ({ content, revision: String(revision) }), replace }),
-  });
-  const signal = new AbortController().signal;
-  const commit = vi.fn<DesignClient['commit']>((input) => service.commit(commitDesignEdits.input.parse(input), signal));
-  const client: DesignClient = {
-    assets: {
-      search: assets.searchImages ?? (async () => []), read: assets.readImage ?? vi.fn(), readLinkedImage: vi.fn(),
-      requestClipboardPaste: assets.requestClipboardPaste ?? vi.fn().mockResolvedValue({ kind: 'unavailable' }),
-      output: { saveDesignHtml: vi.fn(), saveDesignSvg: vi.fn(), saveImageAs: vi.fn(), copyImageToClipboard: vi.fn(), copyDesignLayers: vi.fn(),
-        readDesignLayers: assets.readDesignLayers ?? vi.fn(), copyText: vi.fn() },
-    },
-    list: vi.fn().mockResolvedValue([]), create: vi.fn(), importImage: assets.importImage ?? vi.fn(), read: (ref) => service.read(ref, signal), commit,
-    navigate: (input) => service.navigate(input, signal),
-  };
-  const layoutEngine = await loadYoga();
-  render(<UiProvider locale="en-US"><ToastProvider>
-    <DesignEditor client={client} documentRef={documentRef} layoutEngine={layoutEngine} translate={(key) => key} />
-  </ToastProvider></UiProvider>);
-  return { documentRef, commit, replace, revision: () => revision, read: () => service.read(documentRef, signal) };
-}
+import type { Point } from '../../src/renderer/design-geometry.js';
+import { designDragEvent as layerDragEvent, designDragTransfer as layerTransfer, drawing, mountEditor } from './support/mount-design-editor.js';
 
 function number(label: string) {
   return screen.getByRole<HTMLInputElement>('spinbutton', { name: label });
 }
+
+async function openImageReplacement() {
+  const properties = screen.getByRole('complementary', { name: 'feature.design.properties' });
+  const trigger = within(properties).getByRole('button', { name: 'feature.design.replaceImage' });
+  vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1024);
+  vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(768);
+  vi.spyOn(properties, 'getBoundingClientRect').mockReturnValue(new DOMRect(730, 30, 280, 720));
+  vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(new DOMRect(745, 200, 250, 30));
+  fireEvent.click(trigger);
+  return within(await screen.findByRole('dialog', { name: 'feature.design.replaceImage' }));
+}
+
+it('resizes each panel independently and restores its chosen width after reopening', async () => {
+  await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'panels', rootIds: ['board'],
+    nodes: { board: { kind: 'frame', x: 0, y: 0, width: 200, height: 180, childIds: [] } } });
+  const layer = await screen.findByRole('button', { name: 'feature.design.artboard' });
+  fireEvent.click(layer);
+  const layers = screen.getByRole('separator', { name: 'feature.design.resizeLayers' });
+  const properties = () => screen.getByRole('separator', { name: 'feature.design.resizeProperties' });
+  const width = (handle: HTMLElement) => Number(handle.getAttribute('aria-valuenow'));
+  const initialLayers = width(layers);
+  const initialProperties = width(properties());
+
+  const layout = screen.getByRole('complementary', { name: 'feature.design.layers' }).parentElement!;
+  vi.spyOn(layout, 'clientWidth', 'get').mockReturnValue(1000);
+  vi.spyOn(layout, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1200, 700));
+  function dragEdge(handle: HTMLElement, from: number, to: number) {
+    const start = { button: 0, pointerId: 1, clientX: from };
+    const end = { ...start, clientX: to };
+    fireEvent.pointerDown(handle, start);
+    fireEvent.pointerMove(handle, end);
+    fireEvent.pointerUp(handle, end);
+  }
+
+  dragEdge(layers, 360, 420);
+  const resizedLayers = width(layers);
+  expect(resizedLayers).toBe(initialLayers + 50);
+  expect(width(properties())).toBe(initialProperties);
+  dragEdge(properties(), 840, 804);
+  expect(width(properties())).toBe(initialProperties + 30);
+  fireEvent.keyDown(properties(), { key: 'ArrowLeft' });
+  const resizedProperties = width(properties());
+  expect(resizedProperties).toBe(initialProperties + 30 + 16);
+  expect(width(layers)).toBe(resizedLayers);
+
+  fireEvent.click(screen.getByRole('button', { name: 'feature.design.collapseProperties' }));
+  fireEvent.click(layer);
+  expect(width(properties())).toBe(resizedProperties);
+  const layersToggle = screen.getByRole('button', { name: 'feature.design.layers' });
+  fireEvent.click(layersToggle);
+  fireEvent.click(layersToggle);
+  expect(width(screen.getByRole('separator', { name: 'feature.design.resizeLayers' }))).toBe(resizedLayers);
+});
 
 it('commits a closed pen path once and saves a node drag without moving its other anchors', async () => {
   const { commit, read } = await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'pen', rootIds: [], nodes: {} });
@@ -132,9 +79,8 @@ it('commits a closed pen path once and saves a node drag without moving its othe
 
   fireEvent.click(screen.getByRole('button', { name: 'feature.design.tool.pen' }));
   place(78, 80);
-  place(108, 80, point(120, 96));
-  expect(commit).not.toHaveBeenCalled();
   fireEvent.keyDown(canvas, { key: 'Escape' });
+  expect(commit).not.toHaveBeenCalled();
   expect((await read()).document.rootIds).toEqual([]);
 
   place(78, 80);
@@ -153,7 +99,7 @@ it('commits a closed pen path once and saves a node drag without moving its othe
   }
   const before = await readPath();
   const beforeDrawing = drawing.paths.get(id);
-  expect(before.geometry.closed).toBe(true);
+  expect(before).toMatchObject({ fills: undefined, strokes: [{ color: '#000000', width: 1 }], geometry: { closed: true } });
   expect(before.geometry.anchors).toHaveLength(3);
   expect(before.geometry.anchors[1]).toMatchObject({ incoming: expect.any(Object), outgoing: expect.any(Object) });
 
@@ -179,37 +125,51 @@ it('commits a closed pen path once and saves a node drag without moving its othe
   await waitFor(async () => expect(await readPath()).toEqual(before));
   expect(commit).toHaveBeenCalledTimes(2);
 
-  fireEvent.click(screen.getByRole('button', { name: 'feature.design.tool.pen' }));
-  place(150, 80);
-  place(180, 100);
-  fireEvent.keyDown(canvas, { key: 'Enter' });
-  await waitFor(async () => {
+  for (const [index, key] of ['Enter', 'Escape'].entries()) {
+    fireEvent.click(screen.getByRole('button', { name: 'feature.design.tool.pen' }));
+    place(150, 80);
+    place(180, 100);
+    fireEvent.pointerMove(canvas, point(202, 118));
+    await act(async () => { fireEvent.keyDown(canvas, { key }); });
     const { document } = await read();
-    expect(document.nodes[document.rootIds[1]]).toMatchObject({ kind: 'vector', geometry: { kind: 'path', closed: false } });
-  });
-  expect(commit).toHaveBeenCalledTimes(3);
+    expect(document.nodes[document.rootIds[index + 1]]).toMatchObject({ kind: 'vector',
+      geometry: { kind: 'path', closed: false, anchors: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      strokes: [{ color: '#000000', width: 1 }] });
+  }
+  expect(commit).toHaveBeenCalledTimes(4);
 });
 
 it('saves polygon sides and can scroll, search, insert and replace a Lucide icon', async () => {
   const { commit, read } = await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'vectors', rootIds: [], nodes: {} });
   const canvas = await screen.findByRole<HTMLDivElement>('region', { name: 'feature.design.canvas' });
   canvas.setPointerCapture = () => undefined;
-  fireEvent.click(screen.getByRole('button', { name: 'feature.design.tool.polygon' }));
+  const user = userEvent.setup();
+  screen.getByRole('button', { name: 'feature.design.shapeTools' }).focus();
+  await user.keyboard('{Enter}');
+  (await screen.findByRole('menuitem', { name: 'feature.design.tool.polygon' })).focus();
+  await user.keyboard('{Enter}');
+  expect(canvas.ownerDocument.activeElement).toBe(canvas);
+  await user.keyboard('v');
+  expect(canvas.dataset.tool).toBe('select');
+  await user.click(screen.getByRole('button', { name: 'feature.design.tool.polygon' }));
   fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 78, clientY: 80 });
   fireEvent.pointerMove(canvas, { pointerId: 1, button: 0, clientX: 138, clientY: 130 });
   expect(commit).not.toHaveBeenCalled();
   fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX: 138, clientY: 130 });
   const sides = await screen.findByRole('spinbutton', { name: 'feature.design.polygonSides' });
   const [polygon] = (await read()).document.rootIds;
-  expect((await read()).document.nodes[polygon]).toMatchObject({ width: 60, height: 50, geometry: { kind: 'polygon', sides: 5 } });
+  expect((await read()).document.nodes[polygon]).toMatchObject({ width: 60, height: 50, fills: undefined,
+    geometry: { kind: 'polygon', sides: 5 }, strokes: [{ color: '#000000', width: 1 }] });
   sides.focus();
   fireEvent.change(sides, { target: { value: '7' } });
   fireEvent.keyDown(sides, { key: 'Enter' });
   await waitFor(async () => expect((await read()).document.nodes[polygon]).toMatchObject({ geometry: { kind: 'polygon', sides: 7 } }));
 
-  const icons = screen.getByRole<HTMLButtonElement>('button', { name: 'feature.design.addIcon' });
-  await waitFor(() => expect(icons.disabled).toBe(false));
-  fireEvent.click(icons);
+  const library = screen.getByRole<HTMLButtonElement>('button', { name: 'feature.design.library' });
+  await waitFor(() => expect(library.disabled).toBe(false));
+  fireEvent.click(library);
+  expect(fireEvent.keyDown(screen.getByRole('dialog', { name: 'feature.design.library' }), { key: 'Delete' })).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'feature.design.addIcon' }));
   const picker = screen.getByRole('dialog', { name: 'feature.design.addIcon' });
   await within(picker).findByRole('button', { name: 'feature.design.icon.heart' });
   const grid = within(picker).getByRole('group', { name: 'feature.design.icon' });
@@ -221,11 +181,11 @@ it('saves polygon sides and can scroll, search, insert and replace a Lucide icon
   const rocket = await within(picker).findByRole<HTMLButtonElement>('button', { name: 'rocket' });
   await waitFor(() => expect(rocket.disabled).toBe(false));
   fireEvent.click(rocket);
-  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await waitFor(() => expect(picker.isConnected).toBe(false));
   const { document } = await read();
   const iconId = document.rootIds[1];
   const inserted = document.nodes[iconId];
-  expect(inserted).toMatchObject({ kind: 'vector', geometry: { kind: 'svg', icon: 'rocket' }, strokes: [{ width: 2 }] });
+  expect(inserted).toMatchObject({ kind: 'vector', geometry: { kind: 'svg', icon: 'rocket' }, strokes: [{ width: 1 }] });
   expect(commit).toHaveBeenCalledTimes(3);
 
   fireEvent.click(await screen.findByRole('button', { name: 'feature.design.changeIcon' }));
@@ -242,6 +202,53 @@ it('saves polygon sides and can scroll, search, insert and replace a Lucide icon
   await waitFor(() => expect(changer.isConnected).toBe(false));
   fireEvent.click(screen.getByRole('button', { name: 'feature.design.undo' }));
   await waitFor(async () => expect((await read()).document.nodes[iconId]).toEqual(inserted));
+});
+
+it('duplicates a layer and deletes the selected copy from the layer actions menu', async () => {
+  const { read } = await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'layer-actions', rootIds: ['tile'],
+    nodes: { tile: { kind: 'rectangle', name: 'Tile', x: 0, y: 0, width: 20, height: 20, cornerRadius: 0 } } });
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Tile' }));
+  const menu = () => screen.getByRole('button', { name: 'feature.design.layerActions' });
+
+  await user.click(menu());
+  await user.click(await screen.findByRole('menuitem', { name: 'feature.design.duplicate' }));
+  await waitFor(() => expect(number('X').value).toBe('16'));
+  expect((await read()).document.rootIds).toHaveLength(2);
+
+  await user.click(menu());
+  await user.click(await screen.findByRole('menuitem', { name: 'feature.design.delete' }));
+  await waitFor(async () => expect((await read()).document.rootIds).toEqual(['tile']));
+});
+
+it('ungroups a frame wrapper without losing the component or its position and restores the wrapper on undo', async () => {
+  const source: DesignDocument = { schemaVersion: designDocumentVersion, documentId: 'unwrap', rootIds: ['board'], nodes: {
+    board: { kind: 'frame', x: 120, y: 80, width: 500, height: 300, childIds: ['tile', 'main', 'copy'] },
+    tile: { kind: 'rectangle', x: 4, y: 6, width: 10, height: 12, cornerRadius: 0 },
+    main: { kind: 'frame', name: 'Main card', component: true, x: 42, y: 28, width: 100, height: 64, childIds: ['detail'] },
+    detail: { kind: 'rectangle', x: 5, y: 8, width: 20, height: 15, cornerRadius: 0 },
+    copy: { kind: 'frame', instanceOf: 'main', x: 180, y: 28, width: 100, height: 64, childIds: [] },
+  } };
+  const { read } = await mountEditor(source);
+  const user = userEvent.setup();
+  fireEvent.contextMenu(await screen.findByRole('button', { name: 'Main card' }), { clientX: 150, clientY: 90 });
+  await user.click(await screen.findByRole('menuitem', { name: /^feature\.design\.wrapInFrame /u }));
+
+  const wrapper = await screen.findByRole('button', { name: 'feature.design.frame' });
+  const { document: wrapped } = await read();
+  const wrapperId = (wrapped.nodes.board as DesignFrame).childIds[1];
+  expect(wrapped.nodes[wrapperId]).toMatchObject({ kind: 'frame', childIds: ['main'] });
+
+  fireEvent.contextMenu(wrapper, { clientX: 150, clientY: 90 });
+  await user.click(await screen.findByRole('menuitem', { name: /^feature\.design\.ungroup /u }));
+  await waitFor(async () => {
+    const { document } = await read();
+    expect(document.nodes[wrapperId]).toBeUndefined();
+    expect(document.nodes).toMatchObject(source.nodes);
+  });
+
+  await user.click(screen.getByRole('button', { name: 'feature.design.undo' }));
+  await waitFor(async () => expect((await read()).document).toEqual(wrapped));
 });
 
 it('inserts editable SVG files and clipboard content into an artboard without a selection', async () => {
@@ -262,7 +269,7 @@ it('inserts editable SVG files and clipboard content into an artboard without a 
   const picker = screen.getByRole('dialog', { name: 'feature.design.addIcon' });
   const fileInput = picker.querySelector<HTMLInputElement>('input[type=file]')!;
   fireEvent.change(fileInput, { target: { files: [new File([markup], 'badge.svg', { type: 'image/svg+xml' })] } });
-  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await waitFor(() => expect(picker.isConnected).toBe(false));
   expect(await children()).toMatchObject([{
     kind: 'vector', name: 'badge', x: 108, y: 78, geometry: { kind: 'svg' }, fills: [{ color: '#6f65bf' }], strokes: [{ color: '#223344', width: 2 }],
   }]);
@@ -290,19 +297,6 @@ it('inserts editable SVG files and clipboard content into an artboard without a 
   expect(importImage).not.toHaveBeenCalled();
   expect(commit).toHaveBeenCalledTimes(4);
 });
-
-function layerTransfer() {
-  const dataTransfer = new DataTransfer();
-  vi.spyOn(dataTransfer, 'setDragImage').mockImplementation(() => {});
-  return dataTransfer;
-}
-
-function layerDragEvent(type: 'dragstart' | 'dragover' | 'dragleave' | 'dragend' | 'drop', target: HTMLElement, dataTransfer: DataTransfer, point: Point) {
-  // happy-dom omits mouse coordinates from DragEvent.
-  const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: point.x, clientY: point.y });
-  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
-  return fireEvent(target, event);
-}
 
 it.each([
   { direction: 'out of', into: false, y: 101, rootIds: ['target', 'shape'], childIds: ['child'] },
@@ -755,11 +749,10 @@ it('moves the image crop and its inspector values together, with cancellation an
   await waitFor(() => expect(undo.disabled).toBe(true));
   assertCrop(50, 20);
 
-  fireEvent.click(screen.getByRole('button', { name: 'feature.design.replaceImage' }));
-  const dialog = screen.getByRole('dialog', { name: 'feature.design.replaceImage' });
-  fireEvent.change(within(dialog).getByRole('textbox', { name: 'feature.design.imagePath' }), { target: { value: 'new' } });
-  fireEvent.click(await within(dialog).findByRole('button', { name: 'images/new.png' }));
-  const confirm = within(dialog).getByRole<HTMLButtonElement>('button', { name: 'feature.design.replaceImage' });
+  const picker = await openImageReplacement();
+  fireEvent.change(await picker.findByRole('textbox', { name: 'feature.design.imagePath' }), { target: { value: 'new' } });
+  fireEvent.click(await picker.findByRole('button', { name: 'images/new.png' }));
+  const confirm = picker.getByRole<HTMLButtonElement>('button', { name: 'feature.design.replaceImage' });
   await waitFor(() => expect(confirm.disabled).toBe(false));
   expect(commit).toHaveBeenCalledOnce();
   fireEvent.click(confirm);
@@ -780,15 +773,18 @@ it('waits for the picked image to be stored before inserting a layer with its pr
   const { commit, documentRef, read } = await mountEditor({
     schemaVersion: designDocumentVersion, documentId: 'import-image', rootIds: [], nodes: {},
   }, undefined, { readImage, importImage });
-  fireEvent.click(await screen.findByRole('button', { name: 'feature.design.addImage' }));
-  const dialog = screen.getByRole('dialog', { name: 'feature.design.addImage' });
-  const picker = dialog.querySelector<HTMLInputElement>('input[type="file"]')!;
-  const open = vi.spyOn(picker, 'click').mockImplementation(() => {});
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'feature.design.shapeTools' }));
+  (await screen.findByRole('menuitem', { name: 'feature.design.addImage' })).focus();
+  await user.keyboard('{Enter}');
+  const dialog = await screen.findByRole('dialog', { name: 'feature.design.addImage' });
+  const search = within(dialog).getByRole('textbox', { name: 'feature.design.imagePath' });
+  await waitFor(() => expect(search.ownerDocument.activeElement).toBe(search));
+  const file = new File([Uint8Array.from(Buffer.from(base64, 'base64'))], 'photo.png');
+  const clipboardData = new DataTransfer();
+  clipboardData.items.add(file);
   try {
-    fireEvent.click(within(dialog).getByRole('button', { name: 'feature.design.importLocalImage' }));
-    expect(open).toHaveBeenCalledOnce();
-    const file = new File([Uint8Array.from(Buffer.from(base64, 'base64'))], 'photo.png');
-    fireEvent.change(picker, { target: { files: [file] } });
+    fireEvent.paste(search, { clipboardData });
     const insert = within(dialog).getByRole<HTMLButtonElement>('button', { name: 'feature.design.insert' });
     await waitFor(() => expect(insert.disabled).toBe(false));
     expect(importImage).not.toHaveBeenCalled();
@@ -861,16 +857,16 @@ it('routes paste shortcuts to images, image replacement, and copied layers witho
 
   clipboardData = imageClipboard('replacement.png');
   async function previewReplacement() {
-    fireEvent.click(screen.getByRole('button', { name: 'feature.design.replaceImage' }));
-    const picker = screen.getByRole('dialog', { name: 'feature.design.replaceImage' });
-    picker.focus();
-    fireEvent.keyDown(picker, cmdV);
-    const confirm = within(picker).getByRole<HTMLButtonElement>('button', { name: 'feature.design.replaceImage' });
+    const picker = await openImageReplacement();
+    const search = await picker.findByRole('textbox', { name: 'feature.design.imagePath' });
+    search.focus();
+    fireEvent.keyDown(search, cmdV);
+    const confirm = picker.getByRole<HTMLButtonElement>('button', { name: 'feature.design.replaceImage' });
     await waitFor(() => expect(confirm.disabled).toBe(false));
-    return { picker, confirm };
+    return { search, confirm };
   }
-  const { picker } = await previewReplacement();
-  fireEvent.click(within(picker).getByRole('button', { name: 'Close' }));
+  const { search } = await previewReplacement();
+  fireEvent.keyDown(search, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   expect(importImage).toHaveBeenCalledOnce();
   expect(commit).toHaveBeenCalledOnce();

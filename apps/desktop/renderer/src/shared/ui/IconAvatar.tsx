@@ -15,7 +15,7 @@ export function IconAvatar({ Icon, color, className, variant = 'menu' }: Readonl
     <span
       className={['desktop-icon-avatar', `desktop-icon-avatar-size--${variant}`, className].filter(Boolean).join(' ')}
       aria-hidden="true"
-      style={{ '--desktop-icon-avatar-color': iconColorCssValue(color) } as CSSProperties}
+      style={color === 'text' ? undefined : { '--desktop-icon-avatar-color': iconColorCssValue(color) } as CSSProperties}
     >
       <Icon strokeWidth={1.9} />
     </span>

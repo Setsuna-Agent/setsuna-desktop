@@ -29,7 +29,7 @@ type DesktopNavigationOptions = {
   resetProjectWorkspaceState: () => void;
   resetThreadWorkspacePanels: (threadId: string) => void;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
-  setActiveView: Dispatch<SetStateAction<MainView>>;
+  setActiveView(view: MainView): void;
   setCurrentThread: Dispatch<SetStateAction<RuntimeThread | null>>;
   setNewThreadDraftId?: (draftId: string | null) => void;
   setProjects: Dispatch<SetStateAction<WorkspaceProject[]>>;

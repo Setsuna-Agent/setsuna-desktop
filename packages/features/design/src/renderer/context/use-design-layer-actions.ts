@@ -1,16 +1,17 @@
 import { useRef } from 'react';
+import type { Yoga } from 'yoga-layout/load';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { useToast } from '@setsuna-desktop/renderer-ui';
-import { designLayerImagePaths } from '../design-images.js';
-import type { DesignDocument, DesignDocumentRef, DesignEdit, DesignFrame } from '../../contracts/index.js';
+import { designLayerImagePaths, designLayerShaderPaths, type DesignDocument, type DesignDocumentRef, type DesignEdit, type DesignFrame } from '../../contracts/index.js';
 import type { DesignAssets } from '../client.js';
+import { previewDesignNode, type InspectorFieldEdits } from '../inspector/design-inspector-edit.js';
 import type { ComponentActions } from '../components/DesignComponentActions.js';
-import { containsDesignLayer, detachDesignInstance } from '../components/design-components.js';
-import { changeDesignVariant, createDesignVariant, designComponentDefinitions, designComponentVariants } from '../components/design-library.js';
+import { detachDesignInstance } from '../components/design-components.js';
+import { changeDesignVariant, createDesignVariant, designComponentDefinitions, designComponentVariants, planDesignComponentInsertion } from '../components/design-library.js';
 import { designResourceNode, linkedDesignPath, type DesignLibraryResources } from '../components/design-library-resources.js';
 import { canGroupDesignLayers, changeDesignLayout, groupDesignLayers, orderDesignBranches, selectedBranches, ungroupDesignLayer } from '../design-canvas-edits.js';
 import { toWorld, unionBounds, type Bounds, type Point } from '../design-geometry.js';
-import { centerDesignLayer, resolveDesignInsertion } from '../design-insertion.js';
+import { resolveDesignInsertion } from '../design-insertion.js';
 import type { DesignScene } from '../design-layout.js';
 import { copyDesignBranches, designClipboardSharesRoot, parseDesignClipboard, pasteDesignBranches } from './design-layer-clipboard.js';
 import { canContainDesignLayers, defaultDesignAutoLayout, restackDesignLayers, type DesignLayerActions } from './design-layer-commands.js';
@@ -18,11 +19,12 @@ import { isClosedDesignShape } from '../vectors/design-shape-outline.js';
 
 export type DesignLayerMenuTarget = Readonly<{ id: string | null; point: Point; world?: Point }>;
 
-export function useDesignLayerActions({ document, projected, resources, scene, selectedIds, documentRef, output, getInsertionArea, onSelect, onLocate, onOpenLibrary, commit, translate: t }: Readonly<{
+export function useDesignLayerActions({ document, projected, resources, scene, layoutEngine, selectedIds, documentRef, output, getInsertionArea, onSelect, onLocate, onOpenLibrary, commit, fieldEdits, translate: t }: Readonly<{
   document: DesignDocument;
   projected: DesignDocument;
   resources: DesignLibraryResources;
   scene: DesignScene;
+  layoutEngine: Yoga;
   selectedIds: readonly string[];
   documentRef: DesignDocumentRef;
   output: DesignAssets['output'];
@@ -31,6 +33,7 @@ export function useDesignLayerActions({ document, projected, resources, scene, s
   onLocate(id: string): void;
   onOpenLibrary?(path: string): void;
   commit(edits: readonly DesignEdit[]): Promise<boolean>;
+  fieldEdits: InspectorFieldEdits;
   translate: RendererTranslate;
 }>) {
   const toast = useToast();
@@ -43,7 +46,7 @@ export function useDesignLayerActions({ document, projected, resources, scene, s
   const branches = selectedBranches(selectedIds, scene);
   const editable = branches.filter((id) => !scene[id].locked);
   const writableFrame = frame && !frame.instanceOf && !selectedBox?.locked ? frame : undefined;
-  const canWrap = canGroupDesignLayers(document, scene, branches);
+  const canWrap = canGroupDesignLayers(projected, scene, branches);
   const canCreate = canWrap && !frame?.component && !frame?.instanceOf;
   const sourceId = frame?.instanceOf;
   const libraryPath = sourceId && linkedDesignPath(document, sourceId);
@@ -57,7 +60,7 @@ export function useDesignLayerActions({ document, projected, resources, scene, s
   }
 
   function wrap(name: string, frameProps?: Pick<DesignFrame, 'component' | 'group' | 'layout' | 'maskId'>) {
-    const { id, edits } = groupDesignLayers(document, scene, branches, name, frameProps);
+    const { id, edits } = groupDesignLayers(document, scene, branches, name, frameProps, projected);
     void apply(edits, [id]);
   }
 
@@ -71,21 +74,13 @@ export function useDesignLayerActions({ document, projected, resources, scene, s
     } else wrap(name, { component: true });
   }
 
-  function insertComponent(sourceId: string) {
-    const source = designResourceNode(document, sourceId, resources);
-    if (source?.kind !== 'frame' || !source.component) return;
-    const sourceBox = scene[sourceId];
-    const anchor = selectedBox?.paintBounds ?? sourceBox?.paintBounds;
-    const size = { width: Math.max(1, sourceBox?.width ?? source.width), height: Math.max(1, sourceBox?.height ?? source.height) };
-    const { parentId, center } = resolveDesignInsertion(document, scene, getInsertionArea() ?? anchor ?? { x: 0, y: 0, ...size }, selectedId,
-      (id) => !containsDesignLayer(document, sourceId, id, resources));
-    const position = parentId || !anchor ? centerDesignLayer(center, size, parentId ? scene[parentId] : undefined)
-      : { x: anchor.x + anchor.width + 24, y: anchor.y };
-    const nodeId = crypto.randomUUID();
-    void commit([{ kind: 'insert', nodeId, parentId, node: {
-      kind: 'frame', name: source.name, childIds: [], instanceOf: sourceId,
-      ...position, ...size,
-    } }]).then((inserted) => { if (inserted) onLocate(nodeId); });
+  async function insertComponent(sourceId: string) {
+    const placement = planDesignComponentInsertion({ document, projected, resources, scene, layoutEngine, sourceId,
+      target: { area: getInsertionArea(), selectedId } });
+    if (!placement) return false;
+    const inserted = await commit(placement.edits);
+    if (inserted) onLocate(placement.id);
+    return inserted;
   }
 
   function detach() {
@@ -132,10 +127,20 @@ export function useDesignLayerActions({ document, projected, resources, scene, s
         return;
       }
       const copied = parseDesignClipboard(content);
-      if (!designClipboardSharesRoot(copied, documentRef)
-        && Object.values(copied.document.nodes).some((item) => designLayerImagePaths(item).length)) {
-        toast.error(t('feature.design.clipboardImageRoot'));
-        return;
+      if (!designClipboardSharesRoot(copied, documentRef)) {
+        const nodes = Object.values(copied.document.nodes);
+        if (nodes.some((item) => item.kind === 'script' && item.scriptPath)) {
+          toast.error(t('feature.design.clipboardScriptRoot'));
+          return;
+        }
+        if (nodes.some((item) => designLayerShaderPaths(item).length)) {
+          toast.error(t('feature.design.clipboardShaderRoot'));
+          return;
+        }
+        if (nodes.some((item) => designLayerImagePaths(item).length)) {
+          toast.error(t('feature.design.clipboardImageRoot'));
+          return;
+        }
       }
       const id = target ? target.id : selectedId;
       const hit = id ? scene[id] : undefined;
@@ -183,7 +188,6 @@ export function useDesignLayerActions({ document, projected, resources, scene, s
   function commands(target?: DesignLayerMenuTarget): DesignLayerActions {
     const targetId = target ? target.id : selectedId;
     const targetParentId = targetId ? scene[targetId]?.parentId : null;
-    const isGroup = Boolean(writableFrame?.group && !writableFrame.component);
     const stack = editable.length > 1 && editable.length === branches.length && canWrap ? orderDesignBranches(document, branches) : [];
     const maskId = stack.at(-1);
     const canCombine = stack.length > 1 && stack.every((id) => scene[id].visible && isClosedDesignShape(document.nodes[id]));
@@ -195,8 +199,8 @@ export function useDesignLayerActions({ document, projected, resources, scene, s
       back: editable.length ? () => { void commit(restackDesignLayers(document, scene, editable, false)); } : undefined,
       group: canWrap ? () => wrap(t('feature.design.group')) : undefined,
       frame: canWrap ? () => wrap(t('feature.design.frame'), {}) : undefined,
-      ungroup: isGroup && selectedId && writableFrame
-        ? () => { void apply(ungroupDesignLayer(document, scene, selectedId, writableFrame), writableFrame.childIds); } : undefined,
+      ungroup: selectedId && writableFrame && !writableFrame.component && (writableFrame.group || writableFrame.childIds.length > 0)
+        ? () => { void apply(ungroupDesignLayer(document, scene, selectedId, writableFrame, projected), writableFrame.childIds); } : undefined,
       addLayout: canWrap && !frame?.instanceOf && !frame?.layout ? () => {
         const layout = defaultDesignAutoLayout(scene, branches);
         if (writableFrame && selectedId) void commit(changeDesignLayout(document, scene, selectedId, writableFrame, layout));
@@ -219,6 +223,9 @@ export function useDesignLayerActions({ document, projected, resources, scene, s
     };
   }
 
+  const previewNode = previewDesignNode(fieldEdits);
+  const variantNode = (id: string | undefined) => selectedId && id && id !== sourceId && !selectedBox?.locked
+    ? changeDesignVariant(document, projected, selectedId, id, resources) : undefined;
   const components: ComponentActions = {
     canCreate, library, sourceId, onCreate: create, onInsert: insertComponent, librarySource: Boolean(libraryPath),
     onLocate: libraryPath ? onOpenLibrary && (() => onOpenLibrary(libraryPath)) : onLocate,
@@ -229,14 +236,15 @@ export function useDesignLayerActions({ document, projected, resources, scene, s
         : commit([{ kind: 'update', nodeId: selectedId, node: { ...writableFrame, variantName: name.trim() || undefined } }]),
     } : undefined,
     variant: frame?.instanceOf && selectedId ? {
+      instanceId: selectedId,
       value: frame.instanceOf,
       items: designComponentVariants(document, frame.instanceOf, resources).map(({ id, node }) =>
         ({ id, name: node.variantName ?? t('feature.design.variant.default') })),
       select: (id) => {
-        if (selectedBox?.locked || id === frame.instanceOf) return;
-        const node = changeDesignVariant(document, projected, selectedId, id, resources);
+        const node = variantNode(id);
         if (node) void commit([{ kind: 'update', nodeId: selectedId, node }]);
       },
+      preview: (id, owner) => previewNode(variantNode(id), owner),
     } : undefined,
   };
   return { commands, components, branches, editable, canWrap };

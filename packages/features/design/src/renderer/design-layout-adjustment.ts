@@ -1,4 +1,5 @@
 import type { DesignDocument, DesignFrame, DesignLayout, DesignNode } from '../contracts/index.js';
+import { bindDesignVariable, designPaddingVariableFields } from '../contracts/design-variables.js';
 import { roundDesignValue, type Point } from './design-geometry.js';
 import { designPadding, participatesInDesignFlow, type DesignScene } from './design-layout.js';
 
@@ -49,15 +50,18 @@ export function adjustFrameLayout(layout: DesignLayout, handle: LayoutHandle, st
   const distance = delta[axis] * (handle === 'right' || handle === 'bottom' ? -1 : 1);
   const value = Math.max(0, roundDesignValue(start + (snap ? Math.round(distance) : distance)));
   if (value === roundDesignValue(start)) return undefined;
+  return { value, layout: withLayoutHandleValue(layout, handle, value) };
+}
+
+export function withLayoutHandleValue(layout: DesignLayout, handle: LayoutHandle, value: number): DesignLayout {
   if (handle === 'gap') {
     // These anchors preserve the position of the distributed content when its gap becomes fixed.
     const justify = layout.justify === 'space-around' ? 'center' : layout.justify === 'space-between' ? 'start' : layout.justify;
-    return { value, layout: { ...layout, gap: value, justify } };
+    return bindDesignVariable({ ...layout, justify }, 'gap', undefined, value);
   }
-  if (!layout.paddingSides) return { value, layout: { ...layout, [axis === 'x' ? 'paddingX' : 'paddingY']: value } };
-  const paddingSides: [number, number, number, number] = [...layout.paddingSides];
-  paddingSides[layoutEdges.indexOf(handle)] = value;
-  return { value, layout: { ...layout, paddingSides } };
+  const field = layout.paddingSides ? designPaddingVariableFields[layoutEdges.indexOf(handle)]
+    : layoutHandleAxis(layout, handle) === 'x' ? 'paddingX' : 'paddingY';
+  return bindDesignVariable(layout, field, undefined, value);
 }
 
 export function layoutHandleValue(layout: DesignLayout, handle: Exclude<LayoutHandle, 'gap'>) {

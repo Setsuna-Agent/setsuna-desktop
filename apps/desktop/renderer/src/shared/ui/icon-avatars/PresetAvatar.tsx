@@ -20,5 +20,5 @@ export function PresetAvatar({ avatar, color, className, variant = 'menu', prese
   // Saved choices from the shared catalog remain readable when a feature supplies its own presets.
   const matches = (item: IconAvatarPreset) => avatar.type === 'preset' && item.key === avatar.key;
   const preset = presets.find(matches) ?? ICON_AVATAR_PRESETS.find(matches) ?? presets[0] ?? ICON_AVATAR_PRESETS[0];
-  return <IconAvatar Icon={preset.Icon} color={color ?? preset.color} className={className} variant={variant} />;
+  return <IconAvatar Icon={preset.Icon} color={color ?? 'text'} className={className} variant={variant} />;
 }

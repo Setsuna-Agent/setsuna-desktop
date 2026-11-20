@@ -23,7 +23,7 @@ export function isClosedDesignShape(node: DesignNode | undefined): boolean {
 export function designShapeOutline(node: DesignNode, width: number, height: number): readonly DesignSvgPath[] {
   if (width <= 0 || height <= 0) return [];
   if (node.kind === 'vector') {
-    const shape = designVectorShape(node.geometry, width, height);
+    const shape = designVectorShape(node, width, height);
     const view = new Transform().scale(shape.scaleX, shape.scaleY).translate(-shape.viewBox.x, -shape.viewBox.y);
     return shape.paths.map((path) => ({ ...path, transform: combine(view, path.transform) }));
   }

@@ -1,0 +1,199 @@
+.sd-color-picker.design-paint-picker {
+  --design-control: color-mix(in srgb, var(--app-surface) 91%, var(--app-text));
+  --design-line: color-mix(in srgb, var(--app-text) 12%, transparent);
+  --design-accent: var(--app-primary);
+  --design-ink: var(--app-primary);
+  container: design-inspector / inline-size;
+  width: min(280px, calc(100vw - 24px));
+  max-height: min(540px, var(--radix-popover-content-available-height, 80vh));
+  padding: 10px;
+  overflow: hidden auto;
+  font-size: 12px;
+}
+
+.design-paint-picker__body {
+  --design-inspector-control-height: 26px;
+  --design-inspector-control-radius: 6px;
+  --design-inspector-gap: 4px;
+  --design-inspector-icon-size: 22px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.design-paint-picker__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.design-paint-picker__header > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.design-paint-picker .sd-color-picker__formats .sd-select-field {
+  width: auto;
+  min-height: var(--sd-color-picker-field-height);
+}
+
+.design-paint-picker__image,
+.design-shader-fields {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.design-shader-fields .design-inspector__group {
+  min-width: 0;
+}
+
+.design-shader-fields__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--design-inspector-gap);
+}
+
+.sd-popover.design-inspector-picker.design-shader-library {
+  max-height: min(480px, calc(var(--radix-popover-content-available-height, 70vh) * var(--app-page-scale-inverse, 1)));
+}
+
+.design-shader-library .design-image-picker__thumbnail > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.design-paint-picker__source {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.design-paint-picker .sd-select-field.design-paint-picker__blend {
+  --design-control: transparent;
+  --design-inspector-focus: transparent;
+  align-self: stretch;
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+  color: var(--app-text-secondary);
+}
+
+.design-paint-picker .design-paint-picker__blend:is(:hover, :focus-visible, .is-open):not(:disabled) {
+  color: var(--app-text);
+}
+
+.design-paint-picker__blend .sd-select-field__chevron {
+  display: none;
+}
+
+.design-paint-picker__blend .sd-select-field__value {
+  display: grid;
+  place-items: center;
+}
+
+.design-paint-picker__image-preview {
+  width: 100%;
+  height: 94px;
+  border-radius: 7px;
+  background: var(--design-control);
+  object-fit: contain;
+}
+
+.design-paint-picker__source input {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.design-gradient-fields,
+.design-gradient-stops {
+  display: grid;
+  min-width: 0;
+  gap: var(--design-inspector-gap);
+}
+
+.design-gradient-fields__toolbar,
+.design-gradient-stops__header {
+  display: flex;
+  align-items: center;
+  gap: var(--design-inspector-gap);
+}
+
+.design-gradient-fields__toolbar > .sd-select-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.design-gradient-fields__toolbar > .design-inspector__field {
+  flex: 0 0 58px;
+}
+
+.design-gradient-stops__header {
+  justify-content: space-between;
+  color: var(--app-text);
+  font-weight: 500;
+}
+
+.design-gradient-fields .sd-icon-button:not(.sd-color-picker__trigger) {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+}
+
+.design-gradient-fields :is(.design-gradient-fields__toolbar, .design-gradient-stops__header, .design-gradient-stop) > .sd-icon-button {
+  width: var(--design-inspector-icon-size);
+  height: var(--design-inspector-icon-size);
+}
+
+.design-gradient-stop {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr) var(--design-inspector-icon-size);
+  gap: var(--design-inspector-gap);
+  align-items: center;
+}
+
+.design-gradient-stop > .design-inspector__field,
+.design-gradient-fields__toolbar > .design-inspector__field {
+  gap: 2px;
+  padding-inline: 5px;
+}
+
+.design-gradient-stop > .design-inspector__field .sd-field,
+.design-gradient-fields__toolbar > .design-inspector__field .sd-field {
+  text-align: end;
+}
+
+.design-gradient-stop[data-selected] > .design-inspector__field {
+  background-color: var(--design-inspector-focus);
+}
+
+.design-gradient-track {
+  position: relative;
+  height: 16px;
+  margin: 6px 8px 4px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--design-line);
+  background: var(--design-gradient), repeating-conic-gradient(#888 0% 25%, #ddd 0% 50%) 0 0 / 8px 8px;
+}
+
+.design-gradient-track__stop {
+  position: absolute;
+  inset-block-start: 50%;
+  width: 16px;
+  height: 18px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--app-surface);
+  border-radius: 5px;
+  box-shadow: 0 0 0 1px var(--design-line), 0 1px 3px rgb(0 0 0 / 18%);
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.design-gradient-track__stop:is([data-selected], :focus-visible, :active, :hover) {
+  z-index: 1;
+  box-shadow: 0 0 0 2px var(--app-primary);
+}

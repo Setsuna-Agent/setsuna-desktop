@@ -1,225 +1,322 @@
-import { Unlink2 } from 'lucide-react';
+import { Contrast, SquareDashed, Unlink2 } from 'lucide-react';
 import { useContext, useState, type ReactNode } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Checkbox, ColorPicker, IconButton, SelectField, type PickerColor } from '@setsuna-desktop/renderer-ui';
-import { designFrameFill, designTextFill, maxDesignFills, maxDesignStrokes, resolveDesignNodeStyles, type DesignFill, type DesignFrame,
-  type DesignNode, type DesignRectangle, type DesignStroke } from '../../contracts/index.js';
-import { designPaintPopoverPosition, InspectorSection, NumberField, PaintHexField, PaintToggle, QuadFields, VisibilityButton } from './DesignInspectorFields.js';
-import { designFills } from '../design-paint.js';
+import { designColorWithAlpha, designDefaultColor, splitDesignColor } from '../../contracts/design-color.js';
+import { maxDesignFills, maxDesignStrokes, type DesignFill, type DesignNode, type DesignPaint, type DesignStroke } from '../../contracts/index.js';
+import { resolveDesignPaintStyles } from '../../contracts/design-styles.js';
+import { bindDesignVariable, designCornerVariableFields, resolveDesignVariableTarget } from '../../contracts/design-variables.js';
+import { designInspectorPopoverPosition, InspectorGroup, InspectorSection, PaintToggle, VisibilityButton } from './DesignInspectorFields.js';
+import { PaintField, ReadOnlyPaintSwatch } from './DesignPaintField.js';
+import type { Bounds } from '../design-geometry.js';
+import { defaultDesignStroke, defaultDesignStrokeJoin, designFills, hasDesignCorners } from '../design-paint.js';
 import { DesignPaintStack } from './DesignPaintStack.js';
-import { DesignFillPicker, type DesignFillAssets } from './DesignFillPicker.js';
-import { DesignStyleContext, DesignStyleSelect } from '../styles/DesignStyleSelect.js';
+import { DesignPaintPicker, type DesignPaintAssets, type GradientControls } from './DesignPaintPicker.js';
+import { designGradientPaintSpace, type DesignGradientTarget } from '../styles/design-gradient-geometry.js';
+import { designGradientFor } from '../styles/DesignGradientSession.js';
+import { designColorStyle, DesignStyleContext, DesignStyleSelect, type DesignStyleChoice } from '../styles/DesignStyleSelect.js';
+import { DesignVariableField, VariableNumberField } from '../styles/DesignVariableField.js';
+import { bindDesignNumber, bindDesignText, bindDesignValue, designOptionEdits, previewDesignNode, type InspectorFieldEdits } from './design-inspector-edit.js';
 
 const strokeAlignments = ['inside', 'center', 'outside'] as const;
 const strokeJoins = ['miter', 'round', 'bevel'] as const;
 type SaveNode = (node: DesignNode) => Promise<boolean>;
+type EditPaint<T> = (node: DesignNode, apply: (paint: T) => T) => DesignNode;
 type PaintCallbacks = Readonly<{
   onSave: SaveNode;
   onPaintPreview(node: DesignNode | undefined): void;
+  fieldEdits: InspectorFieldEdits;
 }>;
-type PaintValue = Readonly<{ color: string; styleId?: string; opacity?: number; hidden?: boolean }>;
 type AppearanceFieldsProps = PaintCallbacks & Readonly<{
   node: DesignNode;
+  layer?: Readonly<{ id: string; node: DesignNode; box: Bounds }>;
   disabled: boolean;
+  assets: DesignPaintAssets;
   translate: RendererTranslate;
 }>;
 
-export function DesignAppearanceFields({ node, opacity, disabled, onSave, onPaintPreview, translate: t }: AppearanceFieldsProps & Readonly<{
+export function DesignAppearanceFields({ node, layer, opacity, hidden: projectedHidden, disabled, assets, onSave, onPaintPreview, fieldEdits, translate: t }: AppearanceFieldsProps & Readonly<{
   opacity?: number;
+  hidden?: boolean;
 }>) {
-  const { shadow } = node;
   const linked = node.kind === 'frame' && Boolean(node.instanceOf);
+  const cornerNode = !linked && hasDesignCorners(node) ? node : undefined;
+  const binding = { target: node, disabled, translate: t, onBind: onSave, onBindPreview: previewDesignNode(fieldEdits) };
+  const opacityLabel = t('feature.design.opacity');
+  const paintProps = { node, layer, assets, disabled, onSave, onPaintPreview, fieldEdits, translate: t };
 
   return <>
-    <InspectorSection title={t('feature.design.appearance')}
-      action={<VisibilityButton visible={!node.hidden} disabled={disabled}
-        label={t(node.hidden ? 'feature.design.showLayer' : 'feature.design.hideLayer')}
-        onToggle={() => { void onSave({ ...node, hidden: !node.hidden }); }} />}>
-      <NumberField label={t('feature.design.opacity')} prefix="%" value={(opacity ?? node.opacity ?? 1) * 100} min={0} max={100}
-        onSave={(value) => onSave({ ...node, opacity: value / 100 })} />
-      {!linked && (node.kind === 'frame' || node.kind === 'rectangle') ? <CornerFields node={node} disabled={disabled} onSave={onSave} translate={t} /> : null}
-      {!linked && node.kind === 'frame' ? <Checkbox checked={node.clip !== false} disabled={disabled}
-        onChange={(clip) => { void onSave({ ...node, clip }); }}>{t('feature.design.clip')}</Checkbox> : null}
-    </InspectorSection>
-    {!linked ? <DesignStrokeStack node={node} disabled={disabled} translate={t} onSave={onSave} onPaintPreview={onPaintPreview} /> : null}
-    {!linked ? <InspectorSection title={t('feature.design.shadow')}
-      action={shadow ? undefined : <PaintToggle enabled={false} disabled={disabled} label={t('feature.design.addShadow')}
-        onToggle={() => { void onSave({ ...node, shadow: { color: '#171925', blur: 12, x: 0, y: 4 } }); }} />}>
-      {shadow ? <>
-        <PaintRow label={t('feature.design.shadow')} value={shadow} defaultOpacity={0.38} disabled={disabled} translate={t}
-          actions={<PaintToggle enabled disabled={disabled} label={t('feature.design.removeShadow')}
-            onToggle={() => { void onSave({ ...node, shadow: undefined }); }} />}
-          withPaint={(next) => ({ ...node, shadow: next })} onSave={onSave} onPaintPreview={onPaintPreview} />
-        <div className="design-inspector__pair">
-          <NumberField label="X" value={shadow.x} onSave={(x) => onSave({ ...node, shadow: { ...shadow, x } })} />
-          <NumberField label="Y" value={shadow.y} onSave={(y) => onSave({ ...node, shadow: { ...shadow, y } })} />
+    <InspectorSection title={t('feature.design.appearance')}>
+      <InspectorGroup title={opacityLabel}>
+        <div className="design-inspector__paired-control">
+          <VariableNumberField {...binding} field="opacity" factor={100} label={opacityLabel} prefix={<Contrast size={12} />} suffix="%"
+            value={(opacity ?? node.opacity ?? 1) * 100} min={0} max={100} sliderMax={100}
+            {...bindDesignNumber(fieldEdits, (current, value) => ({ ...current, opacity: value / 100 }))} />
+          <DesignVariableField {...binding} field="hidden" label={t('feature.design.hideLayer')}>
+            {(value, bound) => {
+              const hidden = Boolean(value ?? projectedHidden ?? node.hidden);
+              return <VisibilityButton visible={!hidden} disabled={disabled || bound}
+                label={t(hidden ? 'feature.design.showLayer' : 'feature.design.hideLayer')}
+                onToggle={() => { void onSave({ ...node, hidden: !hidden }); }} />;
+            }}
+          </DesignVariableField>
         </div>
-        <NumberField label={t('feature.design.blur')} value={shadow.blur} min={0}
-          onSave={(blur) => onSave({ ...node, shadow: { ...shadow, blur } })} />
-      </> : null}
-    </InspectorSection> : null}
+      </InspectorGroup>
+      {cornerNode ? <InspectorGroup title={t('feature.design.cornerRadius')}>
+        <CornerFields node={cornerNode} box={layer?.box} disabled={disabled} onSave={onSave} fieldEdits={fieldEdits} translate={t} />
+      </InspectorGroup> : null}
+      {!linked && node.kind === 'frame' ? <DesignVariableField {...binding} target={node} field="clip" label={t('feature.design.clip')}>
+        {(value, bound) => <Checkbox checked={(value ?? node.clip) !== false} disabled={disabled || bound}
+          onChange={(clip) => { void onSave({ ...node, clip }); }}>{t('feature.design.clip')}</Checkbox>}
+      </DesignVariableField> : null}
+    </InspectorSection>
+    <DesignFillFields {...paintProps} />
+    {!linked ? <DesignStrokeStack {...paintProps} /> : null}
   </>;
 }
 
-export function DesignFillFields({ node, disabled, assets, onSave, onPaintPreview, translate: t }: AppearanceFieldsProps & { assets: DesignFillAssets }) {
-  const { styles } = useContext(DesignStyleContext);
+export function DesignEffectFields(props: AppearanceFieldsProps) {
+  const { node, disabled, onSave, fieldEdits, translate: t } = props;
+  if (node.kind === 'frame' && node.instanceOf) return null;
+  const { shadow } = node;
+  const effects = node.kind === 'web' || node.kind === 'script';
+  const shadowLabel = t('feature.design.shadow');
+  const shadowFields = shadow ? <>
+    <PaintRow {...props} label={shadowLabel} value={shadow} defaultOpacity={0.38} assets={undefined}
+      actions={<PaintToggle enabled disabled={disabled} label={t('feature.design.removeShadow')}
+        onToggle={() => { void onSave({ ...node, shadow: undefined }); }} />}
+      editPaint={editShadow} />
+    <ShadowNumberFields shadow={shadow} disabled={disabled} fieldEdits={fieldEdits} translate={t}
+      onSave={(next) => onSave({ ...node, shadow: next })} />
+  </> : null;
+  return <InspectorSection title={effects ? t('feature.design.effects') : shadowLabel}
+    action={shadow ? undefined : <PaintToggle enabled={false} disabled={disabled} label={t('feature.design.addShadow')}
+      onToggle={() => { void onSave({ ...node, shadow: { color: designDefaultColor, blur: 12, x: 0, y: 4 } }); }} />}>
+    {effects && shadowFields ? <InspectorGroup title={shadowLabel}>{shadowFields}</InspectorGroup> : shadowFields}
+  </InspectorSection>;
+}
+
+const editShadow: EditPaint<NonNullable<DesignNode['shadow']>> = (node, apply) => node.shadow ? { ...node, shadow: apply(node.shadow) } : node;
+
+function ShadowNumberFields({ shadow, disabled, onSave, fieldEdits, translate: t }: Readonly<{
+  shadow: NonNullable<DesignNode['shadow']>; disabled: boolean;
+  onSave(shadow: NonNullable<DesignNode['shadow']>): Promise<boolean>; fieldEdits: InspectorFieldEdits; translate: RendererTranslate;
+}>) {
+  const binding = { target: shadow, disabled, onBind: onSave, translate: t,
+    onBindPreview: bindDesignValue(fieldEdits, (node, next: typeof shadow) => editShadow(node, () => next)).onPreview };
+  const bind = (field: 'x' | 'y' | 'blur') => bindDesignNumber(fieldEdits,
+    (node, value) => editShadow(node, (paint) => ({ ...paint, [field]: value })));
+  return <>
+    <div className="design-inspector__pair">
+      {(['x', 'y'] as const).map((field) => <VariableNumberField {...binding} key={field} field={field} label={field.toUpperCase()} value={shadow[field]}
+        {...bind(field)} />)}
+    </div>
+    <VariableNumberField {...binding} field="blur" label={t('feature.design.blur')} value={shadow.blur} min={0}
+      {...bind('blur')} />
+  </>;
+}
+
+function controlsForGradient(layer: AppearanceFieldsProps['layer'], stack: DesignGradientTarget['stack'], index: number): GradientControls | undefined {
+  if (!layer) return;
+  const target = { layerId: layer.id, stack, index };
+  if (!designGradientFor(layer.node, target)) return;
+  return { target, bounds: designGradientPaintSpace(layer.node, layer.box, target).bounds };
+}
+
+function DesignFillFields({ node, layer, disabled, assets, onSave, onPaintPreview, fieldEdits, translate: t }: AppearanceFieldsProps) {
   if (node.kind === 'image' || (node.kind === 'frame' && node.instanceOf)) return null;
   const fills = designFills(node);
-  const resolvedFills = styles ? designFills(resolveDesignNodeStyles(node, styles)) : fills;
   const withFills = (next: readonly DesignFill[]) => ({ ...node, fills: next });
   const save = (next: readonly DesignFill[]) => onSave(withFills(next));
   const label = t('feature.design.fill');
   function renderFill(fill: DesignFill, index: number) {
-    const kindLabel = fill.image ? t('feature.design.imageFill') : fill.gradient ? t(`feature.design.fillType.${fill.gradient.kind}`) : undefined;
-    return <PaintRow label={label} value={fill} disabled={disabled} translate={t} kindLabel={kindLabel}
-      withPaint={(next) => withFills(fills.map((current, at) => at === index ? next : current))}
-      onSave={onSave} onPaintPreview={onPaintPreview}
-      renderPicker={({ color, display, preview, save, previewColor, saveColor }) => <DesignFillPicker
-        fill={fill} display={display === fill ? resolvedFills[index] : display} color={color} label={label} disabled={disabled} assets={assets}
-        onColorPreview={previewColor} onColorCommit={saveColor} onPreview={preview} onSave={save} translate={t} />}
+    return <PaintRow label={label} node={node} value={fill} disabled={disabled} translate={t} assets={assets} allowShader
+      gradientControls={controlsForGradient(layer, 'fills', index)}
+      editPaint={(current, apply) => {
+        const stack = designFills(current);
+        return stack[index] ? { ...current, fills: stack.map((paint, at) => at === index ? apply(paint) : paint) } : current;
+      }} onSave={onSave} onPaintPreview={onPaintPreview} fieldEdits={fieldEdits}
       actions={<PaintToggle enabled disabled={disabled} label={t('feature.design.removeFill')}
         onToggle={() => { void save(fills.filter((_, at) => at !== index)); }} />} />;
   }
   return <InspectorSection title={label}
     action={<PaintToggle enabled={false} disabled={disabled || fills.length >= maxDesignFills} label={t('feature.design.addFill')}
-      onToggle={() => {
-        const next = fills.length ? { color: designTextFill, opacity: 0.2 } : { color: node.kind === 'text' ? designTextFill : designFrameFill };
-        void save([...fills, next]);
-      }} />}>
+      onToggle={() => { void save([...fills, { color: designDefaultColor }]); }} />}>
     <DesignPaintStack entries={fills} disabled={disabled} label={t('feature.design.reorderFill')} onSave={save}
       onPreview={(next) => onPaintPreview(next && withFills(next))} renderEntry={renderFill} />
   </InspectorSection>;
 }
 
-function DesignStrokeStack({ node, disabled, onSave, onPaintPreview, translate: t }: AppearanceFieldsProps) {
+function DesignStrokeStack({ node, layer, disabled, assets, onSave, onPaintPreview, fieldEdits, translate: t }: AppearanceFieldsProps) {
   const strokes = node.strokes ?? [];
   const withStrokes = (next: readonly DesignStroke[]) => ({ ...node, strokes: next.length ? next : undefined });
   const save = (next: readonly DesignStroke[]) => onSave(withStrokes(next));
   return <InspectorSection title={t('feature.design.stroke')}
     action={<PaintToggle enabled={false} disabled={disabled || strokes.length >= maxDesignStrokes} label={t('feature.design.addStroke')}
-      onToggle={() => { void save([...strokes, { color: '#171925', width: 1, opacity: strokes.length ? 0.2 : undefined }]); }} />}>
+      onToggle={() => { void save([...strokes, defaultDesignStroke]); }} />}>
     <DesignPaintStack entries={strokes} disabled={disabled} label={t('feature.design.reorderStroke')} onSave={save}
       onPreview={(next) => onPaintPreview(next && withStrokes(next))} renderEntry={(stroke, index) => <StrokeFields
-        kind={node.kind} stroke={stroke} disabled={disabled} translate={t} onSave={onSave} onPaintPreview={onPaintPreview}
-        withStroke={(next) => withStrokes(strokes.map((value, at) => at === index ? next : value))}
+        node={node} stroke={stroke} disabled={disabled} assets={assets} translate={t}
+        onSave={onSave} onPaintPreview={onPaintPreview} fieldEdits={fieldEdits}
+        gradientControls={controlsForGradient(layer, 'strokes', index)}
+        editPaint={(current, apply) => {
+          const stack = current.strokes;
+          return stack?.[index] ? { ...current, strokes: stack.map((paint, at) => at === index ? apply(paint) : paint) } : current;
+        }}
         onRemove={() => { void save(strokes.filter((_, at) => at !== index)); }} />} />
   </InspectorSection>;
 }
 
-function CornerFields({ node, disabled, onSave, translate: t }: Readonly<{
-  node: DesignFrame | DesignRectangle;
+function CornerFields({ node, box = node, disabled, onSave, fieldEdits, translate: t }: Readonly<{
+  node: Extract<DesignNode, { kind: 'frame' | 'rectangle' | 'web' }>;
+  box?: Pick<Bounds, 'width' | 'height'>;
   disabled: boolean;
   onSave: SaveNode;
+  fieldEdits: InspectorFieldEdits;
   translate: RendererTranslate;
 }>) {
+  const { styles } = useContext(DesignStyleContext);
   const { cornerRadii, cornerRadius = 0 } = node;
+  const current = resolveDesignVariableTarget(node, styles);
+  const binding = { target: node, disabled, onBind: onSave, translate: t, onBindPreview: previewDesignNode(fieldEdits) };
+  const corners = ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'] as const;
+  const sliderMax = Math.min(200, Math.ceil(Math.min(box.width, box.height) / 2));
   return <div className="design-inspector__paired-control">
-    {cornerRadii ? <QuadFields values={cornerRadii} prefixes={['↖', '↗', '↘', '↙']}
-      labels={[t('feature.design.corner.topLeft'), t('feature.design.corner.topRight'),
-        t('feature.design.corner.bottomRight'), t('feature.design.corner.bottomLeft')]}
-      onSave={(values) => onSave({ ...node, cornerRadii: values })} />
-      : <NumberField label={t('feature.design.cornerRadius')} prefix="◜" value={cornerRadius} min={0}
-        onSave={(value) => onSave({ ...node, cornerRadius: value })} />}
+    {cornerRadii ? <div className="design-inspector__pair">
+      {corners.map((corner, index) => <VariableNumberField {...binding} key={corner} field={designCornerVariableFields[index]}
+        label={t(`feature.design.corner.${corner}`)} prefix={['↖', '↗', '↘', '↙'][index]} value={cornerRadii[index]} min={0}
+        {...bindDesignNumber(fieldEdits, (node, value) => {
+          if (!hasDesignCorners(node) || !node.cornerRadii) return node;
+          const next: [number, number, number, number] = [...node.cornerRadii];
+          next[index] = value;
+          return { ...node, cornerRadii: next };
+        })} />)}
+    </div> : <VariableNumberField {...binding} field="cornerRadius" label={t('feature.design.cornerRadius')} prefix={<SquareDashed size={12} />}
+        value={cornerRadius} min={0} sliderMax={sliderMax}
+        {...bindDesignNumber(fieldEdits, (node, value) => hasDesignCorners(node) ? { ...node, cornerRadius: value } : node)} />}
     <IconButton size="small" label={t(cornerRadii ? 'feature.design.corner.uniform' : 'feature.design.corner.independent')}
       disabled={disabled} aria-pressed={Boolean(cornerRadii)} onClick={() => {
-        void onSave(cornerRadii ? { ...node, cornerRadius: cornerRadii[0], cornerRadii: undefined }
-          : { ...node, cornerRadii: [cornerRadius, cornerRadius, cornerRadius, cornerRadius] });
+        if (cornerRadii) {
+          const id = node.variableIds?.[designCornerVariableFields[0]];
+          const shared = designCornerVariableFields.every((field) => node.variableIds?.[field] === id) ? id : undefined;
+          const next = designCornerVariableFields.reduce((value, field) => bindDesignVariable(value, field, undefined), node);
+          void onSave(bindDesignVariable({ ...next, cornerRadii: undefined }, 'cornerRadius', shared, current.cornerRadii?.[0] ?? cornerRadii[0]));
+        } else {
+          const next = bindDesignVariable({ ...node, cornerRadii: [cornerRadius, cornerRadius, cornerRadius, cornerRadius] as const }, 'cornerRadius', undefined);
+          void onSave(designCornerVariableFields.reduce((value, field) => bindDesignVariable(value, field, node.variableIds?.cornerRadius), next));
+        }
       }}><Unlink2 size={15} /></IconButton>
   </div>;
 }
 
-function StrokeFields({ kind, stroke, disabled, onSave, onPaintPreview, withStroke, onRemove, translate: t }: PaintCallbacks & Readonly<{
-  kind: DesignNode['kind'];
+function StrokeFields({ node, stroke, disabled, assets, gradientControls, onSave, onPaintPreview, fieldEdits, editPaint, onRemove, translate: t }: PaintCallbacks & Readonly<{
+  node: DesignNode;
   stroke: DesignStroke;
   disabled: boolean;
-  withStroke(stroke: DesignStroke): DesignNode;
+  assets: DesignPaintAssets;
+  gradientControls?: GradientControls;
+  editPaint: EditPaint<DesignStroke>;
   onRemove(): void;
   translate: RendererTranslate;
 }>) {
-  const canAlignStroke = kind !== 'text' && kind !== 'vector';
-  const save = (next: DesignStroke) => onSave(withStroke(next));
+  const canAlignStroke = node.kind !== 'text' && node.kind !== 'vector';
+  const save = (next: DesignStroke) => onSave(editPaint(node, () => next));
+  const previewBinding = bindDesignValue(fieldEdits, (node, next: DesignStroke) => editPaint(node, () => next)).onPreview;
   return <>
-    <PaintRow label={t('feature.design.stroke')} value={stroke} disabled={disabled} translate={t}
+    <PaintRow label={t('feature.design.stroke')} node={node} value={stroke} disabled={disabled} translate={t} assets={assets} gradientControls={gradientControls}
       actions={<PaintToggle enabled disabled={disabled} label={t('feature.design.removeStroke')} onToggle={onRemove} />}
-      withPaint={withStroke} onSave={onSave} onPaintPreview={onPaintPreview} />
+      editPaint={editPaint} onSave={onSave} onPaintPreview={onPaintPreview} fieldEdits={fieldEdits} />
     <div className="design-inspector__stroke-options">
       {canAlignStroke ? <SelectField aria-label={t('feature.design.strokeAlignment')} title={t('feature.design.strokeAlignment')}
-        value={stroke.alignment ?? 'center'} disabled={disabled} onValueChange={(value) => {
-          const alignment = strokeAlignments.find((option) => option === value);
-          if (alignment) void save({ ...stroke, alignment });
-        }}>
+        value={stroke.alignment ?? 'center'} disabled={disabled}
+        {...designOptionEdits(strokeAlignments, bindDesignValue(fieldEdits,
+          (node, alignment) => editPaint(node, (current) => ({ ...current, alignment }))))}>
         {strokeAlignments.map((option) => <option key={option} value={option}>{t(`feature.design.strokeAlignment.${option}`)}</option>)}
       </SelectField> : null}
-      <NumberField label={t('feature.design.strokeWidth')} prefix="W" value={stroke.width} min={0.01}
-        onSave={(width) => save({ ...stroke, width })} />
-      {kind !== 'ellipse' ? <SelectField aria-label={t('feature.design.strokeJoin')} title={t('feature.design.strokeJoin')}
-        value={stroke.join ?? (kind === 'vector' ? 'round' : 'miter')} disabled={disabled} onValueChange={(value) => {
-          const join = strokeJoins.find((option) => option === value);
-          if (join) void save({ ...stroke, join });
-        }}>
+      <VariableNumberField target={stroke} field="width" disabled={disabled} onBind={save} onBindPreview={previewBinding} translate={t}
+        label={t('feature.design.strokeWidth')} prefix="W" value={stroke.width} min={0.01}
+        {...bindDesignNumber(fieldEdits, (node, width) => editPaint(node, (current) => ({ ...current, width })))} />
+      {node.kind !== 'ellipse' ? <SelectField aria-label={t('feature.design.strokeJoin')} title={t('feature.design.strokeJoin')}
+        value={stroke.join ?? defaultDesignStrokeJoin(node)} disabled={disabled}
+        {...designOptionEdits(strokeJoins, bindDesignValue(fieldEdits, (node, join) => editPaint(node, (current) => ({ ...current, join }))))}>
         {strokeJoins.map((option) => <option key={option} value={option}>{t(`feature.design.strokeJoin.${option}`)}</option>)}
       </SelectField> : null}
     </div>
   </>;
 }
 
-type PaintPicker<T> = Readonly<{
-  color: string; display: T;
-  preview(next: T | undefined): void;
-  save(next: T): Promise<boolean>;
-  previewColor(paint: PickerColor | undefined): void;
-  saveColor(paint: PickerColor): Promise<boolean>;
-}>;
-
-function PaintRow<T extends PaintValue>({ label, value, defaultOpacity = 1, disabled, withPaint, onSave, onPaintPreview, actions,
-  kindLabel, renderPicker, translate: t }: PaintCallbacks & Readonly<{
+function PaintRow<T extends DesignPaint>({ label, node, value, defaultOpacity = 1, disabled, editPaint, onSave, onPaintPreview, fieldEdits, actions,
+  assets, gradientControls, allowShader, translate: t }: PaintCallbacks & Readonly<{
   label: string;
+  node: DesignNode;
   value: T;
   defaultOpacity?: number;
   disabled: boolean;
-  withPaint(value: T): DesignNode;
+  editPaint: EditPaint<T>;
   actions: ReactNode;
-  kindLabel?: string;
-  renderPicker?(props: PaintPicker<T>): ReactNode;
+  assets?: DesignPaintAssets;
+  allowShader?: boolean;
+  gradientControls?: GradientControls;
   translate: RendererTranslate;
 }>) {
   const { styles } = useContext(DesignStyleContext);
-  const [draft, setDraft] = useState<{ source: T; paint: T }>();
-  const shared = value.styleId && styles && Object.hasOwn(styles, value.styleId) ? styles[value.styleId] : undefined;
-  const color = shared?.kind === 'color' ? shared.color : value.color;
-  const opacity = value.opacity ?? defaultOpacity;
-  const previewPaint = draft?.source === value ? draft.paint : undefined;
+  const [draft, setDraft] = useState<{ source: T; paint: T; owner?: string }>();
+  const shared = designColorStyle(styles, value.styleId);
+  const color = shared?.color ?? value.color;
+  const kindLabel = value.shader?.assetPath.split('/').at(-1)
+    ?? (value.image ? t('feature.design.image') : value.gradient ? t(`feature.design.fillType.${value.gradient.kind}`) : undefined);
+  const sourceName = !kindLabel && value.styleId ? shared?.name ?? t('feature.design.unavailableStyle') : undefined;
+  const opacity = resolveDesignVariableTarget(value, styles).opacity ?? defaultOpacity;
+  const active = draft?.source === value ? draft : undefined;
+  const previewPaint = active?.paint;
   const previewColorValue = previewPaint?.styleId && previewPaint.styleId === value.styleId ? color : previewPaint?.color;
   const display = previewPaint ? { ...previewPaint, color: previewColorValue ?? color } : value;
+  const displayOpacity = display.opacity !== value.opacity ? display.opacity ?? defaultOpacity : opacity;
+  const withPaint = (next: T) => editPaint(node, () => next);
   const save = (next: T) => onSave(withPaint(next));
+  const previewBinding = bindDesignValue(fieldEdits, (node, paint: T) => editPaint(node, () => paint)).onPreview;
+  function showDraft(next: T | undefined, owner?: string) {
+    setDraft((current) => next ? { source: value, paint: next, owner } : current?.owner === owner ? undefined : current);
+  }
   function preview(next: T | undefined) {
-    setDraft(next ? { source: value, paint: next } : undefined);
+    showDraft(next);
     onPaintPreview(next && withPaint(next));
   }
   function withPickedColor(next: PickerColor): T {
-    const recolored = next.color.toLowerCase() !== color.toLowerCase();
-    return { ...value, opacity: next.opacity === opacity ? value.opacity : next.opacity,
-      ...(recolored ? { color: next.color, styleId: undefined } : undefined) };
+    const base = splitDesignColor(color);
+    const recolored = next.color.toLowerCase() !== base.color.toLowerCase();
+    const paint = recolored ? { ...value, color: designColorWithAlpha(next.color, base.opacity) } : value;
+    return next.opacity === opacity ? paint : bindDesignVariable(paint, 'opacity', undefined, next.opacity);
   }
-  const previewColor = (next: PickerColor | undefined) => preview(next && withPickedColor(next));
-  const saveColor = (next: PickerColor) => save(withPickedColor(next));
+  const previewColor = (next: PickerColor | undefined) => preview(next && sourceName === undefined ? withPickedColor(next) : undefined);
+  const saveColor = (next: PickerColor) => sourceName === undefined ? save(withPickedColor(next)) : Promise.resolve(false);
+  const hexEdits = bindDesignText(fieldEdits, (node, color) => editPaint(node, (paint) => ({ ...paint, color })));
+  const opacityEdits = bindDesignNumber(fieldEdits, (node, opacity) => editPaint(node, (paint) => ({ ...paint, opacity: opacity / 100 })));
+  const colorLink = bindDesignValue(fieldEdits, (node, { id, style }: DesignStyleChoice) =>
+    editPaint(node, (paint) => ({ ...paint, styleId: id, color: style?.kind === 'color' ? style.color : color })));
+  const swatch = assets ? <DesignPaintPicker paint={value} display={resolveDesignPaintStyles({ ...display, opacity: displayOpacity }, styles)}
+    color={color} opacity={opacity} label={label} disabled={disabled} assets={assets} gradientControls={gradientControls} allowShader={allowShader} translate={t}
+    onColorPreview={previewColor} onColorCommit={saveColor} onPreview={preview} onSave={save} />
+    : sourceName !== undefined ? <ReadOnlyPaintSwatch value={color} opacity={displayOpacity} />
+    : <ColorPicker label={label} value={active?.owner ? display.color : color} opacity={active?.owner ? displayOpacity : opacity}
+      disabled={disabled} {...designInspectorPopoverPosition}
+      onColorPreview={previewColor} onColorCommit={saveColor} />;
   return <div className="design-inspector__paint-row">
-    <div className="design-inspector__paint-primary">
-      <div className="design-inspector__paint-controls">
-        {renderPicker ? renderPicker({ color, display, preview, save, previewColor, saveColor })
-          : <ColorPicker label={label} value={color} opacity={opacity} disabled={disabled} {...designPaintPopoverPosition}
-            onColorPreview={previewColor} onColorCommit={saveColor} />}
-        {kindLabel ? <span className="design-inspector__paint-kind" title={kindLabel}>{kindLabel}</span>
-          : <PaintHexField label={label} value={color} disabled={disabled}
-            preview={previewColorValue !== color ? previewColorValue : undefined}
-            onSave={(color) => save({ ...value, color, styleId: undefined })} />}
-        <NumberField label={t('feature.design.paintOpacity', { paint: label })} suffix="%"
-          value={opacity * 100} previewValue={display.opacity !== value.opacity ? (display.opacity ?? defaultOpacity) * 100 : undefined} min={0} max={100}
-          onSave={(opacity) => save({ ...value, opacity: opacity / 100 })} />
-      </div>
-      {!kindLabel ? <DesignStyleSelect kind="color" value={value.styleId} disabled={disabled} compact translate={t}
-        onChange={(styleId, style) => { void save({ ...value, styleId, color: style?.kind === 'color' ? style.color : color }); }} /> : null}
-    </div>
+    <PaintField label={label} value={color} displayName={kindLabel ?? sourceName} swatch={swatch} disabled={disabled}
+      preview={active?.owner || previewColorValue === color ? undefined : previewColorValue} onSave={hexEdits.onSave}
+      onDraft={(color, owner) => {
+        showDraft(color === undefined ? undefined : { ...value, color }, owner);
+        hexEdits.onDraft(color, owner);
+      }}
+      link={!kindLabel ? <DesignStyleSelect kind="color" value={value.styleId} disabled={disabled} compact translate={t}
+        onPreview={colorLink.onPreview} onChange={(choice) => { void colorLink.onSave(choice); }} /> : null}
+      opacityField={<VariableNumberField target={value} field="opacity" disabled={disabled} onBind={save} onBindPreview={previewBinding} translate={t} factor={100}
+        label={t('feature.design.paintOpacity', { paint: label })} suffix="%"
+        value={opacity * 100} previewValue={!active?.owner && displayOpacity !== opacity ? displayOpacity * 100 : undefined} min={0} max={100}
+        onSave={opacityEdits.onSave} onPreview={(opacity, owner) => {
+          showDraft(opacity === undefined ? undefined : { ...value, opacity: opacity / 100 }, owner);
+          opacityEdits.onPreview(opacity, owner);
+        }} />} />
     <div className="design-inspector__paint-actions">
       <VisibilityButton visible={!value.hidden} disabled={disabled}
         label={t(value.hidden ? 'feature.design.showPaint' : 'feature.design.hidePaint', { paint: label })}

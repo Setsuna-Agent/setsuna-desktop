@@ -1,7 +1,9 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { designDocumentVersion } from '@setsuna-desktop/feature-design/contracts';
 import { afterEach, expect, it } from 'vitest';
+import { createDesignWorkspaceFiles } from '../../../src/adapters/workspace/design-workspace-files.js';
 import { FileWorkspaceProjectStore } from '../../../src/adapters/workspace/file-workspace-project-store.js';
 import { systemClock } from '../../../src/ports/clock.js';
 
@@ -33,6 +35,31 @@ it('creates files and folders and preserves nested contents through file and fol
   expect((await store.searchEntries(projectId, '', '')).entries.map((entry) => entry.path)).toEqual(['source']);
   await expect(store.readFile(projectId, 'src/main.ts')).rejects.toThrow();
 });
+
+it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+  'renames an ordinary folder with an unreadable child when a design is bound elsewhere', async () => {
+    const { store, projectId, projectPath, root } = await fixture();
+    const designs = createDesignWorkspaceFiles(store, path.join(root, 'data'));
+    await designs.create({ projectId, name: 'draft.design.json', parentPath: '.' }, JSON.stringify({
+      schemaVersion: designDocumentVersion, documentId: 'draft', rootIds: [], nodes: {},
+    }), new AbortController().signal);
+    const before = path.join(projectPath, 'source', 'locked');
+    const after = path.join(projectPath, 'renamed', 'locked');
+    await mkdir(before, { recursive: true });
+    await writeFile(path.join(before, 'notes.txt'), 'keep');
+    await chmod(before, 0o000);
+    try {
+      await expect(readdir(before)).rejects.toMatchObject({ code: 'EACCES' });
+      await store.renameEntry(projectId, 'source', { name: 'renamed' });
+    } finally {
+      await chmod(before, 0o700).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return chmod(after, 0o700);
+        throw error;
+      });
+    }
+    await expect(readFile(path.join(after, 'notes.txt'), 'utf8')).resolves.toBe('keep');
+  },
+);
 
 it('rejects collisions without changing either entry and supports casing-only renames', async () => {
   const { store, projectId, projectPath } = await fixture();

@@ -1,66 +1,83 @@
-import { ArrowLeft, RotateCcw } from 'lucide-react';
-import { Fragment, useEffect, useId, useMemo, useState } from 'react';
-import { Dialog, IconButton, SelectField, useToast } from '@setsuna-desktop/renderer-ui';
+import { ArrowLeft, RotateCcw, X } from 'lucide-react';
+import { Fragment, useContext, useEffect, useId, useMemo, useState } from 'react';
+import { IconButton, SelectField, useToast } from '@setsuna-desktop/renderer-ui';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { DesignDocument, DesignInteraction } from '../../contracts/index.js';
 import type { DesignScene } from '../design-layout.js';
 import type { LoadDesignImage } from '../design-images.js';
-import { loadExportImages } from '../export/design-export-scene.js';
+import type { CaptureDesignWebImages, DesignWebImages } from '../canvas/use-design-web-previews.js';
+import { designExportFontRequests, loadExportImages, loadExportWebImages, type DesignExportSelection } from '../export/design-export-scene.js';
 import { renderDesignSvg } from '../export/export-design-svg.js';
+import { DesignFontsContext } from '../text/use-design-fonts.js';
 import { designShapeOutline, designTransformMatrix } from '../vectors/design-shape-outline.js';
 import { advanceDesignPrototype, designPrototypeHotspots, type PrototypeState } from './design-prototype.js';
 import './design-prototype.css';
 
-const emptyImages = new Map<string, HTMLImageElement>();
+const emptyAssets = { images: new Map<string, HTMLImageElement>(), fontCss: '' };
 type PreviewProps = Readonly<{
   document: DesignDocument; scene: DesignScene; boards: readonly string[]; start: string;
-  loadImage: LoadDesignImage; onClose(): void; translate: RendererTranslate;
+  loadImage: LoadDesignImage; captureWebImages: CaptureDesignWebImages; onClose(): void; translate: RendererTranslate;
 }>;
 
-export default function DesignPrototypePreview({ document, scene, boards, start, loadImage, onClose, translate: t }: PreviewProps) {
+export default function DesignPrototypePreview({ document, scene, boards, start, loadImage, captureWebImages, onClose, translate: t }: PreviewProps) {
   const [state, setState] = useState<PrototypeState>(() => ({ board: start, history: [], overlays: [] }));
   const reset = (board: string) => setState({ board, history: [], overlays: [] });
   const activate = (interaction: DesignInteraction) => setState((current) => advanceDesignPrototype(current, interaction, boards));
   const board = boards.includes(state.board) ? state.board : boards[0];
   const overlays = state.overlays.filter((id) => boards.includes(id));
   const pages = board ? [board, ...overlays] : [];
-  return <Dialog title={t('feature.design.prototype.preview')} width={1120} onClose={onClose} footer={<div className="design-prototype-controls">
-    <IconButton size="small" label={t('feature.design.prototype.back')} disabled={!state.history.length && !state.overlays.length}
-      onClick={() => activate({ kind: 'back' })}><ArrowLeft size={16} /></IconButton>
-    <SelectField aria-label={t('feature.design.prototype.target')} value={board ?? ''} onValueChange={(id) => { if (id) reset(id); }}>
-      {boards.map((id) => <option value={id} key={id}>{document.nodes[id].name || t('feature.design.artboard')}</option>)}
-    </SelectField>
-    <IconButton size="small" label={t('feature.design.prototype.restart')} onClick={() => reset(start)}><RotateCcw size={15} /></IconButton>
-  </div>}>
+  return <div className="design-tool-popover__content design-prototype-preview">
+    <div className="design-prototype-controls">
+      <IconButton size="small" label={t('feature.design.prototype.back')} disabled={!state.history.length && !state.overlays.length}
+        onClick={() => activate({ kind: 'back' })}><ArrowLeft size={16} /></IconButton>
+      <SelectField aria-label={t('feature.design.prototype.target')} value={board ?? ''} onValueChange={(id) => { if (id) reset(id); }}>
+        {boards.map((id) => <option value={id} key={id}>{document.nodes[id].name || t('feature.design.artboard')}</option>)}
+      </SelectField>
+      <IconButton size="small" label={t('feature.design.prototype.restart')} onClick={() => reset(start)}><RotateCcw size={15} /></IconButton>
+      <IconButton size="small" label={t('feature.design.close')} onClick={onClose}><X size={16} /></IconButton>
+    </div>
     <div className="design-prototype-viewport">
       {pages.map((id, index) => <div key={id} className={index ? 'design-prototype-overlay' : 'design-prototype-page'}
         aria-hidden={index !== pages.length - 1}>
-        <PrototypeBoard id={id} document={document} scene={scene} loadImage={loadImage}
+        <PrototypeBoard id={id} document={document} scene={scene} loadImage={loadImage} captureWebImages={captureWebImages}
           interactive={index === pages.length - 1} onAction={activate} translate={t} />
       </div>)}
     </div>
-  </Dialog>;
+  </div>;
 }
 
-function PrototypeBoard({ id, document, scene, loadImage, interactive, onAction, translate: t }:
-  Pick<PreviewProps, 'document' | 'scene' | 'loadImage' | 'translate'> &
+function PrototypeBoard({ id, document, scene, loadImage, captureWebImages, interactive, onAction, translate: t }:
+  Pick<PreviewProps, 'document' | 'scene' | 'loadImage' | 'captureWebImages' | 'translate'> &
   Readonly<{ id: string; interactive: boolean; onAction(interaction: DesignInteraction): void }>) {
-  const [images, setImages] = useState<ReadonlyMap<string, HTMLImageElement>>(emptyImages);
+  const [assets, setAssets] = useState(emptyAssets);
   const prefix = useId();
   const toast = useToast();
+  const loadFontCss = useContext(DesignFontsContext)?.css;
   const box = scene[id];
   const bounds = box.paintBounds;
   const name = document.nodes[id].name || t('feature.design.artboard');
+  const selection = useMemo(() => ({ document, scene, ids: [id] }), [document, id, scene]);
+  const [captured, setCaptured] = useState<{ selection: DesignExportSelection; images: DesignWebImages }>();
+  const webImages = captured?.selection === selection ? captured.images : undefined;
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadExportWebImages(selection, captureWebImages, controller.signal, t).then((images) => {
+      if (images && !controller.signal.aborted) setCaptured({ selection, images });
+    }).catch(() => { if (!controller.signal.aborted) toast.error(t('feature.design.webLoadFailed')); });
+    return () => controller.abort();
+  }, [captureWebImages, selection, t, toast]);
   const source = useMemo(() => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
-    renderDesignSvg({ document, scene, ids: [id] }, bounds, images, name),
-  ), [bounds, document, id, images, name, scene]);
+    renderDesignSvg({ ...selection, webImages }, bounds, assets.images, name, assets.fontCss),
+  ), [assets, bounds, name, selection, webImages]);
   const hotspots = useMemo(() => interactive ? designPrototypeHotspots(document, scene, id) : [], [document, id, interactive, scene]);
   useEffect(() => {
     let active = true;
-    void loadExportImages({ document, scene, ids: [id] }, loadImage).then((images) => { if (active) setImages(images); })
+    // The SVG is rendered as an image. It cannot see the canvas document's FontFaceSet.
+    void Promise.all([loadExportImages(selection, loadImage), loadFontCss?.(designExportFontRequests(selection), false)])
+      .then(([images, fontCss]) => { if (active) setAssets({ images, fontCss: fontCss ?? '' }); })
       .catch((error: unknown) => { if (active) toast.error(t('feature.design.loadFailed', { error: String(error) })); });
     return () => { active = false; };
-  }, [document, id, loadImage, scene, t, toast]);
+  }, [loadFontCss, loadImage, selection, t, toast]);
   return <div className="design-prototype-board" style={{ width: bounds.width }}>
     <img src={source} alt={name} draggable={false} width={bounds.width} height={bounds.height} />
     {hotspots.length ? <svg viewBox={`${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`} className="design-prototype-hotspots">

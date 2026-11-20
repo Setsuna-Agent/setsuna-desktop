@@ -3,7 +3,8 @@ import type { DesignDocument, DesignFrame, DesignLayout, DesignNode, DesignQuad,
 import { designFrameMask } from '../contracts/design-references.js';
 
 import { designProjectedSourceId } from './components/design-components.js';
-import { intersectBounds, layerTransform, transformedBounds, type Bounds, type DesignTransform } from './design-geometry.js';
+import { intersectBounds, layerTransform, transformedBounds, transformedLocalBounds, type Bounds, type DesignTransform } from './design-geometry.js';
+import { designArrowInkBounds } from './vectors/design-vector.js';
 
 export type DesignLayerBox = Bounds & DesignTransform & Readonly<{
   parentId: string | null;
@@ -46,7 +47,7 @@ export function designLayoutPreviewScope(document: DesignDocument, scene: Design
 }
 
 export function resolveDesignScene(yoga: Yoga, document: DesignDocument, measureText: MeasureDesignText,
-  scope?: Readonly<{ rootIds: readonly string[]; layout?: Readonly<{ layerIds: ReadonlySet<string>; value: DesignLayout }> }>,
+  scope?: Readonly<{ rootIds: readonly string[]; layout?: Readonly<{ layerIds: ReadonlySet<string>; apply(layout: DesignLayout): DesignLayout }> }>,
 ): DesignScene {
   const boxes: Record<string, DesignLayerBox> = Object.create(null);
   const config = yoga.Config.create();
@@ -55,7 +56,8 @@ export function resolveDesignScene(yoga: Yoga, document: DesignDocument, measure
   function build(tree: Node, id: string, parent?: DesignFrame) {
     const source = document.nodes[id];
     const preview = scope?.layout;
-    const model = preview?.layerIds.has(id) && source.kind === 'frame' ? { ...source, layout: preview.value } : source;
+    const model = preview?.layerIds.has(id) && source.kind === 'frame' && source.layout
+      ? { ...source, layout: preview.apply(source.layout) } : source;
     const flowParent = parent?.layout && participatesInDesignFlow(model, id, parent) ? parent : undefined;
     // Keep hidden layers measurable for editing while removing them from the parent's layout.
     if (parent && !flowParent) {
@@ -102,7 +104,8 @@ export function resolveDesignScene(yoga: Yoga, document: DesignDocument, measure
     const y = parent ? top : model.y;
     const size = { x, y, width, height };
     const transform = layerTransform(size, model, parent);
-    const paintBounds = transformedBounds({ ...transform, width, height });
+    const arrowInk = model.kind === 'vector' ? designArrowInkBounds(model, width, height) : undefined;
+    const paintBounds = arrowInk ? transformedLocalBounds(arrowInk, transform) : transformedBounds({ ...transform, width, height });
     const visible = (parent?.visible ?? true) && !model.hidden;
     const visibleBounds = clip === undefined ? paintBounds : clip && intersectBounds(clip, paintBounds);
     boxes[id] = { ...size, ...transform, paintBounds, visibleBounds, parentId, visible, locked: Boolean(parent?.locked || model.locked) };

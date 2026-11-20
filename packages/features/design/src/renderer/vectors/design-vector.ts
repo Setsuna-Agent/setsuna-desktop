@@ -1,8 +1,11 @@
 import type { DesignNode, DesignPathAnchor, DesignPathGeometry, DesignSvgPath, DesignSvgViewBox, DesignVector, DesignVectorGeometry } from '../../contracts/index.js';
 import { type Bounds, type Point, roundDesignValue } from '../design-geometry.js';
+import { designStrokeBounds, visibleDesignStrokes } from '../design-paint.js';
 import { designIconPaths, designIconSize } from './design-icon-paths.js';
 
-export function isDesignPath(node: DesignNode | undefined): node is DesignVector & { geometry: DesignPathGeometry } {
+export type DesignPathNode = DesignVector & Readonly<{ geometry: DesignPathGeometry }>;
+
+export function isDesignPath(node: DesignNode | undefined): node is DesignPathNode {
   return node?.kind === 'vector' && node.geometry.kind === 'path';
 }
 
@@ -18,6 +21,10 @@ export function mapPathAnchors(anchors: readonly DesignPathAnchor[], transform: 
   return anchors.map((anchor) => ({
     ...transform(anchor), incoming: anchor.incoming && transform(anchor.incoming), outgoing: anchor.outgoing && transform(anchor.outgoing),
   }));
+}
+
+export function designPathAnchorsAtSize(geometry: DesignPathGeometry, { width, height }: Pick<Bounds, 'width' | 'height'>) {
+  return mapPathAnchors(geometry.anchors, ({ x, y }) => ({ x: x * width, y: y * height }));
 }
 
 export function designPathData(anchors: readonly DesignPathAnchor[], closed = false) {
@@ -43,30 +50,62 @@ export function designPolygonPath(width: number, height: number, sides: number) 
   return designPathData(vertices.map((point) => ({ x: (point.x - x) * width / spanX, y: (point.y - y) * height / spanY })), true);
 }
 
-export function designVectorShape(geometry: DesignVectorGeometry, width: number, height: number): Readonly<{
+type VectorShapeSource = Pick<DesignVector, 'geometry' | 'strokes'>;
+
+function designArrowHead({ geometry, strokes }: VectorShapeSource, width: number, height: number): readonly [Point, Point, Point] | undefined {
+  if (geometry.kind !== 'path' || geometry.endMarker !== 'arrow') return;
+  const [start, end] = geometry.anchors;
+  const tip = { x: end.x * width, y: end.y * height };
+  const dx = tip.x - start.x * width;
+  const dy = tip.y - start.y * height;
+  const length = Math.hypot(dx, dy);
+  if (!length) return;
+  const strokeWidth = (strokes ?? []).reduce((thickest, stroke) => stroke.hidden || stroke.opacity === 0 ? thickest : Math.max(thickest, stroke.width), 1);
+  // The head is sized in canvas units from its stroke so zooming and reshaping the shaft keep its proportions.
+  const depth = Math.min(length / 2, Math.max(6, strokeWidth * 3.25));
+  const x = dx / length * depth;
+  const y = dy / length * depth;
+  return [{ x: tip.x - x + y, y: tip.y - y - x }, tip, { x: tip.x - x - y, y: tip.y - y + x }];
+}
+
+export function designArrowInkBounds(node: DesignVector, width: number, height: number): Bounds | undefined {
+  const head = designArrowHead(node, width, height);
+  if (!head) return;
+  const bounds = pointBounds([{ x: 0, y: 0 }, { x: width, y: height }, ...head]);
+  const diameter = visibleDesignStrokes(node).reduce((max, stroke) =>
+    Math.max(max, stroke.join === 'miter' ? stroke.width * Math.SQRT2 : stroke.width), 0);
+  return designStrokeBounds(bounds, diameter, 'center');
+}
+
+export function designVectorShape(source: VectorShapeSource, width: number, height: number): Readonly<{
   viewBox: DesignSvgViewBox;
   paths: readonly DesignSvgPath[];
   scaleX: number;
   scaleY: number;
 }> {
+  const { geometry } = source;
   if (geometry.kind === 'svg') return { ...geometry, scaleX: width / geometry.viewBox.width, scaleY: height / geometry.viewBox.height };
   if (geometry.kind === 'icon') return {
     viewBox: { x: 0, y: 0, width: designIconSize, height: designIconSize },
     paths: [{ data: designIconPaths[geometry.icon], lineCap: 'round' }],
     scaleX: width / designIconSize, scaleY: height / designIconSize,
   };
-  const data = geometry.kind === 'polygon' ? designPolygonPath(width, height, geometry.sides)
-    : designPathData(mapPathAnchors(geometry.anchors, ({ x, y }) => ({ x: x * width, y: y * height })), geometry.closed);
+  const shaft = geometry.kind === 'polygon' ? designPolygonPath(width, height, geometry.sides)
+    : designPathData(designPathAnchorsAtSize(geometry, { width, height }), geometry.closed);
+  const head = designArrowHead(source, width, height);
+  const data = head ? `${shaft} ${designPathData(head)}` : shaft;
   return { viewBox: { x: 0, y: 0, width, height }, paths: [{ data, lineCap: 'round' }], scaleX: 1, scaleY: 1 };
 }
 
-export function fitDesignPath(anchors: readonly DesignPathAnchor[], closed: boolean): Readonly<{ bounds: Bounds; geometry: DesignPathGeometry }> {
+export function fitDesignPath(anchors: readonly DesignPathAnchor[], closed: boolean, precision: 'rounded' | 'exact' = 'rounded'):
+  Readonly<{ bounds: Bounds; geometry: DesignPathGeometry }> {
   const bounds = pathBounds(anchors, closed);
   const { x, y } = bounds;
   const width = Math.max(1, bounds.width);
   const height = Math.max(1, bounds.height);
   return {
-    bounds: { x: roundDesignValue(x), y: roundDesignValue(y), width: roundDesignValue(width), height: roundDesignValue(height) },
+    bounds: precision === 'exact' ? { x, y, width, height }
+      : { x: roundDesignValue(x), y: roundDesignValue(y), width: roundDesignValue(width), height: roundDesignValue(height) },
     geometry: { kind: 'path', closed, anchors: mapPathAnchors(anchors, (point) => ({ x: (point.x - x) / width, y: (point.y - y) / height })) },
   };
 }

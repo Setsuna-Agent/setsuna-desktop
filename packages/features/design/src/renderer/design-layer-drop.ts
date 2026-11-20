@@ -5,11 +5,17 @@ import { toLocal, type Point } from './design-geometry.js';
 import type { DesignScene } from './design-layout.js';
 
 export const designLayerDragType = 'application/x-setsuna-design-layer';
+export const designComponentDragType = 'application/x-setsuna-design-component';
 export type DesignLayerDrag = Readonly<{ id: string; revision: string }>;
+export type DesignComponentDrag = Readonly<{ id: string; revision: string }>;
 export type DesignLayerDestination = Readonly<{ parentId: string | null; beforeId: string | null; center?: Point }>;
 
 export function activeDesignLayerDrag(transfer: DataTransfer, source: DesignLayerDrag | undefined, revision: string) {
   return source?.revision === revision && transfer.types.includes(designLayerDragType) ? source : undefined;
+}
+
+export function activeDesignComponentDrag(transfer: DataTransfer, source: DesignComponentDrag | undefined, revision: string) {
+  return source?.revision === revision && transfer.types.includes(designComponentDragType) ? source : undefined;
 }
 
 export function designLayerOrder(document: DesignDocument, parentId: string | null) {

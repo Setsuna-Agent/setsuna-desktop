@@ -2,6 +2,7 @@ import {
   MAX_WORKSPACE_IMAGE_BYTES, workspaceTarget, type DesktopRuntimeClient, type DesktopWorkspaceEntriesWatchOptions, type SetsunaDesktopBridge,
 } from '@setsuna-desktop/contracts';
 import { designImageFileExtensions } from '@setsuna-desktop/feature-design/contracts';
+import { browserDeviceProfiles, DESKTOP_BROWSER_PREVIEW_PARTITION } from '@setsuna-desktop/feature-browser/contracts';
 import type { DesignAssets } from '@setsuna-desktop/feature-design/renderer';
 import { copyTextToClipboard } from '../../shared/lib/clipboard.js';
 
@@ -16,7 +17,14 @@ export function createDesignAssets(
   desktop: Omit<DesignAssets['output'], 'copyText'> & Partial<Pick<SetsunaDesktopBridge['desktop'], 'pasteDesign'>>,
   pasteByWindowControls: () => Promise<boolean>,
 ): DesignAssets {
+  const browser = window.setsunaDesktop?.browser;
   return {
+    webPreview: typeof browser?.configureWebPreview === 'function'
+      && typeof browser.captureWebPreview === 'function' && typeof browser.onWebPreviewEscape === 'function' ? {
+      partition: DESKTOP_BROWSER_PREVIEW_PARTITION,
+      devices: browserDeviceProfiles.flatMap(({ id, label, width, height }) => width && height ? [{ id, label, width, height }] : []),
+      configure: browser.configureWebPreview, capture: browser.captureWebPreview, onEscape: browser.onWebPreviewEscape,
+    } : undefined,
     async requestClipboardPaste(acceptSvg) {
       if (desktop.pasteDesign) return desktop.pasteDesign(acceptSvg);
       // A renderer can reload while development is still using the previous preload.

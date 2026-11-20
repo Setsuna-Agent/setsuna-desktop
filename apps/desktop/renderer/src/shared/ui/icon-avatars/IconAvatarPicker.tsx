@@ -1,10 +1,10 @@
 import { Button, IconButton, Tooltip } from '@setsuna-desktop/renderer-ui';
 import { Download, RotateCcw, Upload } from 'lucide-react';
-import { useRef, type CSSProperties } from 'react';
+import { useRef } from 'react';
 import { brandIconFileAccept } from '../../branding/brandIconUpload.js';
 import { useI18n } from '../../i18n/I18nProvider.js';
 import { IconColorPicker } from '../IconColorPicker.js';
-import { iconColorCssValue, type IconColor } from '../icon-colors.js';
+import type { IconColor } from '../icon-colors.js';
 import { PresetAvatar } from './PresetAvatar.js';
 import { ICON_AVATAR_PRESETS, type IconAvatarPreset } from './presets.js';
 import type { useIconAvatarDraft } from './useIconAvatarDraft.js';
@@ -27,14 +27,12 @@ export function IconAvatarPicker({ draft, color: avatarColor, onColorChange: set
   const fileInput = useRef<HTMLInputElement>(null);
   const { avatar, setAvatar, customAvatar, loading, upload, fetchWebsiteIcon } = draft;
   const reading = loading !== null;
-  const color = avatarColor ?? (compact ? 'text' : undefined);
   const selectedKey = avatar?.type === 'preset' ? avatar.key : !avatar && compact ? presets[0]?.key : undefined;
-  const colors = <IconColorPicker value={color} disabled={reading || disabled} onChange={setAvatarColor}
+  const colors = <IconColorPicker value={avatarColor ?? 'text'} disabled={reading || disabled} onChange={setAvatarColor}
     label={t('pluginUi.avatarColors')} colorLabel={(color) => t('pluginUi.avatarColor', { color })} />;
   return (
     <fieldset className={['icon-avatar-picker__avatars', compact && 'icon-avatar-picker--compact'].filter(Boolean).join(' ')}
-      aria-label={compact ? label : undefined} disabled={reading || disabled}
-      style={compact ? { '--icon-avatar-picker-color': iconColorCssValue(color ?? 'text') } as CSSProperties : undefined}>
+      aria-label={compact ? label : undefined} disabled={reading || disabled}>
       {compact ? <div className="icon-avatar-picker__toolbar">
         {colors}
         {onReset ? <IconButton label={t('pluginUi.resetPluginIcon')} disabled={reading || disabled || (!avatar && !avatarColor)}
@@ -51,7 +49,7 @@ export function IconAvatarPicker({ draft, color: avatarColor, onColorChange: set
               aria-label={title}
               aria-pressed={selectedKey === preset.key}
               onClick={() => setAvatar({ type: 'preset', key: preset.key })}>
-              <PresetAvatar avatar={{ type: 'preset', key: preset.key }} color={color} presets={presets}
+              <PresetAvatar avatar={{ type: 'preset', key: preset.key }} color={avatarColor} presets={presets}
                 className={compact ? 'desktop-icon-avatar--glyph' : undefined} />
             </Button>
           </Tooltip>;

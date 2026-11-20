@@ -1,6 +1,6 @@
 import type { DesignDocument } from '../contracts/index.js';
 import { canContainDesignLayers } from './context/design-layer-commands.js';
-import { containsBounds, intersectBounds, roundDesignValue, toLocal, toWorld, type Bounds, type Point } from './design-geometry.js';
+import { containsBounds, intersectBounds, orientationInParent, roundDesignValue, toLocal, toWorld, type Bounds, type Point } from './design-geometry.js';
 import type { DesignLayerBox, DesignScene } from './design-layout.js';
 
 export type DesignInsertionTarget = Readonly<{ parentId: string | null; center: Point }>;
@@ -63,6 +63,32 @@ export function centerDesignLayer(center: Point, size: Readonly<{ width: number;
     x: roundDesignValue(frame ? Math.max(0, Math.min(frame.width - size.width, x)) : x),
     y: roundDesignValue(frame ? Math.max(0, Math.min(frame.height - size.height, y)) : y),
   };
+}
+
+export function designDrawingPlacement(document: DesignDocument, scene: DesignScene, startParentId: string | null, bounds: Bounds, click = false) {
+  let parentId = startParentId;
+  const origin = startParentId === null ? undefined : scene[startParentId];
+  const size = { width: Math.max(1, roundDesignValue(bounds.width)), height: Math.max(1, roundDesignValue(bounds.height)) };
+  const center = toWorld(origin, midpoint({ ...bounds, ...size }));
+  if (!click && origin) {
+    // Keep drawings centered beyond a clip in a visible ancestor, without moving them on the canvas.
+    for (let id = startParentId; id !== null; id = scene[id].parentId) {
+      const frame = document.nodes[id];
+      if (frame.kind !== 'frame' || frame.clip === false) continue;
+      const box = scene[id];
+      const local = toLocal(box, center);
+      if (local.x < 0 || local.y < 0 || local.x > box.width || local.y > box.height) parentId = box.parentId;
+    }
+  }
+  const parent = parentId === null ? undefined : document.nodes[parentId];
+  const target = parentId === null ? undefined : scene[parentId];
+  const local = toLocal(target, center);
+  const position = startParentId === parentId ? bounds : { x: local.x - size.width / 2, y: local.y - size.height / 2 };
+  return { parentId, placement: { ...size, x: roundDesignValue(position.x), y: roundDesignValue(position.y),
+    ...(origin && startParentId !== parentId ? orientationInParent(origin, target) : undefined),
+    // Drawing provides explicit coordinates, which the parent's flow would override.
+    absolute: !click && parent?.kind === 'frame' && parent.layout ? true : undefined,
+  } };
 }
 
 function midpoint({ x, y, width, height }: Bounds): Point {

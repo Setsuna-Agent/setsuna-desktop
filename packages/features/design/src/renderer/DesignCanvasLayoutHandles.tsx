@@ -1,16 +1,16 @@
 import { Group, Label, Rect, Tag, Text } from 'react-konva';
 import type { DesignDocument } from '../contracts/index.js';
-import { designSelectionColor } from './DesignCanvasSelection.js';
+import { designSelectionColor, designSelectionLabelColor } from './DesignCanvasSelection.js';
 import { intersectBounds, type Bounds, type Point } from './design-geometry.js';
 import {
   frameLayoutGap, hasEditableLayout, layoutEdges, layoutHandleAxis, layoutHandleName, layoutHandleValue, type LayoutHandle,
 } from './design-layout-adjustment.js';
 import type { DesignScene } from './design-layout.js';
+import { colorWithOpacity } from './design-paint.js';
 import { designTextFont } from './design-text.js';
 import type { CanvasLayoutPreview } from './use-design-canvas-gestures.js';
 
-const handleInk = '#a7519b';
-const guideTint = 'rgba(167,81,155,0.16)';
+const guideTint = colorWithOpacity(designSelectionColor, 0.16);
 
 export function DesignCanvasLayoutHandles({ id, document, scene, scale, disabled, preview }: Readonly<{
   id: string;
@@ -73,11 +73,11 @@ export function DesignCanvasLayoutHandles({ id, document, scene, scale, disabled
       const h = across ? thickness : length;
       return <Rect key={handle} name={layoutHandleName(handle)} x={point.x - w / 2} y={point.y - h / 2}
         width={w} height={h} cornerRadius={thickness / 2} hitStrokeWidth={10 * px}
-        fill={active === handle ? designSelectionColor : handleInk} stroke="#fff" strokeWidth={px}
+        fill={active === handle ? designSelectionLabelColor : designSelectionColor} stroke="#fff" strokeWidth={px}
         listening={!active && !disabled} />;
     })}
     {preview && grip ? <Label x={grip.x} y={grip.y - 13 * px * box.scaleY} scaleX={box.scaleX} scaleY={box.scaleY} listening={false}>
-      <Tag fill={designSelectionColor} cornerRadius={5 * px} pointerDirection="down" pointerWidth={6 * px} pointerHeight={4 * px} />
+      <Tag fill={designSelectionLabelColor} cornerRadius={5 * px} pointerDirection="down" pointerWidth={6 * px} pointerHeight={4 * px} />
       <Text text={String(preview.value)} padding={4 * px} fontSize={11 * px} fontFamily={designTextFont} fill="#fff" />
     </Label> : null}
   </Group>;

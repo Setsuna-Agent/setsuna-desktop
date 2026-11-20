@@ -1,6 +1,6 @@
 import { Util } from 'konva/lib/Util.js';
 import type { DesignText, DesignTextRun } from '../../contracts/index.js';
-import { designTextStyle } from './design-typography.js';
+import { designFontStyleWeight, designTextStyle } from './design-typography.js';
 
 export function designTextSegments(text: string, runs: readonly DesignTextRun[] = []) {
   const segments: { text: string; run?: DesignTextRun }[] = [];
@@ -36,7 +36,7 @@ export function layoutRichDesignText(node: DesignText, maxWidth?: number) {
     line = newLine();
   }
   function piece(text: string, style: TextStyle, color?: string): Piece {
-    const font = `${style.fontWeight} ${style.fontSize}px ${style.fontFamily}`;
+    const font = `${designFontStyleWeight(style)} ${style.fontSize}px ${style.fontFamily}`;
     const key = JSON.stringify([font, style.letterSpacing, text]);
     let width = widths.get(key);
     if (width === undefined) {

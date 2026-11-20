@@ -3,8 +3,8 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: var(--desktop-icon-avatar-color);
-  background: color-mix(in srgb, var(--desktop-icon-avatar-color) 14%, transparent);
+  color: var(--desktop-icon-avatar-color, inherit);
+  background: color-mix(in srgb, var(--desktop-icon-avatar-color, transparent) 14%, transparent);
 }
 
 .desktop-icon-avatar svg {

@@ -1,6 +1,6 @@
 import { Slot, ContextMenu, DropdownMenu } from 'radix-ui';
 import { Check, ChevronRight } from 'lucide-react';
-import { forwardRef, useEffect, useRef, useState, type HTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode, type RefObject } from 'react';
+import { forwardRef, useEffect, useRef, useState, type DOMAttributes, type HTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { floatingPlacement, overlayContainer, type Placement } from './portal.js';
 import { cn } from './utils.js';
@@ -16,6 +16,7 @@ export type MenuItem = {
   submenuInitialFocusRef?: RefObject<HTMLElement>;
   tooltip?: ReactNode;
   tooltipClassName?: string;
+  hover?: Pick<DOMAttributes<HTMLElement>, 'onPointerEnter' | 'onPointerLeave'>;
   onClick?(action: MenuAction): void;
 };
 export type MenuProps = {
@@ -126,6 +127,7 @@ function MenuItems({ menu, context }: { menu: MenuProps; context: boolean }) {
       </ui.Portal>
     </ui.Sub>;
     const row = <ui.Item key={key} className={cn('sd-menu__item', item.className, selected && 'is-selected', item.danger && 'is-danger')} disabled={item.disabled}
+      {...(item.disabled ? undefined : item.hover)}
       onSelect={(event) => { const action = { key, domEvent: event }; item.onClick?.(action); menu.onClick?.(action); }}>{content}</ui.Item>;
     return item.tooltip ? <Tooltip key={key} title={item.tooltip} className={item.tooltipClassName} placement="right" mouseEnterDelay={0.35}>{row}</Tooltip> : row;
   })}</>;

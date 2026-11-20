@@ -3,7 +3,8 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type Com
 import { floatingPlacement, overlayContainer, type Placement } from './portal.js';
 import { cn } from './utils.js';
 
-export type PopoverProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'content'> & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>, 'onOpenAutoFocus' | 'onCloseAutoFocus' | 'hideWhenDetached' | 'sideOffset'> & {
+export type PopoverProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'content'> & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>,
+  'onOpenAutoFocus' | 'onCloseAutoFocus' | 'onInteractOutside' | 'hideWhenDetached' | 'sideOffset'> & {
   'data-overlay-open'?: '';
   children: ReactElement; content: ReactNode; contentLabel?: string; open?: boolean; onOpenChange?(open: boolean): void;
   /** Keep outside clicks in the host document, including over embedded webviews. */
@@ -14,7 +15,7 @@ export type PopoverProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'conte
   getAnchorRect?(trigger: HTMLElement): DOMRect;
 };
 export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ children, content, contentLabel, open, onOpenChange, modal = false, trigger = 'click', placement, className, style, mouseEnterDelay = 0.15, mouseLeaveDelay = 0.15,
-  onOpenAutoFocus, onCloseAutoFocus, hideWhenDetached, sideOffset = 6, getAnchorRect, ...triggerProps }, ref) {
+  onOpenAutoFocus, onCloseAutoFocus, onInteractOutside, hideWhenDetached, sideOffset = 6, getAnchorRect, ...triggerProps }, ref) {
   const [internalOpen, setInternalOpen] = useState(false);
   const actualOpen = open ?? internalOpen;
   const triggerElement = useRef<HTMLElement | null>(null);
@@ -41,7 +42,8 @@ export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ 
   return <Primitive.Root open={actualOpen} onOpenChange={changeOpen} modal={modal}>
     {anchor ? <Primitive.Anchor virtualRef={anchor} /> : null}
     <Primitive.Trigger asChild><Slot.Root {...triggerProps} data-overlay-open={overlayOpen} ref={anchor ? setTrigger : ref}>{children}</Slot.Root></Primitive.Trigger>
-    <Primitive.Portal container={overlayContainer()}><Primitive.Content {...panel} aria-label={contentLabel} onOpenAutoFocus={onOpenAutoFocus} onCloseAutoFocus={onCloseAutoFocus}>{content}</Primitive.Content></Primitive.Portal>
+    <Primitive.Portal container={overlayContainer()}><Primitive.Content {...panel} aria-label={contentLabel}
+      onOpenAutoFocus={onOpenAutoFocus} onCloseAutoFocus={onCloseAutoFocus} onInteractOutside={onInteractOutside}>{content}</Primitive.Content></Primitive.Portal>
   </Primitive.Root>;
 });
 

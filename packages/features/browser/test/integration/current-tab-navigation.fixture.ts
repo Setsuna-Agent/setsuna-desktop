@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
-import { app, BrowserWindow, session, type WebContents } from 'electron';
-import { DESKTOP_BROWSER_PARTITION } from '../../src/contracts/index.js';
+import { app, BrowserWindow, nativeImage, session, type WebContents } from 'electron';
+import { DESKTOP_BROWSER_PARTITION, DESKTOP_BROWSER_PREVIEW_PARTITION } from '../../src/contracts/index.js';
 import type { BrowserContextMenuSession } from '../../src/main/context-menu-session.js';
 import { installEmbeddedBrowserWebviews } from '../../src/main/webview.js';
 import { DesktopBrowserController } from '../../src/main/control.js';
@@ -92,6 +92,59 @@ async function main() {
     assert.equal(BrowserWindow.getAllWindows().length, 1);
     assert.equal(await guest.executeJavaScript(`window.open('file:///private/blocked') === null`, true), true);
     assert.equal(guest.getURL(), origin + '/multipart');
+
+    const previewSession = session.fromPartition(DESKTOP_BROWSER_PREVIEW_PARTITION);
+    await previewSession.protocol.handle('https', () => new Response(
+      '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<button onclick="this.textContent = \'Clicked\'">Preview</button>', { headers: { 'Content-Type': 'text/html' } }));
+    const previewReady = new Promise<WebContents>(resolve => owner.webContents.once('did-attach-webview', (_event, contents) => resolve(contents)));
+    const previewUrl = origin + '/preview';
+    const configure = owner.webContents.executeJavaScript(`(async () => {
+      const bridge = window.navigationFixture;
+      if (await bridge.configureWebPreview(${guest.id}, { url: ${JSON.stringify(previewUrl)}, interactive: true })) {
+        throw new Error('The preview bridge accepted a normal browser tab');
+      }
+      const view = document.createElement('webview');
+      view.id = 'design-preview';
+      view.partition = ${JSON.stringify(DESKTOP_BROWSER_PREVIEW_PARTITION)};
+      view.src = 'about:blank';
+      view.style.cssText = 'position:absolute;left:0;top:0;width:314px;height:682px;opacity:0';
+      const ready = new Promise(resolve => view.addEventListener('dom-ready', resolve, { once: true }));
+      document.body.append(view);
+      await ready;
+      return bridge.configureWebPreview(view.getWebContentsId(), {
+        url: ${JSON.stringify(previewUrl)}, interactive: false,
+        device: { id: 'iphone-15-pro', width: 314, height: 682 },
+      });
+    })()`);
+    const preview = await previewReady;
+    assert.equal(preview.session, previewSession);
+    assert.equal(await configure, true);
+    assert.equal(preview.getURL(), previewUrl);
+    assert.deepEqual(await preview.executeJavaScript(`{
+      const button = document.querySelector('button');
+      button.click();
+      [button.textContent, localStorage.getItem('shared'), typeof process, innerWidth, navigator.maxTouchPoints];
+    }`, true), ['Clicked', null, 'undefined', 314, 5]);
+    assert.equal(await preview.executeJavaScript(`window.open('/preview-popup') === null`, true), true);
+    const previewImage: string = await owner.webContents.executeJavaScript(`window.navigationFixture.captureWebPreview(${preview.id})`);
+    assert.equal(nativeImage.createFromDataURL(previewImage).isEmpty(), false, 'inactive web content is usable as a canvas preview');
+    assert.equal(await owner.webContents.executeJavaScript(`(async () => {
+      const view = document.querySelector('#design-preview');
+      const bridge = window.navigationFixture;
+      window.previewEscape = new Promise(resolve => {
+        const stop = bridge.onWebPreviewEscape(id => { stop(); resolve(id); });
+      });
+      view.style.opacity = '1';
+      view.focus();
+      return bridge.configureWebPreview(view.getWebContentsId(), {
+        url: ${JSON.stringify(previewUrl)}, interactive: true,
+        device: { id: 'iphone-15-pro', width: 314, height: 682 },
+      });
+    })()`), true);
+    preview.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    assert.equal(await owner.webContents.executeJavaScript('window.previewEscape'), preview.id);
+    assert.equal(newTabRequests, 0);
     console.log('CURRENT_TAB_NAVIGATION_OK');
   } finally { stop(); await scope.finishDispose(); owner.destroy(); }
 }

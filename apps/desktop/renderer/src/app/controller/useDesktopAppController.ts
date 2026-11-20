@@ -8,6 +8,7 @@ import {
   type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { isDesignDocumentPath } from '@setsuna-desktop/feature-design/contracts';
+import { isFeatureOperationCancelled } from '@setsuna-desktop/feature-core/operation';
 import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import {
   useCallback,
@@ -43,9 +44,10 @@ import { useConversationDebugFeatureEnabled } from '../../composition/Conversati
 import { useUsageFeatureInvalidation } from '../../composition/UsageFeatureBoundary.js';
 import { useCapabilitiesRefreshCoordinator } from '../../composition/CapabilitiesRefreshBoundary.js';
 import { useReviewFeatureService } from '../../composition/ReviewFeatureBoundary.js';
-import { useDesignClient, type DesignWorkspaceLocation } from '../../composition/design/DesignFeatureBoundary.js';
+import { useDesignClient } from '../../composition/design/DesignFeatureBoundary.js';
 import type { RuntimeTurnSettlement } from '../../services/runtime-client/useRuntimeThreadState.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
+import { useDesignWindowSession } from './useDesignWindowSession.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
 import { useThreadDeletionGuard } from './useThreadDeletionGuard.js';
 
@@ -54,12 +56,9 @@ export function useDesktopAppController() {
   const toast = useToast();
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [newThreadDraftId, setNewThreadDraftId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<MainView>('chat');
-  const [designLocation, setDesignLocation] = useState<DesignWorkspaceLocation | null>(null);
+  const [viewOverride, setActiveView] = useState<MainView>();
   const [designSources, setDesignSources] = useState<readonly WorkspaceProject[]>([]);
   const openDesignView = useRef<() => void>(() => undefined);
-  const latestView = useRef(activeView);
-  latestView.current = activeView;
   const [capabilitySelectionRequest, setCapabilitySelectionRequest] = useState<ChatCapabilitySelectionRequest | null>(null);
   const capabilitySelectionRequestIdRef = useRef(0);
 
@@ -97,6 +96,7 @@ export function useDesktopAppController() {
     terminalTurnIdsRef,
     threads,
     windowSessionKey,
+    initialWindowThreadId,
   } = runtime;
 
   useEffect(() => {
@@ -120,6 +120,11 @@ export function useDesktopAppController() {
   const recoveredWindowKeyRef = useRef<string | null>(null);
   if (loadState === 'ready') recoveredWindowKeyRef.current = windowSessionKey;
   const recoveryWindowKey = recoveredWindowKeyRef.current;
+  const { activeView, designLocation, setDesignLocation } = useDesignWindowSession(
+    designClient ? recoveryWindowKey : null, viewOverride, Boolean(initialWindowThreadId),
+  );
+  const latestView = useRef(activeView);
+  latestView.current = activeView;
   const workspaceRecoveryKey = useWorkspaceRecoveryKey(recoveryWindowKey);
   const composerSession = useChatComposerSession(chatTargetIdentity, client, recoveryWindowKey);
   const canSaveChatSelection = !isFeatureConversationView(activeView) && (!currentThread || isPrimaryConversationThread(currentThread));
@@ -210,19 +215,29 @@ export function useDesktopAppController() {
   const fileRootId = filePanel?.rootId ?? workspaceProjectRoots(activeWorkspace)[0]?.id;
   const fileRoot = workspaceProjectRoots(activeWorkspace).find((root) => root.id === fileRootId);
   const fileWorkspace = activeWorkspace && fileRoot ? workspaceProjectForRoot(activeWorkspace, fileRoot.id) : undefined;
+  const designOpenRequests = useIdentityRequestGuard(JSON.stringify([activeView, activeWorkspace?.id, fileRootId, designLocation]));
   const openWorkspaceFile = useCallback((filePath: string, rootId?: string) => {
+    const isCurrent = designOpenRequests.begin();
     if (designClient && activeWorkspace && isDesignDocumentPath(filePath)) {
       // An asynchronous file read belongs to the view that initiated it.
       if (latestView.current !== activeView) return;
-      if (!projects.some(({ id }) => id === activeWorkspace.id)) {
-        setDesignSources((sources) => [...sources.filter(({ id }) => id !== activeWorkspace.id), activeWorkspace]);
-      }
-      setDesignLocation({ projectId: activeWorkspace.id, rootId, path: filePath });
-      openDesignView.current();
+      const homeFilter = designLocation?.path ? designLocation.homeFilter : designLocation;
+      void designClient.resolveResourceRoot({ projectId: activeWorkspace.id, rootId, path: filePath }).then((source) => {
+        if (!isCurrent()) return;
+        if (source.projectId === activeWorkspace.id && !projects.some(({ id }) => id === activeWorkspace.id)) {
+          setDesignSources((sources) => [...sources.filter(({ id }) => id !== activeWorkspace.id), activeWorkspace]);
+        }
+        setDesignLocation({ ...source, ...(homeFilter ? { homeFilter } : {}) });
+        openDesignView.current();
+      }).catch((error: unknown) => {
+        if (isCurrent() && !isFeatureOperationCancelled(error)) {
+          toast.error(t('feature.design.loadFailed', { error: error instanceof Error ? error.message : String(error) }));
+        }
+      });
       return;
     }
     openFilePanel(filePath, rootId);
-  }, [activeView, activeWorkspace, designClient, openFilePanel, projects]);
+  }, [activeView, activeWorkspace, designClient, designLocation, designOpenRequests, openFilePanel, projects, setDesignLocation, t, toast]);
   const projectWorkspace = useProjectWorkspace({
     rootId: fileRootId,
     project: activeWorkspace,

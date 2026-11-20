@@ -5,11 +5,12 @@ import { expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({
   clipboard: { writeText: vi.fn() },
   screen: { getCursorScreenPoint: vi.fn() },
-  session: { fromPartition: () => ({ setPermissionRequestHandler: vi.fn() }) },
+  session: { fromPartition: () => ({ setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn(), on: vi.fn() }) },
 }));
 import { BrowserContextMenuSession } from '../../src/main/context-menu-session.js';
 import { installEmbeddedBrowserWebviews } from '../../src/main/webview.js';
 import { BROWSER_IPC_CHANNELS } from '../../src/contracts/bridge.js';
+import { DESKTOP_BROWSER_PREVIEW_PARTITION } from '../../src/contracts/browser-control.js';
 
 function windowFixture(isAllowedExtensionUrl?: (url: string) => boolean, tabId: string | null = null) {
   let destroyed = false;
@@ -47,6 +48,36 @@ it('only attaches extension documents authorized by the installed-extension serv
     expect(event.preventDefault).toHaveBeenCalledTimes(blocked ? 1 : 0);
     expect(preferences).toMatchObject({ nodeIntegration: false, contextIsolation: true, sandbox: true });
     expect(preferences.preload).toBeUndefined();
+  }
+  host.close();
+});
+
+it('isolates live previews and applies their navigation policy instead of tab hooks', () => {
+  const host = windowFixture(() => true, 'browser-tab');
+  const partition = DESKTOP_BROWSER_PREVIEW_PARTITION;
+  const attach = { preventDefault: vi.fn() };
+  const preferences = { preload: '/desktop/preload.js', nodeIntegration: true, nodeIntegrationInSubFrames: true,
+    webSecurity: false, allowRunningInsecureContent: true, session: undefined };
+  host.contents.emit('will-attach-webview', attach, preferences, { src: 'https://example.test/', partition });
+  expect(attach.preventDefault).not.toHaveBeenCalled();
+  expect(preferences).toMatchObject({ nodeIntegration: false, nodeIntegrationInSubFrames: false, contextIsolation: true,
+    webSecurity: true, allowRunningInsecureContent: false, sandbox: true });
+  expect(preferences.preload).toBeUndefined();
+  expect(preferences.session).toBeDefined();
+  const send = vi.fn();
+  const guest = Object.assign(new EventEmitter(), {
+    session: preferences.session, setWindowOpenHandler: vi.fn(), getUserAgent: () => 'fixture',
+    setAudioMuted: vi.fn(), hostWebContents: { isDestroyed: () => false, send },
+  });
+  host.contents.emit('did-attach-webview', {}, guest);
+  expect(guest.setAudioMuted).toHaveBeenCalledWith(true);
+  guest.emit('before-input-event', { preventDefault: vi.fn() }, { type: 'keyDown', code: 'KeyF', key: 'f', meta: true });
+  expect(send).not.toHaveBeenCalled();
+  expect(guest.setWindowOpenHandler.mock.calls[0][0]()).toEqual({ action: 'deny' });
+  for (const type of ['will-frame-navigate', 'will-redirect']) {
+    const event = { isMainFrame: true, url: 'file:///private/test', preventDefault: vi.fn() };
+    guest.emit(type, event);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
   }
   host.close();
 });

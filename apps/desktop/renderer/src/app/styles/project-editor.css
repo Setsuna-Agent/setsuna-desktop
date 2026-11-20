@@ -15,56 +15,6 @@
   text-align: end;
 }
 
-.desktop-project-editor__defaults-mode {
-  position: relative;
-  isolation: isolate;
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  justify-self: start;
-  padding: 2px;
-  border-radius: var(--app-radius-sm);
-  background: var(--app-segment-track-bg);
-}
-
-/* A fixed-size slider avoids shared-layout scaling and dialog position changes. */
-.desktop-project-editor__defaults-mode::before {
-  content: '';
-  position: absolute;
-  inset-block: 2px;
-  left: 2px;
-  width: calc(50% - 2px);
-  border-radius: var(--app-radius-xs);
-  background: var(--app-segment-selected-bg);
-  box-shadow: var(--app-segment-selected-shadow);
-  transform: translateX(0);
-  transition: transform 160ms linear;
-}
-
-.desktop-project-editor__defaults-mode[data-following='true']::before {
-  transform: translateX(100%);
-}
-
-.desktop-project-editor__defaults-mode > .sd-button {
-  position: relative;
-  justify-content: center;
-  min-height: 28px;
-  padding: 3px 10px;
-  border: 0;
-  border-radius: var(--app-radius-xs);
-  color: var(--app-text-muted);
-  background: transparent;
-  font-size: 12px;
-}
-
-.desktop-project-editor__defaults-mode > .sd-button:is([aria-pressed='true'], :hover:not(:disabled)) {
-  color: var(--app-text);
-  background: transparent;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .desktop-project-editor__defaults-mode::before { transition: none; }
-}
-
 .desktop-project-editor__directory {
   overflow: hidden;
   border: 1px solid var(--desktop-agent-subtle-divider);

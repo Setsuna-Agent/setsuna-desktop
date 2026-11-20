@@ -8,14 +8,14 @@ const port = parentPort;
 if (!port) throw new Error('Tool programs require a managed worker.');
 const pending = new Map<number, { resolve(value: string): void; reject(error: Error): void }>();
 let started = false;
-port.on('message', (message: { type: string; code: string; toolNames: string[]; toolCatalog?: Array<{ name: string; description: string }>; state?: [string, string][]; id: number; value: string; error?: string }) => {
+port.on('message', (message: { type: string; code: string; toolNames: string[]; toolCatalog?: Array<{ name: string; description: string }>; state?: [string, string][]; returnValue?: boolean; id: number; value: string; error?: string }) => {
   if (message.type === 'result') {
     const call = pending.get(message.id);
     pending.delete(message.id);
     if (message.error) call?.reject(new Error(message.error)); else call?.resolve(message.value);
   } else if (message.type === 'start' && !started) {
     started = true;
-    execute(message.code, message.toolNames, message.state, message.toolCatalog).then(
+    execute(message.code, message.toolNames, message.state, message.toolCatalog, message.returnValue).then(
       output => port.postMessage({ type: 'done', output }),
       error => port.postMessage({ type: 'error', error: Buffer.from(error instanceof Error ? error.message : String(error))
         .subarray(0, TOOL_PROGRAM_OUTPUT_BYTES).toString() }),
@@ -23,7 +23,8 @@ port.on('message', (message: { type: string; code: string; toolNames: string[]; 
   }
 });
 
-async function execute(code: string, toolNames: string[], snapshot: [string, string][] = [], catalog: Array<{ name: string; description: string }> = []): Promise<string> {
+async function execute(code: string, toolNames: string[], snapshot: [string, string][] = [], catalog: Array<{ name: string; description: string }> = [],
+  returnValue = false): Promise<string> {
   // NodeNext sees the CommonJS namespace; bundled and tsx imports may unwrap it.
   const engine = await newQuickJSWASMModuleFromVariant(variant.default ?? variant);
   const runtime = engine.newRuntime();
@@ -89,7 +90,7 @@ async function execute(code: string, toolNames: string[], snapshot: [string, str
         tools[name] = async (args = {}) => JSON.parse(await __call(name, JSON.stringify(args)));
       }
       Object.freeze(tools);
-      const print = (...values) => __print(values.map(value => typeof value === 'string' ? value : JSON.stringify(value)).join(' '));
+      const print = (...values) => { if (${!returnValue}) __print(values.map(value => typeof value === 'string' ? value : JSON.stringify(value)).join(' ')); };
       const text = print;
       const console = Object.freeze({ log: print });
       const store = (key, value) => { const encoded = JSON.stringify(value); if (encoded === undefined) throw new Error('store requires JSON-serializable data'); __store(key, encoded); };
@@ -99,7 +100,7 @@ async function execute(code: string, toolNames: string[], snapshot: [string, str
     vm.unwrapResult(vm.evalCode(bootstrap)).dispose();
     const result = vm.unwrapResult(vm.evalCode(`(async () => {\n${code}\n})()`, 'tool-program.js'));
     try {
-      await new Promise<void>((resolve, reject) => {
+      return await new Promise<string>((resolve, reject) => {
         let scheduled = false;
         pump = () => {
           if (!alive) return;
@@ -107,7 +108,13 @@ async function execute(code: string, toolNames: string[], snapshot: [string, str
             const jobs = runtime.executePendingJobs(128);
             if (jobs.error) { const error = vm.dump(jobs.error); jobs.error.dispose(); throw new Error(JSON.stringify(error)); }
             const state = vm.getPromiseState(result);
-            if (state.type === 'fulfilled') { state.value.dispose(); resolve(); }
+            if (state.type === 'fulfilled') {
+              try {
+                const output = returnValue ? vm.getString(state.value) : lines.join('\n') || 'Program completed without printed output.';
+                if (Buffer.byteLength(output) > TOOL_PROGRAM_OUTPUT_BYTES) throw new Error('Program output exceeds 64 KiB.');
+                resolve(output);
+              } finally { state.value.dispose(); }
+            }
             else if (state.type === 'rejected') {
               const error = vm.dump(state.error); state.error.dispose(); reject(new Error(JSON.stringify(error)));
             } else if (runtime.hasPendingJob() && !scheduled) {
@@ -118,7 +125,6 @@ async function execute(code: string, toolNames: string[], snapshot: [string, str
         };
         pump();
       });
-      return lines.join('\n') || 'Program completed without printed output.';
     } finally { result.dispose(); }
   } finally {
     alive = false;

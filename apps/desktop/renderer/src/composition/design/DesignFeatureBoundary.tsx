@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
-import { workspaceFileKey, type DesktopWorkspaceEntriesWatchOptions, type WorkspaceFileRead } from '@setsuna-desktop/contracts';
+import type { DesktopWorkspaceEntriesWatchOptions, WorkspaceFileRead } from '@setsuna-desktop/contracts';
 import { DesignDocumentSurface, type DesignClient } from '@setsuna-desktop/feature-design/renderer';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { FeatureRecoveryShell } from '../FeatureRecoveryShell.js';
@@ -25,6 +25,6 @@ export function WorkspaceDesignFile({ file, workspaceRoot }: Readonly<{ file: Wo
   const watchAssetDirectories = useCallback((directories: readonly string[], changed: () => void, options?: DesktopWorkspaceEntriesWatchOptions) =>
     workspaceRoot ? watchDesignDirectories(workspaceRoot, directories, changed, options) : () => undefined, [workspaceRoot]);
   if (!client) return <FeatureRecoveryShell candidateFeatureIds={['design']} reason="view-missing" />;
-  return <DesignDocumentSurface key={workspaceFileKey(file)} client={client} documentRef={documentRef}
+  return <DesignDocumentSurface client={client} documentRef={documentRef}
     fileRevision={file.revision} watchAssetDirectories={watchAssetDirectories} translate={t} />;
 }

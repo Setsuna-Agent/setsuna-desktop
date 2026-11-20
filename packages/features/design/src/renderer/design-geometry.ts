@@ -72,6 +72,15 @@ export function transformedBounds(box: DesignTransform & Readonly<{ width: numbe
   return unionBounds(corners.map((point) => ({ ...point, width: 0, height: 0 }))) as Bounds;
 }
 
+export function transformedLocalBounds(bounds: Bounds, pose: DesignTransform): Bounds {
+  const origin = toWorld(pose, bounds);
+  return transformedBounds({ ...pose, absoluteX: origin.x, absoluteY: origin.y, width: bounds.width, height: bounds.height });
+}
+
+export function layerOutline(bounds: Bounds, orientation: DesignOrientation): Bounds {
+  return transformedBounds({ ...bounds, ...layerTransform(bounds, orientation) });
+}
+
 export function unionBounds(bounds: readonly Bounds[]): Bounds | undefined {
   if (!bounds.length) return undefined;
   let left = Infinity;

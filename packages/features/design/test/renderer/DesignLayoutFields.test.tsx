@@ -34,15 +34,15 @@ function mountFields(initial: DesignDocument, id: string, yoga: Yoga) {
     const node = document.nodes[id];
     const box = scene[id];
     const parent = box.parentId ? projected.nodes[box.parentId] : undefined;
-    const numberEdits: ComponentProps<typeof DesignSizeFields>['numberEdits'] = {
-      onNumberSave: (apply) => save([{ kind: 'update', nodeId: id, node: apply(document.nodes[id]) }]),
-      onNumberPreview: () => {},
+    const fieldEdits: ComponentProps<typeof DesignSizeFields>['fieldEdits'] = {
+      onFieldSave: (apply) => save([{ kind: 'update', nodeId: id, node: apply(document.nodes[id]) }]),
+      onFieldPreview: () => {},
     };
     const sizes = <DesignSizeFields node={node} projectedNode={projected.nodes[id]} box={box}
-      parent={parent?.kind === 'frame' ? parent : undefined} translate={t} disabled={false} numberEdits={numberEdits}
+      parent={parent?.kind === 'frame' ? parent : undefined} translate={t} disabled={false} fieldEdits={fieldEdits}
       onSave={(next) => save([{ kind: 'update', nodeId: id, node: next }])} />;
     return node.kind === 'frame' && !node.instanceOf ? <DesignLayoutFields frame={node} sizeControls={sizes}
-      translate={t} disabled={false} numberEdits={numberEdits}
+      translate={t} disabled={false} fieldEdits={fieldEdits}
       onLayoutChange={(next) => save(changeDesignLayout(document, scene, id, node, next))} /> : sizes;
   }
   const view = render(panel());

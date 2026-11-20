@@ -105,6 +105,14 @@ export const browserPreloadFeature = definePreloadFeature<BrowserPreloadBridgeCo
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setActiveTab, { tabId }),
       setDeviceEmulation: (tabId, emulation) =>
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setDeviceEmulation, { emulation, tabId }),
+      configureWebPreview: (webContentsId, settings) =>
+        ipcRenderer.invoke(BROWSER_IPC_CHANNELS.configureWebPreview, { webContentsId, settings }),
+      captureWebPreview: (webContentsId) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.captureWebPreview, webContentsId),
+      onWebPreviewEscape(callback) {
+        const listener = (_event: IpcRendererEvent, id: number) => callback(id);
+        ipcRenderer.on(BROWSER_IPC_CHANNELS.webPreviewEscape, listener);
+        return () => ipcRenderer.off(BROWSER_IPC_CHANNELS.webPreviewEscape, listener);
+      },
       showReloadMenu: (webContentsId, shortcutBindings, point) =>
         ipcRenderer.invoke(BROWSER_IPC_CHANNELS.showReloadMenu, {
           shortcutBindings: shortcutBindings ? { ...shortcutBindings } : undefined,

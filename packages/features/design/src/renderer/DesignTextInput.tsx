@@ -29,7 +29,7 @@ export function DesignTextInput({ initialText, label, style, autoWidth = false, 
     }
     element.style.height = '0px';
     element.style.height = `${element.scrollHeight}px`;
-  }, [autoWidth, style.fontFamily, style.fontSize, style.fontWeight, style.letterSpacing, style.lineHeight, style.width, text]);
+  }, [autoWidth, style.fontFamily, style.fontSize, style.fontStyle, style.fontWeight, style.letterSpacing, style.lineHeight, style.width, text]);
 
   const submit = async (value: string) => {
     if (saving.current || cancelled.current) return;

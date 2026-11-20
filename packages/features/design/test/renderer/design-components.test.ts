@@ -1,9 +1,14 @@
 import { expect, it } from 'vitest';
-import { commitDesignEdits, designDocumentCodec, type DesignFrame } from '../../src/contracts/index.js';
+import { loadYoga } from 'yoga-layout/load';
+import { commitDesignEdits, designDocumentCodec, designDocumentVersion, type DesignFrame } from '../../src/contracts/index.js';
+import { designVariableCollectionKey } from '../../src/contracts/design-variable-collections.js';
+import { createDesignComponentThumbnailSelection } from '../../src/renderer/components/design-component-thumbnails.js';
 import { designInstanceContents, detachDesignInstance, projectDesignComponents, withDesignInstanceContent } from '../../src/renderer/components/design-components.js';
 import { applyDesignEdits } from '../../src/contracts/apply-design-edits.js';
 import { changeDesignVariant, createDesignVariant, designComponentVariants } from '../../src/renderer/components/design-library.js';
 import { buildDesignLibraryResources } from '../../src/renderer/components/design-library-resources.js';
+import { resolveDesignScene } from '../../src/renderer/design-layout.js';
+import { designExportImagePaths } from '../../src/renderer/export/design-export-scene.js';
 
 it('keeps nested instances linked until they are detached and rejects edits that break those links', () => {
   const frame = { kind: 'frame', x: 0, y: 0, width: 160, height: 80, childIds: [] } satisfies DesignFrame;
@@ -127,4 +132,38 @@ it('keeps text and image overrides local to a nested instance through reload, re
     ref: { projectId: 'project', rootId: 'root', path: 'test.design.json' }, expectedRevision: '0',
     edits: [{ kind: 'update', nodeId: 'example', node: unsafe }],
   })).toThrow(/within the project root/u);
+});
+
+it('previews the local and shared components independently using the shared variant’s authored mode', async () => {
+  const frame = { kind: 'frame', x: 0, y: 0, width: 96, height: 40, childIds: [] } as const;
+  const image = { kind: 'image', x: 0, y: 0, width: 24, height: 24 } as const;
+  const schemaVersion = designDocumentVersion;
+  const local = designDocumentCodec.parse({ schemaVersion, documentId: 'screen', libraries: { controls: 'controls.design.json' },
+    rootIds: ['loading'], nodes: {
+      loading: { ...frame, component: true, childIds: ['asset'] },
+      asset: { ...image, assetPath: 'local.png' },
+    } });
+  const shared = designDocumentCodec.parse({ schemaVersion, documentId: 'controls', rootIds: ['board'],
+    variableCollections: { default: { modes: { large: 'Large' } } },
+    styles: { size: { kind: 'number', name: 'Width', value: 96, modeValues: { large: 180 } } },
+    nodes: {
+      board: { ...frame, width: 200, hidden: true, childIds: ['button', 'loading'],
+        variableModeIds: { [designVariableCollectionKey('controls')]: 'large' } },
+      button: { ...frame, component: true },
+      loading: { ...frame, component: true, componentSet: 'button', variantName: 'Loading',
+        variableIds: { width: 'size' }, childIds: ['asset', 'hidden'] },
+      asset: { ...image, assetPath: 'loading.png' },
+      hidden: { ...image, hidden: true, assetPath: 'hidden.png' },
+    } });
+  const resources = buildDesignLibraryResources(local.documentId, [shared]);
+  const layoutEngine = await loadYoga();
+  const projected = projectDesignComponents(local, resources);
+  const scene = resolveDesignScene(layoutEngine, projected, () => ({ width: 0, height: 0 }));
+  const select = createDesignComponentThumbnailSelection(local, { projected, scene, resources, layoutEngine });
+  const localPreview = select('loading');
+  const sharedPreview = select('controls:loading');
+  if (!localPreview || !sharedPreview) throw new Error('Both component previews must be available.');
+  expect(designExportImagePaths(localPreview)).toEqual(['local.png']);
+  expect(designExportImagePaths(sharedPreview)).toEqual(['loading.png']);
+  expect(sharedPreview.scene.loading.width).toBe(180);
 });

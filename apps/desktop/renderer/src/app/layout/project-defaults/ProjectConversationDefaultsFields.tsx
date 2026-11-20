@@ -1,5 +1,5 @@
 import { canFollowWorkspaceConversationDefaults, type WorkspaceConversationDefaults, type WorkspaceProject } from '@setsuna-desktop/contracts';
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { SegmentedControl } from '@setsuna-desktop/renderer-ui';
 import { useRef } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { SelectField } from '../../../shared/ui/primitives.js';
@@ -32,15 +32,11 @@ export function ProjectConversationDefaultsFields({ value, projects, projectId, 
   return <section className="sd-form-stack">
     <div className="sd-form-field">
       <h3 className="sd-form-label">{t('sidebar.conversationDefaults')}</h3>
-      <div className="desktop-project-editor__defaults-mode" data-following={following}
-        role="group" aria-label={t('sidebar.conversationDefaults')}>
-        <Button variant="ghost" aria-pressed={!following} disabled={disabled} onClick={() => changeMode('custom')}>
-          {t('sidebar.customDefaults')}
-        </Button>
-        <Button variant="ghost" aria-pressed={following} disabled={disabled} onClick={() => changeMode('follow')}>
-          {t('sidebar.followDefaults')}
-        </Button>
-      </div>
+      <SegmentedControl label={t('sidebar.conversationDefaults')} value={following ? 'follow' : 'custom'}
+        disabled={disabled} onChange={changeMode} options={[
+          { value: 'custom', label: t('sidebar.customDefaults') },
+          { value: 'follow', label: t('sidebar.followDefaults') },
+        ]} />
     </div>
     {following ? <label className="sd-form-field">
       <span className="sd-form-label">{t('sidebar.defaultsSource')}</span>

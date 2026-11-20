@@ -120,7 +120,7 @@ export function isWorkspaceSearchPathExcluded(
 }
 
 export function workspaceRelativeSearchPath(root: string, filePath: string): string {
-  const relative = slashPath(path.relative(root, path.resolve(root, filePath))).replace(/^\.\//u, '');
+  const relative = path.relative(root, path.resolve(root, filePath)).split(path.sep).join('/');
   if (!relative || relative === '..' || relative.startsWith('../')) {
     throw new Error(`Ripgrep returned a path outside the workspace: ${filePath}`);
   }

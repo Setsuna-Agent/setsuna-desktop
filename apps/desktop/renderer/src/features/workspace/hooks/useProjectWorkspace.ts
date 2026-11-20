@@ -128,12 +128,10 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
     [activeProjectId, rootId, scopeKey, client, confirmDiscardChanges, filePreview, filePreviewRequests, onOpenFilePanel],
   );
 
-  const openProjectFile = useCallback(
-    async (filePath: string, line?: number, selectedRootId = rootId,
+  // Search results and restored tabs already identify an exact entry in a bound root.
+  const openRootFile = useCallback(
+    async (filePath: string, line?: number, targetRootId = rootId,
       { revealPanel = true }: { revealPanel?: boolean } = {}): Promise<boolean> => {
-      const reference = project ? resolveWorkspaceFileReference(project, filePath, selectedRootId) : null;
-      const targetRootId = reference?.root.id ?? selectedRootId;
-      filePath = reference?.path ?? filePath;
       if (!activeProjectId) return false;
       const projectId = activeProjectId;
       const isLatest = filePreviewRequests.begin();
@@ -166,8 +164,13 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
         return false;
       }
     },
-    [activeProjectId, rootId, scopeKey, project, client, confirmDiscardChanges, filePreview, filePreviewRequests, onOpenFilePanel, t, toast],
+    [activeProjectId, rootId, scopeKey, client, confirmDiscardChanges, filePreview, filePreviewRequests, onOpenFilePanel, t, toast],
   );
+
+  const openProjectFile = useCallback((filePath: string, line?: number, selectedRootId = rootId, options?: { revealPanel?: boolean }) => {
+    const reference = project && resolveWorkspaceFileReference(project, filePath, selectedRootId);
+    return openRootFile(reference?.path ?? filePath, line, reference?.root.id ?? selectedRootId, options);
+  }, [openRootFile, project, rootId]);
 
   const searchProjectEntries = useCallback(
     async (query = '', parent?: string | null): Promise<WorkspaceEntrySearchResponse> => {
@@ -342,6 +345,7 @@ export function useProjectWorkspace({ activeProjectId, rootId, project, client, 
     deleteEntry,
     openEntry,
     openProjectFile,
+    openRootFile,
     cancelFilePreviewRequests: filePreviewRequests.invalidate,
     refreshFilePreview,
     resetProjectWorkspaceState,

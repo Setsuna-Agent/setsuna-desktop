@@ -62,9 +62,11 @@ import { JavaScriptWorkspaceSearchEngine } from '../search/javascript-workspace-
 import { isPathWithin } from '../search/workspace-search-policy.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
-import { createWorkspaceEntry, deleteWorkspaceEntry, moveWorkspaceEntry, renameWorkspaceEntry } from './workspace-entry-mutations.js';
+import { createDesignWorkspaceEntryRelocation } from './design-workspace-resource-root.js';
+import { createWorkspaceEntry, deleteWorkspaceEntry, moveWorkspaceEntry, renameWorkspaceEntry, type WorkspaceEntryRelocation } from './workspace-entry-mutations.js';
 import { applyWorkspaceFileChanges } from './workspace-file-changes.js';
 import { readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
+import { walkWorkspaceFiles } from './workspace-file-walk.js';
 
 import { assertProjectRootsAvailable, findGitRoot, normalizeProjectPath, normalizeProjectRoots, projectWithRoots } from './workspace-project-roots.js';
 
@@ -88,6 +90,7 @@ type FileWorkspaceProjectStoreOptions = {
 
 export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   private readonly indexPath: string;
+  private readonly relocateWithOwnership: WorkspaceEntryRelocation;
   private readonly searchEngine: WorkspaceSearchEngine;
   private readonly temporaryWorkspacePath: string;
   private readonly temporaryWorkspaceDates = new Map<string, string>();
@@ -98,6 +101,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     private readonly options: FileWorkspaceProjectStoreOptions = {},
   ) {
     this.indexPath = path.join(dataDir, 'projects.json');
+    this.relocateWithOwnership = createDesignWorkspaceEntryRelocation(dataDir);
     this.searchEngine = options.searchEngine ?? new JavaScriptWorkspaceSearchEngine();
     this.temporaryWorkspacePath = path.resolve(options.temporaryWorkspacePath ?? path.join(dataDir, 'temporary-workspace'));
   }
@@ -441,7 +445,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         }
 
         const absolutePath = path.join(current, entry.name);
-        const relativePath = toProjectRelative(project.path, absolutePath).replace(/\\/g, '/');
+        const relativePath = toProjectRelative(project.path, absolutePath);
         scanned += 1;
 
         if (entry.isDirectory()) {
@@ -541,9 +545,22 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     return realpath((await this.requireProject(projectId)).path);
   }
 
+  async listBoundWorkspaceRoots() {
+    const { projects } = await this.readIndex();
+    const all = new Set<string>();
+    const active = new Set<string>();
+    for (const project of projects) {
+      for (const root of workspaceProjectRoots(project)) {
+        all.add(root.path);
+        if (!project.archivedAt) active.add(root.path);
+      }
+    }
+    return { all: [...all], active };
+  }
+
   async renameEntry(projectId: WorkspaceProjectTarget, relativePath: string, input: WorkspaceEntryRenameInput): Promise<WorkspaceEntry> {
-    const project = await this.requireProject(projectId);
-    return renameWorkspaceEntry(project.path, relativePath, input);
+    const [root, boundRoots] = await Promise.all([this.resolveWorkspaceRoot(projectId), this.listBoundWorkspaceRoots()]);
+    return renameWorkspaceEntry(root, relativePath, input, { boundRoots: boundRoots.all, relocate: this.relocateWithOwnership });
   }
 
   async deleteEntry(projectId: WorkspaceProjectTarget, relativePath: string): Promise<void> {
@@ -552,8 +569,8 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   async moveEntry(projectId: WorkspaceProjectTarget, relativePath: string, input: WorkspaceEntryMoveInput): Promise<WorkspaceEntry> {
-    const project = await this.requireProject(projectId);
-    return moveWorkspaceEntry(project.path, relativePath, input);
+    const [root, boundRoots] = await Promise.all([this.resolveWorkspaceRoot(projectId), this.listBoundWorkspaceRoots()]);
+    return moveWorkspaceEntry(root, relativePath, input, { boundRoots: boundRoots.all, relocate: this.relocateWithOwnership });
   }
 
   async writeBinaryFile(projectId: WorkspaceProjectTarget, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite> {
@@ -788,12 +805,11 @@ async function realExistingParent(startPath: string): Promise<string> {
 }
 
 function normalizeRelativePath(relativePath: string): string {
-  const normalized = relativePath.trim() || '.';
-  return normalized.replace(/^\/+/, '') || '.';
+  return relativePath.replace(/^\/+/, '') || '.';
 }
 
 function toProjectRelative(projectRoot: string, absolutePath: string): string {
-  return (path.relative(projectRoot, absolutePath) || '.').replace(/\\/g, '/');
+  return (path.relative(projectRoot, absolutePath) || '.').split(path.sep).join('/');
 }
 
 async function sortedDirectoryEntries(directory: string) {
@@ -802,7 +818,7 @@ async function sortedDirectoryEntries(directory: string) {
 }
 
 function normalizeEntrySearchText(value: string): string {
-  return value.trim().replace(/\\/g, '/').toLowerCase();
+  return value.trim().split(path.sep).join('/').toLowerCase();
 }
 
 function parentForRelativePath(relativePath: string): string {
@@ -819,21 +835,6 @@ async function countEntries(root: string): Promise<number> {
     return count < 10000;
   });
   return count;
-}
-
-export async function walkWorkspaceFiles(root: string, onFile: (filePath: string) => boolean | Promise<boolean>, signal?: AbortSignal): Promise<boolean> {
-  signal?.throwIfAborted();
-  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
-  for (const entry of entries) {
-    if (isIgnoredWorkspaceEntryName(entry.name) || entry.isSymbolicLink()) continue;
-    const absolutePath = path.join(root, entry.name);
-    if (entry.isDirectory()) {
-      if (!(await walkWorkspaceFiles(absolutePath, onFile, signal))) return false;
-    } else if (entry.isFile() && !(await onFile(absolutePath))) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function workspaceFileIdentity(target: WorkspaceProjectTarget): { projectId: string; rootId?: string } {

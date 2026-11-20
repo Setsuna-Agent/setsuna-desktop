@@ -92,10 +92,6 @@
   background: transparent;
 }
 
-.app-navigation__button > .app-navigation__icon--default {
-  color: inherit;
-}
-
 .app-navigation__button > .desktop-icon-avatar svg {
   width: 18px;
   height: 18px;

@@ -1,7 +1,8 @@
 import type { DesignImage } from '../contracts/index.js';
+import { defaultDesignImageCrop } from '../contracts/design-variables.js';
 import { roundDesignValue, type Bounds, type Point } from './design-geometry.js';
 
-export const defaultImageCrop: Point = { x: 0.5, y: 0.5 };
+export { defaultDesignImageCrop as defaultImageCrop } from '../contracts/design-variables.js';
 
 export function designImageFit(node: DesignImage, width: number, height: number, imageWidth: number, imageHeight: number):
   Readonly<{ bounds: Bounds; crop?: Bounds; overhang?: Point }> {
@@ -14,7 +15,7 @@ export function designImageFit(node: DesignImage, width: number, height: number,
   const scale = Math.max(width / imageWidth, height / imageHeight);
   const w = width / scale;
   const h = height / scale;
-  const crop = node.crop ?? defaultImageCrop;
+  const crop = node.crop ?? defaultDesignImageCrop;
   return { bounds: { x: 0, y: 0, width, height },
     crop: { x: (imageWidth - w) * crop.x, y: (imageHeight - h) * crop.y, width: w, height: h },
     overhang: { x: Math.max(0, imageWidth * scale - width), y: Math.max(0, imageHeight * scale - height) } };

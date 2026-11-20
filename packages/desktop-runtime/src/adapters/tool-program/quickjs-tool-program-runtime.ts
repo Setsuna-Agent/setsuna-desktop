@@ -25,7 +25,7 @@ export class QuickJsToolProgramRuntime implements ToolProgramRuntime {
     for (const worker of this.active.values()) void worker.terminate();
   }
 
-  async execute(input: Parameters<ToolProgramRuntime['execute']>[0]): Promise<string> {
+  async execute(input: Parameters<ToolProgramRuntime['execute']>[0] & { output?: 'return' }): Promise<string> {
     input.signal.throwIfAborted();
     const sessionId = input.sessionId ?? 'default';
     if (this.stopped || this.active.has(sessionId) || this.active.size >= 4) throw new Error('Tool program runtime is unavailable or busy.');
@@ -77,7 +77,7 @@ export class QuickJsToolProgramRuntime implements ToolProgramRuntime {
             })();
           }
         });
-        worker.postMessage({ type: 'start', code: input.code, toolNames: input.toolNames,
+        worker.postMessage({ type: 'start', code: input.code, toolNames: input.toolNames, returnValue: input.output === 'return',
           state: state.snapshot(), toolCatalog: input.toolCatalog ?? input.toolNames.map(name => ({ name, description: '' })) });
         if (input.signal.aborted) cancel();
       });

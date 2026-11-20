@@ -116,6 +116,14 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     workspacePanels,
   } = controller;
   const designAvailable = Boolean(useDesignClient());
+  const designProjects = useMemo(() => {
+    const projects = new Map(runtime.projects.map((project) => [project.id, project]));
+    for (const source of designSources) if (!projects.has(source.id)) projects.set(source.id, source);
+    if (activeWorkspace?.id && activeWorkspace.id === designLocation?.projectId && !projects.has(activeWorkspace.id)) {
+      projects.set(activeWorkspace.id, activeWorkspace);
+    }
+    return [...projects.values()];
+  }, [activeWorkspace, designLocation?.projectId, designSources, runtime.projects]);
   const [conversationOverviewVisibility, setConversationOverviewVisibility] = useState<ConversationOverviewVisibility>('auto');
   const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
   const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
@@ -137,7 +145,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const currentThread = runtime.currentThread;
   const openSearchFile = useSidebarSearchFileNavigation({
     activeProjectId, activeView, currentThreadId: currentThread?.id, workspaceId: activeWorkspace?.id,
-    navigation, openProjectFile: projectWorkspace.openProjectFile,
+    navigation, openRootFile: projectWorkspace.openRootFile,
   });
   const assistantChat = activeView === 'chat' && currentThread?.featureId === 'assistants';
   const toast = useToast();
@@ -654,8 +662,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           onBack: openChat,
         }}
         renderDefault={(routeId) => routeId === 'design' ? (
-          <DesignWorkspaceRoute preferredProjectId={activeProject?.id ?? activeProjectId}
-            projects={[...runtime.projects, ...designSources.filter((source) => !runtime.projects.some(({ id }) => id === source.id))]}
+          <DesignWorkspaceRoute projects={designProjects}
             location={designLocation} onLocationChange={setDesignLocation} onAddProject={navigation.openCreateProject} />
         ) : (
           <AppRouteContent

@@ -1,14 +1,16 @@
 import { ImageIcon, ImageOff, Search, Upload } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactElement } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { Button, Dialog, TextField, useToast } from '@setsuna-desktop/renderer-ui';
+import { Button, Popover, TextField, useToast } from '@setsuna-desktop/renderer-ui';
 import type { DesignDocumentRef } from '../contracts/index.js';
 import type { DesignAssets, DesignClient } from './client.js';
 import { DesignImageGallery, useProjectImagePreview } from './DesignImageGallery.js';
+import { designLayerShortcut } from './context/design-layer-shortcuts.js';
 import {
   clipboardDesignImage, designImageAccept, isDesignImageName, prepareLocalDesignImage, storePreparedDesignImage,
   type LoadDesignImage, type PreparedDesignImage,
 } from './design-images.js';
+import { designInspectorPopoverPosition } from './inspector/DesignInspectorFields.js';
 import './design-image-picker.css';
 
 type ImageChoice = Readonly<
@@ -17,17 +19,36 @@ type ImageChoice = Readonly<
 type PickerOperation = 'preview' | 'insert';
 const emptyPaths: readonly string[] = [];
 
-export function DesignImagePicker({ documentRef, assets, loadImage, currentPath, replacing = false, translate: t, onClose, onImport, onInsert }: Readonly<{
+export type DesignImageAssets = Readonly<{
   documentRef: DesignDocumentRef;
   assets: DesignAssets;
   loadImage: LoadDesignImage;
+  onImport: DesignClient['importImage'];
+}>;
+
+type ImagePickerProps = DesignImageAssets & Readonly<{
   currentPath?: string;
-  replacing?: boolean;
   translate: RendererTranslate;
   onClose(): void;
-  onImport: DesignClient['importImage'];
   onInsert(path: string): Promise<boolean>;
+}>;
+
+export function DesignImagePopover({ children, revision, disabled, ...picker }: Omit<ImagePickerProps, 'onClose'> & Readonly<{
+  children: ReactElement;
+  revision: string;
+  disabled: boolean;
 }>) {
+  const [openedAt, setOpenedAt] = useState<string>();
+  const open = openedAt === revision && !disabled;
+  return <Popover {...designInspectorPopoverPosition} open={open} hideWhenDetached
+    onOpenChange={(next) => setOpenedAt(next && !disabled ? revision : undefined)}
+    className="design-tool-popover design-tool-popover--image" contentLabel={picker.translate('feature.design.replaceImage')}
+    content={open ? <div className="design-tool-popover__content">
+      <DesignImagePicker {...picker} onClose={() => setOpenedAt(undefined)} />
+    </div> : null}>{children}</Popover>;
+}
+
+export function DesignImagePicker({ documentRef, assets, loadImage, currentPath, translate: t, onClose, onImport, onInsert }: ImagePickerProps) {
   const [query, setQuery] = useState('');
   const [searchResult, setSearchResult] = useState<{ query: string; paths: readonly string[] }>();
   const [choice, setChoice] = useState<ImageChoice | undefined>(() => currentPath ? { kind: 'project', path: currentPath } : undefined);
@@ -69,7 +90,6 @@ export function DesignImagePicker({ documentRef, assets, loadImage, currentPath,
   const loadingPreview = pending === 'preview' || Boolean(projectPath && projectPreview === undefined);
   const canInsert = Boolean(src && !pending && (local || projectPath !== currentPath));
   const previewError = projectPreview === null && projectPath ? t('feature.design.loadImageFailed', { path: projectPath }) : undefined;
-  const title = t(replacing ? 'feature.design.replaceImage' : 'feature.design.addImage');
 
   async function run(phase: PickerOperation, task: (signal: AbortSignal) => Promise<void>) {
     if (operation.current) return;
@@ -113,49 +133,60 @@ export function DesignImagePicker({ documentRef, assets, loadImage, currentPath,
     });
   }
 
-  return <Dialog className="design-image-picker-dialog" title={title} width={720} dismissible={pending !== 'insert'} onClose={onClose}
-    footer={<>
-      <Button variant="secondary" icon={<Upload size={16} />} loading={pending === 'preview'}
-        disabled={Boolean(pending)} onClick={() => input.current?.click()}>{t('feature.design.importLocalImage')}</Button>
-      <Button type="submit" form={formId} variant="primary" loading={pending === 'insert'} disabled={!canInsert}>
-        {t(replacing ? 'feature.design.replaceImage' : 'feature.design.insert')}
-      </Button>
-    </>}
-    onPaste={(event) => {
-      if (event.defaultPrevented) return;
-      const image = clipboardDesignImage(event.clipboardData);
-      if (!image) return;
-      event.preventDefault();
-      previewLocalFile(image);
-    }}>
-    <form id={formId} className="design-image-picker" onSubmit={(event) => { event.preventDefault(); confirmImage(); }}>
-      <div className="design-image-picker__content">
-        <div className="design-image-picker__browser">
-          <TextField autoFocus appearance="search" aria-label={t('feature.design.imagePath')} placeholder={t('feature.design.imagePath')}
-            leadingIcon={<Search size={16} />} readOnly={Boolean(pending)} value={query} onChange={(event) => {
-              setQuery(event.target.value);
-              setChoice((current) => current?.kind === 'local' ? current : undefined);
-            }} />
-          <DesignImageGallery paths={paths} loadImage={loadImage} selected={projectPath} searching={searching}
-            label={t('feature.design.image')} disabled={Boolean(pending)}
-            onSelect={(path) => setChoice({ kind: 'project', path })} />
-        </div>
-        <figure className="design-image-picker__preview">
-          <div className="design-image-picker__stage" aria-busy={loadingPreview}>
-            {src ? <img src={src} alt="" draggable={false} />
-              : loadingPreview ? <span className="sd-spinner" aria-hidden="true" />
-                : previewError ? <span className="design-image-picker__placeholder" role="img" aria-label={previewError} title={previewError}>
-                  <ImageOff size={26} strokeWidth={1.5} />
-                </span> : <span className="design-image-picker__placeholder" aria-hidden="true"><ImageIcon size={28} strokeWidth={1.5} /></span>}
-          </div>
-          {caption ? <figcaption className="design-image-picker__caption" title={caption}>{caption}</figcaption> : null}
-        </figure>
+  function paste(event: ClipboardEvent<HTMLElement>) {
+    if (event.defaultPrevented) return;
+    const image = clipboardDesignImage(event.clipboardData);
+    if (!image) return;
+    event.preventDefault();
+    previewLocalFile(image);
+  }
+
+  function pasteShortcut(event: KeyboardEvent<HTMLElement>) {
+    if (event.defaultPrevented || event.nativeEvent.isComposing || designLayerShortcut(event) !== 'paste') return;
+    event.preventDefault();
+    if (!event.repeat) void assets.requestClipboardPaste(false).catch((error: unknown) => {
+      toast.error(t('feature.design.clipboardFailed', { error: String(error) }));
+    });
+  }
+
+  const footer = <>
+    <Button size="small" variant="secondary" icon={<Upload size={14} />} loading={pending === 'preview'}
+      disabled={Boolean(pending)} onClick={() => input.current?.click()}>{t('feature.design.importLocalImage')}</Button>
+    <Button size="small" type="submit" form={formId} variant="primary" loading={pending === 'insert'} disabled={!canInsert}>
+      {t(currentPath ? 'feature.design.replaceImage' : 'feature.design.insert')}
+    </Button>
+  </>;
+  const content = <form id={formId} className="design-image-picker" onSubmit={(event) => { event.preventDefault(); confirmImage(); }}>
+    <div className="design-image-picker__content">
+      <div className="design-image-picker__browser">
+        <TextField autoFocus appearance="search" aria-label={t('feature.design.imagePath')} placeholder={t('feature.design.imagePath')}
+          leadingIcon={<Search size={16} />} readOnly={Boolean(pending)} value={query} onChange={(event) => {
+            setQuery(event.target.value);
+            setChoice((current) => current?.kind === 'local' ? current : undefined);
+          }} />
+        <DesignImageGallery paths={paths} loadImage={loadImage} selected={projectPath} searching={searching}
+          label={t('feature.design.image')} disabled={Boolean(pending)}
+          onSelect={(path) => setChoice({ kind: 'project', path })} />
       </div>
-      <input ref={input} type="file" accept={designImageAccept} hidden onChange={(event) => {
-        const file = event.currentTarget.files?.[0];
-        event.currentTarget.value = '';
-        if (file) previewLocalFile(file);
-      }} />
-    </form>
-  </Dialog>;
+      <figure className="design-image-picker__preview">
+        <div className="design-image-picker__stage" aria-busy={loadingPreview}>
+          {src ? <img src={src} alt="" draggable={false} />
+            : loadingPreview ? <span className="sd-spinner" aria-hidden="true" />
+              : previewError ? <span className="design-image-picker__placeholder" role="img" aria-label={previewError} title={previewError}>
+                <ImageOff size={26} strokeWidth={1.5} />
+              </span> : <span className="design-image-picker__placeholder" aria-hidden="true"><ImageIcon size={28} strokeWidth={1.5} /></span>}
+        </div>
+        {caption ? <figcaption className="design-image-picker__caption" title={caption}>{caption}</figcaption> : null}
+      </figure>
+    </div>
+    <input ref={input} type="file" accept={designImageAccept} hidden onChange={(event) => {
+      const file = event.currentTarget.files?.[0];
+      event.currentTarget.value = '';
+      if (file) previewLocalFile(file);
+    }} />
+  </form>;
+  return <div className="design-image-picker-popover" onPaste={paste} onKeyDown={pasteShortcut}>
+    {content}
+    <div className="design-image-picker-popover__footer">{footer}</div>
+  </div>;
 }

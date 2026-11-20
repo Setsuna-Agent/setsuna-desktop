@@ -58,3 +58,29 @@ it('previews opacity independently of color and clears it on cancellation', asyn
   await act(async () => { fireEvent.pointerUp(alpha, end); });
   expect(commit).toHaveBeenCalledExactlyOnceWith({ color: '#2b4a6d', opacity: 0.8 });
 });
+
+it('previews a typed HEX value without losing the original alpha when the suffix is removed', async () => {
+  const preview = vi.fn<(paint: PickerColor | undefined) => void>();
+  const commit = vi.fn<(paint: PickerColor) => Promise<boolean>>().mockResolvedValue(true);
+  render(<UiProvider locale="en-US">
+    <ColorPicker label="Fill" value="#2b4a6d" opacity={0.4} onColorPreview={preview} onColorCommit={commit} />
+  </UiProvider>);
+  fireEvent.click(screen.getByRole('button', { name: 'Fill' }));
+  const hex = await screen.findByRole('textbox', { name: 'HEX' });
+  hex.focus();
+  fireEvent.change(hex, { target: { value: '44AA6680' } });
+  expect(preview).toHaveBeenLastCalledWith({ color: '#44aa66', opacity: 128 / 255 });
+  fireEvent.change(hex, { target: { value: '44AA66' } });
+  expect(preview).toHaveBeenLastCalledWith({ color: '#44aa66', opacity: 0.4 });
+  expect(commit).not.toHaveBeenCalled();
+  fireEvent.keyDown(hex, { key: 'Escape' });
+  expect(preview).toHaveBeenLastCalledWith(undefined);
+  expect(commit).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Fill' }));
+  const reopened = await screen.findByRole('textbox', { name: 'HEX' });
+  reopened.focus();
+  fireEvent.change(reopened, { target: { value: '44AA66' } });
+  await act(async () => { fireEvent.keyDown(reopened, { key: 'Enter' }); });
+  expect(commit).toHaveBeenCalledExactlyOnceWith({ color: '#44aa66', opacity: 0.4 });
+});

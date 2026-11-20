@@ -117,8 +117,8 @@ export function DesignPaintStack<T>({ entries, label, disabled, renderEntry, onS
           event.dataTransfer.effectAllowed = 'move';
           event.dataTransfer.setData(paintDragType, String(index));
           source.current = { entries, from: index };
-          const swatch = event.currentTarget.parentElement?.querySelector<HTMLElement>('.design-inspector__paint-controls');
-          native.start(event, swatch ?? event.currentTarget);
+          const field = event.currentTarget.parentElement?.querySelector<HTMLElement>('.design-paint-field');
+          native.start(event, field ?? event.currentTarget);
         }} onDragEnd={endDrag} onKeyDown={(event) => {
           if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
           event.preventDefault();

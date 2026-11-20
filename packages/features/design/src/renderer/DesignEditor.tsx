@@ -1,19 +1,36 @@
-import { Copy, Group, LibraryBig, Play, Redo2, Trash2, Undo2, Ungroup } from 'lucide-react';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
+import { Copy, Ellipsis, Group, Play, Redo2, Trash2, Undo2, Ungroup } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type SetStateAction, type SyntheticEvent } from 'react';
 import type { Yoga } from 'yoga-layout/load';
-import { IconButton, useToast } from '@setsuna-desktop/renderer-ui';
-import { defaultDesignPolygonSides, designTextFill, type DesignContentOverride, type DesignDocument, type DesignEdit, type DesignNode, type DesignSnapshot, type DesignStyle } from '../contracts/index.js';
+import { Dropdown, IconButton, Popover, useToast } from '@setsuna-desktop/renderer-ui';
+import type { DesignContentOverride, DesignDocument, DesignEdit, DesignNode, DesignScript, DesignStyle } from '../contracts/index.js';
+import { designDefaultColor } from '../contracts/design-color.js';
+import { maxDesignScriptBytes } from '../contracts/design-content-source.js';
+import { designStylesForModes } from '../contracts/design-styles.js';
+import { bindDesignVariable, defaultDesignImageCrop } from '../contracts/design-variables.js';
+import { isStraightDesignPath } from '../contracts/vector-geometry.js';
+import { defaultDrawingWidths, drawingInkTool, drawingPathNode, isDrawingInkTool, type DrawingInk, type DrawingInkTool, type DrawingPreview } from './canvas/design-drawing.js';
+import { isSegmentDrawingTool } from './canvas/design-shape-drawing.js';
+import { convertDesignScript, projectDesignScriptLayers, withDesignScriptInput } from './canvas/design-script-layers.js';
+import { readDesignScriptFile, type DesignScriptSource } from './canvas/design-script-source.js';
+import { useDesignScriptParameters } from './canvas/use-design-script-parameters.js';
+import { useDesignScriptResults, type DesignScriptParameterPreview } from './canvas/use-design-script-results.js';
+import type { DesignWebLayerControls } from './canvas/DesignWebToolbar.js';
+import { DesignPanelLayout } from './canvas/DesignSidePanels.js';
 import { DesignCanvas, type CanvasViewport, type DesignCanvasHandle } from './DesignCanvas.js';
 import type { DesignDocumentSurfaceProps } from './DesignDocumentSurface.js';
 import { DesignImagePicker } from './DesignImagePicker.js';
-import { DesignInspector, type ArtboardPreset, type DesignInspectorHandle } from './inspector/DesignInspector.js';
+import { DesignInspector, type DesignInspectorHandle } from './inspector/DesignInspector.js';
+import { DesignContentSourceFields } from './inspector/DesignContentSourceFields.js';
+import type { DesignScriptParameterEdits } from './inspector/DesignScriptParameterFields.js';
 import { DesignLayers } from './DesignLayers.js';
 import { DesignTextInput } from './DesignTextInput.js';
-import { designToolForKey } from './DesignTools.js';
+import { designToolForKey, designToolPopoverPosition, isDesignImagePickerShortcut, type DesignToolPanel } from './DesignTools.js';
 import { designInstanceContents, projectDesignComponents, withDesignInstanceContent } from './components/design-components.js';
-import { designStyleChoices, type DesignLibraryResources } from './components/design-library-resources.js';
+import { planDesignComponentInsertion } from './components/design-library.js';
+import { planDesignLibraryUnlink } from './components/design-library-unlink.js';
+import { designLibraryVariableCollections, designStyleChoices, type DesignLibraryResources } from './components/design-library-resources.js';
 import { useDesignLibraryResources } from './components/use-design-library-resources.js';
-import { DesignCanvasSettingsDialog, DesignLayerMenu } from './context/DesignLayerMenu.js';
+import { DesignLayerMenu } from './context/DesignLayerMenu.js';
 import { useDesignCanvasSettings } from './context/design-canvas-settings.js';
 import { canContainDesignLayers } from './context/design-layer-commands.js';
 import { designLayerShortcut } from './context/design-layer-shortcuts.js';
@@ -22,21 +39,28 @@ import {
   alignDesignLayers, alignDesignLayerToFrame, changeDesignLayout, dropDesignLayer, duplicateDesignLayers, isFlowChild, moveDesignLayer,
   movePositions, orderDesignBranches, planDesignLayerUpdate, transformDesignLayer,
 } from './design-canvas-edits.js';
-import { roundDesignValue, type Point } from './design-geometry.js';
+import type { Point } from './design-geometry.js';
 import { clipboardDesignImage, importLocalDesignImage, useDesignImageLoader, type LoadDesignImage } from './design-images.js';
-import { centerDesignLayer, resolveDesignInsertion, type DesignInsertionTarget } from './design-insertion.js';
-import type { InspectorCanvasPreview } from './inspector/design-inspector-edit.js';
-import type { DesignLayerDrag } from './design-layer-drop.js';
+import { centerDesignLayer, designDrawingPlacement, resolveDesignInsertion, type DesignInsertionTarget } from './design-insertion.js';
+import type { DesignNodeEdit, InspectorCanvasPreview, InspectorFieldEdits } from './inspector/design-inspector-edit.js';
+import type { DesignComponentDrag, DesignLayerDrag } from './design-layer-drop.js';
 import { hasEditableLayout } from './design-layout-adjustment.js';
 import { resolveDesignScene, type DesignScene } from './design-layout.js';
-import { compositeDesignFill } from './design-paint.js';
+import { compositeDesignFill, defaultDesignStroke } from './design-paint.js';
 import { designTextStyle, measureDesignText } from './design-text.js';
+import { designExportScriptIds } from './export/design-export-scene.js';
 import { useDesignExports, type DesignExportRequest } from './export/use-design-exports.js';
+import type { CaptureDesignWebImages } from './canvas/use-design-web-previews.js';
+import { DesignShaderAssetsContext, useDesignShaderAssets } from './shaders/use-design-shader-assets.js';
 import { toggleSelection, type CanvasAction, type DesignTool } from './use-design-canvas-gestures.js';
-import { useDesignDocument } from './use-design-document.js';
-import { DesignLibraryDialog } from './styles/DesignLibraryDialog.js';
+import { useDesignDocument, type DesignEditorSnapshot } from './use-design-document.js';
+import { DesignLibraryPanel } from './styles/DesignLibraryPanel.js';
+import { DesignBoardModes } from './styles/DesignBoardModes.js';
+import { DesignGradientSessionProvider } from './styles/DesignGradientSession.js';
 import { DesignStyleContext } from './styles/DesignStyleSelect.js';
+import { DesignVariableTable } from './styles/DesignVariableTable.js';
 import { designPrototypeBoardFor, designPrototypeBoards } from './prototype/design-prototype.js';
+import { DesignFontsContext, useDesignFonts, useDesignScriptFonts } from './text/use-design-fonts.js';
 import { DesignIconPicker } from './vectors/DesignIconPicker.js';
 import { clipboardDesignSvg, type DesignSvgSource } from './vectors/design-svg-source.js';
 import { fitDesignPath, isDesignPath } from './vectors/design-vector.js';
@@ -49,14 +73,28 @@ type ImageTarget = Readonly<{ revision: string }> & (
   | Readonly<{ kind: 'replace'; id: string }>
   | Readonly<{ kind: 'override'; id: string; path: string }>
 );
+type OpenToolPanel = Readonly<
+  { kind: 'library' | 'variables' } | { kind: 'image'; target: Extract<ImageTarget, { kind: 'insert' }> } | { kind: 'icon'; target: AssetInsertTarget }
+>;
 
 const directions: Record<string, Point> = {
   ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 },
 };
 const DesignPrototypePreview = lazy(() => import('./prototype/DesignPrototypePreview.js'));
+const drawingPaint = { color: designDefaultColor };
+const initialDrawingInks: Readonly<Record<DrawingInkTool, DrawingInk>> = {
+  pen: { paint: drawingPaint, width: defaultDrawingWidths.pen },
+  pencil: { paint: drawingPaint, width: defaultDrawingWidths.pencil, preset: 'smooth' },
+  brush: { paint: drawingPaint, width: defaultDrawingWidths.brush, preset: 'tapered' },
+};
 
 function isTextEntry(target: EventTarget) {
   return target instanceof Element && Boolean(target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
+}
+
+function isEditorEvent({ target, currentTarget }: SyntheticEvent<HTMLElement>) {
+  // Portalled controls share the React tree but have their own keyboard and paste handling.
+  return target instanceof Node && currentTarget.contains(target);
 }
 
 export default function DesignEditor({ layoutEngine, ...props }: DesignDocumentSurfaceProps & { layoutEngine: Yoga }) {
@@ -65,88 +103,176 @@ export default function DesignEditor({ layoutEngine, ...props }: DesignDocumentS
   const source = session.snapshot?.document;
   const resources = useDesignLibraryResources(client, documentRef, source, props.watchAssetDirectories);
   const projected = useMemo(() => source ? projectDesignComponents(source, resources) : null, [resources, source]);
-  const scene = useMemo(() => projected ? resolveDesignScene(layoutEngine, projected, measureDesignText) : null, [layoutEngine, projected]);
+  const fonts = useDesignFonts(client.fonts, projected, props.translate);
+  // Reflow auto-sized text once its actual faces are available to the canvas.
+  const scene = useMemo(() => projected ? resolveDesignScene(layoutEngine, projected, measureDesignText) : null,
+    [layoutEngine, projected, fonts.revision]);
   const loadImage = useDesignImageLoader(client.assets, documentRef, projected, props.watchAssetDirectories);
+  const shaders = useDesignShaderAssets(client, documentRef, projected, props.watchAssetDirectories);
   if (!session.snapshot || !scene || !projected) return null;
-  return <OpenDesignEditor {...props} {...session} key={source?.documentId} snapshot={session.snapshot}
-    projected={projected} resources={resources} scene={scene} layoutEngine={layoutEngine} loadImage={loadImage} />;
+  return <DesignFontsContext.Provider value={fonts}>
+    <DesignShaderAssetsContext.Provider value={shaders}>
+      <OpenDesignEditor {...props} {...session} key={session.snapshot.document.documentId} snapshot={session.snapshot}
+        projected={projected} resources={resources} scene={scene} layoutEngine={layoutEngine} loadImage={loadImage} />
+    </DesignShaderAssetsContext.Provider>
+  </DesignFontsContext.Provider>;
 }
 
-function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, numbersBusy, editNumber, commit, navigate, currentRevision, projected, resources, scene, layoutEngine, loadImage, onOpenLibrary }:
-  DesignDocumentSurfaceProps & ReturnType<typeof useDesignDocument> & { snapshot: DesignSnapshot; projected: DesignDocument;
+function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, editFields, appendStroke, commit, navigate,
+  currentRevision, projected, resources, scene, layoutEngine, loadImage, onOpenLibrary, layersToggleTarget, watchAssetDirectories }:
+  DesignDocumentSurfaceProps & ReturnType<typeof useDesignDocument> & { snapshot: DesignEditorSnapshot; projected: DesignDocument;
     resources: DesignLibraryResources; scene: DesignScene; layoutEngine: Yoga; loadImage: LoadDesignImage },
 ) {
   const canvas = useRef<DesignCanvasHandle>(null);
   const inspector = useRef<DesignInspectorHandle>(null);
   const layerDrag = useRef<DesignLayerDrag>();
+  const componentDrag = useRef<DesignComponentDrag>();
   const assetImport = useRef<AbortController>();
   const toast = useToast();
   const publishInspectorPreview = useCallback((value: InspectorCanvasPreview | undefined) => inspector.current?.preview(value), []);
   const [selection, setSelection] = useState<readonly string[]>([]);
+  const [webMode, setWebMode] = useState<'inline' | 'expanded'>();
+  const closeWeb = useCallback(() => {
+    setWebMode(undefined);
+    canvas.current?.focus();
+  }, []);
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const selectLayers = useCallback((next: SetStateAction<readonly string[]>) => {
+    setSelection(next);
+    setWebMode(undefined);
+    setInspectorCollapsed(false);
+  }, []);
   const [tool, setTool] = useState<DesignTool>('select');
+  const [drawingMode, setDrawingMode] = useState(false);
+  const [drawingInks, setDrawingInks] = useState(initialDrawingInks);
+  const lastDrawingTool = useRef<DrawingInkTool>('pencil');
   const [draft, setDraft] = useState<TextDraft | null>(null);
   const [fitRequest, setFitRequest] = useState(0);
-  const [imageTarget, setImageTarget] = useState<ImageTarget | null>(null);
-  const [iconTarget, setIconTarget] = useState<AssetInsertTarget | null>(null);
+  const [toolPanel, setToolPanel] = useState<OpenToolPanel>();
   const [importingAsset, setImportingAsset] = useState(false);
   const [canvasAdjustment, setCanvasAdjustment] = useState<Readonly<{ kind: 'crop' | 'layout' | 'path'; id: string }>>();
   const [showLayers, setShowLayers] = useState(true);
-  const [showInspector, setShowInspector] = useState(true);
   const [layerMenu, setLayerMenu] = useState<(DesignLayerMenuTarget & { revision: string }) | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [stylePreview, setStylePreview] = useState<{ styleId: string; color: string; revision: string }>();
+  const [variableCollectionKey, setVariableCollectionKey] = useState<string>();
+  const [stylePreview, setStylePreview] = useState<{ styleId: string; style: DesignStyle; revision: string }>();
+  const [scriptPreview, setScriptPreview] = useState<DesignScriptParameterPreview>();
   const [prototypeStart, setPrototypeStart] = useState<string>();
   const { settings, toggleSetting } = useDesignCanvasSettings();
-  const exportActions = useDesignExports(client.assets.output, loadImage, t);
+  const captureWebImages = useCallback<CaptureDesignWebImages>((layers, signal) =>
+    canvas.current?.captureWebImages(layers, signal) ?? Promise.resolve(undefined), []);
+  const exportActions = useDesignExports(client.assets.output, loadImage, t, captureWebImages);
   const { document, revision, canUndo, canRedo } = snapshot;
-  const localStyles = useMemo(() => {
-    const original = stylePreview && document.styles?.[stylePreview.styleId];
-    return showLibrary && stylePreview?.revision === revision && original?.kind === 'color'
-      ? { ...document.styles, [stylePreview.styleId]: { ...original, color: stylePreview.color } satisfies DesignStyle }
-      : document.styles;
-  }, [document.styles, revision, showLibrary, stylePreview]);
-  const canvasDocument = useMemo(() => localStyles === document.styles ? projected : projectDesignComponents({ ...document, styles: localStyles }, resources),
-    [document, localStyles, projected, resources]);
-  const styles = useMemo(() => designStyleChoices({ ...document, styles: localStyles }, resources), [document, localStyles, resources]);
-  const styleCatalog = useMemo(() => ({ styles, libraries: document.libraries }), [document.libraries, styles]);
+  const showVariables = toolPanel?.kind === 'variables';
+  const imageTarget = toolPanel?.kind === 'image' ? toolPanel.target : undefined;
+  const activeStyle = (showVariables || toolPanel?.kind === 'library') && stylePreview?.revision === revision ? stylePreview : undefined;
+  const canvasSource = useMemo(() => activeStyle
+    ? { ...document, styles: { ...document.styles, [activeStyle.styleId]: activeStyle.style } } : document, [activeStyle, document]);
+  const canvasDocument = useMemo(() => canvasSource === document ? projected : projectDesignComponents(canvasSource, resources),
+    [canvasSource, document, projected, resources]);
+  const canvasScene = useMemo(() => activeStyle && activeStyle.style.kind !== 'color'
+    ? resolveDesignScene(layoutEngine, canvasDocument, measureDesignText) : scene, [activeStyle, canvasDocument, layoutEngine, scene]);
+  const styles = useMemo(() => designStyleChoices(document, resources), [document, resources]);
+  const openVariables = useCallback(() => {
+    setStylePreview(undefined);
+    setToolPanel({ kind: 'variables' });
+  }, []);
+  const styleCatalog = useMemo(() => ({
+    styles, libraries: document.libraries, documentId: document.documentId,
+    openVariables: () => { setVariableCollectionKey(document.documentId); openVariables(); },
+    collectionNames: Object.fromEntries(designLibraryVariableCollections(document, resources).flatMap(({ key, collection }) =>
+      collection.name ? [[key, collection.name]] : [])),
+  }), [document, openVariables, resources, styles]);
   const boards = useMemo(() => designPrototypeBoards(document, scene), [document, scene]);
   const selectedIds = selection.filter((id) => Object.hasOwn(document.nodes, id));
+  const drawingInk = drawingMode && isDrawingInkTool(tool) ? drawingInks[tool] : undefined;
+  const showInspector = selectedIds.length > 0 && !inspectorCollapsed && !drawingInk;
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
   const node = selectedId ? document.nodes[selectedId] : undefined;
   const box = selectedId ? scene[selectedId] : undefined;
+  const scriptPath = showInspector && node?.kind === 'script' ? node.scriptPath : undefined;
+  const activeScriptPreview = scriptPreview?.id === selectedId && scriptPreview.scriptPath === scriptPath && !box?.locked ? scriptPreview : undefined;
+  const { current: currentScripts, pending: pendingScripts, rendered: renderedScripts } = useDesignScriptResults(
+    client, documentRef, { document: projected, scene }, watchAssetDirectories, t,
+    { document: canvasDocument, scene: canvasScene, preview: activeScriptPreview },
+  );
+  useDesignScriptFonts(renderedScripts);
+  const projectOutput = useCallback(() => {
+    const output = projectDesignScriptLayers(projected, currentScripts);
+    const outputScene = output === projected ? scene : resolveDesignScene(layoutEngine, output, measureDesignText);
+    return { document: output, scene: outputScene };
+  }, [currentScripts, layoutEngine, projected, scene]);
+  const prototypeOutput = useMemo(() => prototypeStart ? projectOutput() : undefined, [projectOutput, prototypeStart]);
+  const scriptParameters = useDesignScriptParameters(client, documentRef, scriptPath, watchAssetDirectories);
+  const webHost = client.assets.webPreview;
+  const webSession = selectedId && node?.kind === 'web' && node.url && box?.visible && !box.locked && webHost
+    && webMode && tool === 'select' ? { id: selectedId, mode: webMode, close: closeWeb } : undefined;
+  const boardId = designPrototypeBoardFor(selectedId, scene);
+  const board = boardId ? document.nodes[boardId] : undefined;
+  const modes = board?.kind === 'frame' ? board.variableModeIds : undefined;
+  const inspectorCatalog = useMemo(() => {
+    if (!showInspector) return styleCatalog;
+    const resolved = designStylesForModes(canvasDocument.styles, document.documentId, modes);
+    return { ...styleCatalog, styles: styles && Object.fromEntries(Object.keys(styles).map((id) => [id, resolved?.[id] ?? styles[id]])) };
+  }, [canvasDocument.styles, document.documentId, modes, showInspector, styleCatalog, styles]);
   const parent = box?.parentId ? document.nodes[box.parentId] : undefined;
   const adjustment = canvasAdjustment?.id === selectedId ? canvasAdjustment : undefined;
   const croppingId = adjustment?.kind === 'crop' && node?.kind === 'image' && node.fit !== 'contain' && !box?.locked ? adjustment.id : undefined;
   const canAdjustLayout = hasEditableLayout(node) && Boolean(box?.visible && box.visibleBounds && !box.locked);
   const layoutAdjustmentId = adjustment?.kind === 'layout' && canAdjustLayout && tool === 'select' ? adjustment.id : undefined;
-  const pathEditingId = adjustment?.kind === 'path' && isDesignPath(node) && tool === 'select' && box?.visible && !box.locked ? adjustment.id : undefined;
+  const straightPath = isDesignPath(node) && isStraightDesignPath(node.geometry);
+  const straightPathId = straightPath && tool === 'select' && box?.visible && box.visibleBounds && !box.locked ? selectedId ?? undefined : undefined;
+  const pathEditingId = adjustment?.kind === 'path' && isDesignPath(node) && !straightPath && tool === 'select' && box?.visible && !box.locked
+    ? adjustment.id : undefined;
   const instanceId = node?.kind === 'frame' && node.instanceOf ? selectedId : null;
   const instanceContents = useMemo(() => instanceId ? designInstanceContents(projected, instanceId) : [], [instanceId, projected]);
-  const imageLayer = imageTarget?.kind === 'replace' ? document.nodes[imageTarget.id]
-    : imageTarget?.kind === 'override' ? projected.nodes[`${imageTarget.id}/${imageTarget.path}`] : undefined;
   useEffect(() => {
     if (canvasAdjustment && !croppingId && !layoutAdjustmentId && !pathEditingId) setCanvasAdjustment(undefined);
   }, [canvasAdjustment, croppingId, layoutAdjustmentId, pathEditingId]);
-  useEffect(() => { if (imageTarget && imageTarget.revision !== revision) setImageTarget(null); }, [imageTarget, revision]);
-  useEffect(() => { if (iconTarget && iconTarget.revision !== revision) setIconTarget(null); }, [iconTarget, revision]);
+  useEffect(() => {
+    if (toolPanel && 'target' in toolPanel && toolPanel.target.revision !== revision) {
+      setToolPanel((current) => current === toolPanel ? undefined : current);
+    }
+  }, [toolPanel, revision]);
   useEffect(() => () => assetImport.current?.abort(), []);
+  const inspectorLayerIds = selectedIds.filter((id) => !scene[id].locked);
+  const fieldEdits = inspectorEdits();
   const { commands, components, branches, editable, canWrap } = useDesignLayerActions({
-    document, projected, resources, scene, selectedIds, documentRef, output: client.assets.output, onOpenLibrary,
+    document, projected, resources, scene, layoutEngine, selectedIds, documentRef, output: client.assets.output, onOpenLibrary,
     getInsertionArea: () => canvas.current?.insertionArea(),
-    commit: commitEdits, onSelect: setSelection, onLocate: locateLayer, translate: t,
+    commit: commitEdits, fieldEdits, onSelect: selectLayers, onLocate: locateLayer, translate: t,
   });
   const actions = commands();
   const canAlign = editable.length > 1 && editable.length === branches.length
-    && editable.every((id) => scene[id].parentId === scene[editable[0]].parentId && !isFlowChild(document, scene, id));
-  const canAlignInFrame = Boolean(selectedId && box?.parentId && !box.locked && !isFlowChild(document, scene, selectedId));
-  const isGroup = Boolean(actions.ungroup);
+    && editable.every((id) => scene[id].parentId === scene[editable[0]].parentId && !isFlowChild(projected, scene, id));
+  const canAlignInFrame = Boolean(selectedId && box?.parentId && !box.locked && !isFlowChild(projected, scene, selectedId));
+  const canUngroup = Boolean(actions.ungroup);
   const editing = draft?.documentId === document.documentId && document.nodes[draft.nodeId]?.kind === 'text' ? draft : null;
   const controlsDisabled = busy || importingAsset || Boolean(editing);
   const activeLayerMenu = layerMenu?.revision === revision && !controlsDisabled ? layerMenu : null;
-  const inspectorSelection = selectedId && node && box ? { id: selectedId, node, projectedNode: projected.nodes[selectedId],
-    box, parent: parent?.kind === 'frame' ? parent : undefined } : undefined;
-  const exportDisabled = controlsDisabled || exportActions.busy || !branches.some((id) => scene[id].visible);
+  const inspectorSelection = selectedId && node && box ? { id: selectedId, node, projectedNode: canvasDocument.nodes[selectedId],
+    box, parent: parent?.kind === 'frame' ? parent : undefined, parentBox: box.parentId ? scene[box.parentId] : undefined } : undefined;
+  const exportScripts = designExportScriptIds({ document: projected, scene, ids: branches });
+  const exportDisabled = controlsDisabled || exportActions.busy || Boolean(activeScriptPreview)
+    || exportScripts.some((id) => pendingScripts.has(id)) || !branches.some((id) => scene[id].visible);
+
+  function changeTool(next: DesignTool) {
+    if (next !== 'select') setWebMode(undefined);
+    if (drawingMode && isDrawingInkTool(next)) lastDrawingTool.current = next;
+    setTool(next);
+  }
+
+  function toggleDrawingMode() {
+    setWebMode(undefined);
+    setDrawingMode(!drawingMode);
+    setTool(drawingMode ? 'select' : lastDrawingTool.current);
+    setToolPanel(undefined);
+  }
+
+  function changeDrawingInk(next: DrawingInk) {
+    if (!drawingMode || !isDrawingInkTool(tool)) return;
+    setDrawingInks((inks) => ({ ...inks, [tool]: { ...next, preset: next.preset && drawingInkTool(next.preset) === tool
+      ? next.preset : inks[tool].preset } }));
+  }
 
   function commitEdits(edits: readonly DesignEdit[], base = revision): Promise<boolean> {
     return edits.length ? commit(edits, base) : Promise.resolve(false);
@@ -155,12 +281,12 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
   async function finishLayerDrop(id: string, edits: readonly DesignEdit[], base: string) {
     if (controlsDisabled || currentRevision() !== base) return false;
     const saved = await commitEdits(edits, base);
-    if (saved) setSelection([id]);
+    if (saved) selectLayers([id]);
     return saved;
   }
 
   function locateLayer(id: string) {
-    setSelection([id]);
+    selectLayers([id]);
     setTool('select');
     setFitRequest((current) => current + 1);
   }
@@ -174,29 +300,42 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
 
   function openLayerMenu(target: DesignLayerMenuTarget) {
     if (controlsDisabled) return;
-    if (target.id === null) setSelection([]);
-    else if (!selectedIds.includes(target.id)) setSelection([target.id]);
+    if (target.id === null) selectLayers([]);
+    else if (!selectedIds.includes(target.id)) selectLayers([target.id]);
     setLayerMenu({ ...target, revision });
   }
 
   function exportSelection(request: DesignExportRequest) {
+    if (exportDisabled) return;
+    if (exportScripts.some((id) => !currentScripts.has(id))) {
+      toast.error(t('feature.design.scriptFailed'));
+      return;
+    }
     const ids = orderDesignBranches(document, branches);
     const name = node?.name?.trim() || (node?.kind === 'text' ? node.text.trim().split('\n', 1)[0] : '')
       || documentRef.path.split('/').at(-1)?.replace(/\.design\.json$/iu, '') || t('feature.design.layers');
-    void exportActions.run({ document: projected, scene, ids }, name, request);
+    const selection = { ...projectOutput(), ids };
+    void exportActions.run(selection, name, request);
   }
 
-  async function commitInsertion(nodeId: string, edits: readonly DesignEdit[], base: string) {
+  async function commitInsertion(nodeId: string, edits: readonly DesignEdit[], base: string, keepTool = false) {
     if (!await commitEdits(edits, base)) return false;
-    setSelection([nodeId]);
-    setTool('select');
+    selectLayers([nodeId]);
+    if (!keepTool) setTool('select');
     return true;
   }
 
-  async function insert(next: DesignNode, parentId: string | null, base = revision, fit = false) {
+  async function finishComponentDrop(sourceId: string, point: Point, base: string) {
+    if (controlsDisabled || currentRevision() !== base || toolPanel?.kind !== 'library') return;
+    const placement = planDesignComponentInsertion({ document, projected, resources, scene, layoutEngine, sourceId, target: { point } });
+    if (placement && await commitInsertion(placement.id, placement.edits, base)) {
+      setToolPanel((current) => current === toolPanel ? undefined : current);
+    }
+  }
+
+  async function insert(next: DesignNode, parentId: string | null, base = revision, keepTool = false) {
     const nodeId = crypto.randomUUID();
-    if (!await commitInsertion(nodeId, [{ kind: 'insert', nodeId, parentId, node: next }], base)) return false;
-    if (fit) setFitRequest((current) => current + 1);
+    if (!await commitInsertion(nodeId, [{ kind: 'insert', nodeId, parentId, node: next }], base, keepTool)) return false;
     if (next.kind === 'text') {
       const savedRevision = currentRevision();
       if (savedRevision) setDraft({ documentId: document.documentId, nodeId, text: next.text, revision: savedRevision });
@@ -204,30 +343,31 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
     return true;
   }
 
-  function addPreset(preset: ArtboardPreset) {
-    const x = document.rootIds.reduce((edge, id) => Math.max(edge, scene[id].paintBounds.x + scene[id].paintBounds.width + 72), 0);
-    void insert({ kind: 'frame', name: t(`feature.design.preset.${preset.id}`), x, y: 0,
-      width: preset.width, height: preset.height, childIds: [] }, null, revision, true);
-  }
-
   function drawLayer(action: Extract<CanvasAction, { kind: 'draw' }>, base: string) {
-    const { parentId, tool: drawingTool, bounds, click } = action;
-    const size = { x: roundDesignValue(bounds.x), y: roundDesignValue(bounds.y),
-      width: Math.max(1, roundDesignValue(bounds.width)), height: Math.max(1, roundDesignValue(bounds.height)) };
+    const { tool: drawingTool, bounds, click, geometry } = action;
+    const { parentId, placement: size } = designDrawingPlacement(projected, scene, action.parentId, bounds, click);
+    const strokes = [defaultDesignStroke];
+    if (drawingTool === 'web' || drawingTool === 'script') return insert({
+      ...size, kind: drawingTool, name: t(`feature.design.${drawingTool}`), strokes,
+      width: click ? (drawingTool === 'web' ? 720 : 240) : size.width,
+      height: click ? (drawingTool === 'web' ? 480 : 160) : size.height,
+    }, parentId, base);
     if (drawingTool === 'frame') return insert({
       ...size, kind: 'frame', name: t(parentId === null ? 'feature.design.artboard' : 'feature.design.frame'),
       width: click ? (parentId === null ? 960 : 280) : size.width,
-      height: click ? (parentId === null ? 600 : 160) : size.height, childIds: [],
+      height: click ? (parentId === null ? 600 : 160) : size.height, childIds: [], strokes,
     }, parentId, base);
-    if (drawingTool === 'text') return insert({
-      kind: 'text', x: size.x, y: size.y, width: click ? 216 : Math.max(24, size.width),
-      widthMode: click ? 'hug' : 'fixed', fontSize: 24, text: t('feature.design.text'),
-    }, parentId, base);
-    const appearance = { ...(click ? { ...size, width: 128, height: 96 } : size), fills: [{ color: '#b3adf5' }] };
-    if (drawingTool === 'polygon') return insert({ ...appearance, kind: 'vector', geometry: { kind: 'polygon', sides: defaultDesignPolygonSides } }, parentId, base);
+    if (drawingTool === 'text') {
+      const { height: _height, ...placement } = size;
+      return insert({ ...placement, kind: 'text', width: click ? 216 : Math.max(24, size.width),
+        widthMode: click ? 'hug' : 'fixed', fontSize: 24, text: t('feature.design.text') }, parentId, base);
+    }
+    const shape = { ...(click && !isSegmentDrawingTool(drawingTool) ? { ...size, width: 128, height: 96 } : size), strokes };
+    if (geometry) return insert({ ...shape, kind: 'vector', geometry,
+      name: drawingTool === 'polygon' ? undefined : t(`feature.design.tool.${drawingTool}`) }, parentId, base);
     return insert(drawingTool === 'ellipse'
-      ? { kind: 'ellipse', ...appearance }
-      : { kind: 'rectangle', ...appearance, cornerRadius: 0 }, parentId, base);
+      ? { kind: 'ellipse', ...shape }
+      : { kind: 'rectangle', ...shape, cornerRadius: 0 }, parentId, base);
   }
 
   function assetInsertTarget(): AssetInsertTarget | undefined {
@@ -235,7 +375,20 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
     return area && { ...resolveDesignInsertion(document, scene, area, selectedId), revision };
   }
 
-  async function chooseImage(path: string, target = imageTarget) {
+  function changeToolPanel(kind: DesignToolPanel, open: boolean) {
+    if (kind === 'variables' && open) { openVariables(); return; }
+    if (open || toolPanel?.kind === kind) setStylePreview(undefined);
+    if (!open) {
+      setToolPanel((current) => current?.kind === kind ? undefined : current);
+    } else if (kind === 'library') {
+      setToolPanel({ kind });
+    } else {
+      const target = assetInsertTarget();
+      if (target) setToolPanel(kind === 'image' ? { kind, target: { ...target, kind: 'insert' } } : { kind, target });
+    }
+  }
+
+  async function chooseImage(path: string, target: ImageTarget | undefined = imageTarget) {
     if (!target || currentRevision() !== target.revision) return false;
     const image = await loadImage(path);
     if (currentRevision() !== target.revision) return false;
@@ -247,8 +400,9 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
     if (target.kind === 'replace') {
       const current = document.nodes[target.id];
       if (current?.kind !== 'image' || scene[target.id]?.locked) return false;
+      const reset = bindDesignVariable(bindDesignVariable(current, 'crop.x', undefined), 'crop.y', undefined);
       return current.assetPath === path || commitEdits([{ kind: 'update', nodeId: target.id,
-        node: { ...current, assetPath: path, crop: undefined } }], target.revision);
+        node: { ...reset, assetPath: path, crop: undefined } }], target.revision);
     }
     const { parentId, center } = target;
     const frame = parentId ? scene[parentId] : undefined;
@@ -297,6 +451,27 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
     });
   }
 
+  function importScript(input: File | DesignScriptSource, id: string, layer: DesignScript) {
+    return importAsset(async (signal) => {
+      let script: DesignScriptSource;
+      try {
+        script = 'source' in input ? input : await readDesignScriptFile(input);
+      } catch {
+        if (!signal.aborted) toast.error(t('feature.design.importScriptInvalid', { size: maxDesignScriptBytes / 1024 }));
+        return false;
+      }
+      if (signal.aborted || !assetTargetIsCurrent({ revision })) return false;
+      try {
+        const scriptPath = await client.importScript({ ref: documentRef, ...script }, signal);
+        return !signal.aborted && assetTargetIsCurrent({ revision })
+          && await commitEdits([{ kind: 'update', nodeId: id, node: { ...layer, scriptPath, scriptInputs: undefined } }], revision);
+      } catch {
+        if (!signal.aborted) toast.error(t('feature.design.importScriptFailed', { name: script.name }));
+        return false;
+      }
+    });
+  }
+
   function importSvg(input: DesignSvgSource, target: AssetInsertTarget) {
     return importAsset(async (signal) => {
       try {
@@ -314,8 +489,8 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
   }
 
   function handlePaste(event: ClipboardEvent<HTMLElement>) {
-    if (event.defaultPrevented || controlsDisabled || imageTarget || iconTarget || activeLayerMenu || showSettings
-      || showLibrary || prototypeStart || isTextEntry(event.target)) return;
+    if (event.defaultPrevented || controlsDisabled || activeLayerMenu
+      || prototypeStart || !isEditorEvent(event) || isTextEntry(event.target)) return;
     const svg = clipboardDesignSvg(event.clipboardData);
     const image = svg ? undefined : clipboardDesignImage(event.clipboardData);
     if (!svg && !image) {
@@ -338,16 +513,17 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
     return commitEdits([{ kind: 'update', nodeId: id, node: withDesignInstanceContent(instance, path, value) }], base);
   }
 
-  function saveBatch(nodes: ReadonlyMap<string, DesignNode>) {
-    if (currentRevision() !== revision || ![...nodes.keys()].every((id) => selectedIds.includes(id) && !scene[id]?.locked)) {
-      return Promise.resolve(false);
-    }
-    return commitEdits([...nodes].map(([nodeId, node]) => ({ kind: 'update', nodeId, node })));
+  function inspectorEdits(): InspectorFieldEdits {
+    const updates = (apply: DesignNodeEdit) => new Map(inspectorLayerIds.map((id) => [id, apply]));
+    return {
+      onFieldSave: (apply) => inspectorLayerIds.length ? editFields(updates(apply), revision, { projected, scene }) : Promise.resolve(false),
+      onFieldPreview: (owner, apply) => canvas.current?.previewFields(owner, apply && updates(apply)),
+    };
   }
 
   async function duplicate() {
     const { edits, copies } = duplicateDesignLayers(document, scene, editable);
-    if (await commitEdits(edits)) setSelection(copies);
+    if (await commitEdits(edits)) selectLayers(copies);
   }
 
   function history(direction: 'undo' | 'redo') {
@@ -356,29 +532,52 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
 
   function applyMove(placements: Readonly<Record<string, Point>>, base = revision) {
     return commitEdits(Object.entries(placements).flatMap(([id, placement]) => {
-      const edit = moveDesignLayer(document, scene, id, placement);
+      const edit = moveDesignLayer(document, scene, id, placement, projected);
       return edit ? [edit] : [];
     }), base);
   }
 
+  async function saveFreehandStroke({ id, parentId, node }: DrawingPreview, base: string) {
+    if (parentId && scene[parentId]?.locked) return false;
+    const preset = node.geometry.freehand?.preset;
+    const name = t(`feature.design.tool.${preset ? drawingInkTool(preset) : 'pencil'}`);
+    const before = currentRevision();
+    const saved = appendStroke({ kind: 'insert', nodeId: id, parentId, node: { ...node, name } }, base);
+    if (currentRevision() !== before) selectLayers([id]);
+    return saved;
+  }
+
   function finishGesture(action: CanvasAction, base: string) {
+    if (action.kind === 'gradient') {
+      return selectedId === action.id && !scene[action.id]?.locked && currentRevision() === base
+        ? commitEdits([{ kind: 'update', nodeId: action.id, node: action.node }], base) : Promise.resolve(false);
+    }
     if (action.kind === 'draw') return drawLayer(action, base);
     if (action.kind === 'path') {
       if (currentRevision() !== base || action.parentId && scene[action.parentId]?.locked) return Promise.resolve(false);
+      if (drawingInk && tool === 'pen') {
+        const path = drawingPathNode(action.anchors, action.closed, drawingInks.pen);
+        const { parentId, placement } = designDrawingPlacement(projected, scene, action.parentId, path);
+        return insert({ ...path, ...placement, name: t('feature.design.tool.pen') }, parentId, base, true);
+      }
       const { bounds, geometry } = fitDesignPath(action.anchors, action.closed);
-      return insert({ kind: 'vector', ...bounds, geometry, fills: action.closed ? [{ color: '#b3adf5' }] : [],
-        strokes: [{ color: designTextFill, width: 2, join: 'round' }] }, action.parentId, base);
+      const { parentId, placement } = designDrawingPlacement(projected, scene, action.parentId, bounds);
+      return insert({ kind: 'vector', ...placement, geometry, strokes: [defaultDesignStroke] }, parentId, base);
     }
     if (action.kind === 'edit-path') {
-      if (currentRevision() !== base || pathEditingId !== action.id || scene[action.id]?.locked) return Promise.resolve(false);
+      if (currentRevision() !== base || (pathEditingId ?? straightPathId) !== action.id || scene[action.id]?.locked) return Promise.resolve(false);
       return commitEdits([{ kind: 'update', nodeId: action.id, node: action.node }], base);
     }
     if (action.kind === 'move') return applyMove(action.placements, base);
     if (action.kind === 'drop') return finishLayerDrop(action.id, action.edits, base);
     if (action.kind === 'crop') {
       const image = document.nodes[action.id];
+      const drawn = projected.nodes[action.id];
       if (currentRevision() !== base || image?.kind !== 'image' || image.fit === 'contain' || scene[action.id]?.locked) return Promise.resolve(false);
-      return commitEdits([{ kind: 'update', nodeId: action.id, node: { ...image, crop: action.crop } }], base);
+      const previous = drawn.kind === 'image' ? drawn.crop ?? defaultDesignImageCrop : defaultDesignImageCrop;
+      const node = (['x', 'y'] as const).reduce((current, axis) => action.crop[axis] === previous[axis] ? current
+        : bindDesignVariable(current, `crop.${axis}`, undefined, action.crop[axis]), image);
+      return commitEdits([{ kind: 'update', nodeId: action.id, node }], base);
     }
     if (action.kind === 'layout') {
       const frame = document.nodes[action.id];
@@ -387,58 +586,62 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
       }
       return commitEdits(changeDesignLayout(document, scene, action.id, frame, action.layout), base);
     }
-    const node = transformDesignLayer(document, scene, action.id, action.placement);
-    return node ? commitEdits(planDesignLayerUpdate(document, action.id, node, scene[action.id], resources), base) : Promise.resolve(false);
+    const node = transformDesignLayer(document, scene, action.id, action.placement, projected);
+    return node ? commitEdits(planDesignLayerUpdate(document, action.id, node, { projected, scene }), base) : Promise.resolve(false);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (controlsDisabled || iconTarget || activeLayerMenu || showSettings || showLibrary || prototypeStart
-      || event.defaultPrevented || event.nativeEvent.isComposing) return;
+    if (controlsDisabled || activeLayerMenu || prototypeStart
+      || event.defaultPrevented || event.nativeEvent.isComposing || !isEditorEvent(event)) return;
     const textEntry = isTextEntry(event.target);
     const layerCommand = designLayerShortcut(event);
-    if (layerCommand === 'paste' && (imageTarget || !textEntry)) {
+    if (layerCommand === 'paste' && !textEntry) {
       event.preventDefault();
       event.stopPropagation();
-      const target = imageTarget ? undefined : assetInsertTarget();
+      const target = assetInsertTarget();
       // Native SVG formats may be hidden from the renderer's paste event.
       if (!event.repeat) void client.assets.requestClipboardPaste(Boolean(target)).then((result) => {
         if (result.kind === 'svg' && target) void importSvg({ markup: result.markup }, target);
-        else if (result.kind === 'unavailable' && !imageTarget) actions.paste?.();
+        else if (result.kind === 'unavailable') actions.paste?.();
       }).catch((error: unknown) => {
         toast.error(t('feature.design.clipboardFailed', { error: error instanceof Error ? error.message : String(error) }));
       });
       return;
     }
-    if (imageTarget || textEntry) return;
+    if (textEntry) return;
     const shortcut = event.key.toLowerCase();
     if (layerCommand) {
       const action = actions[layerCommand];
       if (!action) return;
       if (!event.repeat) action();
     } else if (event.metaKey || event.ctrlKey) {
-      if (shortcut === 'z' || shortcut === 'y') history(shortcut === 'y' || event.shiftKey ? 'redo' : 'undo');
+      if (!drawingMode && isDesignImagePickerShortcut(event)) {
+        if (!event.repeat && toolPanel?.kind !== 'image') changeToolPanel('image', true);
+      } else if (shortcut === 'z' || shortcut === 'y') history(shortcut === 'y' || event.shiftKey ? 'redo' : 'undo');
       else if (shortcut === 'd') void duplicate();
       else if (shortcut === 'a') {
         const order = parent?.kind === 'frame' ? parent.childIds : document.rootIds;
-        setSelection(order.filter((id) => scene[id].visible && !scene[id].locked));
+        selectLayers(order.filter((id) => scene[id].visible && !scene[id].locked));
       } else return;
     } else if (shortcut === 'escape') {
-      if (layoutAdjustmentId || pathEditingId) setCanvasAdjustment(undefined);
+      if (webSession) closeWeb();
+      else if (layoutAdjustmentId || pathEditingId) setCanvasAdjustment(undefined);
+      else if (drawingMode) toggleDrawingMode();
       else {
-        setSelection([]);
+        selectLayers([]);
         setTool('select');
       }
-    } else if (shortcut === 'enter' && selectedId && node?.kind === 'text' && !box?.locked && box?.visible
+    } else if (shortcut === 'enter' && selectedId && node?.kind === 'text' && !node.variableIds?.text && !box?.locked && box?.visible
       && event.target instanceof Element && event.target.closest('.design-editor__stage')) {
       setDraft({ documentId: document.documentId, nodeId: selectedId, text: node.text, revision });
-    } else if (directions[event.key] && editable.length && editable.every((id) => !isFlowChild(document, scene, id))) {
+    } else if (directions[event.key] && editable.length && editable.every((id) => !isFlowChild(projected, scene, id))) {
       const direction = directions[event.key];
       const step = event.shiftKey ? 10 : 1;
       void applyMove(movePositions(scene, editable, { x: direction.x * step, y: direction.y * step }));
     } else {
-      const next = designToolForKey(shortcut);
+      const next = designToolForKey(event, drawingMode);
       if (!next || event.altKey) return;
-      setTool(next);
+      changeTool(next);
     }
     event.preventDefault();
     event.stopPropagation();
@@ -459,7 +662,7 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
         ...typography, width: Math.max(1, location.width * scale), fontSize: typography.fontSize * scale,
         letterSpacing: typography.letterSpacing * scale,
         transformOrigin: '0 0', transform: `rotate(${location.angle}deg) scale(${location.scaleX}, ${location.scaleY})`,
-        color: fill === 'transparent' ? designTextFill : fill,
+        color: fill === 'transparent' ? designDefaultColor : fill,
       }}
       onCancel={() => setDraft(null)}
       onCommit={async (text) => {
@@ -474,72 +677,163 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
     />;
   }
 
-  return <DesignStyleContext.Provider value={styleCatalog}><section className="design-editor" aria-label={t('feature.design.workspace')} aria-busy={busy || importingAsset}
+  const imagePicker = imageTarget ? <DesignImagePicker documentRef={documentRef} assets={client.assets} loadImage={loadImage} translate={t}
+    onClose={() => changeToolPanel('image', false)} onImport={client.importImage} onInsert={chooseImage} /> : null;
+  const scriptResult = selectedId && node?.kind === 'script' && !activeScriptPreview ? currentScripts.get(selectedId) : undefined;
+  const scriptParameterEdits: DesignScriptParameterEdits | undefined = selectedId && scriptPath ? {
+    parameters: scriptParameters,
+    onPreview: (parameter, value, owner) => setScriptPreview((current) => value !== undefined
+      ? { id: selectedId, scriptPath, parameter, value, owner } : current?.owner === owner ? undefined : current),
+    onSave: (parameter, value) => editFields(new Map([[selectedId, (current) => {
+      if (current.kind !== 'script' || current.scriptPath !== scriptPath) return current;
+      const scriptInputs = withDesignScriptInput(current.scriptInputs, parameter, value);
+      return scriptInputs === current.scriptInputs ? current : { ...current, scriptInputs };
+    }]]), revision),
+  } : undefined;
+  const webDevices = webHost ? [
+    { id: '', label: t('feature.design.webResponsive') },
+    ...webHost.devices.map(({ id, label }) => ({ id, label: id === 'laptop' ? t('feature.design.webLaptop') : label })),
+  ] : [];
+  function webControlsFor(id: string): DesignWebLayerControls | undefined {
+    const layer = document.nodes[id];
+    if (!webHost || layer?.kind !== 'web' || !scene[id]?.visible) return;
+    const mode = webSession?.id === id ? webSession.mode : undefined;
+    return {
+      mode, canBrowse: Boolean(layer.url), devices: webDevices,
+      browse: () => {
+        if (mode) { closeWeb(); return; }
+        if (selectedId !== id) selectLayers([id]);
+        setTool('select');
+        setWebMode('inline');
+      },
+      expand: () => {
+        setTool('select');
+        setWebMode(mode === 'expanded' ? 'inline' : 'expanded');
+      },
+      save: (patch) => {
+        if (mode && 'url' in patch && !patch.url) setWebMode(undefined);
+        return editFields(new Map([[id, (current) => {
+          if (current.kind !== 'web') return current;
+          const next = { ...current, ...patch };
+          return next.url === current.url && next.deviceId === current.deviceId ? current : next;
+        }]]), revision);
+      },
+    };
+  }
+  const contentSource = selectedId && box && (node?.kind === 'web' || node?.kind === 'script') ? <DesignContentSourceFields
+    key={selectedId} node={node} disabled={controlsDisabled || box.locked} translate={t}
+    onSave={(next) => commitEdits([{ kind: 'update', nodeId: selectedId, node: next }])}
+    web={webControlsFor(selectedId)}
+    scriptParameters={scriptParameterEdits}
+    onImport={node.kind === 'script' ? (script) => { void importScript(script, selectedId, node); } : undefined}
+    onConvert={node.kind === 'script' && scriptResult ? () => {
+      const { frameId, edits } = convertDesignScript(selectedId, node, box.parentId, scriptResult);
+      void commitInsertion(frameId, edits, revision);
+    } : undefined} /> : undefined;
+  const previewStyle = (styleId: string, style: DesignStyle | undefined) => setStylePreview((current) => style ? { styleId, style, revision }
+    : current?.styleId === styleId && current.revision === revision ? undefined : current);
+  const toolPanelContent = showVariables ? <DesignVariableTable document={document} resources={resources} disabled={controlsDisabled}
+    previewStyles={activeStyle ? canvasDocument.styles : undefined}
+    selectedCollection={variableCollectionKey ?? document.documentId} onSelectCollection={setVariableCollectionKey} onCommit={commitEdits}
+    onPreviewStyle={previewStyle}
+    onOpenLibrary={onOpenLibrary} translate={t} />
+    : toolPanel?.kind === 'library' ? <DesignLibraryPanel document={document} documentRef={documentRef} client={client} sources={canvasDocument.styles}
+      componentPreviews={{ projected, scene, resources, layoutEngine, loadImage }}
+      components={components.library} componentDrag={componentDrag} revision={revision}
+      disabled={controlsDisabled} onSetStyle={(styleId, style) => commitEdits([{ kind: 'setStyle', styleId, style }])}
+      onPreviewStyle={previewStyle}
+      onOpenLibrary={onOpenLibrary} translate={t}
+      onLink={(documentId, path) => commitEdits([{ kind: 'linkLibrary', documentId, path }])}
+      onUnlink={(path) => {
+        const edits = planDesignLibraryUnlink(document, projected, resources, path);
+        if (edits) return commitEdits(edits);
+        toast.error(t('feature.design.unlinkLibraryUnavailable'));
+        return Promise.resolve(false);
+      }} />
+      : toolPanel?.kind === 'icon' ? <DesignIconPicker translate={t} onInsert={(source) => importSvg(source, toolPanel.target)}
+        onClose={() => changeToolPanel('icon', false)} /> : imagePicker;
+
+  const toolbarActions = <>
+    <IconButton label={t('feature.design.undo')} size="small" disabled={controlsDisabled || !canUndo} onClick={() => history('undo')}><Undo2 size={16} /></IconButton>
+    <IconButton label={t('feature.design.redo')} size="small" disabled={controlsDisabled || !canRedo} onClick={() => history('redo')}><Redo2 size={16} /></IconButton>
+    <Popover {...designToolPopoverPosition} open={Boolean(prototypeStart)} contentLabel={t('feature.design.prototype.preview')}
+      className="design-tool-popover design-tool-popover--prototype" onOpenChange={(open) => {
+        setPrototypeStart(open ? (boardId && boards.includes(boardId) ? boardId : boards[0]) : undefined);
+      }} content={prototypeStart && prototypeOutput ? <Suspense fallback={null}>
+        <DesignPrototypePreview start={prototypeStart} boards={boards} {...prototypeOutput} loadImage={loadImage} captureWebImages={captureWebImages}
+          onClose={() => setPrototypeStart(undefined)} translate={t} />
+      </Suspense> : null}>
+      <IconButton label={t('feature.design.prototype.preview')} size="small" disabled={controlsDisabled || !boards.length}><Play size={15} /></IconButton>
+    </Popover>
+    {editable.length ? <>
+      <span className="design-tools__divider" aria-hidden="true" />
+      <Dropdown placement="bottomRight" disabled={controlsDisabled} align={{ offset: [0, designToolPopoverPosition.sideOffset] }} menu={{ items: [
+        canUngroup || (canWrap && editable.length > 1) ? {
+          key: 'group', label: t(canUngroup ? 'feature.design.ungroup' : 'feature.design.groupSelection'),
+          icon: canUngroup ? <Ungroup size={15} /> : <Group size={15} />,
+          onClick: canUngroup ? actions.ungroup : actions.group, disabled: controlsDisabled,
+        } : null,
+        { key: 'duplicate', label: t('feature.design.duplicate'), icon: <Copy size={15} />, disabled: controlsDisabled,
+          onClick: () => { void duplicate(); } },
+        { key: 'delete', label: t('feature.design.delete'), icon: <Trash2 size={15} />, danger: true,
+          disabled: controlsDisabled, onClick: actions.delete },
+      ] }}>
+        <IconButton label={t('feature.design.layerActions')} size="small" disabled={controlsDisabled}><Ellipsis size={17} /></IconButton>
+      </Dropdown>
+    </> : null}
+  </>;
+  return <DesignStyleContext.Provider value={styleCatalog}><DesignGradientSessionProvider>
+    <section className="design-editor" aria-label={t('feature.design.workspace')} aria-busy={busy || importingAsset}
     onKeyDown={handleKeyDown} onPaste={handlePaste}>
-    <div className="design-editor__toolbar" role="group" aria-label={t('feature.design.tools')}>
-      <IconButton label={t('feature.design.undo')} size="small" disabled={controlsDisabled || !canUndo} onClick={() => history('undo')}><Undo2 size={16} /></IconButton>
-      <IconButton label={t('feature.design.redo')} size="small" disabled={controlsDisabled || !canRedo} onClick={() => history('redo')}><Redo2 size={16} /></IconButton>
-      <IconButton label={t('feature.design.library')} size="small" disabled={controlsDisabled}
-        onClick={() => setShowLibrary(true)}><LibraryBig size={16} /></IconButton>
-      <IconButton label={t('feature.design.prototype.preview')} size="small" disabled={controlsDisabled || !boards.length}
-        onClick={() => {
-          const board = designPrototypeBoardFor(selectedId, scene);
-          setPrototypeStart(board && boards.includes(board) ? board : boards[0]);
-        }}><Play size={15} /></IconButton>
-      {editable.length ? <>
-        <span className="design-editor__toolbar-divider" aria-hidden="true" />
-        {isGroup || (canWrap && editable.length > 1) ? <IconButton
-          label={t(isGroup ? 'feature.design.ungroup' : 'feature.design.groupSelection')} size="small"
-          disabled={controlsDisabled} onClick={isGroup ? actions.ungroup : actions.group}>
-          {isGroup ? <Ungroup size={16} /> : <Group size={16} />}
-        </IconButton> : null}
-        <IconButton label={t('feature.design.duplicate')} size="small" disabled={controlsDisabled}
-          onClick={() => { void duplicate(); }}><Copy size={15} /></IconButton>
-        <IconButton label={t('feature.design.delete')} size="small" disabled={controlsDisabled}
-          onClick={actions.delete}><Trash2 size={15} /></IconButton>
-      </> : null}
-    </div>
-    <div className="design-editor__body" data-layers={showLayers} data-inspector={showInspector}>
-      <DesignLayers document={document} scene={scene} revision={revision} drag={layerDrag}
-        open={showLayers} onTogglePanel={() => setShowLayers((visible) => !visible)}
-        onContextMenu={openLayerMenu}
-        selectedIds={selectedIds} disabled={controlsDisabled} onSelect={(id, additive) => setSelection((ids) =>
+    <DesignPanelLayout layersOpen={showLayers} inspectorOpen={showInspector}>
+      <DesignLayers document={document} projected={projected} scene={scene} loadImage={loadImage} revision={revision} drag={layerDrag}
+        open={showLayers} toggleTarget={layersToggleTarget} onTogglePanel={() => setShowLayers((visible) => !visible)}
+        onContextMenu={openLayerMenu} onHoverLayer={(id) => canvas.current?.highlightLayer(id)}
+        selectedIds={selectedIds} disabled={controlsDisabled} onSelect={(id, additive) => selectLayers((ids) =>
           additive ? toggleSelection(ids.filter((item) => Object.hasOwn(document.nodes, item)), id) : [id])}
-        onToggle={(nodeId, flag) => { void commitEdits([{ kind: 'update', nodeId, node: {
-          ...document.nodes[nodeId], [flag]: !document.nodes[nodeId][flag],
-        } }]); }}
-        onDrop={(id, destination, base) => finishLayerDrop(id, dropDesignLayer(document, scene, id, destination), base)}
+        onToggle={(nodeId, flag) => {
+          const source = document.nodes[nodeId];
+          const next = flag === 'hidden' ? bindDesignVariable(source, 'hidden', undefined, !projected.nodes[nodeId].hidden)
+            : { ...source, locked: !source.locked };
+          void commitEdits([{ kind: 'update', nodeId, node: next }]);
+        }}
+        onDrop={(id, destination, base) => finishLayerDrop(id, dropDesignLayer(document, scene, id, destination, projected), base)}
         translate={t} />
-      <DesignCanvas ref={canvas} document={document} projected={canvasDocument} resources={resources} scene={scene} layoutEngine={layoutEngine}
-        revision={revision} layerDrag={layerDrag} onLayerDrop={finishLayerDrop} selectedIds={selectedIds} editingId={editing?.nodeId ?? null}
-        croppingId={croppingId} layoutAdjustmentId={layoutAdjustmentId} pathEditingId={pathEditingId} onExitAdjustment={() => setCanvasAdjustment(undefined)}
+      <DesignCanvas ref={canvas} document={canvasSource} projected={canvasDocument} resources={resources} scene={canvasScene} layoutEngine={layoutEngine}
+        revision={revision} layerDrag={layerDrag} onLayerDrop={finishLayerDrop} componentDrag={componentDrag} onComponentDrop={finishComponentDrop}
+        selectedIds={selectedIds} scriptResults={renderedScripts} webHost={webHost} webSession={webSession}
+        webControlsFor={webControlsFor} editingId={editing?.nodeId ?? null}
+        croppingId={croppingId} layoutAdjustmentId={layoutAdjustmentId} pathEditingId={pathEditingId} straightPathId={straightPathId}
+        onExitAdjustment={() => setCanvasAdjustment(undefined)}
         onInspectorPreview={publishInspectorPreview}
         onContextMenu={openLayerMenu} settings={settings}
-        disabled={busy || importingAsset} fitRequest={fitRequest} loadImage={loadImage} tool={tool} onToolChange={setTool}
-        onImage={() => {
-          const target = assetInsertTarget();
-          if (target) setImageTarget({ ...target, kind: 'insert' });
-        }}
-        onIcon={() => setIconTarget(assetInsertTarget() ?? null)}
-        onSelect={setSelection} translate={t} onEditText={(nodeId, text) => {
-          if (!controlsDisabled) setDraft({ documentId: document.documentId, nodeId, text: text.text, revision });
+        disabled={busy || importingAsset} fitRequest={fitRequest} loadImage={loadImage} tool={tool} onToolChange={changeTool}
+        drawing={{ enabled: drawingMode, ink: drawingInk, disabled: importingAsset || busy,
+          revision: snapshot.drawingRevision, onToggle: toggleDrawingMode, onChangeInk: changeDrawingInk, onCommit: saveFreehandStroke }}
+        toolbarActions={toolbarActions}
+        toolPanels={{ active: toolPanel?.kind, content: toolPanelContent, onOpenChange: changeToolPanel }}
+        onSelect={selectLayers} translate={t} onEditText={(nodeId, text) => {
+          if (!controlsDisabled && !text.variableIds?.text) setDraft({ documentId: document.documentId, nodeId, text: text.text, revision });
         }}
         onAction={finishGesture} renderTextInput={renderTextInput} />
-      <DesignInspector ref={inspector} selection={inspectorSelection} selectedCount={selectedIds.length} revision={revision} numbersBusy={numbersBusy}
-        open={showInspector} onTogglePanel={() => setShowInspector((visible) => !visible)}
-        components={components} exportDisabled={exportDisabled} onExport={exportSelection}
-        fillAssets={{ documentRef, assets: client.assets, loadImage, onImport: client.importImage }}
-        numberEdits={{
-          onNumberSave: (apply) => selectedId && !box?.locked ? editNumber(selectedId, apply, revision, resources) : Promise.resolve(false),
-          onNumberPreview: (owner, apply) => { if (selectedId) canvas.current?.previewNumber(selectedId, owner, apply); },
+      {showInspector ? <DesignStyleContext.Provider value={inspectorCatalog}><DesignInspector ref={inspector} selection={inspectorSelection} selectedCount={selectedIds.length} revision={revision}
+        onClose={() => {
+          setInspectorCollapsed(true);
+          canvas.current?.focus();
         }}
+        components={components} contentSource={contentSource} onAddLayout={actions.addLayout} exportDisabled={exportDisabled} onExport={exportSelection}
+        boardModes={selectedId && boardId === selectedId && node?.kind === 'frame' && !node.group
+          ? <DesignBoardModes frame={node} document={document} resources={resources} disabled={controlsDisabled || Boolean(box?.locked)}
+            fieldEdits={fieldEdits} translate={t} /> : null}
+        paintAssets={{ documentRef, assets: client.assets, loadImage, onImport: client.importImage }}
+        fieldEdits={fieldEdits}
         imageActions={{
           cropping: Boolean(croppingId),
-          onReplace: () => { if (selectedId) setImageTarget({ kind: 'replace', id: selectedId, revision }); },
+          onReplace: (path) => selectedId ? chooseImage(path, { kind: 'replace', id: selectedId, revision }) : Promise.resolve(false),
           onToggleCrop: () => toggleCanvasAdjustment('crop'),
         }}
         layoutAdjustment={canAdjustLayout ? { active: Boolean(layoutAdjustmentId), toggle: () => toggleCanvasAdjustment('layout') } : undefined}
-        pathActions={isDesignPath(node) ? { active: Boolean(pathEditingId), toggle: () => toggleCanvasAdjustment('path') } : undefined}
+        pathActions={isDesignPath(node) && !straightPath ? { active: Boolean(pathEditingId), toggle: () => toggleCanvasAdjustment('path') } : undefined}
         prototype={selectedId && node && boards.length ? {
           interaction: node.interaction,
           targets: boards.filter((id) => id !== designPrototypeBoardFor(selectedId, scene))
@@ -549,19 +843,15 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
         instanceActions={instanceId ? {
           entries: instanceContents,
           onContent: (path, value) => saveInstanceContent(instanceId, path, value),
-          onReplaceImage: (path) => setImageTarget({ kind: 'override', id: instanceId, path, revision }),
+          onReplaceImage: (path, assetPath) => chooseImage(assetPath, { kind: 'override', id: instanceId, path, revision }),
         } : undefined}
-        batch={{
-          layers: selectedIds.length > 1 ? selectedIds.filter((id) => !scene[id].locked).map((id) =>
-            ({ id, node: document.nodes[id], opacity: projected.nodes[id].opacity ?? 1 })) : [],
-          onSave: saveBatch,
-          onPreview: (nodes) => { if (!nodes || currentRevision() === revision) canvas.current?.previewPaint(revision, nodes); },
-        }}
+        batch={selectedIds.length > 1 ? inspectorLayerIds.map((id) =>
+          ({ id, node: document.nodes[id], opacity: projected.nodes[id].opacity ?? 1 })) : []}
         canAlign={canAlign || canAlignInFrame} canDistribute={canAlign && editable.length >= 3}
-        disabled={controlsDisabled} translate={t} onAddPreset={addPreset}
+        disabled={controlsDisabled} translate={t}
         onAlign={(mode) => {
-          if (selectedId && canAlignInFrame) void commitEdits(alignDesignLayerToFrame(document, scene, selectedId, mode));
-          else if (canAlign) void commitEdits(alignDesignLayers(scene, editable, mode));
+          if (selectedId && canAlignInFrame) void commitEdits(alignDesignLayerToFrame(document, scene, selectedId, mode, projected));
+          else if (canAlign) void commitEdits(alignDesignLayers(document, scene, editable, mode));
         }}
         onPaintPreview={(next) => {
           if (selectedId && (!next || currentRevision() === revision)) canvas.current?.previewPaint(revision, next ? new Map([[selectedId, next]]) : undefined);
@@ -569,29 +859,13 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy, n
         onSave={(next) => selectedId && currentRevision() === revision
           ? commitEdits([{ kind: 'update', nodeId: selectedId, node: next }]) : Promise.resolve(false)}
         onLayoutChange={(layout) => selectedId && node?.kind === 'frame' && !node.instanceOf && currentRevision() === revision
-          ? commitEdits(changeDesignLayout(document, scene, selectedId, node, layout)) : Promise.resolve(false)} />
-    </div>
-    {imageTarget ? <DesignImagePicker documentRef={documentRef} assets={client.assets} loadImage={loadImage} translate={t}
-      currentPath={imageLayer?.kind === 'image' ? imageLayer.assetPath : undefined}
-      replacing={imageTarget.kind !== 'insert'} onClose={() => setImageTarget(null)}
-      onImport={client.importImage} onInsert={chooseImage} /> : null}
-    {iconTarget ? <DesignIconPicker translate={t} onInsert={(source) => importSvg(source, iconTarget)} onClose={() => setIconTarget(null)} /> : null}
+          ? commitEdits(changeDesignLayout(document, scene, selectedId, node, layout)) : Promise.resolve(false)} /></DesignStyleContext.Provider> : null}
+    </DesignPanelLayout>
     {activeLayerMenu ? <DesignLayerMenu
-      point={activeLayerMenu.point} hasSelection={selectedIds.length > 0} actions={commands(activeLayerMenu)}
+      point={activeLayerMenu.point} hasSelection={selectedIds.length > 0} actions={commands(activeLayerMenu)} components={components}
       onCopyPng={exportDisabled ? undefined : () => exportSelection({ kind: 'image', action: 'copy', scale: 1 })}
       onCopyHtml={exportDisabled ? undefined : () => exportSelection({ kind: 'code', action: 'copy', format: 'html' })}
       settings={settings} onToggle={toggleSetting} translate={t}
-      onOpenSettings={() => setShowSettings(true)} onClose={() => setLayerMenu(null)} /> : null}
-    {showSettings ? <DesignCanvasSettingsDialog settings={settings} onToggle={toggleSetting} translate={t}
-      onClose={() => setShowSettings(false)} /> : null}
-    {showLibrary ? <DesignLibraryDialog document={document} documentRef={documentRef} client={client} disabled={busy}
-      onSetStyle={(styleId, style) => commitEdits([{ kind: 'setStyle', styleId, style }])}
-      onPreviewColor={(styleId, color) => setStylePreview(color === undefined ? undefined : { styleId, color, revision })}
-      onLink={(documentId, path) => commitEdits([{ kind: 'linkLibrary', documentId, path }])} onOpenLibrary={onOpenLibrary}
-      onClose={() => { setStylePreview(undefined); setShowLibrary(false); }} translate={t} /> : null}
-    {prototypeStart ? <Suspense fallback={null}>
-      <DesignPrototypePreview start={prototypeStart} boards={boards} document={projected} scene={scene} loadImage={loadImage}
-        onClose={() => setPrototypeStart(undefined)} translate={t} />
-    </Suspense> : null}
-  </section></DesignStyleContext.Provider>;
+      onClose={() => setLayerMenu(null)} /> : null}
+  </section></DesignGradientSessionProvider></DesignStyleContext.Provider>;
 }

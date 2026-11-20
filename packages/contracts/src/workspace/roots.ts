@@ -37,6 +37,13 @@ export function workspaceFileKey(file: Pick<WorkspaceFileRead, 'projectId' | 'ro
   return JSON.stringify([file.projectId, file.rootId ?? null, file.path]);
 }
 
+/** Identify the same entry when multiple resolved workspace directories contain it. */
+export function workspaceFilePathKey(rootPath: string, relativePath: string): string {
+  const windows = isWindowsPath(rootPath);
+  const separator = rootPath.endsWith('/') || (windows && rootPath.endsWith('\\')) ? '' : '/';
+  return comparableWorkspacePath(normalizeReferencePath(`${rootPath}${separator}${relativePath}`, windows));
+}
+
 /** A presentation view of one directory; project id and the complete directory catalog stay intact. */
 export function workspaceProjectForRoot(project: WorkspaceProject, rootId?: string | null): WorkspaceProject {
   const roots = workspaceProjectRoots(project);
@@ -56,13 +63,12 @@ export function resolveWorkspaceFileReference(project: WorkspaceProject, value: 
   const normalized = value.replace(/\\/gu, '/');
   const absolute = normalized.startsWith('/') || /^[a-zA-Z]:\//u.test(normalized);
   const target = normalizeReferencePath(absolute ? normalized : `${selected.path}/${normalized}`);
+  const comparable = comparableWorkspacePath(target);
   const ordered = [...roots].sort((left, right) => right.path.length - left.path.length);
   const candidates = absolute ? ordered : [selected, ...ordered.filter((root) => root.id !== selected.id)];
   for (const root of candidates) {
     const prefix = normalizeReferencePath(root.path).replace(/\/$/u, '');
-    const insensitive = /^[a-zA-Z]:\//u.test(prefix) || prefix.startsWith('//');
-    const comparable = insensitive ? target.toLowerCase() : target;
-    const base = insensitive ? prefix.toLowerCase() : prefix;
+    const base = comparableWorkspacePath(prefix);
     if (comparable === base || comparable.startsWith(`${base}/`)) {
       return { root, path: target.slice(prefix.length).replace(/^\//u, '') || '.' };
     }
@@ -70,8 +76,16 @@ export function resolveWorkspaceFileReference(project: WorkspaceProject, value: 
   return null;
 }
 
-function normalizeReferencePath(value: string): string {
-  const normalized = value.replace(/\\/gu, '/');
+function comparableWorkspacePath(path: string): string {
+  return isWindowsPath(path) ? path.toLowerCase() : path;
+}
+
+function isWindowsPath(path: string): boolean {
+  return /^[a-zA-Z]:(?:[\\/]|$)/u.test(path) || path.startsWith('//') || path.startsWith('\\\\');
+}
+
+function normalizeReferencePath(value: string, acceptBackslash = true): string {
+  const normalized = acceptBackslash ? value.replace(/\\/gu, '/') : value;
   const minimum = normalized.startsWith('//') ? 4 : 1;
   const segments: string[] = [];
   for (const part of normalized.split('/')) {
@@ -80,5 +94,6 @@ function normalizeReferencePath(value: string): string {
       if (segments.length > minimum) segments.pop();
     } else if (part || !segments.length || (normalized.startsWith('//') && segments.length === 1)) segments.push(part);
   }
-  return trimTrailingSeparators(segments.join('/'));
+  const path = segments.join('/');
+  return acceptBackslash ? trimTrailingSeparators(path) : path;
 }

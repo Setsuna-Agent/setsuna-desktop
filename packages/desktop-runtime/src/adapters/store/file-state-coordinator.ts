@@ -2,6 +2,12 @@ import path from 'node:path';
 
 const fileStateQueues = new Map<string, Promise<void>>();
 
+/** Acquire related state locks in the same order for every writer. */
+export function withFileStateUpdates<T>(filePaths: readonly string[], operation: () => Promise<T>): Promise<T> {
+  return [...new Set(filePaths.map((filePath) => path.resolve(filePath)))].sort()
+    .reduceRight((next, filePath) => () => withFileStateUpdate(filePath, next), operation)();
+}
+
 /**
  * 串行处理单个持久化状态文件的读取、修改与写入操作。
  *

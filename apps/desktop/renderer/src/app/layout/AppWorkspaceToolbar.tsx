@@ -1,10 +1,9 @@
-import { Button } from '@setsuna-desktop/renderer-ui';
+import { Button, PanelPlacementIcon } from '@setsuna-desktop/renderer-ui';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { WorkspaceTopbar } from '../../features/workspace/WorkspaceTopbar.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
-import { PanelPlacementIcon } from '../../features/workspace/PanelPlacementIcon.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { AppTooltip } from '../../shared/ui/primitives.js';
@@ -69,7 +68,7 @@ export function AppWorkspaceToolbar({
       onSelectPanel={async (panelId) => {
         const panel = workspacePanels.sidePanelSlot.panels.find((item) => item.id === panelId);
         if (panel?.type === 'file' && panel.filePath) {
-          void projectWorkspace.openProjectFile(panel.filePath, undefined, panel.rootId);
+          void projectWorkspace.openRootFile(panel.filePath, undefined, panel.rootId);
           return;
         }
         if (panel?.type === 'files' && !await projectWorkspace.setFilePreview(null)) return;

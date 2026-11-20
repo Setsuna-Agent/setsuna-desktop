@@ -11,8 +11,8 @@ import { describe, expect, it } from 'vitest';
 import {
   FileWorkspaceProjectStore,
   MAX_WORKSPACE_IMAGE_BYTES,
-  walkWorkspaceFiles,
 } from '../../../src/adapters/workspace/file-workspace-project-store.js';
+import { walkWorkspaceFiles } from '../../../src/adapters/workspace/workspace-file-walk.js';
 import { systemClock } from '../../../src/ports/clock.js';
 
 const ONE_PIXEL_PNG = Buffer.from(

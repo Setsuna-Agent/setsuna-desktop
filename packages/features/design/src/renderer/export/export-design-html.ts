@@ -2,15 +2,15 @@ import type { DesignFrame, DesignLayout, DesignNode, DesignStroke } from '../../
 import { designFrameMask } from '../../contracts/design-references.js';
 import { toWorld, type Bounds } from '../design-geometry.js';
 import { designPadding, designSizeMode, participatesInDesignFlow, type DesignLayerBox } from '../design-layout.js';
-import { colorWithOpacity, compositeDesignFill, layerCornerRadius, visibleDesignStrokes } from '../design-paint.js';
-import { designFontStack, designTextStyle } from '../design-text.js';
+import { colorWithOpacity, compositeDesignFill, designStrokeNeedsSeparateLayer, layerCornerRadius, visibleDesignStrokes } from '../design-paint.js';
+import { designFontStack, designFontStyleWeight, designTextStyle } from '../design-text.js';
 import { designCssBackground, designCssFill, hasLayeredDesignPaint, visibleDesignFills } from '../styles/design-gradients.js';
 import { designTextSegments } from '../text/design-rich-text.js';
 import type { DesignExportSelection } from './design-export-scene.js';
 import { defaultImageCrop } from '../design-image-fit.js';
 import { designVectorShape } from '../vectors/design-vector.js';
-import { positionedDesignOutline } from '../vectors/design-shape-outline.js';
-import { createDesignSvgDefs, escapeDesignMarkup as escapeHtml, svgPaintedPaths } from './design-svg-markup.js';
+import { designShapeOutline, positionedDesignOutline } from '../vectors/design-shape-outline.js';
+import { createDesignSvgDefs, escapeDesignMarkup as escapeHtml, svgAttributes, svgDesignTextOutlines } from './design-svg-markup.js';
 
 export type DesignCodeFormat = 'html' | 'html-tailwind';
 type Styles = Record<string, string>;
@@ -43,8 +43,8 @@ const px = (value: number) => `${Number(value.toFixed(3))}px`;
 const textStroke = (stroke: DesignStroke) => `${px(stroke.width)} ${colorWithOpacity(stroke.color, stroke.opacity)}`;
 
 export function renderDesignHtml(
-  { document, scene, ids }: DesignExportSelection, bounds: Bounds,
-  images: ReadonlyMap<string, HTMLImageElement>, title: string, format: DesignCodeFormat,
+  { document, scene, ids, webImages }: DesignExportSelection, bounds: Bounds,
+  images: ReadonlyMap<string, HTMLImageElement>, title: string, format: DesignCodeFormat, fontCss = '',
 ): string {
   const used = new Set<Utility>();
   const defs = createDesignSvgDefs(images);
@@ -60,7 +60,7 @@ export function renderDesignHtml(
     return `${className} style="${escapeHtml(declarations.join(';'))}"`;
   }
 
-  function paintLayers(node: DesignNode, text?: string) {
+  function paintLayers(node: DesignNode, size: Bounds, text?: string) {
     return visibleDesignFills(node).map((fill) => {
       const style: Styles = { inset: '0', 'pointer-events': 'none', 'border-radius': 'inherit' };
       if (fill.image) {
@@ -69,7 +69,7 @@ export function renderDesignHtml(
         const size = fill.image.fit === 'stretch' ? '100% 100%' : fill.image.fit;
         style.background = `center / ${size} no-repeat url(${JSON.stringify(image.src)})`;
         if (fill.opacity !== undefined) style.opacity = String(fill.opacity);
-      } else style.background = designCssFill(fill);
+      } else style.background = designCssFill(fill, size);
       if (fill.blendMode && fill.blendMode !== 'normal') style['mix-blend-mode'] = fill.blendMode;
       if (text !== undefined) {
         style['background-clip'] = 'text';
@@ -79,6 +79,21 @@ export function renderDesignHtml(
       }
       return `<span aria-hidden="true"${attributes(style, 'absolute')}>${text ?? ''}</span>`;
     }).join('');
+  }
+
+  function strokeOverlays(node: DesignNode, box: Bounds, strokes: readonly DesignStroke[]) {
+    const local = { x: 0, y: 0, width: box.width, height: box.height };
+    // Put blend modes on the SVG elements so each stroke composites against the HTML behind it.
+    const paints = strokes.map((stroke) => ({ ...stroke, blendMode: undefined }));
+    const outlines = node.kind === 'text' ? svgDesignTextOutlines(node, box.width, defs.strokes(paints, local))
+      : defs.outlines(paints, designShapeOutline(node, box.width, box.height), local);
+    const tag = svgAttributes({ viewBox: `0 0 ${box.width} ${box.height}`, preserveAspectRatio: 'none', xmlns: 'http://www.w3.org/2000/svg' });
+    return outlines.map((outline, index) => {
+      const style: Styles = { inset: '0', width: '100%', height: '100%', overflow: 'visible', 'pointer-events': 'none' };
+      const blendMode = strokes[index].blendMode;
+      if (blendMode && blendMode !== 'normal') style['mix-blend-mode'] = blendMode;
+      return `<svg aria-hidden="true"${tag}${attributes(style, 'absolute')}>${outline}</svg>`;
+    });
   }
 
   function layer(id: string, depth: number, parent?: DesignFrame): string {
@@ -117,18 +132,21 @@ export function renderDesignHtml(
     const position: Utility[] = flow ? (grow ? ['relative'] : ['relative', 'flex-none']) : [responsive ? 'relative' : 'absolute'];
     if (rotation || scaleX !== 1 || scaleY !== 1) style.transform = `rotate(${rotation}deg) scale(${scaleX}, ${scaleY})`;
     if (node.opacity !== undefined) style.opacity = String(node.opacity);
-    const strokes = visibleDesignStrokes(node);
     if (node.kind === 'vector') {
-      const shape = designVectorShape(node.geometry, box.width, box.height);
+      const shape = designVectorShape(node, box.width, box.height);
       const shadow = node.shadow?.hidden ? undefined : node.shadow;
       style.overflow = 'visible';
       if (shadow) style.filter = `drop-shadow(${px(shadow.x)} ${px(shadow.y)} ${px(shadow.blur)} ${colorWithOpacity(shadow.color, shadow.opacity ?? 0.38)})`;
-      const paths = svgPaintedPaths(shape.paths, defs.fills(node, shape.viewBox), strokes, Math.max(shape.scaleX, shape.scaleY) || 1);
+      const paths = defs.vector(node, shape.paths, shape.viewBox, Math.max(shape.scaleX, shape.scaleY) || 1);
       const { x, y, width, height } = shape.viewBox;
       return `${indent}<svg${name}${attributes(style, ...position)} viewBox="${x} ${y} ${width} ${height}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">${paths}</svg>\n`;
     }
+    const strokes = visibleDesignStrokes(node);
     const layered = hasLayeredDesignPaint(node);
-    const insetStrokes = applyAppearance(style, node, box, strokes, layered);
+    const web = node.kind === 'web' && webImages?.get(id);
+    const outlines = web || strokes.some(designStrokeNeedsSeparateLayer) ? strokeOverlays(node, box, strokes) : [];
+    const strokeOverlay = outlines.join('');
+    const insetStrokes = applyAppearance(style, node, box, strokeOverlay ? [] : strokes, layered);
     if (node.kind === 'text') {
       const content = designTextSegments(node.text, node.runs).map(({ text, run }) => {
         if (!run) return escapeHtml(text);
@@ -140,35 +158,41 @@ export function renderDesignHtml(
         return `<span${attributes(overrides)}>${escapeHtml(text)}</span>`;
       }).join('');
       // Overlay the additional outlines while keeping a single selectable text flow.
-      const outlines = strokes.slice(1).map((stroke) => `<span aria-hidden="true"${attributes({ inset: '0', 'pointer-events': 'none',
+      const textOutlines = strokeOverlay || strokes.slice(1).map((stroke) => `<span aria-hidden="true"${attributes({ inset: '0', 'pointer-events': 'none',
         'user-select': 'none', '-webkit-text-fill-color': 'transparent', '-webkit-text-stroke': textStroke(stroke) }, 'absolute')}>${content}</span>`).join('');
-      const body = layered ? `${paintLayers(node, content)}<span${attributes({}, 'relative')}>${content}</span>` : content;
-      return `${indent}<div${name}${attributes(style, ...position, 'whitespace-pre-wrap', 'break-words')}>${body}${outlines}</div>\n`;
+      const body = layered ? `${paintLayers(node, box, content)}<span${attributes({}, 'relative')}>${content}</span>` : content;
+      return `${indent}<div${name}${attributes(style, ...position, 'whitespace-pre-wrap', 'break-words')}>${body}${textOutlines}</div>\n`;
     }
     if (node.kind === 'image') {
       const src = images.get(node.assetPath)?.src ?? '';
       const crop = node.fit === 'contain' ? defaultImageCrop : node.crop ?? defaultImageCrop;
       const imageStyle = { 'object-fit': node.fit ?? 'cover', 'object-position': `${crop.x * 100}% ${crop.y * 100}%` };
       const source = ` src="${escapeHtml(src)}" alt=""`;
-      if (strokes.some((stroke) => stroke.alignment !== 'outside')) {
+      if (strokeOverlay || strokes.some((stroke) => stroke.alignment !== 'outside')) {
         // A replaced <img> does not show inset shadows. Paint the outlines over its pixels.
         const { 'box-shadow': border, ...wrapper } = style;
         const pixels = attributes({ ...imageStyle, display: 'block', width: '100%', height: '100%' });
-        const overlay = attributes({ inset: '0', 'box-shadow': border, 'pointer-events': 'none' }, 'absolute');
-        return `${indent}<div${name}${attributes(wrapper, ...position)}><img${pixels}${source}><span aria-hidden="true"${overlay}></span></div>\n`;
+        const overlay = strokeOverlay || `<span aria-hidden="true"${attributes({ inset: '0', 'box-shadow': border, 'pointer-events': 'none' }, 'absolute')}></span>`;
+        return `${indent}<div${name}${attributes(strokeOverlay ? style : wrapper, ...position)}><img${pixels}${source}>${overlay}</div>\n`;
       }
       return `${indent}<img${name}${attributes({ ...style, ...imageStyle }, ...position)}${source}>\n`;
     }
-    const paints = layered ? paintLayers(node) : '';
+    const paints = layered ? paintLayers(node, box) : '';
     const inset = insetStrokes ? `<span aria-hidden="true"${attributes({ inset: '0', 'box-shadow': insetStrokes,
       'border-radius': 'inherit', 'pointer-events': 'none' }, 'absolute')}></span>` : '';
     if (node.kind === 'frame' && node.childIds.length) {
       const layout = node.layout;
-      if (node.clip !== false) position.push('overflow-hidden');
+      const clipAtContent = Boolean(strokeOverlay) && node.clip !== false;
+      if (node.clip !== false && !clipAtContent) position.push('overflow-hidden');
       const mask = designFrameMask(document, node);
-      const contentStyle: Styles = mask ? { width: '100%', height: heightMode === 'hug' ? 'auto' : '100%',
-        'clip-path': defs.clip(positionedDesignOutline(mask.node, scene[mask.id])) } : style;
-      const contentClasses: Utility[] = mask ? ['relative'] : position;
+      const wrapContent = Boolean(mask) || clipAtContent;
+      const contentStyle: Styles = wrapContent ? { width: '100%', height: heightMode === 'hug' ? 'auto' : '100%' } : style;
+      const contentClasses: Utility[] = wrapContent ? ['relative'] : position;
+      if (clipAtContent) {
+        contentStyle['border-radius'] = 'inherit';
+        contentClasses.push('overflow-hidden');
+      }
+      if (mask) contentStyle['clip-path'] = defs.clip(positionedDesignOutline(mask.node, scene[mask.id]));
       if (layout) {
         contentStyle.padding = designPadding(layout).map(px).join(' ');
         contentStyle.gap = px(layout.gap);
@@ -179,18 +203,22 @@ export function renderDesignHtml(
         contentClasses.push('flex', layout.direction === 'horizontal' ? 'flex-row' : 'flex-col',
           `items-${layout.align}`, justifyUtility[layout.justify ?? 'start']);
       }
-      const children = node.childIds.filter((childId) => childId !== mask?.id).map((childId) => layer(childId, depth + (mask ? 2 : 1), node)).join('');
-      const content = mask ? `${indent}  <div${attributes(contentStyle, ...contentClasses)}>\n${children}${indent}  </div>\n` : children;
-      return `${indent}<div${name}${attributes(style, ...position)}>\n${paints}${content}${inset}${indent}</div>\n`;
+      const children = node.childIds.filter((childId) => childId !== mask?.id).map((childId) => layer(childId, depth + (wrapContent ? 2 : 1), node)).join('');
+      const content = wrapContent ? `${indent}  <div${attributes(contentStyle, ...contentClasses)}>\n${children}${indent}  </div>\n` : children;
+      const first = outlines[0] && !layered && !designStrokeNeedsSeparateLayer(strokes[0]) && (strokes[0].alignment ?? 'center') === 'center' ? outlines[0] : '';
+      const last = first ? outlines.slice(1).join('') : strokeOverlay;
+      return `${indent}<div${name}${attributes(style, ...position)}>\n${paints}${first}${content}${inset}${last}${indent}</div>\n`;
     }
-    return `${indent}<div${name}${attributes(style, ...position)}>${paints}${inset}</div>\n`;
+    const snapshot = web ? `<img src="${escapeHtml(web.image.src)}" alt=""${attributes({ inset: '0', width: '100%', height: '100%',
+      'border-radius': 'inherit', 'object-fit': web.device ? 'contain' : 'fill' }, 'absolute')}>` : '';
+    return `${indent}<div${name}${attributes(style, ...position)}>${paints}${snapshot}${inset}${strokeOverlay}</div>\n`;
   }
   const rootStyle = attributes(responsiveRoot ? { width: '100%' } : { width: px(bounds.width), height: px(bounds.height) }, 'relative');
   const body = `<div${rootStyle}>\n${ids.map((id) => layer(id, 1)).join('')}</div>`;
   const definitions = defs.markup();
   const svg = definitions ? `<svg aria-hidden="true" style="position:absolute;width:0;height:0">${definitions}</svg>\n` : '';
   const fallback = [...used].map((item) => `.${item}{${utilities[item]}}`).join('');
-  return `<!doctype html>\n<html>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${escapeHtml(title)}</title>\n<style>body{margin:0}*{box-sizing:border-box}${fallback}</style>\n</head>\n<body>\n${svg}${body}\n</body>\n</html>\n`;
+  return `<!doctype html>\n<html>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${escapeHtml(title)}</title>\n<style>body{margin:0}*{box-sizing:border-box}${fontCss}${fallback}</style>\n</head>\n<body>\n${svg}${body}\n</body>\n</html>\n`;
 }
 
 function applyAppearance(style: Styles, node: DesignNode, box: DesignLayerBox, strokes: readonly DesignStroke[], layered: boolean) {
@@ -200,18 +228,18 @@ function applyAppearance(style: Styles, node: DesignNode, box: DesignLayerBox, s
     const text = designTextStyle(node);
     style.color = layered ? 'transparent' : compositeDesignFill(node);
     if (!layered && visibleDesignFills(node).some((fill) => fill.gradient)) {
-      style.background = designCssBackground(node);
+      style.background = designCssBackground(node, box);
       style['background-clip'] = 'text';
       style.color = 'transparent';
     }
-    style.font = `${text.fontWeight} ${px(text.fontSize)}/${text.lineHeight} ${text.fontFamily}`;
+    style.font = `${designFontStyleWeight(text)} ${px(text.fontSize)}/${text.lineHeight} ${text.fontFamily}`;
     style['letter-spacing'] = px(text.letterSpacing);
     style['text-align'] = text.textAlign;
     if (shadowValue) style['text-shadow'] = shadowValue;
     if (strokes[0]) style['-webkit-text-stroke'] = textStroke(strokes[0]);
     return;
   }
-  if (node.kind !== 'image' && !layered) style.background = designCssBackground(node);
+  if (node.kind !== 'image' && !layered) style.background = designCssBackground(node, box);
   const radius = layerCornerRadius(node, box.width, box.height);
   if (node.kind === 'ellipse') style['border-radius'] = '50%';
   else if (radius) style['border-radius'] = Array.isArray(radius) ? radius.map(px).join(' ') : px(radius);

@@ -1,31 +1,35 @@
 // @vitest-environment happy-dom
 import { act, cleanup, createEvent, fireEvent, render } from '@testing-library/react';
 import type Konva from 'konva';
-import { useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { loadYoga } from 'yoga-layout/load';
 import { designDocumentVersion, type DesignDocument } from '../../src/contracts/index.js';
 import { applyDesignEdits } from '../../src/contracts/apply-design-edits.js';
 import { toWorld } from '../../src/renderer/design-geometry.js';
+import { designDrawingPlacement } from '../../src/renderer/design-insertion.js';
 import { resolveDesignScene, type DesignScene } from '../../src/renderer/design-layout.js';
-import { useDesignCanvasGestures, type CanvasAction, type CanvasViewport } from '../../src/renderer/use-design-canvas-gestures.js';
+import { useDesignCanvasGestures, type CanvasAction, type CanvasViewport, type DesignTool } from '../../src/renderer/use-design-canvas-gestures.js';
 
 afterEach(cleanup);
 
-function mountGestures(design: DesignDocument, scene: DesignScene, selected: readonly [string, ...string[]]) {
+function mountGestures(design: DesignDocument, scene: DesignScene, selected: readonly string[],
+  { handle, scale = 1, tool = 'select' }: Readonly<{ handle?: string; scale?: number; tool?: DesignTool }> = {}) {
   const stage = { current: {
-    getIntersection: () => ({ hasName: () => false, findAncestor: () => ({ id: () => selected[0] }) }),
+    getIntersection: () => selected.length ? { hasName: (name: string) => name === handle, findAncestor: () => ({ id: () => selected[0] }) } : null,
   } as unknown as Konva.Stage };
   const commit = vi.fn<(action: CanvasAction, revision: string) => Promise<boolean>>().mockResolvedValue(true);
   const editText = vi.fn();
+  let preview: ReturnType<typeof useDesignCanvasGestures>['preview'];
 
   function CanvasGestureTarget() {
     const [selectedIds, onSelect] = useState<readonly string[]>(selected);
-    const [viewport, setViewport] = useState<CanvasViewport>({ x: 0, y: 0, scale: 1 });
+    const [viewport, setViewport] = useState<CanvasViewport>({ x: 0, y: 0, scale });
     const controls = useDesignCanvasGestures({
-      stage, document: design, scene, revision: 'base', tool: 'select', selectedIds,
+      stage, document: design, scene, revision: 'base', tool, selectedIds,
       disabled: false, viewport, setViewport, onSelect, onEditText: editText, onAction: commit,
     });
+    useLayoutEffect(() => { preview = controls.preview; }, [controls.preview]);
     return <div tabIndex={0} role="region" aria-label="Canvas" ref={(element) => {
       if (element) element.setPointerCapture = () => undefined;
     }} onPointerDown={controls.onPointerDown} onPointerMove={controls.onPointerMove}
@@ -33,8 +37,96 @@ function mountGestures(design: DesignDocument, scene: DesignScene, selected: rea
   }
 
   const canvas = render(<CanvasGestureTarget />).getByRole('region', { name: 'Canvas' });
-  return { canvas, commit, editText };
+  Object.defineProperties(canvas, { clientWidth: { value: 1200 }, clientHeight: { value: 900 } });
+  return { canvas, commit, editText, preview: () => preview };
 }
+
+it('draws backwards from one frame corner to the other and keeps the snapped bounds inside auto layout', async () => {
+  const design: DesignDocument = {
+    schemaVersion: designDocumentVersion, documentId: 'draw-snap', rootIds: ['board'],
+    nodes: { board: { kind: 'frame', x: 40, y: 40, width: 300, height: 180, childIds: [],
+      layout: { direction: 'horizontal', gap: 12, padding: 20, align: 'start' } } },
+  };
+  const yoga = await loadYoga();
+  const measure = () => ({ width: 1, height: 1 });
+  const scene = resolveDesignScene(yoga, design, measure);
+  const { canvas, commit, preview } = mountGestures(design, scene, [], { tool: 'rectangle' });
+  const start = { pointerId: 1, button: 0, clientX: 334, clientY: 212 };
+  const end = { ...start, clientX: 35, clientY: 46 };
+  fireEvent.pointerDown(canvas, start);
+  fireEvent.pointerMove(canvas, { ...end, altKey: true });
+  expect(preview()?.drawing?.bounds).toEqual({ x: -5, y: 6, width: 299, height: 166 });
+  expect(preview()?.guides).toBeUndefined();
+
+  fireEvent.pointerMove(canvas, end);
+  const drawing = preview()?.drawing;
+  expect(drawing).toEqual({ kind: 'draw', tool: 'rectangle', parentId: 'board',
+    bounds: { x: 0, y: 0, width: 300, height: 180 }, click: false });
+  expect(preview()?.guides?.map(({ points }) => points)).toEqual([
+    [340, 40, 340, 220], [40, 220, 340, 220], [40, 40, 40, 220], [40, 40, 340, 40],
+  ]);
+  expect(commit).not.toHaveBeenCalled();
+  await act(async () => { fireEvent.pointerUp(canvas, end); });
+  expect(commit).toHaveBeenCalledExactlyOnceWith(drawing, 'base');
+  const [[saved]] = commit.mock.calls;
+  if (saved.kind !== 'draw' || !saved.parentId) throw new Error('Expected drawing coordinates inside the frame.');
+  const { parentId, placement } = designDrawingPlacement(design, scene, saved.parentId, saved.bounds);
+  const next = applyDesignEdits(design, [{ kind: 'insert', nodeId: 'tile', parentId,
+    node: { kind: 'rectangle', cornerRadius: 0, ...placement } }]);
+  expect(resolveDesignScene(yoga, next, measure).tile).toMatchObject(saved.bounds);
+});
+
+it('prefers the frame border over a nearer interior guide and bypasses it with Alt', async () => {
+  const design: DesignDocument = {
+    schemaVersion: designDocumentVersion, documentId: 'border-snap', rootIds: ['board'],
+    nodes: {
+      board: { kind: 'frame', x: 40, y: 40, width: 300, height: 180, childIds: ['tile', 'peer'] },
+      tile: { kind: 'rectangle', x: 60, y: 32, width: 50, height: 24, cornerRadius: 0 },
+      peer: { kind: 'rectangle', x: 9, y: 100, width: 130, height: 30, cornerRadius: 0 },
+    },
+  };
+  const scene = resolveDesignScene(await loadYoga(), design, () => ({ width: 1, height: 1 }));
+  const { canvas, commit, preview } = mountGestures(design, scene, ['tile']);
+  const start = { pointerId: 1, button: 0, clientX: 110, clientY: 80 };
+  const end = { ...start, clientX: 59 };
+  fireEvent.pointerDown(canvas, start);
+  fireEvent.pointerMove(canvas, end);
+  expect(preview()?.guides).toEqual([{ axis: 'x', points: [40, 40, 40, 220] }]);
+  await act(async () => { fireEvent.pointerUp(canvas, end); });
+  expect(commit).toHaveBeenCalledExactlyOnceWith({ kind: 'move', placements: { tile: { x: 0, y: 32 } } }, 'base');
+
+  fireEvent.pointerDown(canvas, start);
+  await act(async () => { fireEvent.pointerUp(canvas, { ...end, altKey: true }); });
+  expect(commit).toHaveBeenLastCalledWith({ kind: 'move', placements: { tile: { x: 9, y: 32 } } }, 'base');
+});
+
+it('snaps a resized edge to the true outline of a rotated and reflected frame', async () => {
+  const design: DesignDocument = {
+    schemaVersion: designDocumentVersion, documentId: 'resize-snap', rootIds: ['board'],
+    nodes: {
+      board: { kind: 'frame', x: 124, y: 240, width: 1440, height: 400, rotation: 27, flipX: true, childIds: ['tile'] },
+      tile: { kind: 'rectangle', x: 0, y: 20, width: 400, height: 166, cornerRadius: 0 },
+    },
+  };
+  const scale = 0.57;
+  const scene = resolveDesignScene(await loadYoga(), design, () => ({ width: 1, height: 1 }));
+  const { canvas, commit, preview } = mountGestures(design, scene, ['tile'], { handle: 'design-anchor-4', scale });
+  function pointerAt(x: number) {
+    const point = toWorld(scene.board, { x, y: 103 });
+    return { pointerId: 1, button: 0, clientX: point.x * scale, clientY: point.y * scale };
+  }
+  fireEvent.pointerDown(canvas, pointerAt(400));
+  fireEvent.pointerMove(canvas, pointerAt(1424));
+  const guide = preview()?.guides?.[0];
+  expect(guide?.axis).toBe('x');
+  const top = toWorld(scene.board, { x: 1440, y: 0 });
+  const bottom = toWorld(scene.board, { x: 1440, y: 400 });
+  [top.x, top.y, bottom.x, bottom.y].forEach((value, index) => expect(guide?.points[index]).toBeCloseTo(value, 6));
+  await act(async () => { fireEvent.pointerUp(canvas, pointerAt(1424)); });
+  expect(commit).toHaveBeenCalledExactlyOnceWith({
+    kind: 'transform', id: 'tile', placement: { x: 0, y: 20, width: 1440, height: 166 },
+  }, 'base');
+});
 
 it('distinguishes cancelled drags, batch moves in a reflected frame, and text editing clicks', async () => {
   const design: DesignDocument = {
