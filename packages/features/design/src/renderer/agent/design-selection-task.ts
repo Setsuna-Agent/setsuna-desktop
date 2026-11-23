@@ -78,7 +78,7 @@ function designParticipant(input: DesignSelectionTask, sourceId: string, agent?:
     }
     if (name === 'design_edit') {
       if (args.revision !== snapshot.revision) throw new Error(JSON.stringify({ applied: false, code: 'REVISION_CONFLICT', revision: snapshot.revision, error: 'Design revision changed. Inspect before editing again.' }));
-      const plan = await planEditorCommand(view, view.editor, ids, args, !roots, (id) => permits(view, roots, id), signal);
+      const plan = await planEditorCommand(view, view.editor, ids, args, !roots, (id) => permits(view, roots, id), signal, step.libraryId);
       if (!step.networkAccess && args.dryRun !== true) {
         (await import('./design-edit-preflight.js')).checkInstanceWebLayers(view, plan.edits);
       }

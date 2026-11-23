@@ -33,7 +33,7 @@ export class DesignDocumentService {
       const snapshot = toSnapshot(await this.readHistory(file));
       const project = await file.linkedProject?.(snapshot.document.documentId);
       signal.throwIfAborted();
-      return { ...snapshot, linkedProjectId: project === undefined ? ref.projectId ?? null : project };
+      return { ...snapshot, workspaceRoot: file.workspaceRoot, linkedProjectId: project === undefined ? ref.projectId ?? null : project };
     });
   }
 

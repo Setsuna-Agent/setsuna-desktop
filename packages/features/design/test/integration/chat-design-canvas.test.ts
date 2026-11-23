@@ -2,8 +2,9 @@ import { createServer } from 'node:http';
 import { loadYoga } from 'yoga-layout/load';
 import { expect, it, vi } from 'vitest';
 import { createRuntimeServerTestHarness } from '../../../../desktop-runtime/test/support/runtime-server/harness.js';
+import { ONE_PIXEL_PNG_BASE64 } from '../../../../desktop-runtime/test/support/runtime-server/rest-capabilities.js';
 import { readRequestText } from '../../../../desktop-runtime/test/support/runtime-server/shared.js';
-import { chatDesignResult, type DesignSnapshot } from '../../src/contracts/index.js';
+import { chatDesignResult, designMentionText, type DesignSnapshot } from '../../src/contracts/index.js';
 import type { DesignTaskClient } from '../../src/contracts/design-task.js';
 import { createDesignClient } from '../../src/renderer/client.js';
 import { defaultDesignCanvasSettings } from '../../src/renderer/context/design-canvas-settings.js';
@@ -21,6 +22,11 @@ it('waits for the main chat canvas, edits and inspects real layers, and rejects 
   const focus: DesignAgentFocus[] = [];
   let exchange: Promise<void> | undefined;
   let savedRevision = '';
+  let resourcePaths: string[] = [];
+  let images: string[] = [];
+  let privateImage = '';
+  let ownImage = '';
+  let reference = '';
   let board = '';
   const provider = createServer(async (request, response) => {
     const body = JSON.parse(await readRequestText(request));
@@ -29,7 +35,7 @@ it('waits for the main chat canvas, edits and inspects real layers, and rejects 
       catalogs.push(body.tools.map((tool: { function: { name: string } }) => tool.function.name));
       const result = () => JSON.parse(body.messages.findLast((message: { role: string }) => message.role === 'tool').content);
       switch (catalogs.length) {
-        case 1: call = { name: 'chat_design', args: { action: 'create', name: 'Main' } }; break;
+        case 1: call = { name: 'chat_design', args: { action: 'open', reference } }; break;
         case 2: call = { name: 'design_edit', args: { revision: result().revision, action: 'insert', ids: [],
           fields: { kind: 'frame', name: 'Screen', width: 400, height: 600, children: [{ kind: 'text', name: 'Title', text: 'Hello' }] } } }; break;
         case 3: {
@@ -43,11 +49,26 @@ it('waits for the main chat canvas, edits and inspects real layers, and rejects 
           board = edit.ids[0];
           call = { name: 'design_inspect', args: { scope: 'document', name: 'Title' } }; break;
         }
-        case 4:
+        case 4: call = { name: 'design_resources', args: { kind: 'documents' } }; break;
+        case 5:
+          resourcePaths = result().items;
+          call = { name: 'design_edit', args: { action: 'linkLibrary', fields: { path: 'Other.design.json' }, revision: savedRevision } }; break;
+        case 6:
+          call = { name: 'design_edit', args: { action: 'linkLibrary', fields: { path: 'Shared.design.json' }, revision: savedRevision } }; break;
+        case 7:
+          savedRevision = result().revision;
+          call = { name: 'design_resources', args: { kind: 'images' } }; break;
+        case 8:
+          images = result().items;
+          call = { name: 'design_edit', args: { action: 'insert', ids: [board], revision: savedRevision, fields: { kind: 'image', assetPath: privateImage } } }; break;
+        case 9:
+          call = { name: 'design_edit', args: { action: 'insert', ids: [board], revision: savedRevision, fields: { kind: 'image', assetPath: ownImage } } }; break;
+        case 10:
+          savedRevision = result().revision;
           inspected.resolve();
           await resume.promise;
           call = { name: 'design_edit', args: { revision: savedRevision, action: 'delete', ids: [board] } }; break;
-        case 5: call = { name: 'chat_design', args: { action: 'finish' } }; break;
+        case 11: call = { name: 'chat_design', args: { action: 'finish' } }; break;
       }
     }
     const delta = call ? { tool_calls: [{ index: 0, id: 'canvas_' + catalogs.length, type: 'function',
@@ -64,13 +85,27 @@ it('waits for the main chat canvas, edits and inspects real layers, and rejects 
     await harness.configureOpenAiProvider('canvas', 'http://127.0.0.1:' + address.port + '/v1');
     const project = await post('/v1/projects', { name: 'Chat' });
     const other = await post('/v1/projects', { name: 'Other' });
+    const base = '/v1/features/design';
+    for (const [name, projectId] of [['Main.design.json', project.id], ['Shared.design.json', project.id], ['Other.design.json', other.id]]) {
+      const ref = { storageId: 'local', path: name };
+      await post(base + '/documents', { ...ref, parentPath: '.', name });
+      const library = await harness.runtimeFetch(base + '/documents?' + new URLSearchParams(ref));
+      await post(base + '/storage/project', { ref, documentId: library.document.documentId, projectId });
+      if (name === 'Main.design.json') {
+        reference = designMentionText({ ref, documentId: library.document.documentId });
+        ownImage = await post(base + '/images', { ref, name: 'own.png', base64: ONE_PIXEL_PNG_BASE64 });
+      }
+      if (projectId === other.id) privateImage = await post(base + '/images', { ref, name: 'private.png', base64: ONE_PIXEL_PNG_BASE64 });
+    }
+    // The unplaced image must survive the importer's session and remain private to its draft.
+    await harness.server.close();
+    await harness.startRuntimeServer(harness.runtimeDataDir);
     const { id: threadId } = await post('/v1/threads', { projectId: project.id, title: 'Design' });
     const { turnId } = await post('/v1/threads/' + threadId + '/turns', { input: 'Design a screen on the canvas' });
     const thread = await harness.waitForThread(threadId, (thread) => thread.messages.some((message) =>
       message.toolRuns?.some((run) => run.name === 'design_edit' && run.status === 'running')));
     const receipt = thread.messages.flatMap((m) => m.toolRuns ?? []).find((run) => run.name === 'chat_design');
     const draft = chatDesignResult(receipt?.data)!;
-    const base = '/v1/features/design';
     const read = (): Promise<DesignSnapshot> => harness.runtimeFetch(base + '/documents?' + new URLSearchParams({ storageId: 'local', path: draft.ref.path }));
     let snapshot = await read();
     expect(snapshot.document.rootIds).toEqual([]);
@@ -99,7 +134,13 @@ it('waits for the main chat canvas, edits and inspects real layers, and rejects 
     await post(base + '/storage/project', { ref: draft.ref, documentId: draft.documentId, projectId: other.id });
     resume.resolve();
     const done = await harness.waitForCompletedTurn(threadId, turnId);
-    expect(done.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.id === 'canvas_4')?.status).toBe('error');
+    expect(resourcePaths.sort()).toEqual(['Main.design.json', 'Shared.design.json']);
+    const toolRuns = done.messages.flatMap((message) => message.toolRuns ?? []);
+    expect(toolRuns.find((run) => run.id === 'canvas_5')?.status).toBe('error');
+    expect(images).toEqual([ownImage]);
+    expect(toolRuns.find((run) => run.id === 'canvas_8')).toMatchObject({ status: 'error', resultPreview: expect.stringContaining('Import this asset') });
+    expect(toolRuns.find((run) => run.id === 'canvas_10')?.status).toBe('error');
+    expect(Object.values((await read()).document.libraries ?? {})).toEqual(['Shared.design.json']);
     expect(catalogs.at(-1)).toContain('exec_command');
     expect(await read()).toMatchObject({ revision: savedRevision, document: { rootIds: [board] }, canUndo: true });
     await exchange;

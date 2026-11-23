@@ -10,6 +10,7 @@ import { DesignSelectionProvider } from '../../features/chat/mentions/DesignSele
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { FeatureRecoveryShell } from '../FeatureRecoveryShell.js';
 import { useDesignClient } from './DesignClientContext.js';
+import { watchDesignDirectories } from './design-assets.js';
 import { createChatCanvasSelections } from './chatCanvasSelections.js';
 
 const Activity = createContext<{ entries: ReturnType<typeof conversationArtifacts>; turnId: string | null; threadId?: string }>({ entries: new Map(), turnId: null });
@@ -90,7 +91,7 @@ export function ChatDesignCanvas({ owner, visible = true }: { owner: DesignConve
   if (!client) return <FeatureRecoveryShell candidateFeatureIds={['design']} reason="view-missing" />;
   if (source?.key !== key) return null;
   return <DesignDocumentSurface client={client} documentRef={source.ref} expectedDocumentId={owner.documentId}
-    fileRevision={design?.revision} chatActivity={{ connectSelection: visible ? connectSelection ?? undefined : undefined, networkAccess: design?.networkAccess === true,
+    watchDirectories={watchDesignDirectories} fileRevision={design?.revision} chatActivity={{ connectSelection: visible ? connectSelection ?? undefined : undefined, networkAccess: design?.networkAccess === true,
       request: threadId && turnId && entry?.kind === 'design' && entry.turnId === turnId && design?.canvasRequestId
         ? { threadId, id: design.canvasRequestId } : undefined }} translate={t} />;
 }

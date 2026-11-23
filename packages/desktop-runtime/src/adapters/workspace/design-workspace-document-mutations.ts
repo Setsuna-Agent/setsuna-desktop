@@ -8,7 +8,7 @@ import { isNodeError } from '../../shared/node-errors.js';
 import { designChanged, readDesignDocumentFile, readValidDesignDocument,
   resolveDesignFile, withDesignSource, type DesignFile } from './design-workspace-document-file.js';
 import { designResourceDirectory, type DesignResourceOwnership } from './design-workspace-resource-root.js';
-import { readWorkspaceDesignSource } from './design-workspace-source.js';
+import { readVerifiedDesignImport, readWorkspaceDesignSource } from './design-workspace-source.js';
 import { createWorkspaceFile, resolveEntryParent, resolveExistingWorkspaceEntry } from './workspace-entry-mutations.js';
 import { readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
 import { walkWorkspaceFiles } from './workspace-file-walk.js';
@@ -99,8 +99,10 @@ async function moveDocument(sourceRoot: string, sourcePath: string, destinationR
     return created;
   };
   try {
-    if (path.relative(resourceRoot, destinationRoot)) await copyDependencies(resourceRoot, original.document, write, signal);
+    const imports = await ownership.imports(canonical, documentId);
+    if (path.relative(resourceRoot, destinationRoot)) await copyDependencies(resourceRoot, original.document, imports, write, signal);
     const copy = await write(name, { content: original.content, documentId });
+    if (Object.keys(imports).length) await ownership.rememberImports(target, documentId, destinationRoot, imports);
     const association = await ownership.project(canonical, documentId);
     const linkedProject = association === undefined ? sourceProject : association;
     if (linkedProject !== undefined) await ownership.setProject(target, documentId, destinationRoot, linkedProject, await ownership.chatOrigin(canonical, documentId));
@@ -130,7 +132,7 @@ function sameEntry(a: DesignFile, b: DesignFile) {
   return a.target === b.target && a.stats.ino === b.stats.ino && a.stats.dev === b.stats.dev;
 }
 
-async function removeUnchangedFile(source: TrackedFile, signal?: AbortSignal, copy?: TrackedFile) {
+export async function removeUnchangedFile(source: TrackedFile, signal?: AbortSignal, copy?: TrackedFile) {
   const files = copy ? [source, copy] : [source];
   await Promise.all(files.map(async (file) => {
     if (file.revision === undefined) return;
@@ -149,7 +151,7 @@ async function removeUnchangedFile(source: TrackedFile, signal?: AbortSignal, co
 
 type TransferWrite = (relativePath: string, file: Readonly<{ content: string | Uint8Array; revision?: string; documentId?: string }>) => Promise<TrackedFile>;
 
-async function copyDependencies(root: string, document: DesignDocument, write: TransferWrite, signal: AbortSignal) {
+async function copyDependencies(root: string, document: DesignDocument, imports: Record<string, string>, write: TransferWrite, signal: AbortSignal) {
   const imagePaths = new Set<string>();
   const sourcePaths = new Set<string>();
   const libraries = new Map<string, string>();
@@ -193,6 +195,15 @@ async function copyDependencies(root: string, document: DesignDocument, write: T
     await copyAssets(file.document);
     libraries.set(relativePath, id);
     links.push(...Object.entries(file.document.libraries ?? {}));
+  }
+  for (const [path, revision] of Object.entries(imports)) {
+    signal.throwIfAborted();
+    if (imagePaths.has(path) || sourcePaths.has(path)) continue;
+    const imported = await readVerifiedDesignImport(root, path, revision);
+    if (imported) {
+      const content = imported.preview?.kind === 'image' ? Buffer.from(imported.preview.base64, 'base64') : imported.content;
+      await write(path, { revision, content });
+    }
   }
 }
 

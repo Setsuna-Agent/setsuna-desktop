@@ -79,17 +79,7 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
   }, []);
   const watchAssetDirectories = useCallback<WatchDesignDirectories>((directories, changed, options) =>
     workspaceRoot ? watchDirectories(workspaceRoot, directories, changed, options) : () => undefined, [watchDirectories, workspaceRoot]);
-  const watchChanges = useCallback((changed: () => void) => {
-    if (!documentRef) return () => undefined;
-    const key = designFileKey(documentRef);
-    const refresh = () => { if (!mutatingFiles.current?.has(key)) changed(); };
-    const unwatch = watchAssetDirectories([designFileParts(documentRef.path).folder || '.'], refresh);
-    window.addEventListener('focus', refresh);
-    return () => {
-      window.removeEventListener('focus', refresh);
-      unwatch();
-    };
-  }, [documentRef, watchAssetDirectories]);
+  const shouldRefresh = useCallback(() => !documentRef || !mutatingFiles.current?.has(designFileKey(documentRef)), [documentRef]);
 
   const backToDocuments = useCallback(() => onLocationChange(homeFilter), [homeFilter, onLocationChange]);
   function openDocument(ref: DesignDocumentRef) {
@@ -262,7 +252,7 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
           <DesignDocumentSurface renderChat={props.renderChat && ((binding) => props.renderChat?.(binding, linkedProject ?? null))} client={client} projects={projects} onFileAction={(destination) => {
             if (destination) openDocument(destination); else backToDocuments();
           }} readOnly={mutatingFiles.current?.has(designFileKey(documentRef))}
-            documentRef={documentRef} watchChanges={watchChanges} watchAssetDirectories={watchAssetDirectories}
+            documentRef={documentRef} shouldRefresh={shouldRefresh} watchAssetDirectories={watchAssetDirectories}
             onOpenLibrary={openFile} onDocumentMissing={backToDocuments} translate={t} />
         </div>
       </div>

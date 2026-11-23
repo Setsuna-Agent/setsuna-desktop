@@ -27,7 +27,7 @@ export function parseDesignWorkspace(input: unknown): DesignWorkspace {
 export type DesignDocumentRef = DesignWorkspace & Readonly<{ path: string }>;
 export type CreateDesignDocumentInput = DesignWorkspace & Readonly<{ parentPath: string; name: string; command?: DesignCommandKey }>;
 export type MoveDesignDocumentInput = Readonly<{ ref: DesignDocumentRef; destination: DesignWorkspace; command?: DesignCommandKey; expectedRevision?: string }>;
-export type DesignSnapshot = Readonly<{ document: DesignDocument; revision: string; canUndo: boolean; canRedo: boolean; linkedProjectId?: string | null }>;
+export type DesignSnapshot = Readonly<{ document: DesignDocument; revision: string; canUndo: boolean; canRedo: boolean; workspaceRoot?: string; linkedProjectId?: string | null }>;
 
 export const designImageExtensions = {
   'image/bmp': 'bmp', 'image/gif': 'gif', 'image/jpeg': 'jpg', 'image/png': 'png',
@@ -82,6 +82,7 @@ const snapshotCodec = defineRuntimeCodec<DesignSnapshot>((input) => {
     revision: requiredString(value.revision),
     canUndo: value.canUndo,
     canRedo: value.canRedo,
+    ...(value.workspaceRoot === undefined ? {} : { workspaceRoot: requiredString(value.workspaceRoot) }),
     ...(value.linkedProjectId === undefined ? {} : { linkedProjectId: value.linkedProjectId === null ? null : requiredString(value.linkedProjectId) }),
   };
 });

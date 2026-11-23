@@ -8,10 +8,14 @@ it('discovers linked drafts and isolates project and personal canvas requests wi
   const harness = await createRuntimeServerTestHarness();
   let next: { id: string; input: unknown } | undefined;
   let tools: string[] = [];
+  let actions: string[] | undefined;
   const provider = createServer(async (request, response) => {
     const body = JSON.parse(await readRequestText(request));
     const call = body.tools?.length ? next : undefined;
-    if (call) next = undefined;
+    if (call) {
+      next = undefined;
+      actions = body.tools.find((item: { function: { name: string } }) => item.function.name === chatDesignTool)?.function.parameters.properties.action.enum;
+    }
     if (call) tools = body.tools?.map((item: { function: { name: string } }) => item.function.name) ?? [];
     const delta = call ? { tool_calls: [{ index: 0, id: call.id, type: 'function', function: {
       name: chatDesignTool, arguments: JSON.stringify(call.input),
@@ -46,6 +50,16 @@ it('discovers linked drafts and isolates project and personal canvas requests wi
     const owner = { documentId: created.documentId, ref: created.ref };
     expect(await list(a.id)).toEqual([owner]);
     expect(await list(b.id)).toEqual([]);
+    await harness.runtimeFetch('/v1/config', { method: 'PUT', body: JSON.stringify({ permissionProfile: 'danger-full-access' }) });
+    next = { id: 'review_create', input: { action: 'create', name: 'Forbidden' } };
+    const review = await post('/v1/features/desktop-review/threads/' + chat.id + '/reviews', { language: 'en-US', target: { type: 'uncommittedChanges' } });
+    const reviewed = await harness.waitForCompletedTurn(chat.id, review.turnId);
+    expect(actions).toEqual(['list', 'open']);
+    expect(reviewed.messages.flatMap((item) => item.toolRuns ?? []).find((item) => item.id === 'review_create')?.status).toBe('error');
+    const side = await post('/v1/features/side-conversation/threads/' + chat.id, {});
+    expect((await call(side.threadId, 'side_create', { action: 'create', name: 'Forbidden' }, 'Design a screen')).status).toBe('error');
+    expect(tools).not.toContain(chatDesignTool);
+    expect(await list(a.id)).toEqual([owner]);
     const reference = designMentionText(owner);
     const discovered = await call(chat.id, 'find_designs', { action: 'list' }, 'Which designs are linked to my project?');
     expect(discovered.status).toBe('success');

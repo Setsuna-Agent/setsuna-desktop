@@ -1,12 +1,13 @@
 import { useCallback, useLayoutEffect, useRef } from 'react';
 import type { DesignCanvasSelection } from './DesignChatBridge.js';
-import type { DesignDocument } from '../../contracts/index.js';
+import type { DesignDocument, DesignDocumentRef } from '../../contracts/index.js';
 import type { DesignScene } from '../design-layout.js';
 import { designPrototypeBoardFor } from '../prototype/design-prototype.js';
 
 type BeginPick = Parameters<DesignCanvasSelection['subscribePicks']>[0];
 
 export function useDesignChatPicks(document: DesignDocument, scene: DesignScene, options: {
+  ref: DesignDocumentRef;
   connect?(canvas: DesignCanvasSelection): () => void;
   show(ids: readonly string[]): void;
   unavailable(): void;
@@ -44,7 +45,7 @@ export function useDesignChatPicks(document: DesignDocument, scene: DesignScene,
       }
       const first = document.nodes[ids[0]];
       const label = first.name || (first.kind === 'text' && first.text) || first.kind;
-      finish({ documentId: document.documentId, boards: [...boards], ids,
+      finish({ ref: options.ref, documentId: document.documentId, boards: [...boards], ids,
         label: ids.length === 1 ? label : `${label} +${ids.length - 1}` });
     };
   }

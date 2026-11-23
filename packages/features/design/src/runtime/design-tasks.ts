@@ -1,12 +1,15 @@
 import type { RuntimeEditorSelection } from '@setsuna-desktop/contracts';
-import { designFileKey, type DesignConversationOwner, type DesignWorkspaceDocument } from '../contracts/index.js';
+import { designFileKey, type DesignConversationOwner, type DesignSnapshot, type DesignDocumentRef, type DesignWorkspaceDocument } from '../contracts/index.js';
 import type { DesignCommandKey } from '../contracts/design-command-key.js';
 import { randomUUID } from 'node:crypto';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
-import { designTaskRecord, readDesignSelection, type DesignAgent, type DesignInputBinding, type DesignToolPolicy, type DesignTaskReply, type DesignTaskResult, type DesignTaskStart, type DesignTaskStep,
+import { designResourcePage, designTaskRecord, readDesignSelection, type DesignAgent, type DesignInputBinding, type DesignToolPolicy, type DesignTaskReply, type DesignTaskResult, type DesignTaskStart, type DesignTaskStep,
   type DesignToolName, type DesignToolService, type DesignTurnHost } from '../contracts/design-task.js';
+import type { ChatDesignAssets } from './chat-design-assets.js';
 import type { DesignDocumentService } from './design-document-service.js';
 import { designToolDefinitions } from './design-tool-definitions.js';
+import { resolveDesignInputSelection } from '../contracts/design-selection-mention.js';
+import { parseDesignLibraryPath } from '../contracts/design-resource-id.js';
 import { checkDesignWebEdits, checkDesignTaskEdits } from './design-task-scope.js';
 
 function deferred<T>() {
@@ -22,7 +25,10 @@ function participant(selection: string[], reset: boolean, agent?: DesignAgent): 
 
 type ChatCanvas = {
   requestId: string; turnId: string;
-  verify(signal: AbortSignal): Promise<void>;
+  listDocuments(signal: AbortSignal): Promise<readonly string[]>;
+  libraryId(path: string, signal: AbortSignal): Promise<string>;
+  assets?: ChatDesignAssets;
+  verify(signal: AbortSignal): Promise<DesignSnapshot>;
   authorize(documentId: string, file: DesignWorkspaceDocument): Promise<void>;
 };
 
@@ -204,17 +210,32 @@ export class DesignTasks implements DesignToolService {
     return null;
   }
 
-  captureSelection(threadId: string, clientId: string) {
+  async captureSelection(threadId: string, clientId: string, content: string) {
     const session = this.threads.get(threadId);
     if (!session || session.controller.signal.aborted) return;
     const ids = session.inputs.get(clientId) ?? (session.start.clientId === clientId ? session.start.selection : undefined);
-    return ids && { documentId: session.start.documentId, ids: [...ids] };
+    if (!ids) return;
+    const snapshot = { documentId: session.start.documentId, ids: [...ids], ownerThreadId: threadId };
+    const target = resolveDesignInputSelection(content, snapshot);
+    if (target.status !== 'resolved') throw new Error('Selection belongs to another design.');
+    await this.verifySelectionRefs(session, target.refs);
+    return snapshot;
   }
 
-  restoreSelection(threadId: string, clientId: string, selection: RuntimeEditorSelection) {
+  async restoreSelection(threadId: string, clientId: string, selection: RuntimeEditorSelection, refs: readonly DesignDocumentRef[]) {
     const session = this.threads.get(threadId);
     if (!session || session.controller.signal.aborted || session.start.documentId !== selection.documentId) throw new Error('The design editor is unavailable.');
+    if (selection.ownerThreadId !== threadId) await this.verifySelectionRefs(session, refs);
     session.inputs.set(clientId, [...selection.ids]);
+  }
+
+  private async verifySelectionRefs(session: Session, refs: readonly DesignDocumentRef[]) {
+    const { threadId, documentId } = session.start;
+    for (const ref of refs) {
+      if (designFileKey(ref) !== designFileKey(session.start.ref)
+        && !await this.host.resolveOwnedRoot(threadId, { ref, documentId })) throw new Error('Selection belongs to another design.');
+    }
+    if (session.controller.signal.aborted) throw new Error('The design editor is unavailable.');
   }
 
   fileOperationSignal(command: DesignCommandKey | undefined, signal: AbortSignal) {
@@ -255,17 +276,28 @@ export class DesignTasks implements DesignToolService {
       try { await Promise.race([session.ready, cancelled.promise]); }
       finally { commandSignal.removeEventListener('abort', stop); }
       commandSignal.throwIfAborted();
-      if (session.canvas) await session.canvas.verify(AbortSignal.any([commandSignal, session.controller.signal]));
+      const snapshot = await session.canvas?.verify(AbortSignal.any([commandSignal, session.controller.signal]));
       const bound = worker?.participant ?? this.mainParticipant(session, policy?.inputClientId);
-      return this.executeBound(session, bound, name, input, commandSignal, policy?.networkAccess === true);
+      return this.executeBound(session, bound, name, input, commandSignal, policy?.networkAccess === true, snapshot);
     });
   }
 
-  private async executeBound(session: Session, bound: Participant, name: DesignToolName, input: unknown, turnSignal: AbortSignal, networkAccess: boolean) {
+  private async executeBound(session: Session, bound: Participant, name: DesignToolName, input: unknown, turnSignal: AbortSignal, networkAccess: boolean, snapshot?: DesignSnapshot) {
     const { agent, roots } = bound;
     const signal = AbortSignal.any([session.controller.signal, turnSignal]);
     signal.throwIfAborted();
     const args = designTaskRecord(input);
+    const assets = session.canvas?.assets;
+    if (session.canvas && name === 'design_resources') {
+      let paths: readonly string[] | undefined;
+      if (args.kind === 'documents') paths = await session.canvas.listDocuments(signal);
+      if (args.kind === 'images' && assets && snapshot) paths = await assets.images(snapshot.document, signal);
+      if (paths) return { content: JSON.stringify(designResourcePage(paths, args)), containsExternalContext: true as const };
+    }
+    // The renderer only needs the authorized library ID to plan the link.
+    const libraryPath = session.canvas && name === 'design_edit' && args.action === 'linkLibrary'
+      ? parseDesignLibraryPath(designTaskRecord(args.fields).path) : undefined;
+    const libraryId = session.canvas && libraryPath ? await session.canvas.libraryId(libraryPath, signal) : undefined;
     const selection = name === 'design_view' && args.action === 'select' && args.ids !== undefined ? readDesignSelection(args.ids) : undefined;
     if (name === 'design_edit' && args.dryRun !== undefined && typeof args.dryRun !== 'boolean') throw new Error('dryRun must be a boolean.');
     if (bound.reset && bound.selection.length) {
@@ -274,7 +306,7 @@ export class DesignTasks implements DesignToolService {
       signal.throwIfAborted();
     }
     const id = randomUUID();
-    const result = await this.request(session, { kind: 'tool', id, name, args, agent, networkAccess, selection: bound.reset ? bound.selection : undefined },
+    const result = await this.request(session, { kind: 'tool', id, name, args, agent, libraryId, networkAccess, selection: bound.reset ? bound.selection : undefined },
       agent ? session.controller.signal : signal, signal);
     bound.reset = false;
     signal.throwIfAborted();
@@ -286,6 +318,16 @@ export class DesignTasks implements DesignToolService {
     if (result.plan) {
       if (name !== 'design_edit' || result.plan.revision !== args.revision) throw new Error('Unexpected design mutation.');
       const { revision, edits } = result.plan;
+      if (assets && session.canvas && snapshot) {
+        const base = snapshot.revision === revision ? snapshot : await session.canvas.verify(signal);
+        await assets.check(base.document, edits, signal);
+      }
+      if (session.canvas) {
+        for (const edit of edits) {
+          if (edit.kind === 'linkLibrary' && (edit.path !== libraryPath || edit.documentId !== libraryId
+            || await session.canvas.libraryId(edit.path, signal) !== libraryId)) throw new Error('Unauthorized design library.');
+        }
+      }
       const summary = designTaskRecord(JSON.parse(content || '{}'));
       let savedRevision = revision;
       const dryRun = args.dryRun === true;

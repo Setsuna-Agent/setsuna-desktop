@@ -106,14 +106,14 @@ export default function DesignEditor({ layoutEngine, ...props }: DesignDocumentS
   const { client, documentRef } = props;
   const session = useDesignDocument(props);
   const source = session.snapshot?.document;
-  const resources = useDesignLibraryResources(client, documentRef, source, props.watchAssetDirectories);
+  const resources = useDesignLibraryResources(client, documentRef, source, session.watchAssetDirectories);
   const projected = useMemo(() => source ? projectDesignComponents(source, resources) : null, [resources, source]);
   const fonts = useDesignFonts(client.fonts, projected, props.translate);
   // Reflow auto-sized text once its actual faces are available to the canvas.
   const scene = useMemo(() => projected ? resolveDesignScene(layoutEngine, projected, measureDesignText) : null,
     [layoutEngine, projected, fonts.revision]);
-  const loadImage = useDesignImageLoader(client.assets, documentRef, projected, props.watchAssetDirectories);
-  const shaders = useDesignShaderAssets(client, documentRef, projected, props.watchAssetDirectories);
+  const loadImage = useDesignImageLoader(client.assets, documentRef, projected, session.watchAssetDirectories);
+  const shaders = useDesignShaderAssets(client, documentRef, projected, session.watchAssetDirectories);
   if (!session.snapshot || !scene || !projected) return null;
   return <DesignFontsContext.Provider value={fonts}>
     <DesignShaderAssetsContext.Provider value={shaders}>
@@ -172,6 +172,7 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
   const exportActions = useDesignExports(client.assets.output, loadImage, t, captureWebImages);
   const { document, revision, canUndo, canRedo } = snapshot;
   const chatPicks = useDesignChatPicks(document, scene, {
+    ref: documentRef,
     connect: chatActivity?.connectSelection,
     unavailable: () => toast.error(t('feature.design.selectionUnavailable')),
     show(ids) {

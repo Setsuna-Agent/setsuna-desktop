@@ -61,7 +61,7 @@ async function planSvg(fields: Args, parent: string | null, center: { x: number;
 }
 
 export async function planEditorCommand(view: DesignCommandContext, editor: DesignEditorTools | undefined, ids: readonly string[], args: Args,
-  wholeDocument: boolean, permits: (id: string) => boolean, signal: AbortSignal): Promise<{ ids: readonly string[]; edits: readonly DesignEdit[] }> {
+  wholeDocument: boolean, permits: (id: string) => boolean, signal: AbortSignal, libraryId?: string): Promise<{ ids: readonly string[]; edits: readonly DesignEdit[] }> {
   const { document, projected, resources, scene } = view;
   const fields = args.fields === undefined ? {} : designTaskRecord(args.fields);
   const id = ids[0];
@@ -194,8 +194,8 @@ export async function planEditorCommand(view: DesignCommandContext, editor: Desi
         return { ids: [], edits };
       }
       if (!editor) throw new Error('Library source unavailable.');
-      const library = await editor.client.read({ ...editor.ref, path }, signal);
-      return { ids: [], edits: [{ kind: 'linkLibrary', documentId: library.document.documentId, path }] };
+      const documentId = libraryId ?? (await editor.client.read({ ...editor.ref, path }, signal)).document.documentId;
+      return { ids: [], edits: [{ kind: 'linkLibrary', documentId, path }] };
     }
     default: return planDesignCommand(view, ids, args);
   }

@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, realpath, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
@@ -17,6 +17,9 @@ it('keeps a local draft, imported image and conversation together through projec
     const snapshot = await harness.runtimeFetch(api + '/documents?' + new URLSearchParams(ref));
     const owner = { ref, documentId: snapshot.document.documentId };
     const chat = await post(api + '/conversations', owner);
+    const linked = await post(api + '/images', { ref, name: 'link.png', base64: ONE_PIXEL_PNG_BASE64 });
+    const replaced = await post(api + '/images', { ref, name: 'reused.png', base64: ONE_PIXEL_PNG_BASE64 });
+    const unused = await post(api + '/images', { ref, name: 'unplaced.png', base64: ONE_PIXEL_PNG_BASE64 });
     const image = await post(api + '/images', { ref, name: 'sample.png', base64: ONE_PIXEL_PNG_BASE64 });
     await post(api + '/documents/edits', { ref, expectedRevision: snapshot.revision, edits: [
       { kind: 'insert', nodeId: 'picture', parentId: null, node: {
@@ -25,6 +28,9 @@ it('keeps a local draft, imported image and conversation together through projec
     ] });
     const { directories } = await harness.runtimeFetch(api + '/storage');
     const local = directories.find((item: { id: string }) => item.id === 'local').path;
+    await unlink(path.join(local, linked));
+    await symlink(local, path.join(local, linked), process.platform === 'win32' ? 'junction' : 'dir');
+    await writeFile(path.join(local, replaced), 'replacement from another draft');
     const file = path.join(local, ref.path);
     const original = await readFile(file, 'utf8');
     const a = path.join(harness.runtimeDataDir, 'a');
@@ -52,6 +58,9 @@ it('keeps a local draft, imported image and conversation together through projec
     await harness.startRuntimeServer(harness.runtimeDataDir);
     await expect(readFile(file)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(path.join(external, ref.path), 'utf8')).toBe(original);
+    await expect(readFile(path.join(external, linked))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(path.join(external, replaced))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await post(api + '/storage/images/read', { ref: moved, path: unused })).toMatchObject({ base64: ONE_PIXEL_PNG_BASE64 });
     expect(await post(api + '/storage/images/read', { ref: moved, path: image })).toMatchObject({ base64: ONE_PIXEL_PNG_BASE64 });
     expect(await post(api + '/conversations/list', { ...owner, ref: moved })).toEqual([chat]);
     const sessionId = randomUUID();

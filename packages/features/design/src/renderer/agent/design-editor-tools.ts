@@ -12,6 +12,7 @@ import { designComponentDefinitions } from '../components/design-library.js';
 import { designLibraryVariableCollections, designStyleChoices } from '../components/design-library-resources.js';
 import type { DesignExportRequest } from '../export/use-design-exports.js';
 import type { DesignCommandContext } from './design-command.js';
+import { designResourcePage } from '../../contracts/design-task.js';
 import type { DesignCommandKey } from '../../contracts/design-command-key.js';
 
 export type DesignEditorTools = {
@@ -59,10 +60,8 @@ export async function readDesignResources(view: DesignCommandContext, editor: De
     const names = values.filter((item): item is string => typeof item === 'string');
     filtered = args.exact === true ? names.filter((name) => name === query)
       : [...names.filter((name) => name === query), ...names.filter((name) => name !== query && name.includes(query))];
-  } else if (query) filtered = values.filter((item) => JSON.stringify(item).toLowerCase().includes(query));
-  const offset = args.offset ?? 0;
-  if (typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0) throw new Error('Invalid resource offset.');
-  return { items: filtered.slice(offset, offset + 64), total: filtered.length };
+  }
+  return designResourcePage(filtered, args);
 }
 
 export async function lucideCatalog() {
@@ -121,7 +120,7 @@ export async function manageDesignFile(editor: DesignEditorTools, args: Args, re
   const { client, ref, projects } = editor;
   if (args.action === 'destinations') return (projects ?? []).filter((project) => project.id !== ref.projectId).map((project) => ({ id: project.id, name: project.name,
     roots: workspaceProjectRoots(project).map(({ id, path }) => ({ id, path })) }));
-  if (args.action === 'create') return client.create({ storageId: 'local', name: designDocumentFileName(textArg(args.name, 'file name')), parentPath: '.', command }, signal);
+  if (args.action === 'create') return client.create({ ...ref, name: designDocumentFileName(textArg(args.name, 'file name')), parentPath: '.', command }, signal);
   if (args.revision !== revision) throw new Error('Design revision changed. Inspect again.');
   if (args.action === 'delete') {
     await client.delete({ ...ref, expectedRevision: revision, command }, signal);

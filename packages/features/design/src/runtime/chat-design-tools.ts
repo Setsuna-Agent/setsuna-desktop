@@ -1,13 +1,14 @@
 import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
-import { chatDesignTool, createDesignDocument, designDocumentFileName, designMentionText, parseDesignMentions,
+import { canAccessChatDesign, chatDesignTool, createDesignDocument, designDocumentFileName, designMentionText, parseDesignMentions,
   type ChatDesignTools, type ChatDesignScope, type DesignConversationOwner, type DesignWorkspaceDocument,
   type DesignWorkspaceFiles } from '../contracts/index.js';
 import { parseDesignSelectionMentions } from '../contracts/design-selection-mention.js';
 import { designTaskRecord, readDesignSelection } from '../contracts/design-task.js';
 import type { DesignDocumentService } from './design-document-service.js';
+import { ChatDesignAssets } from './chat-design-assets.js';
 import type { DesignTasks } from './design-tasks.js';
 
-export function createChatDesignTools(files: Pick<DesignWorkspaceFiles, 'projectDesigns' | 'resolveResourceRoot'>, documents: DesignDocumentService,
+export function createChatDesignTools(files: Pick<DesignWorkspaceFiles, 'projectDesigns' | 'resolveResourceRoot' | 'list'>, documents: DesignDocumentService,
   tasks: Pick<DesignTasks, 'openChatCanvas' | 'chatCanvasRole' | 'leave'>): ChatDesignTools {
   function definition(writable: boolean, canvasOpen: boolean): RuntimeToolDefinition {
     const actions = ['list', 'open'];
@@ -41,21 +42,33 @@ export function createChatDesignTools(files: Pick<DesignWorkspaceFiles, 'project
     }
     if (action !== 'open' && !(writable && action === 'create')) throw new Error('Open the canvas, then use design_edit.');
     const { owner, selection } = action === 'create' ? { owner: await create(name, scope, signal), selection: [] } : referencedDesign(reference);
-    const authorize = async (id: string, file: DesignWorkspaceDocument) => {
+    const allowed = async (ref: DesignConversationOwner['ref'], id: string, file: DesignWorkspaceDocument) => {
       const association = await file.linkedProject?.(id);
-      const project = association === undefined ? owner.ref.projectId : association;
-      if (id === owner.documentId && (project ? project === scope.projectId : !scope.projectId && await file.chatOrigin?.(id) === scope.threadId)) return;
+      return canAccessChatDesign(scope, association === undefined ? ref.projectId : association, async () => file.chatOrigin?.(id));
+    };
+    const authorize = async (id: string, file: DesignWorkspaceDocument) => {
+      if (id === owner.documentId && await allowed(owner.ref, id, file)) return;
       throw new Error('This design is unavailable in this conversation.');
     };
     const inspect = (signal: AbortSignal, ids: readonly string[] = []) => documents.withSnapshot(owner.ref, signal, async (snapshot, file) => {
       await authorize(snapshot.document.documentId, file);
       if (ids.some((id) => !Object.hasOwn(snapshot.document.nodes, id))) throw new Error('A referenced design layer is no longer available.');
-      return snapshot.revision;
+      return snapshot;
     });
-    const revision = await inspect(signal, selection);
+    const { revision } = await inspect(signal, selection);
     const ref = await files.resolveResourceRoot(owner.ref, signal);
     const canvasRequestId = await tasks.openChatCanvas(scope.threadId, { ref, documentId: owner.documentId, selection }, {
-      turnId: scope.turnId, authorize, verify: async (signal) => { await inspect(signal); },
+      assets: ref.projectId && ref.projectId === scope.projectId ? undefined : new ChatDesignAssets(ref, documents),
+      listDocuments: (signal) => files.list(ref, signal, scope),
+      async libraryId(path, signal) {
+        const library = { ...ref, path };
+        const id = await documents.withSnapshot(library, signal, async ({ document }, file) =>
+          await allowed(library, document.documentId, file) ? document.documentId : undefined).catch(() => undefined);
+        signal.throwIfAborted();
+        if (!id) throw new Error('This design library is unavailable in this conversation.');
+        return id;
+      },
+      turnId: scope.turnId, authorize, verify: inspect,
     }, signal);
     return { content: JSON.stringify({ reference: designMentionText(owner), revision, next: 'Use design_inspect, design_view and design_edit in the live canvas.' }),
       data: { resultKind: 'design.draft', resultMajor: 1, payload: { ...owner, action, revision, networkAccess, canvasRequestId } }, containsExternalContext: true };

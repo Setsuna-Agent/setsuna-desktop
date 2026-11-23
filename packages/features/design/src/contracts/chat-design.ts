@@ -7,6 +7,9 @@ export const chatDesignTool = 'chat_design';
 /** The containing directory disambiguates same-named drafts in the project picker. */
 export type ProjectDesignEntry = DesignConversationOwner & { directory?: string };
 export type ChatDesignScope = { projectId?: string; threadId: string };
+export async function canAccessChatDesign(chat: ChatDesignScope, projectId: string | null | undefined, origin: () => Promise<string | undefined>) {
+  return projectId ? projectId === chat.projectId : !chat.projectId && await origin() === chat.threadId;
+}
 export type ChatDesignResult = DesignConversationOwner & { revision: string; canvasRequestId?: string; networkAccess?: boolean; action: 'create' | 'open' | 'edit' };
 
 export interface ChatDesignTools {

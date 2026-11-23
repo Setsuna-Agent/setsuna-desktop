@@ -19,7 +19,7 @@ export { maxDesignScriptBytes, parseDesignScriptPath, parseDesignWebUrl } from '
 export type { DesignScriptCanvas, DesignScriptInputs, DesignScriptParameter, DesignScriptValue } from './design-script-parameters.js';
 export { designFontWeights } from './design-fonts.js';
 export { designTypographyOf, resolveDesignNodeStyles } from './design-styles.js';
-export { designDocumentImagePaths, designLayerImagePaths, designLayerShaderPaths, designPaintImagePaths } from './design-image-references.js';
+export { designDocumentAssetPaths, designDocumentImagePaths, designLayerImagePaths, designLayerShaderPaths, designPaintImagePaths } from './design-image-references.js';
 export { maxDesignShaderBytes, parseDesignShaderPath, parseDesignShaderSource,
   type DesignShaderPaint, type DesignShaderSampler, type DesignShaderValue } from './design-shader.js';
 export { rebaseDesignTextRuns, updateDesignTextRange } from './design-text-runs.js';
@@ -54,6 +54,8 @@ export const designScriptSandboxCapability = defineCapability<Readonly<{
 
 export type DesignWorkspaceDocument = Readonly<{
   key: string;
+  workspaceRoot?: string;
+  importedAssets?(documentId: string, accept: (path: string) => boolean): Promise<readonly string[]>;
   chatOrigin?(documentId: string): Promise<string | undefined>;
   linkedProject?(documentId: string): Promise<string | null | undefined>;
   read(): Promise<Readonly<{ content: string; revision: string }>>;
@@ -64,7 +66,7 @@ export { designDirectoryGrant, designDirectoryGrants, getDesignCatalog, setDesig
 
 export interface DesignWorkspaceFiles extends DesignStorage {
   projectDesigns(projectId: string, signal: AbortSignal): Promise<ProjectDesignEntry[]>;
-  list(workspace: DesignWorkspace, signal: AbortSignal): Promise<readonly string[]>;
+  list(workspace: DesignWorkspace, signal: AbortSignal, chat?: ChatDesignScope): Promise<readonly string[]>;
   create(input: CreateDesignDocumentInput, content: string, signal: AbortSignal, chat?: ChatDesignScope): Promise<WorkspaceEntry>;
   move(input: MoveDesignDocumentInput, signal: AbortSignal): Promise<DesignDocumentRef>;
   delete(ref: DesignDocumentRef & { expectedRevision?: string }, signal: AbortSignal): Promise<void>;

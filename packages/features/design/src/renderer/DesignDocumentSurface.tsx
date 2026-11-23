@@ -4,6 +4,7 @@ import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { designFileKey, type DesignDocumentRef } from '../contracts/index.js';
 import type { DesignClient } from './client.js';
+import type { WatchDesignRootDirectories } from './catalog/use-design-document-lists.js';
 import type { WatchDesignDirectories } from './design-images.js';
 
 const LazyDesignEditor = lazy(async () => {
@@ -23,7 +24,8 @@ export type DesignDocumentSurfaceProps = Readonly<{
   expectedDocumentId?: string;
   chatActivity?: { request?: { threadId: string; id: string }; networkAccess: boolean;
     connectSelection?(canvas: DesignCanvasSelection): () => void };
-  watchChanges?: (changed: () => void) => () => void;
+  shouldRefresh?(): boolean;
+  watchDirectories?: WatchDesignRootDirectories;
   watchAssetDirectories?: WatchDesignDirectories;
   onOpenLibrary?(path: string): void;
   onDocumentMissing?(): void;

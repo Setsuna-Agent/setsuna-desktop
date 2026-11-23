@@ -63,14 +63,7 @@ function relocateWorkspaceEntry(root: string, relativePath: string, input: { nam
         throw new Error('A folder cannot be moved into itself or one of its subfolders.');
       }
     }
-    await relocate(source, target, type, async () => {
-      // Preparing descendants can take time. Recheck that both paths still refer to the planned locations.
-      const current = await resolveExistingWorkspaceEntry(root, relativePath);
-      const destination = await resolveEntryParent(root, path.relative(root, parent) || '.');
-      if (path.relative(source, current.target) || path.relative(parent, destination)
-        || sourceStat.ino !== current.stats.ino || sourceStat.dev !== current.stats.dev) {
-        throw new Error('The workspace entry changed during relocation.');
-      }
+    async function checkDestination() {
       const targetStat = await lstat(target).catch((error: NodeJS.ErrnoException) => {
         if (error.code === 'ENOENT') return null;
         throw error;
@@ -84,6 +77,18 @@ function relocateWorkspaceEntry(root: string, relativePath: string, input: { nam
           throw Object.assign(new Error(`An entry named "${name}" already exists.`), { code: 'EEXIST' });
         }
       }
+    }
+    // Reject collisions before feature owners prepare bindings for the destination.
+    await checkDestination();
+    await relocate(source, target, type, async () => {
+      // Preparing descendants can take time. Recheck that both paths still refer to the planned locations.
+      const current = await resolveExistingWorkspaceEntry(root, relativePath);
+      const destination = await resolveEntryParent(root, path.relative(root, parent) || '.');
+      if (path.relative(source, current.target) || path.relative(parent, destination)
+        || sourceStat.ino !== current.stats.ino || sourceStat.dev !== current.stats.dev) {
+        throw new Error('The workspace entry changed during relocation.');
+      }
+      await checkDestination();
       await rename(source, target);
     });
     return entryForPath(root, target, type);

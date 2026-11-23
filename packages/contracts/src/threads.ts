@@ -538,7 +538,8 @@ export function normalizeRuntimeQueuedTurnInputKind(value: unknown): RuntimeQueu
   return value === 'goal' ? 'goal' : 'message';
 }
 
-export type RuntimeEditorSelection = Readonly<{ documentId: string; ids: readonly string[] }>;
+/** A validated queue item follows its owning design chat through file moves. Older snapshots have no owner. */
+export type RuntimeEditorSelection = Readonly<{ documentId: string; ids: readonly string[]; ownerThreadId?: string }>;
 
 /**
  * 等待当前轮次结束后再作为独立用户轮次发送的输入。

@@ -1,5 +1,5 @@
 import type { RuntimeEditorSelection } from '@setsuna-desktop/contracts';
-import { readDesignDocument, type DesignDocumentRef } from './operations.js';
+import { designFileKey, readDesignDocument, type DesignDocumentRef } from './operations.js';
 
 /** Stored in the message itself so queued turns and restored drafts keep the picked IDs. */
 export type DesignSelectionReference = Readonly<{
@@ -46,6 +46,8 @@ export function resolveDesignInputSelection(content: string, snapshot?: RuntimeE
   const documentId = snapshot?.documentId ?? mentions[0]?.reference.documentId;
   if (!documentId) return { status: 'missing' } as const;
   if (mentions.some(({ reference }) => reference.documentId !== documentId)) return { status: 'conflict' } as const;
+  const refs = new Map<string, DesignDocumentRef>();
+  for (const { reference: { ref } } of mentions) if (ref) refs.set(designFileKey(ref), ref);
   const selection = snapshot ?? { documentId, ids: [...new Set(mentions.flatMap(({ reference }) => reference.ids))] };
-  return { status: 'resolved', selection } as const;
+  return { status: 'resolved', selection, refs: [...refs.values()] } as const;
 }

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { isValidWorkspaceEntryName, WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
-import { designDocumentCodec, designImageFileExtensions, isDesignDocumentPath, maxDesignShaderBytes,
+import { canAccessChatDesign, designDocumentCodec, designImageFileExtensions, isDesignDocumentPath, maxDesignShaderBytes,
   type DesignDocumentRef, type DesignImageExtension, type DesignWorkspaceFiles } from '@setsuna-desktop/feature-design/contracts';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { isNodeError } from '../../shared/node-errors.js';
@@ -11,9 +11,9 @@ import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { writeTextFile } from '../store/json-file.js';
 import { safeStorageFileStem } from '../store/storage-file-name.js';
 import { designChanged, readDesignDocumentFile, readDesignFile, resolveDesignFile, withDesignSource, type DesignFile } from './design-workspace-document-file.js';
-import { deleteDesignWorkspaceDocument, moveDesignWorkspaceDocument } from './design-workspace-document-mutations.js';
-import { bindDesignResourcesForEdit, createDesignResourceOwnership, designResourceDirectory, designResourceRootUnavailable, resolveDesignResourceRoot } from './design-workspace-resource-root.js';
-import { readWorkspaceDesignSource } from './design-workspace-source.js';
+import { deleteDesignWorkspaceDocument, moveDesignWorkspaceDocument, removeUnchangedFile } from './design-workspace-document-mutations.js';
+import { bindDesignResourcesForEdit, createDesignResourceOwnership, designResourceDirectory, designResourceRootUnavailable, readDraftId, resolveDesignResourceRoot } from './design-workspace-resource-root.js';
+import { readVerifiedDesignImport, readWorkspaceDesignSource } from './design-workspace-source.js';
 import { designStorageDirectories } from './design-storage-directories.js';
 import { readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
 import type { FileWorkspaceProjectStore } from './file-workspace-project-store.js';
@@ -67,22 +67,29 @@ export function createDesignWorkspaceFiles(
       const fallback = extension === 'js' ? 'script' : extension === 'glsl' ? 'shader' : 'image';
       const stem = safeStorageFileStem(path.parse(name).name.replace(/^\.+/u, ''), fallback);
       const safeStem = isValidWorkspaceEntryName(`${stem}.${extension}`) ? stem : `_${stem}`;
+      const revision = createHash('sha256').update(content).digest('hex');
       for (let ordinal = 1; ; ordinal += 1) {
         const filename = ordinal === 1 ? `${safeStem}.${extension}` : `${safeStem}-${ordinal}.${extension}`;
         const relativePath = `${designAssetDirectory}/${filename}`;
+        const assetTarget = path.join(await resolveEntryParent(root, designAssetDirectory), filename);
+        signal.throwIfAborted();
+        let created: DesignFile['stats'] | undefined;
         try {
-          const parent = await resolveEntryParent(root, designAssetDirectory);
-          signal.throwIfAborted();
-          await createWorkspaceFile(path.join(parent, filename), content);
-          return relativePath;
+          created = await createWorkspaceFile(assetTarget, content);
         } catch (error) {
           // Try a new name only when exclusive creation found an existing entry.
           if (!isNodeError(error) || error.code !== 'EEXIST') throw error;
-          if (extension === 'glsl') {
-            const existing = await readWorkspaceDesignSource(root, relativePath, maxDesignShaderBytes).catch(() => undefined);
-            signal.throwIfAborted();
-            if (existing?.content === content) return relativePath;
-          }
+          if (extension !== 'glsl') continue;
+          const existing = await readWorkspaceDesignSource(root, relativePath, maxDesignShaderBytes).catch(() => undefined);
+          signal.throwIfAborted();
+          if (existing?.content !== content) continue;
+        }
+        try {
+          await ownership.rememberImports(target, document.documentId, root, { [relativePath]: revision });
+          return relativePath;
+        } catch (error) {
+          if (created) await removeUnchangedFile({ target: assetTarget, stats: created, root, relativePath, revision }).catch(() => undefined);
+          throw error;
         }
       }
     });
@@ -129,11 +136,19 @@ export function createDesignWorkspaceFiles(
       const { preview } = await readWorkspaceFilePreview(target, assetPath);
       return preview?.kind === 'image' ? preview : null;
     },
-    async list(scope, signal) {
+    async list(scope, signal, chat) {
       const root = await storage.resolve(scope);
       const paths: string[] = [];
-      await walkWorkspaceFiles(root, (file) => {
-        if (isDesignDocumentPath(file)) paths.push(path.relative(root, file).split(path.sep).join('/'));
+      await walkWorkspaceFiles(root, async (file) => {
+        signal.throwIfAborted();
+        if (!isDesignDocumentPath(file)) return true;
+        if (chat) {
+          const id = await readDraftId(file).catch(() => undefined);
+          if (!id) return true;
+          const linked = await ownership.project(file, id);
+          if (!await canAccessChatDesign(chat, linked === undefined ? scope.projectId : linked, () => ownership.chatOrigin(file, id))) return true;
+        }
+        paths.push(path.relative(root, file).split(path.sep).join('/'));
         return true;
       }, { signal });
       signal.throwIfAborted();
@@ -204,7 +219,16 @@ export function createDesignWorkspaceFiles(
           return readDesignFile(target, ref.path);
         };
         return operation({
-          key,
+          key, workspaceRoot: root,
+          async importedAssets(id, accept) {
+            const paths: string[] = [];
+            for (const [path, revision] of Object.entries(await ownership.imports(key, id))) {
+              signal.throwIfAborted();
+              if (accept(path) && await readVerifiedDesignImport(root, path, revision)) paths.push(path);
+            }
+            signal.throwIfAborted();
+            return paths;
+          },
           chatOrigin: (id) => ownership.chatOrigin(key, id),
           linkedProject: (id) => ownership.project(key, id),
           read,

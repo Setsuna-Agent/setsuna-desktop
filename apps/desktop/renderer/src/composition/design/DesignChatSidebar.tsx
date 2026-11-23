@@ -88,7 +88,7 @@ export default function DesignChatSidebar({ binding, conversations, project, run
       </SelectField>
       <IconButton label={newLabel} disabled={navigationDisabled} onClick={() => select(null)}><Plus size={16} /></IconButton>
     </header>}
-    {selected !== undefined && <DesignConversationPanel readOnly={legacyChats.some((item) => item.id === selected)} binding={binding} project={project} runtime={runtime} threadId={selected}
+    {selected !== undefined && <DesignConversationPanel conversations={conversations} readOnly={legacyChats.some((item) => item.id === selected)} binding={binding} project={project} runtime={runtime} threadId={selected}
       reload={reload} onBusy={setBusy} create={async () => {
         const next = await conversations.create(owner);
         setHistory((items) => [next, ...items.filter((item) => item.id !== next.id)]);

@@ -18,6 +18,7 @@ export function createDesignConversationRelocation(store: Pick<ThreadStore, 'lis
   return async ({ source, target, documentId, projectAtDestination, linkedProject }, commit) => {
     const threads = await store.listThreads({ featureId: 'design', includeFeatures: true, includeArchived: true });
     const sourceKey = workspaceFilePathKey(path.dirname(source), path.basename(source));
+    const targetKey = target === null ? null : workspaceFilePathKey(path.dirname(target), path.basename(target));
     const moved: { id: string; origin: RuntimeThreadOrigin; projectId: string | null; file: string }[] = [];
     const draftIds = new Map<string, string | undefined>();
     let deleting = false;
@@ -25,13 +26,17 @@ export function createDesignConversationRelocation(store: Pick<ThreadStore, 'lis
       for (const { id, origin, featureId, projectId } of threads) {
         if (featureId !== 'design' || origin?.featureId !== 'design' || !origin.entityId) continue;
         const [file, draftId] = parseOwner(origin.entityId);
-        if (!draftId || (file !== sourceKey && !file.startsWith(sourceKey + '/'))) continue;
-        const relative = file.slice(sourceKey.length + 1);
-        if (workspaceFilePathKey(source, relative || '.') !== file) continue;
+        if (!draftId) continue;
+        const fromSource = file === sourceKey || file.startsWith(sourceKey + '/');
+        const atDestination = targetKey && targetKey !== sourceKey && (file === targetKey || file.startsWith(targetKey + '/'));
+        if (!fromSource && !atDestination) continue;
+        const relative = fromSource ? file.slice(sourceKey.length + 1) : '';
+        if (fromSource && workspaceFilePathKey(source, relative || '.') !== file) continue;
         // Removing a path retires its bindings, including ones for unreadable or replaced drafts.
         let nextOwner: string | null = null;
         let nextProject = projectId ?? null;
-        if (target !== null) {
+        // A destination deleted outside the app can still own chats belonging to the previous copy.
+        if (fromSource && target !== null) {
           if (documentId === undefined) {
             if (!draftIds.has(file)) draftIds.set(file, await readDraftId(file));
             if (draftIds.get(file) !== draftId) continue;

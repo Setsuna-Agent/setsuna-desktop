@@ -98,7 +98,7 @@ it('edits only the board picked in main chat and hands the saved edit back for m
   const editor = await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'live', rootIds: ['board', 'copy'],
     nodes: { board, copy: { ...board, x: 200 } } }, undefined, { tasks(service) {
       tasks = new DesignTasks({ resolveOwnedRoot: async () => undefined, cancel }, service);
-      launcher = createChatDesignTools({ projectDesigns: vi.fn(), resolveResourceRoot: async (ref) => ref }, service, tasks);
+      launcher = createChatDesignTools({ list: vi.fn(), projectDesigns: vi.fn(), resolveResourceRoot: async (ref) => ref }, service, tasks);
       return tasks;
     } });
   const signal = new AbortController().signal;
@@ -142,7 +142,7 @@ it('binds a canvas reference after the user selects a different board with a sim
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900);
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
   const rail = { kind: 'rectangle', name: 'Active', x: 4, y: 6, width: 2, height: 20, cornerRadius: 0 } as const;
-  const { read } = await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'pick', rootIds: ['a', 'b'], nodes: {
+  const { read, documentRef } = await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'pick', rootIds: ['a', 'b'], nodes: {
     a: { ...frame, name: 'Left', childIds: ['a-rail'] }, b: { ...frame, name: 'Right', x: 160, childIds: ['b-rail'] },
     'a-rail': rail, 'b-rail': rail,
   } }, undefined, {
@@ -160,7 +160,7 @@ it('binds a canvas reference after the user selects a different board with a sim
   const click = { button: 0, pointerId: 1, clientX: 40, clientY: 40 };
   fireEvent.pointerDown(canvas, click);
   fireEvent.pointerUp(canvas, click);
-  expect(picked).toHaveBeenCalledExactlyOnceWith({ documentId: 'pick', boards: ['a'], ids: ['a-rail'], label: 'Active' });
+  expect(picked).toHaveBeenCalledExactlyOnceWith({ ref: documentRef, documentId: 'pick', boards: ['a'], ids: ['a-rail'], label: 'Active' });
   const shiftClick = (id: string) => {
     drawing.hit = id;
     fireEvent.pointerDown(canvas, { ...click, shiftKey: true });
