@@ -1,8 +1,8 @@
-import type { RenderDesignChat } from './agent/DesignChatBridge.js';
+import type { DesignCanvasSelection, RenderDesignChat } from './agent/DesignChatBridge.js';
 import { lazy, Suspense } from 'react';
-import { workspaceFileKey, type WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import type { DesignDocumentRef } from '../contracts/index.js';
+import { designFileKey, type DesignDocumentRef } from '../contracts/index.js';
 import type { DesignClient } from './client.js';
 import type { WatchDesignDirectories } from './design-images.js';
 
@@ -20,6 +20,9 @@ export type DesignDocumentSurfaceProps = Readonly<{
   onFileAction?(destination?: DesignDocumentRef): void;
   readOnly?: boolean;
   fileRevision?: string;
+  expectedDocumentId?: string;
+  chatActivity?: { request?: { threadId: string; id: string }; networkAccess: boolean;
+    connectSelection?(canvas: DesignCanvasSelection): () => void };
   watchChanges?: (changed: () => void) => () => void;
   watchAssetDirectories?: WatchDesignDirectories;
   onOpenLibrary?(path: string): void;
@@ -28,5 +31,5 @@ export type DesignDocumentSurfaceProps = Readonly<{
 }>;
 
 export function DesignDocumentSurface(props: DesignDocumentSurfaceProps) {
-  return <Suspense fallback={null}><LazyDesignEditor key={workspaceFileKey(props.documentRef)} {...props} /></Suspense>;
+  return <Suspense fallback={null}><LazyDesignEditor key={designFileKey(props.documentRef)} {...props} /></Suspense>;
 }

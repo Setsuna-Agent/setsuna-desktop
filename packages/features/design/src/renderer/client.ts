@@ -6,7 +6,7 @@ import type { FeatureOperationTransport } from '@setsuna-desktop/feature-core/op
 import type { SetsunaDesktopBridge, WorkspaceEntry, WorkspaceFilePreview } from '@setsuna-desktop/contracts';
 import { importDesignFont, listDesignFonts, readDesignFont, removeDesignFont, type DesignCustomFont } from '../contracts/design-fonts.js';
 import {
-  commitDesignEdits, createDesignDocument, deleteDesignDocument, importDesignImage, importDesignScript, listDesignDocuments, moveDesignDocument, navigateDesignHistory,
+  type ProjectDesignEntry, listProjectDesigns, getDesignCatalog, setDesignProject, readDesignImage, searchDesignImages, type DesignCatalog, commitDesignEdits, createDesignDocument, deleteDesignDocument, importDesignImage, importDesignScript, listDesignDocuments, moveDesignDocument, navigateDesignHistory,
   importDesignShader, readDesignDocument, readDesignScriptParameters, readDesignShader, renderDesignScript, resolveDesignDocumentRoot,
   type CommitDesignEditsInput, type CreateDesignDocumentInput, type DesignDocumentRef, type DesignSnapshot, type DesignWorkspace,
   type DesignDocument, type DesignScriptParameter, type ImportDesignImageInput, type ImportDesignScriptInput,
@@ -27,6 +27,7 @@ export type DesignWebPreviewHost = Readonly<{
 }>;
 
 export type DesignAssets = Readonly<{
+  chooseDirectory?: SetsunaDesktopBridge['desktop']['chooseDesignDirectory'];
   webPreview?: DesignWebPreviewHost;
   search(ref: DesignDocumentRef, query: string): Promise<readonly string[]>;
   read(ref: DesignDocumentRef, path: string): Promise<Extract<WorkspaceFilePreview, { kind: 'image' }> | null>;
@@ -38,6 +39,9 @@ export type DesignAssets = Readonly<{
 }>;
 
 export type DesignClient = Readonly<{
+  projectDesigns(projectId: string, signal?: AbortSignal): Promise<ProjectDesignEntry[]>;
+  catalog(signal?: AbortSignal): Promise<DesignCatalog>;
+  setProject(owner: DesignConversationOwner, projectId: string | null): Promise<null>;
   conversations?: {
     list(owner: DesignConversationOwner, signal?: AbortSignal): Promise<DesignConversation[]>;
     create(owner: DesignConversationOwner): Promise<DesignConversation>;
@@ -80,7 +84,13 @@ export const designAssetsCapability = defineCapability<DesignAssets>({
 
 export function createDesignClient(transport: FeatureOperationTransport, assets: DesignAssets): DesignClient {
   return {
-    assets,
+    assets: { ...assets,
+      read: (ref, path) => ref.storageId ? transport.call(readDesignImage, { ref, path }) : assets.read(ref, path),
+      search: (ref, query) => ref.storageId ? transport.call(searchDesignImages, { ref, query }) : assets.search(ref, query),
+    },
+    projectDesigns: (projectId, signal) => transport.call(listProjectDesigns, { projectId }, { signal }),
+    catalog: (signal) => transport.call(getDesignCatalog, undefined, { signal }),
+    setProject: (owner, projectId) => transport.call(setDesignProject, { ...owner, projectId }),
     conversations: {
       list: (owner, signal) => transport.call(listDesignConversations, owner, { signal }),
       create: (owner) => transport.call(createDesignConversation, owner),

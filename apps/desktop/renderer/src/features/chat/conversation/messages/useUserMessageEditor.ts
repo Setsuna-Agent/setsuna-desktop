@@ -18,14 +18,12 @@ import { createChatCapabilityCommandItems, createChatSkillCommandItems } from '.
 import type { SlashCommandMenuItem } from '../../composer/ChatSlashCommandMenu.js';
 import { parseMentionCommand, parseSkillCommand, parseSlashCommand } from '../../composer/chatCommandUtils.js';
 import {
-  createBrowserTabMentionSlot,
+  createChatMentionSlots,
   createMessageDraftSlots,
-  createPluginAppMentionSlot,
   createSelectedPluginSlot,
   createSelectedSkillReferences,
   createSelectedSkillSlot,
   createTextSlot,
-  createWorkspaceMentionSlots,
   filterSelectedSkillsBySlots,
 } from '../../composer/chatComposerSlots.js';
 import type { ComposerEditor, ComposerSlot } from '../../composer/editor/types.js';
@@ -42,6 +40,7 @@ export type UserMessageEditorStateProps = {
 export type UserMessageEditorProps = UserMessageEditorStateProps & {
   client: ChatAttachmentClient;
   activeProject?: WorkspaceProject;
+  designProjectId?: string;
   skills: RuntimeSkillSummary[];
   plugins: RuntimePluginSummary[];
   onSearchProjectEntries(query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
@@ -51,7 +50,7 @@ export type UserMessageEditorProps = UserMessageEditorStateProps & {
 export function useUserMessageEditor({
   message,
   client,
-  activeProject,
+  activeProject, designProjectId,
   disabled,
   submitting,
   skills,
@@ -81,7 +80,7 @@ export function useUserMessageEditor({
 
   const getEditor = useCallback(() => editorRef.current, []);
   const getInputElement = useCallback(() => editorRef.current?.inputElement ?? null, []);
-  const commands = useChatCommandController({ activeProject, draft, plugins, getInputElement, onSearchProjectEntries, slashMenuBlocked: locked, t });
+  const commands = useChatCommandController({ activeProject, designProjectId, draft, plugins, getInputElement, onSearchProjectEntries, slashMenuBlocked: locked, t });
   const selectedSkills = useMemo(() => filterSelectedSkillsBySlots(skills, slots), [skills, slots]);
   const slashEntries = useMemo(() => {
     const query = commands.slashQuery;
@@ -118,10 +117,7 @@ export function useUserMessageEditor({
   const selectMention = (item?: ChatMentionItem) => {
     const command = commands.mentionCommand ?? parseMentionCommand(draft, commands.commandCursorOffset);
     if (locked || !command || !item) return;
-    const nextSlots = item.kind === 'app' ? [createPluginAppMentionSlot(item.app), createTextSlot(' ')]
-      : item.kind === 'browser-tab' ? [createBrowserTabMentionSlot(item.tab), createTextSlot(' ')]
-        : createWorkspaceMentionSlots(item.entry);
-    editorRef.current?.insert(nextSlots, 'cursor', draft.slice(command.start, command.end), true);
+    editorRef.current?.insert(createChatMentionSlots(item), 'cursor', draft.slice(command.start, command.end), true);
     commands.acceptMentionSelection();
   };
   const selectSlash = (item?: SlashCommandMenuItem) => {

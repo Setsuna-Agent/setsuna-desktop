@@ -3,7 +3,7 @@ import { lstat, readdir, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { workspaceFilePathKey, workspaceProjectRoots, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { designDocumentImagePaths, designLayerShaderPaths, isDesignDocumentPath,
-  type DesignDocument, type DesignDocumentRef } from '@setsuna-desktop/feature-design/contracts';
+  type DesignDirectory, type DesignWorkspace, type DesignDocument, type DesignDocumentRef } from '@setsuna-desktop/feature-design/contracts';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { RuntimeUseCaseError } from '../../runtime/use-cases/errors.js';
 import { isNodeError } from '../../shared/node-errors.js';
@@ -17,7 +17,7 @@ import type { DesignConversationRelocation, DesignDestinationProject } from './d
 
 export type DesignResourceOwnership = ReturnType<typeof createDesignResourceOwnership>;
 type DraftLocation = Readonly<{ file: string; id: string }>;
-type DraftBinding = Readonly<DraftLocation & { root: string }>;
+type DraftBinding = Readonly<DraftLocation & { root: string; threadId?: string; projectId?: string | null }>;
 const ownershipDirectory = 'design-resource-roots';
 
 export function createDesignResourceOwnership(dataDir: string) {
@@ -49,20 +49,26 @@ export function createDesignResourceOwnership(dataDir: string) {
     return withFileStateUpdate(file, () => storeBinding(file, { file: target, id, root }));
   }
 
-  async function findInDirectory(source: string) {
+  async function records() {
     const entries = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
       if (isNodeError(error) && error.code === 'ENOENT') return [];
       throw error;
     });
+    return entries.filter((entry) => entry.isFile() && /^[a-f0-9]{64}\.json$/u.test(entry.name)).map((entry) => path.join(directory, entry.name));
+  }
+
+  function availableRecord(file: string) {
+    return readRecord(file).catch((error: unknown) => {
+      if (isUnreadable(error) || isResourceRootUnavailable(error) || (error instanceof Error && error.cause instanceof SyntaxError)) return undefined;
+      throw error;
+    });
+  }
+
+  async function findInDirectory(source: string) {
     const drafts: DraftLocation[] = [];
     const legacy = new Set<string>();
-    for (const entry of entries) {
-      if (!entry.isFile() || !/^[a-f0-9]{64}\.json$/u.test(entry.name)) continue;
-      const file = path.join(directory, entry.name);
-      const record = await readRecord(file).catch((error: unknown) => {
-        if (isUnreadable(error) || isResourceRootUnavailable(error) || (error instanceof Error && error.cause instanceof SyntaxError)) return undefined;
-        throw error;
-      });
+    for (const file of await records()) {
+      const record = await availableRecord(file);
       if (typeof record === 'string') {
         if (isPathWithin(record, source) || isPathWithin(source, record)) legacy.add(file);
       } else if (record && isPathWithin(source, record.file)) {
@@ -95,6 +101,30 @@ export function createDesignResourceOwnership(dataDir: string) {
       if (typeof record === 'string') await remember(target, id, record).catch(() => undefined);
       return bindingRoot(record);
     },
+    async project(target: string, id: string) {
+      const record = await readRecord(recordPath(target, id));
+      return typeof record === 'object' ? record.projectId : undefined;
+    },
+    async chatOrigin(file: string, id: string) {
+      const record = await readRecord(recordPath(file, id));
+      return typeof record === 'object' ? record.threadId : undefined;
+    },
+    async setProject(file: string, id: string, root: string, projectId: string | null, threadId?: string) {
+      const previous = await readRecord(recordPath(file, id));
+      await writeJsonFile(recordPath(file, id), { ...(typeof previous === 'object' ? previous : {}), file, id, root, projectId, ...(threadId ? { threadId } : {}) }, { mode: 0o600 });
+    },
+    async associations(signal: AbortSignal, projectId?: string) {
+      const result: (DraftBinding & { projectId: string | null })[] = [];
+      for (const file of await records()) {
+        signal.throwIfAborted();
+        const record = await availableRecord(file);
+        if (typeof record !== 'object' || record.projectId === undefined || (projectId !== undefined && record.projectId !== projectId)) continue;
+        // An offline or unreadable external draft must not hide other drafts in the catalog.
+        const id = await readDraftId(record.file).catch(() => undefined);
+        if (id === record.id) result.push({ ...record, projectId: record.projectId });
+      }
+      return result;
+    },
     remember,
     forget: (target: string, id: string) => rm(recordPath(target, id), { force: true }),
     findInDirectory,
@@ -106,13 +136,14 @@ export function createDesignResourceOwnership(dataDir: string) {
       return withFileStateUpdates(changes.flatMap(({ previous, next }) => [previous, next]), async () => {
         const bindings: { previous: string; next: string; binding: DraftBinding }[] = [];
         for (const { previous, next, destination, id } of changes) {
-          const root = bindingRoot(await readRecord(previous));
+          const record = await readRecord(previous);
+          const root = bindingRoot(record);
           if (root === undefined) continue;
           // The file tree preserves ownership. A transfer in Design can also copy its dependencies.
           if (!isPathWithin(root, destination)) {
-            throw new RuntimeUseCaseError('conflict', 'Use “Move to another project” in Design to move a draft outside its original resource directory.');
+            throw new RuntimeUseCaseError('conflict', 'Use “Change save location” in Design to move a draft outside its original resource directory.');
           }
-          bindings.push({ previous, next, binding: { file: destination, id, root } });
+          bindings.push({ previous, next, binding: { ...(typeof record === 'object' ? record : {}), file: destination, id, root } });
         }
         const added: string[] = [];
         try {
@@ -136,7 +167,13 @@ export function createDesignWorkspaceEntryRelocation(dataDir: string, relocateCh
   const ownership = createDesignResourceOwnership(dataDir);
   return async (source, target, type, relocateEntry) => {
     const canonical = await realpath(source);
-    const move = (id?: string) => relocateChats ? relocateChats({ source: canonical, target, documentId: id, projectAtDestination }, relocateEntry) : relocateEntry();
+    // An explicit association follows a file-tree rename, even outside the linked project's roots.
+    const destinationProject: DesignDestinationProject | undefined = projectAtDestination && (async (owner, next, file, id) => {
+      const linked = await ownership.project(file, id);
+      return linked === undefined ? projectAtDestination(owner, next, file, id) : linked;
+    });
+    const move = (id?: string) => relocateChats ? relocateChats({ source: canonical, target, documentId: id,
+      projectAtDestination: destinationProject }, relocateEntry) : relocateEntry();
     if (target === null) return move();
     if (type === 'file') {
       // A chat follows its draft through temporary filenames. Only probe an ordinary file if a chat owns its path.
@@ -178,10 +215,11 @@ export async function readDraftId(file: string) {
 }
 
 export function resolveDesignResourceRoot(ref: DesignDocumentRef, root: string, projects: readonly WorkspaceProject[],
-  ownership: DesignResourceOwnership, signal: AbortSignal) {
-  const scopes = projects.flatMap((project) => workspaceProjectRoots(project).map((candidate) => ({
-    directory: candidate.path, projectId: project.id, rootId: candidate.id,
+  ownership: DesignResourceOwnership, signal: AbortSignal, directories: DesignDirectory[] = []) {
+  const scopes: { directory: string; scope: DesignWorkspace }[] = projects.flatMap((project) => workspaceProjectRoots(project).map((candidate) => ({
+    directory: candidate.path, scope: { projectId: project.id, rootId: candidate.id },
   })));
+  scopes.push(...directories.map((item) => ({ directory: item.path, scope: { storageId: item.id } })));
   return withDesignSource(root, ref.path, scopes.map(({ directory }) => directory), undefined, signal, async (file, roots) => {
     const target = await realpath(file.target);
     const { document } = await readDesignDocumentFile(target, ref.path);
@@ -190,7 +228,7 @@ export function resolveDesignResourceRoot(ref: DesignDocumentRef, root: string, 
     if (!path.relative(root, directory)) return { ...ref, path: relativePath };
     const scope = scopes.find((scope) => !path.relative(scope.directory, directory));
     if (!scope) throw designResourceRootUnavailable();
-    return { projectId: scope.projectId, rootId: scope.rootId, path: relativePath };
+    return { ...scope.scope, path: relativePath };
   });
 }
 

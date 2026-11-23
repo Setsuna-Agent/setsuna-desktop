@@ -227,7 +227,7 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
     const child = await this.options.host.createThread({
       title: collaborationTitle(input, prompt), projectId: parent.projectId, workspaceId: parent.workspaceId,
       parentThreadId: parent.id, memoryMode: parent.memoryMode, modelBinding: configuration.modelBinding,
-    }, parent.featureId);
+    }, { parentFeatureId: parent.featureId, parentTurnId: context.turnId, prompt });
     const createdAt = this.options.host.now().toISOString();
     const modelIdentity = { displayName: collaborationDisplayName(input, state.tasks), avatarSeed: avatarSeedForThread(child.id) };
     // Capture appearance for every UI projection, without sending image bytes to the model.
@@ -297,9 +297,9 @@ export class RuntimeCollaborationCoordinator implements CollaborationControl {
       this.assertRunning(context);
       const started = await this.options.host.startTurn(task.childThreadId, {
         ...handoff, name: task.identity.displayName, prompt, title: task.title, turnId: execution.turnId, configuration: task.configuration,
-      }, { unattended: context.unattended, ...(participant.featureId ? { owner: {
-        featureId: participant.featureId, parentThreadId: context.threadId, participantIndex: participant.index,
-      } } : {}) });
+      }, { unattended: context.unattended, owner: {
+        featureId: participant.featureId, parentThreadId: context.threadId, parentTurnId: execution.parentTurnId, participantIndex: participant.index,
+      } });
       if (started.turnId !== execution.turnId) {
         await this.options.host.cancelTurn(task.childThreadId, started.turnId);
         throw new Error('Child turn does not match its reserved execution.');

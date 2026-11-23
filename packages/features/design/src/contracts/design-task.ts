@@ -1,3 +1,4 @@
+import type { ChatDesignTools } from './chat-design.js';
 import type { DesignCommandKey } from './design-command-key.js';
 import type { RuntimeEditorSelection, RuntimeMessage, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { defineCapability } from '@setsuna-desktop/feature-core/capability';
@@ -15,7 +16,7 @@ export const designActions = ['update', 'bindTokens', 'insert', 'layout', 'remov
   'delete', 'paste', 'replace', 'front', 'back', 'component', 'detach', 'mask', 'removeMask', 'union', 'subtract', 'variant', 'override', 'createVariant', 'insertInstance', 'insertSvg', 'freehand', 'convertScript', 'reparent', 'reorder',
   'setStyle', 'setVariableCollection', 'moveVariable', 'linkLibrary', 'unlinkLibrary'] as const;
 
-export type DesignTaskStart = { sessionId: string; clientId?: string; ref: DesignDocumentRef; documentId: string; selection: string[]; threadId: string };
+export type DesignTaskStart = { sessionId: string; canvasRequestId?: string; clientId?: string; ref: DesignDocumentRef; documentId: string; selection: string[]; threadId: string };
 export type DesignAgent = Readonly<{ threadId: string; turnId: string; name: string; colorIndex: number }>;
 export type DesignTaskResult = { content: string; image?: string; failed?: boolean; plan?: { revision: string; edits: DesignEdit[] } };
 export type DesignTaskStep = { kind: 'tool'; id: string; agent?: DesignAgent; name: DesignToolName; args: Record<string, unknown>; networkAccess?: boolean; selection?: string[] }
@@ -78,8 +79,8 @@ const route = '/v1/features/design/tasks';
 export const startDesignTask = defineFeatureOperation({
   id: 'design.task.start', method: 'POST', path: route, errors: {}, idempotency: 'non-idempotent',
   input: defineRuntimeCodec<DesignTaskStart>((input) => {
-    const { ref, threadId, sessionId, clientId, documentId, selection } = designTaskRecord(input);
-    return { sessionId: token(sessionId), clientId: clientId === undefined ? undefined : string(clientId, 256), ref: readDesignDocument.input.parse(ref), documentId: string(documentId, 256),
+    const { ref, threadId, sessionId, canvasRequestId, clientId, documentId, selection } = designTaskRecord(input);
+    return { sessionId: token(sessionId), canvasRequestId: canvasRequestId === undefined ? undefined : token(canvasRequestId), clientId: clientId === undefined ? undefined : string(clientId, 256), ref: readDesignDocument.input.parse(ref), documentId: string(documentId, 256),
       selection: readDesignSelection(selection), threadId: string(threadId, 256) };
   }), output: step,
 });
@@ -125,9 +126,10 @@ export interface DesignTurnHost {
 }
 export interface DesignToolService {
   definitions: RuntimeToolDefinition[];
+  chatCanvasRole(threadId: string, turnId?: string): 'owner' | 'participant' | undefined;
   captureSelection(threadId: string, clientId: string): RuntimeEditorSelection | undefined;
   restoreSelection(threadId: string, clientId: string, selection: RuntimeEditorSelection): void;
-  join(parentThreadId: string, agent: DesignAgent): void;
+  join(parentThreadId: string, agent: DesignAgent, parentTurnId?: string): void;
   leave(threadId: string, turnId: string): Promise<void>;
   scope(threadId: string, turnId?: string, inputClientId?: string): { kind: 'document' | 'selection'; root: string; path: string } | undefined;
   execute(threadId: string, name: DesignToolName, args: unknown, signal: AbortSignal, turnId?: string, policy?: DesignToolPolicy): Promise<{
@@ -137,6 +139,6 @@ export interface DesignToolService {
 export const designTurnHostCapability = defineCapability<DesignTurnHost>({
   id: 'design.turn-host', description: 'Run a design task in a dedicated agent conversation.',
 });
-export const designToolsCapability = defineCapability<DesignToolService>({
+export const designToolsCapability = defineCapability<{ editor: DesignToolService; chat: ChatDesignTools }>({
   id: 'design.tools', description: 'Tools scoped to a live design editor task.',
 });

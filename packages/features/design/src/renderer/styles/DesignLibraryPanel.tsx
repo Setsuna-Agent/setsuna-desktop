@@ -196,7 +196,7 @@ function LinkedLibraries({ client, document, documentRef, disabled, onLink, onUn
 
   useEffect(() => {
     const controller = new AbortController();
-    void client.list({ projectId: documentRef.projectId, rootId: documentRef.rootId }, controller.signal).then((paths) => {
+    void client.list(documentRef, controller.signal).then((paths) => {
       if (!controller.signal.aborted) setPaths(paths.filter((path) => path !== documentRef.path));
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) toast.error(t('feature.design.loadDocumentsFailed', { error: String(error) }));

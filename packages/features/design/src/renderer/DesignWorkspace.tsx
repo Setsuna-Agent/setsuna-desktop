@@ -1,7 +1,8 @@
 import type { RenderDesignChat } from './agent/DesignChatBridge.js';
 import { ArrowLeft, Frame, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { workspaceFileKey, workspaceFilePathKey, workspaceProjectRoots, workspaceRootName, type WorkspaceProject } from '@setsuna-desktop/contracts';
+import { workspaceFilePathKey, workspaceProjectRoots, type WorkspaceProject } from '@setsuna-desktop/contracts';
+import { designFileKey } from '../contracts/index.js';
 import { isFeatureOperationCancelled } from '@setsuna-desktop/feature-core/operation';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Button, IconButton, SelectField, useToast } from '@setsuna-desktop/renderer-ui';
@@ -14,6 +15,7 @@ import { DesignScopeFields } from './catalog/DesignScopeFields.js';
 import { DesignWorkspaceHome, designFileParts, type DesignCatalogFile } from './catalog/DesignWorkspaceHome.js';
 import type { DesignClient } from './client.js';
 import type { WatchDesignDirectories } from './design-images.js';
+import { useDesignCatalog } from './catalog/use-design-catalog.js';
 import { designListingKey, useDesignDocumentLists, type WatchDesignRootDirectories } from './catalog/use-design-document-lists.js';
 import { withPausedDesignEdits } from './document/pending-design-edits.js';
 import './design.css';
@@ -28,7 +30,6 @@ export type DesignWorkspaceProps = Readonly<{
   location: DesignWorkspaceLocation | null;
   onLocationChange(location: DesignWorkspaceLocation | null): void;
   watchDirectories: WatchDesignRootDirectories;
-  onAddProject(): void;
   translate: RendererTranslate;
 }>;
 
@@ -39,31 +40,6 @@ const emptyPaths: readonly string[] = [];
 
 export default function DesignWorkspace(props: DesignWorkspaceProps) {
   const { client, location, onLocationChange, projects, watchDirectories, translate: t } = props;
-  const catalog = useMemo(() => projects.flatMap((project) => {
-    const roots = workspaceProjectRoots(project);
-    return roots.length ? [{ id: project.id, name: project.name, roots }] : [];
-  }), [projects]);
-  const requestedFilter = location?.path ? location.homeFilter : location;
-  const filteredProject = catalog.find(({ id }) => id === requestedFilter?.projectId);
-  const filterRootId = filteredProject?.roots.find(({ id }) => id === requestedFilter?.rootId)?.id;
-  const homeFilter = useMemo<DesignScope | null>(() => filteredProject
-    ? { projectId: filteredProject.id, ...(filterRootId ? { rootId: filterRootId } : {}) } : null, [filteredProject, filterRootId]);
-  const project = location?.path ? catalog.find(({ id }) => id === location.projectId) : undefined;
-  const root = location?.rootId ? project?.roots.find(({ id }) => id === location.rootId) : project?.roots[0];
-  const path = location?.path;
-  const projectId = project?.id;
-  const rootId = root?.id;
-  const documentRef = useMemo(() => projectId && rootId && path ? { projectId, rootId, path } : null,
-    [path, projectId, rootId]);
-  const workspaceRoot = root?.path;
-  const listProjectId = documentRef?.projectId ?? homeFilter?.projectId;
-  const listRootId = documentRef?.rootId ?? homeFilter?.rootId;
-  const scopes = useMemo(() => catalog.flatMap((item) => {
-    if (listProjectId && listProjectId !== item.id) return [];
-    return item.roots.filter(({ id }) => !listRootId || listRootId === id).map((root) => ({
-      projectId: item.id, root, source: item.roots.length > 1 ? [item.name, workspaceRootName(root)] : [item.name],
-    }));
-  }), [catalog, listProjectId, listRootId]);
   const latestLocation = useRef(location);
   latestLocation.current = location;
   const resolvingSource = useRef<AbortController>();
@@ -75,6 +51,27 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
   const reportListFailure = useCallback((error: unknown) => {
     toast.error(t('feature.design.loadDocumentsFailed', { error: error instanceof Error ? error.message : String(error) }));
   }, [t, toast]);
+  const { scopes: catalogScopes, projectFor, refresh: refreshCatalog, rememberDirectory } = useDesignCatalog(client, projects, t, reportListFailure);
+  const catalog = useMemo(() => projects.map((project) => ({ id: project.id, name: project.name, roots: workspaceProjectRoots(project) })), [projects]);
+  const requestedFilter = location?.path ? location.homeFilter : location;
+  const filteredProject = catalog.find(({ id }) => id === requestedFilter?.projectId);
+  const filterRootId = filteredProject?.roots.find(({ id }) => id === requestedFilter?.rootId)?.id;
+  const homeFilter = useMemo(() => filteredProject
+    ? { projectId: filteredProject.id, ...(filterRootId ? { rootId: filterRootId } : {}) } : null, [filteredProject, filterRootId]);
+  const current = location?.path ? catalogScopes.find(({ scope }) => location.storageId !== undefined
+    ? scope.storageId === location.storageId : scope.projectId === location.projectId && (!location.rootId || location.rootId === scope.rootId)) : undefined;
+  const path = location?.path;
+  const projectId = current?.scope.projectId;
+  const rootId = current?.scope.rootId;
+  const storageId = location?.storageId;
+  const documentRef = useMemo<DesignDocumentRef | null>(() => {
+    if (!path) return null;
+    if (storageId) return { storageId, path };
+    return projectId ? { projectId, rootId, path } : null;
+  }, [path, projectId, rootId, storageId]);
+  const scopes = useMemo(() => current ? [current] : path ? [] : catalogScopes, [current, path, catalogScopes]);
+  const workspaceRoot = current?.root.path;
+  const linkedProject = documentRef && workspaceRoot ? projectFor(documentRef, workspaceRoot) : null;
   const { lists, refresh: refreshLists } = useDesignDocumentLists(client, scopes, documentRef ? undefined : watchDirectories, reportListFailure);
   useEffect(() => {
     mounted.current = true;
@@ -84,7 +81,7 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
     workspaceRoot ? watchDirectories(workspaceRoot, directories, changed, options) : () => undefined, [watchDirectories, workspaceRoot]);
   const watchChanges = useCallback((changed: () => void) => {
     if (!documentRef) return () => undefined;
-    const key = workspaceFileKey(documentRef);
+    const key = designFileKey(documentRef);
     const refresh = () => { if (!mutatingFiles.current?.has(key)) changed(); };
     const unwatch = watchAssetDirectories([designFileParts(documentRef.path).folder || '.'], refresh);
     window.addEventListener('focus', refresh);
@@ -118,9 +115,26 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
   }
 
   function createAction(trigger: ReactElement) {
-    const initialScope = documentRef ?? homeFilter ?? (catalog.length === 1 ? { projectId: catalog[0].id } : null);
-    return <DesignCreateDocument key={documentRef ? workspaceFileKey(documentRef) : JSON.stringify(homeFilter)}
-      projects={catalog} initialScope={initialScope} fixedScope={Boolean(documentRef)} onCreate={create} translate={t}>{trigger}</DesignCreateDocument>;
+    return <DesignCreateDocument key={documentRef ? designFileKey(documentRef) : JSON.stringify(homeFilter)}
+      chooseDirectory={chooseDirectory} onCreate={create} translate={t}>{trigger}</DesignCreateDocument>;
+  }
+
+  async function chooseDirectory() {
+    if (!client.assets.chooseDirectory) throw new Error(t('feature.design.chooseLocation'));
+    const chosen = await client.assets.chooseDirectory();
+    if (chosen && mounted.current) rememberDirectory(chosen);
+    return chosen;
+  }
+
+  async function associate(projectId: string | null) {
+    if (!documentRef || actionPending) return;
+    setActionPending(true);
+    try {
+      const { document } = await client.read(documentRef);
+      await client.setProject({ ref: documentRef, documentId: document.documentId }, projectId);
+      if (mounted.current) await refreshCatalog();
+    } catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
+    finally { if (mounted.current) setActionPending(false); }
   }
 
   async function create(scope: DesignScope, name: string) {
@@ -137,12 +151,12 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
 
   function documentMenu(ref: DesignDocumentRef) {
     const name = designFileParts(ref.path).name;
-    const menuKey = workspaceFileKey(ref);
+    const menuKey = designFileKey(ref);
     const action = actionRequest?.location === location && actionRequest.menuKey === menuKey ? actionRequest : undefined;
     const deleteTitle = t('feature.design.deleteDocumentTitle', { path: ref.path });
     const form = action?.kind === 'move' ? {
-      label: t('feature.design.moveDocumentTitle', { name }),
-      content: <DesignMoveForm projects={catalog.filter(({ id }) => id !== action.source.projectId)} pending={actionPending}
+      label: t('feature.design.moveDocumentTitle', { name }), compact: true,
+      content: <DesignMoveForm source={action.source} choose={chooseDirectory} pending={actionPending}
         onMove={(destination) => { void runDocumentAction((ref) => client.move({ ref, destination }), openDocument); }}
         onClose={closeAction} translate={t} />,
     } : action?.kind === 'delete' ? {
@@ -159,12 +173,12 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
         </div>
       </div>,
     } : undefined;
-    return <DesignDocumentMenu name={name} translate={t} disabled={actionPending} form={form} onCloseForm={closeAction}
-      onMove={catalog.length > 1 ? () => {
+    return <DesignDocumentMenu name={name} translate={t} placement={documentRef ? 'bottomLeft' : 'bottomRight'} disabled={actionPending} form={form} onCloseForm={closeAction}
+      onMove={() => {
         closeAction();
         resolveDocumentSource(ref, (source) => setActionRequest({ kind: 'move', location, menuKey, source }),
           (error) => reportActionFailure('move', error));
-      } : undefined}
+      }}
       onDelete={() => {
         resolvingSource.current?.abort();
         setActionRequest({ kind: 'delete', location, menuKey, source: ref });
@@ -175,7 +189,7 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
     if (!actionRequest || mutatingFiles.current) return;
     const { source, menuKey, kind, location: startedAt } = actionRequest;
     const isCurrent = () => mounted.current && latestLocation.current === startedAt;
-    const keys = new Set([menuKey, workspaceFileKey(source)]);
+    const keys = new Set([menuKey, designFileKey(source)]);
     mutatingFiles.current = keys;
     setActionPending(true);
     try {
@@ -185,7 +199,9 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
         if (!isCurrent()) return;
         setActionRequest(undefined);
         refreshLists();
-        complete?.(result);
+        void refreshCatalog();
+        if (complete) complete(result);
+        else if (documentRef && kind === 'delete') backToDocuments();
       });
     } catch (error: unknown) {
       if (isCurrent() && !isFeatureOperationCancelled(error)) reportActionFailure(kind, error);
@@ -195,7 +211,7 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
     }
   }
 
-  const paths = projectId && root ? lists.get(designListingKey({ projectId, root })) ?? emptyPaths : emptyPaths;
+  const paths = current ? lists.get(designListingKey(current)) ?? emptyPaths : emptyPaths;
   const visiblePaths = path && !paths.includes(path) ? orderPaths([...paths, path]) : paths;
   function openFile(item: string) {
     if (documentRef && item !== documentRef.path) openListedDocument({ ...documentRef, path: item });
@@ -206,16 +222,20 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
     for (const scope of scopes) {
       for (const path of lists.get(designListingKey(scope)) ?? emptyPaths) {
         const pathKey = workspaceFilePathKey(scope.root.path, path);
+        const ref = { ...scope.scope, path };
+        if (homeFilter && (projectFor(ref, scope.root.path) !== homeFilter.projectId
+          || (homeFilter.rootId && (scope.scope.projectId !== homeFilter.projectId || scope.scope.rootId !== homeFilter.rootId)))) continue;
         const listed = byPath.get(pathKey);
         // For the same absolute file, the shortest relative route starts at the deepest bound root.
         if (listed && listed.ref.path.split('/').length <= path.split('/').length) continue;
-        byPath.set(pathKey, { pathKey, ref: { projectId: scope.projectId, rootId: scope.root.id, path }, source: scope.source });
+        byPath.set(pathKey, { pathKey, ref, source: scope.source });
       }
     }
     return [...byPath.values()];
-  }, [documentRef, lists, scopes]);
-  const scopeControls = <DesignScopeFields projects={catalog} scope={documentRef ?? homeFilter} mode={documentRef ? 'editor' : 'filter'}
-    onChange={onLocationChange} translate={t} />;
+  }, [documentRef, homeFilter, lists, projectFor, scopes]);
+  const scopeControls = documentRef ? <DesignScopeFields projects={catalog} scope={linkedProject ? { projectId: linkedProject } : null}
+    mode="association" disabled={actionPending} onChange={(scope) => { void associate(scope?.projectId ?? null); }} translate={t} />
+    : <DesignScopeFields projects={catalog} scope={homeFilter} mode="filter" onChange={onLocationChange} translate={t} />;
   return <div className="design-workspace">
     {documentRef ? (
       <div className="design-workspace__editing">
@@ -224,6 +244,7 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
             <ArrowLeft size={17} />
           </IconButton>
           {scopeControls}
+          {documentMenu(documentRef)}
           <span className="design-workspace__bar-divider" aria-hidden="true" />
           <SelectField className="design-workspace__current-file" aria-label={t('feature.design.documents')}
             title={documentRef.path} value={documentRef.path} valueContent={designFileParts(documentRef.path).name}
@@ -238,19 +259,17 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
           </IconButton>)}
         </nav>
         <div className="design-workspace__editor">
-          <DesignDocumentSurface renderChat={props.renderChat} client={client} projects={projects} onFileAction={(destination) => {
+          <DesignDocumentSurface renderChat={props.renderChat && ((binding) => props.renderChat?.(binding, linkedProject ?? null))} client={client} projects={projects} onFileAction={(destination) => {
             if (destination) openDocument(destination); else backToDocuments();
-          }} readOnly={mutatingFiles.current?.has(workspaceFileKey(documentRef))}
+          }} readOnly={mutatingFiles.current?.has(designFileKey(documentRef))}
             documentRef={documentRef} watchChanges={watchChanges} watchAssetDirectories={watchAssetDirectories}
             onOpenLibrary={openFile} onDocumentMissing={backToDocuments} translate={t} />
         </div>
       </div>
     ) : <DesignWorkspaceHome scopeControls={scopeControls} files={files} onOpen={openListedDocument} renderFileAction={documentMenu} translate={t}
-      createAction={catalog.length ? createAction(<Button variant="primary" className="design-workspace-home__create" icon={<Plus size={17} />}>
+      createAction={createAction(<Button variant="primary" className="design-workspace-home__create" icon={<Plus size={17} />}>
         {t('feature.design.newDocument')}
-      </Button>) : <Button variant="primary" className="design-workspace-home__create" icon={<Plus size={17} />} onClick={props.onAddProject}>
-        {t('feature.design.addProject')}
-      </Button>} />}
+      </Button>)} />}
   </div>;
 }
 

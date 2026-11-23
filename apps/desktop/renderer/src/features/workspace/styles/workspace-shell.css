@@ -11,6 +11,8 @@
   overflow: hidden;
 }
 
+.desktop-workspace-panel--design > .design-editor { flex: 1; }
+
 .desktop-workspace-panel-slot {
   display: block;
   position: relative;

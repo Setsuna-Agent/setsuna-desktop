@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { workspaceFileKey } from '@setsuna-desktop/contracts';
+import { designFileKey } from '../../contracts/index.js';
 import { designDocumentFileExtension, type DesignDocument, type DesignDocumentRef, type DesignLibraryLinks, type DesignSnapshot } from '../../contracts/index.js';
 import type { DesignClient } from '../client.js';
 import type { WatchDesignDirectories } from '../design-images.js';
@@ -13,7 +13,7 @@ export function useDesignLibraryResources(
   client: Pick<DesignClient, 'read'>, ref: DesignDocumentRef, document: DesignDocument | undefined, watchDirectories?: WatchDesignDirectories,
 ) {
   const documentId = document?.documentId;
-  const scope = JSON.stringify([workspaceFileKey(ref), documentId]);
+  const scope = JSON.stringify([designFileKey(ref), documentId]);
   const linksKey = libraryLinksKey(document?.libraries);
   const [loaded, setLoaded] = useState<Readonly<{ scope: string; files: LibraryFiles }>>();
   const files = loaded?.scope === scope && linksKey !== '[]' ? loaded.files : undefined;

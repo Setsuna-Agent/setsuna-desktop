@@ -6,11 +6,10 @@ import { useDesignChat } from './DesignChatHost.js';
 import { useDesignClient } from './DesignFeatureBoundary.js';
 import { watchDesignDirectories } from './design-assets.js';
 
-export function DesignWorkspaceRoute({ projects, location, onLocationChange, onAddProject }: Readonly<{
+export function DesignWorkspaceRoute({ projects, location, onLocationChange }: Readonly<{
   projects: readonly WorkspaceProject[];
   location: DesignWorkspaceLocation | null;
   onLocationChange(location: DesignWorkspaceLocation | null): void;
-  onAddProject(): void;
 }>) {
   const client = useDesignClient();
   const renderDesignChat = useDesignChat(location?.projectId);
@@ -19,7 +18,7 @@ export function DesignWorkspaceRoute({ projects, location, onLocationChange, onA
     {client ? <DesignWorkspaceSurface client={client} projects={projects}
       renderChat={renderDesignChat}
       location={location} onLocationChange={onLocationChange} watchDirectories={watchDesignDirectories}
-      onAddProject={onAddProject} translate={t} />
+      translate={t} />
       : <FeatureRecoveryShell candidateFeatureIds={['design']} reason="view-missing" />}
   </section>;
 }

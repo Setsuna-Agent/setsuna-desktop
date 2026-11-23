@@ -3,7 +3,9 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { Util } from 'konva/lib/Util.js';
 import { expect, it, vi } from 'vitest';
-import { designDocumentVersion } from '../../src/contracts/index.js';
+import { chatDesignResult, designDocumentVersion } from '../../src/contracts/index.js';
+import { designSelectionMentionText, type DesignSelectionReference } from '../../src/contracts/design-selection-mention.js';
+import { createChatDesignTools } from '../../src/runtime/chat-design-tools.js';
 import type { DesignChatBinding } from '../../src/renderer/agent/DesignChatBridge.js';
 import { projectDesignComponents } from '../../src/renderer/components/design-components.js';
 import type { DesignTaskStart } from '../../src/contracts/design-task.js';
@@ -84,6 +86,53 @@ it('keeps the selected-layer task and its draft through fullscreen and sidebar n
     const { document } = await read();
     expect(document.nodes[document.rootIds[1]]).toMatchObject({ kind: 'rectangle', x: 232, y: 172, width: 100, height: 60 });
   });
+});
+
+it('edits only the board picked in main chat and hands the saved edit back for manual undo', async () => {
+  const threadId = 'main-chat';
+  const turnId = 'design-turn';
+  const cancel = vi.fn();
+  let tasks!: DesignTasks;
+  let launcher!: ReturnType<typeof createChatDesignTools>;
+  const board = { kind: 'frame', name: 'Original', x: 0, y: 0, width: 160, height: 100, childIds: [] } as const;
+  const editor = await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'live', rootIds: ['board', 'copy'],
+    nodes: { board, copy: { ...board, x: 200 } } }, undefined, { tasks(service) {
+      tasks = new DesignTasks({ resolveOwnedRoot: async () => undefined, cancel }, service);
+      launcher = createChatDesignTools({ projectDesigns: vi.fn(), resolveResourceRoot: async (ref) => ref }, service, tasks);
+      return tasks;
+    } });
+  const signal = new AbortController().signal;
+  try {
+    let pick: DesignSelectionReference | null = null;
+    editor.showChatCanvas({ networkAccess: false, connectSelection: (canvas) => canvas.subscribePicks(() => (value) => { pick = value; }) });
+    const surface = await screen.findByRole<HTMLDivElement>('region', { name: 'feature.design.canvas' });
+    surface.setPointerCapture = () => undefined;
+    drawing.hit = 'board';
+    const click = { button: 0, pointerId: 1, clientX: 40, clientY: 40 };
+    fireEvent.pointerDown(surface, click);
+    fireEvent.pointerUp(surface, click);
+    const reference = designSelectionMentionText({ ...pick!, ref: editor.documentRef });
+    drawing.hit = 'copy';
+    fireEvent.pointerDown(surface, click);
+    fireEvent.pointerUp(surface, click);
+    const opened = await launcher.execute({ action: 'open', reference }, { threadId, turnId, projectId: editor.documentRef.projectId },
+      { writable: true, networkAccess: false }, signal);
+    const id = chatDesignResult(opened.data)!.canvasRequestId!;
+    editor.showChatCanvas({ request: { threadId, id }, networkAccess: false });
+    const undo = await screen.findByRole<HTMLButtonElement>('button', { name: 'feature.design.undo' });
+    await act(async () => {
+      const edit = await tasks.execute(threadId, 'design_edit', { action: 'update',
+        revision: (await editor.read()).revision, fields: { name: 'Revised' } }, signal, turnId);
+      expect(JSON.parse(edit.content)).toMatchObject({ applied: true, refreshed: true });
+    });
+    expect((await editor.read()).document.nodes).toMatchObject({ board: { name: 'Revised' }, copy: { name: 'Original' } });
+    await act(() => tasks.leave(threadId, turnId));
+    editor.showChatCanvas({ networkAccess: false });
+    await waitFor(() => expect(undo.disabled).toBe(false));
+    fireEvent.click(undo);
+    await waitFor(async () => expect((await editor.read()).document.nodes.board.name).toBe('Original'));
+    expect(cancel).not.toHaveBeenCalled();
+  } finally { await tasks.dispose(); }
 });
 
 it('binds a canvas reference after the user selects a different board with a similarly named layer', async () => {

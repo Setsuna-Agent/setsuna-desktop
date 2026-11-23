@@ -1,3 +1,4 @@
+import { chatDesignTitle, designFileKey, type DesignConversationOwner } from '@setsuna-desktop/feature-design/contracts';
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
 import { pullRequestPanelId, type PullRequestReference } from '@setsuna-desktop/feature-pull-requests/contracts';
 import {
@@ -36,6 +37,7 @@ export type DesktopPanelSlot = 'side' | 'bottom';
 export type DesktopPanelType = RendererWorkspacePanelType;
 export type DesktopBrowserPanelState = BrowserPanelState;
 export type DesktopPanelTab = {
+  design?: DesignConversationOwner;
   browser?: DesktopBrowserPanelState;
   id: string;
   type: DesktopPanelType;
@@ -96,6 +98,10 @@ export const createPullRequestPanel = (reference: PullRequestReference): Desktop
 });
 export const createChangesPanel = (): DesktopPanelTab => ({ id: 'changes', type: 'changes', title: '变更' });
 export const createFilesPanel = (): DesktopPanelTab => ({ id: FILES_PANEL_ID, type: 'files', title: '打开文件' });
+export const createDesignPanel = (design: DesignConversationOwner): DesktopPanelTab => ({
+  type: 'design', id: JSON.stringify(['design', designFileKey(design.ref), design.documentId]), title: chatDesignTitle(design),
+  design: { ref: design.ref, documentId: design.documentId },
+});
 export const createFilePanel = (filePath: string, rootId?: string): DesktopPanelTab => ({
   id: rootId ? `file:${rootId}:${filePath}` : `file:${filePath}`, type: 'file', title: fileName(filePath), filePath, ...(rootId ? { rootId } : {}),
 });
@@ -297,4 +303,8 @@ export function formatTokens(value: number): string {
 
 export function fileName(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? path;
+}
+
+export function isSingletonDesktopPanelType(type: DesktopPanelType): boolean {
+  return type === 'overview' || type === 'conversation-debug' || type === 'review' || type === 'changes' || type === 'files';
 }

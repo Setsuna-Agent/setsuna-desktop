@@ -1,16 +1,20 @@
+import { designOwnerCodec } from '@setsuna-desktop/feature-design/contracts';
 import { DEFAULT_BROWSER_URL } from '@setsuna-desktop/feature-browser/contracts';
 import { pullRequestFromPanelId } from '@setsuna-desktop/feature-pull-requests/contracts';
 import { readSessionRecord } from '../../shared/preferences/sessionStorage.js';
-import { createEmptyPanelSlot, type DesktopPanelSlotState, type DesktopPanelTab } from './model.js';
+import { createDesignPanel, createEmptyPanelSlot, type DesktopPanelSlotState, type DesktopPanelTab } from './model.js';
 import type { DesktopWorkspacePanelLayout } from './hooks/useDesktopWorkspacePanelSession.js';
 
-const restorableTypes = new Set(['browser', 'file', 'files', 'terminal', 'overview', 'review', 'changes', 'pull-request']);
+const restorableTypes = new Set(['browser', 'file', 'files', 'terminal', 'overview', 'review', 'changes', 'design', 'pull-request']);
 
 function restoredPanel(value: unknown): DesktopPanelTab | null {
   if (!value || typeof value !== 'object') return null;
   const panel = value as Partial<DesktopPanelTab>;
   if (typeof panel.id !== 'string' || !panel.id || panel.id.length > 2048 || !panel.type || !restorableTypes.has(panel.type)) return null;
   const result: DesktopPanelTab = { id: panel.id, type: panel.type };
+  if (panel.type === 'design') {
+    try { return createDesignPanel(designOwnerCodec.parse(panel.design)); } catch { return null; }
+  }
   if (panel.type === 'pull-request' && !pullRequestFromPanelId(panel.id)) return null;
   if (typeof panel.title === 'string') result.title = panel.title.slice(0, 512);
   if (typeof panel.rootId === 'string' && panel.rootId) result.rootId = panel.rootId;

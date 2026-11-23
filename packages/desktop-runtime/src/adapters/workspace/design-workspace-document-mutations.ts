@@ -15,7 +15,7 @@ import { walkWorkspaceFiles } from './workspace-file-walk.js';
 import type { DesignConversationRelocation, DesignDestinationProject } from './design-conversation-relocation.js';
 
 type TrackedFile = DesignFile & { root: string; relativePath: string; revision?: string };
-type MoveOptions = { expectedRevision?: string; projectAtDestination?: DesignDestinationProject; relocateChats?: DesignConversationRelocation };
+type MoveOptions = { sourceProject?: string | null; expectedRevision?: string; projectAtDestination?: DesignDestinationProject; relocateChats?: DesignConversationRelocation };
 
 export function deleteDesignWorkspaceDocument(root: string, relativePath: string, boundRoots: readonly string[],
   ownership: DesignResourceOwnership, signal: AbortSignal, expectedRevision?: string, relocateChats?: DesignConversationRelocation) {
@@ -40,7 +40,7 @@ export function moveDesignWorkspaceDocument(sourceRoot: string, sourcePath: stri
 
 async function moveDocument(sourceRoot: string, sourcePath: string, destinationRoot: string, source: DesignFile,
   roots: readonly string[], boundRoots: readonly string[], ownership: DesignResourceOwnership, signal: AbortSignal,
-  { expectedRevision, projectAtDestination, relocateChats }: MoveOptions) {
+  { expectedRevision, projectAtDestination, relocateChats, sourceProject }: MoveOptions) {
   const name = path.basename(source.target);
   if (process.platform === 'win32' && !isValidWorkspaceEntryName(name)) {
     throw new FeatureOperationFailure({ code: 'INVALID_INPUT', message: 'The design requires a valid destination file name.', retryable: false });
@@ -101,10 +101,13 @@ async function moveDocument(sourceRoot: string, sourcePath: string, destinationR
   try {
     if (path.relative(resourceRoot, destinationRoot)) await copyDependencies(resourceRoot, original.document, write, signal);
     const copy = await write(name, { content: original.content, documentId });
+    const association = await ownership.project(canonical, documentId);
+    const linkedProject = association === undefined ? sourceProject : association;
+    if (linkedProject !== undefined) await ownership.setProject(target, documentId, destinationRoot, linkedProject, await ownership.chatOrigin(canonical, documentId));
     // Later copies can introduce a second match for an existing library with no saved binding.
     for (const [relativePath, revision] of reusedLibraries) await assertReusableLibrary(relativePath, revision);
     const commit = () => removeUnchangedFile({ ...source, root: sourceRoot, relativePath: sourcePath, revision: original.revision }, signal, copy);
-    if (relocateChats) await relocateChats({ source: canonical, target, documentId, projectAtDestination }, commit);
+    if (relocateChats) await relocateChats({ source: canonical, target, documentId, projectAtDestination, linkedProject }, commit);
     else await commit();
   } catch (error) {
     // The copies are visible to external editors before the transfer commits.

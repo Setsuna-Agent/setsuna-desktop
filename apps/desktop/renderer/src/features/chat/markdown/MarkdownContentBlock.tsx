@@ -1,3 +1,5 @@
+import { designOwnerFromHref } from '@setsuna-desktop/feature-design/contracts';
+import { ChatDesignLabel } from '../mentions/ChatDesignReference.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   Children,
@@ -55,6 +57,8 @@ function MarkdownTaskInput() {
 
 function MarkdownLink({ children, href, node: _node, onClick, ...props }: MarkdownElementProps<'a'>) {
   const { workspaceRoot } = useMarkdownNavigation();
+  const design = designOwnerFromHref(href);
+  if (design) return <ChatDesignLabel owner={design} />;
   const target = resolveMarkdownLinkTarget(href, workspaceRoot);
   const label = <MarkdownLinkLabelContext.Provider value>{children}</MarkdownLinkLabelContext.Provider>;
 

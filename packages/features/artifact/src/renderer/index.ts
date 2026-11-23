@@ -1,6 +1,6 @@
 export { artifactRendererFeature } from './feature.js';
 export { openArtifactInBrowser, runArtifactNativeFileAction } from './artifact-actions.js';
 export {
-  ArtifactNavigationProvider,
+  ArtifactNavigationProvider, useArtifactNavigation,
   type ArtifactBrowserOpenHandler,
 } from './context.js';

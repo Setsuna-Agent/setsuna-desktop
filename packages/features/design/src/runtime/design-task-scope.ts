@@ -31,3 +31,12 @@ export function checkDesignTaskEdits(document: DesignDocument, edits: readonly D
   }
   return extended;
 }
+
+export function checkDesignWebEdits(document: DesignDocument, edits: readonly DesignEdit[]) {
+  if (edits.some((edit) => {
+    if (edit.kind !== 'insert' && edit.kind !== 'update') return false;
+    if (edit.node.kind !== 'web' || !edit.node.url) return false;
+    const previous = document.nodes[edit.nodeId];
+    return edit.kind === 'insert' || previous?.kind !== 'web' || previous.url !== edit.node.url;
+  })) throw new Error('Network access is required to add or change a web layer URL.');
+}

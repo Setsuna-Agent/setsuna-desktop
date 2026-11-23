@@ -25,5 +25,5 @@ export const designRendererFeature = defineRendererFeature({
   },
 });
 
-export type { DesignChatBinding } from './agent/DesignChatBridge.js';
+export type { DesignCanvasSelection, DesignChatBinding } from './agent/DesignChatBridge.js';
 export { DesignChatFullscreenContext } from './agent/design-chat-layout.js';

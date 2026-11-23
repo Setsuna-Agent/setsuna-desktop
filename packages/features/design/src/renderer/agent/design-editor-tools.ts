@@ -121,7 +121,7 @@ export async function manageDesignFile(editor: DesignEditorTools, args: Args, re
   const { client, ref, projects } = editor;
   if (args.action === 'destinations') return (projects ?? []).filter((project) => project.id !== ref.projectId).map((project) => ({ id: project.id, name: project.name,
     roots: workspaceProjectRoots(project).map(({ id, path }) => ({ id, path })) }));
-  if (args.action === 'create') return client.create({ ...ref, name: designDocumentFileName(textArg(args.name, 'file name')), parentPath: '.', command }, signal);
+  if (args.action === 'create') return client.create({ storageId: 'local', name: designDocumentFileName(textArg(args.name, 'file name')), parentPath: '.', command }, signal);
   if (args.revision !== revision) throw new Error('Design revision changed. Inspect again.');
   if (args.action === 'delete') {
     await client.delete({ ...ref, expectedRevision: revision, command }, signal);

@@ -5,13 +5,13 @@ import { expect, it } from 'vitest';
 import { loadYoga } from 'yoga-layout/load';
 import { createRuntimeServerTestHarness } from '../../../../desktop-runtime/test/support/runtime-server/harness.js';
 import { readRequestText } from '../../../../desktop-runtime/test/support/runtime-server/shared.js';
-import { designDocumentVersion, type DesignSnapshot } from '../../src/contracts/index.js';
+import { chatDesignResult, designDocumentVersion, designMentionText, type DesignDocumentRef, type DesignSnapshot } from '../../src/contracts/index.js';
 import type { DesignTaskClient } from '../../src/contracts/design-task.js';
 import { runDesignSelectionTask, type DesignTaskView } from '../../src/renderer/agent/design-selection-task.js';
 import { emptyDesignLibraryResources } from '../../src/renderer/components/design-library-resources.js';
 import { resolveDesignScene } from '../../src/renderer/design-layout.js';
 
-it('dispatches named designers with independent selections and recovers a concurrent edit without overwriting the other board', async () => {
+it.each(['design', 'main'] as const)('dispatches named designers in %s chat and recovers a concurrent edit without overwriting the other board', async (surface) => {
   const harness = await createRuntimeServerTestHarness();
   const boards = [{ id: 'nav', name: '导航' }, { id: 'chart', name: '图表' }];
   const releaseWrites = Promise.withResolvers<void>();
@@ -21,6 +21,10 @@ it('dispatches named designers with independent selections and recovers a concur
   let conflicts = 0;
   let spawned = 0;
   let callId = 0;
+  let reference = '';
+  let attemptedDispatch = false;
+  let opened = false;
+  const childTools = new Set<string>();
   const provider = createServer(async (req, res) => {
     const body = JSON.parse(await readRequestText(req)) as {
       messages: { role: string; content: string }[]; tools?: { function: { name: string } }[];
@@ -30,6 +34,7 @@ it('dispatches named designers with independent selections and recovers a concur
     const tools = body.messages.filter((m) => m.role === 'tool');
     let call: { name: string; args: unknown } | undefined;
     if (child && names.includes('design_edit')) {
+      names.forEach((name) => childTools.add(name));
       const last = tools.at(-1)?.content;
       if (!last) call = { name: 'design_view', args: { action: 'select', ids: [child.id] } };
       else if (tools.length === 1) call = { name: 'design_inspect', args: {} };
@@ -42,6 +47,14 @@ it('dispatches named designers with independent selections and recovers a concur
         if (reading.size === boards.length) bothRead.resolve();
         await releaseWrites.promise;
         call = { name: 'design_edit', args: { action: 'update', revision, fields: { name: child.name } } };
+      }
+    } else if (!child && surface === 'main' && !opened && names.includes('chat_design')) {
+      if (!attemptedDispatch) {
+        attemptedDispatch = true;
+        call = { name: 'spawn_agent', args: { name: '导航', prompt: 'Design in ' + reference } };
+      } else {
+        opened = true;
+        call = { name: 'chat_design', args: { action: 'open', reference } };
       }
     } else if (!child && names.includes('spawn_agent') && spawned < boards.length) {
       const { name, id } = boards[spawned++];
@@ -69,7 +82,20 @@ it('dispatches named designers with independent selections and recovers a concur
       rootIds: boards.map((b) => b.id), nodes: { nav: { ...frame, x: 0 }, chart: { ...frame, x: 200 } } }));
     const base = '/v1/features/design';
     const owner = { ref, documentId: 'team' };
-    const { id: threadId } = await post(base + '/conversations', owner);
+    reference = designMentionText(owner);
+    const { id: threadId } = surface === 'design' ? await post(base + '/conversations', owner) : await post('/v1/threads', { projectId: project.id });
+    const startParent = () => post('/v1/threads/' + threadId + '/turns', { input: 'Divide the canvas work.' });
+    const mainTurn = surface === 'main' ? await startParent() : undefined;
+    let canvasRequestId: string | undefined;
+    let editorRef: DesignDocumentRef = ref;
+    if (mainTurn) {
+      const thread = await harness.waitForThread(threadId, (thread) => thread.messages.some((message) =>
+        message.toolRuns?.some((run) => chatDesignResult(run.data)?.canvasRequestId)));
+      const runs = thread.messages.flatMap((message) => message.toolRuns ?? []);
+      expect(runs.find((run) => run.name === 'spawn_agent')?.status).toBe('error');
+      canvasRequestId = chatDesignResult(runs.find((run) => run.name === 'chat_design')?.data)!.canvasRequestId;
+      editorRef = await harness.runtimeFetch(base + '/documents/resource-root?' + new URLSearchParams(ref));
+    }
     const client: DesignTaskClient = { bindInput: (input, signal) => post(base + '/tasks/bind-input', input, signal),
       watchCommand: (input, signal) => post(base + '/tasks/watch-command', input, signal),
       start: (input, signal) => post(base + '/tasks', input, signal),
@@ -78,7 +104,7 @@ it('dispatches named designers with independent selections and recovers a concur
     let snapshot = await read();
     const layoutEngine = await loadYoga();
     const ready = Promise.withResolvers<void>();
-    exchange = runDesignSelectionTask({ client, ref, selection: ['nav'], threadId, signal: live.signal, onReady: ready.resolve,
+    exchange = runDesignSelectionTask({ client, ref: editorRef, canvasRequestId, selection: mainTurn ? [] : ['nav'], threadId, signal: live.signal, onReady: ready.resolve,
       approve: async () => true, synchronize: async () => snapshot = await read(), view(): DesignTaskView {
         const { document } = snapshot;
         return { document, projected: document, layoutEngine, resources: emptyDesignLibraryResources,
@@ -92,7 +118,7 @@ it('dispatches named designers with independent selections and recovers a concur
         };
       } }).catch((error) => { if (!live.signal.aborted) throw error; });
     await Promise.race([ready.promise, exchange]);
-    const turn = await post('/v1/threads/' + threadId + '/turns', { input: 'Divide the canvas work.' });
+    const turn = mainTurn ?? await startParent();
     const completed = harness.waitForCompletedTurn(threadId, turn.turnId);
     await Promise.race([bothRead.promise, completed]);
     expect(focuses.get('导航')?.board).toBe('nav');
@@ -103,7 +129,11 @@ it('dispatches named designers with independent selections and recovers a concur
     expect(conflicts).toBe(1);
     expect((await read()).document.nodes).toMatchObject({ nav: { name: '导航' }, chart: { name: '图表' } });
     await expect.poll(() => focuses.size).toBe(0);
-    expect(await post(base + '/conversations/list', owner)).toEqual([expect.objectContaining({ id: threadId })]);
+    expect(await post(base + '/conversations/list', owner)).toEqual(mainTurn ? [] : [expect.objectContaining({ id: threadId })]);
+    if (mainTurn) {
+      expect(childTools.has('exec_command')).toBe(false);
+      expect(childTools.has('chat_design')).toBe(false);
+    }
   } finally {
     releaseWrites.resolve();
     live.abort();

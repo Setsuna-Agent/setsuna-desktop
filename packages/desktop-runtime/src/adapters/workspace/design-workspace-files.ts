@@ -1,8 +1,9 @@
+import { listLinkedDesigns } from './design-project-catalog.js';
 import { createHash } from 'node:crypto';
 import { mkdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { isValidWorkspaceEntryName, workspaceTarget, WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
-import { designDocumentCodec, isDesignDocumentPath, maxDesignShaderBytes,
+import { isValidWorkspaceEntryName, WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
+import { designDocumentCodec, designImageFileExtensions, isDesignDocumentPath, maxDesignShaderBytes,
   type DesignDocumentRef, type DesignImageExtension, type DesignWorkspaceFiles } from '@setsuna-desktop/feature-design/contracts';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { isNodeError } from '../../shared/node-errors.js';
@@ -13,6 +14,8 @@ import { designChanged, readDesignDocumentFile, readDesignFile, resolveDesignFil
 import { deleteDesignWorkspaceDocument, moveDesignWorkspaceDocument } from './design-workspace-document-mutations.js';
 import { bindDesignResourcesForEdit, createDesignResourceOwnership, designResourceDirectory, designResourceRootUnavailable, resolveDesignResourceRoot } from './design-workspace-resource-root.js';
 import { readWorkspaceDesignSource } from './design-workspace-source.js';
+import { designStorageDirectories } from './design-storage-directories.js';
+import { readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
 import type { FileWorkspaceProjectStore } from './file-workspace-project-store.js';
 import { createWorkspaceFile, resolveEntryParent, resolveExistingWorkspaceEntry } from './workspace-entry-mutations.js';
 import { walkWorkspaceFiles } from './workspace-file-walk.js';
@@ -25,11 +28,17 @@ export function createDesignWorkspaceFiles(
   relocateChats?: DesignConversationRelocation,
 ): DesignWorkspaceFiles {
   const ownership = createDesignResourceOwnership(dataDir);
+  const storage = designStorageDirectories(dataDir, projects);
+  async function boundRoots() {
+    const [projectsRoots, directories] = await Promise.all([projects.listBoundWorkspaceRoots(), storage.list()]);
+    const paths = directories.map((directory) => directory.path);
+    return { all: [...new Set([...projectsRoots.all, ...paths])], active: new Set([...projectsRoots.active, ...paths]) };
+  }
 
   async function withDocumentSource<T>(ref: DesignDocumentRef, signal: AbortSignal,
     operation: (root: string, file: DesignFile, resourceRoots: readonly string[]) => Promise<T>) {
     const [root, bindings] = await Promise.all([
-      projects.resolveWorkspaceRoot(workspaceTarget(ref.projectId, ref.rootId)), projects.listBoundWorkspaceRoots(),
+      storage.resolve(ref), boundRoots(),
     ]);
     // Archived directories still share the file lock, but only roots available when opening can supply its resources.
     return withDesignSource(root, ref.path, bindings.all, undefined, signal, (file, enclosing) =>
@@ -80,8 +89,48 @@ export function createDesignWorkspaceFiles(
   }
 
   return {
-    async list({ projectId, rootId }, signal) {
-      const root = await projects.resolveWorkspaceRoot(workspaceTarget(projectId, rootId));
+    async catalog(signal) {
+      const [directories, associations] = await Promise.all([storage.list(), ownership.associations(signal)]);
+      return { directories, associations: associations.map(({ file, projectId }) => ({ file, projectId })) };
+    },
+    projectDesigns: (projectId, signal) => listLinkedDesigns(projects, storage, ownership, projectId, signal),
+    async setProject(ref, documentId, projectId, signal) {
+      if (projectId !== null && !(await projects.listProjects()).projects.some((item) => item.id === projectId)) throw new Error('Unknown project.');
+      await withDocumentSource(ref, signal, async (root, file, roots) => {
+        const target = await realpath(file.target);
+        const { document } = await readDesignDocumentFile(target, ref.path);
+        if (document.documentId !== documentId) throw designChanged();
+        const directory = await designResourceDirectory(root, target, document, roots, ownership, signal);
+        // Retain access to the draft and its original resources if the old project is later removed.
+        if (ref.projectId) await storage.remember(directory);
+        const save = () => ownership.setProject(target, documentId, directory, projectId);
+        if (relocateChats) await relocateChats({ source: target, target, documentId, linkedProject: projectId }, save);
+        else await save();
+      });
+    },
+    async searchImages(ref, query, signal) {
+      const root = await storage.resolve(ref);
+      await resolveDesignFile(root, ref.path);
+      const paths: string[] = [];
+      const needle = query.trim().toLowerCase();
+      await walkWorkspaceFiles(root, (file) => {
+        const entry = path.relative(root, file).split(path.sep).join('/');
+        if (entry.split('/').every(isValidWorkspaceEntryName) && designImageFileExtensions.some((extension) => entry.toLowerCase().endsWith('.' + extension))
+          && entry.toLowerCase().includes(needle)) paths.push(entry);
+        return paths.length < 80;
+      }, { signal });
+      return paths;
+    },
+    async readImage(ref, assetPath, signal) {
+      const root = await storage.resolve(ref);
+      await resolveDesignFile(root, ref.path);
+      const { target } = await resolveExistingWorkspaceEntry(root, assetPath);
+      signal.throwIfAborted();
+      const { preview } = await readWorkspaceFilePreview(target, assetPath);
+      return preview?.kind === 'image' ? preview : null;
+    },
+    async list(scope, signal) {
+      const root = await storage.resolve(scope);
       const paths: string[] = [];
       await walkWorkspaceFiles(root, (file) => {
         if (isDesignDocumentPath(file)) paths.push(path.relative(root, file).split(path.sep).join('/'));
@@ -90,8 +139,8 @@ export function createDesignWorkspaceFiles(
       signal.throwIfAborted();
       return paths.sort((a, b) => a.localeCompare(b));
     },
-    async create(input, content, signal) {
-      const root = await projects.resolveWorkspaceRoot(workspaceTarget(input.projectId, input.rootId));
+    async create(input, content, signal, chat) {
+      const root = await storage.resolve(input);
       const { name } = input;
       if (!isValidWorkspaceEntryName(name)) throw new Error('Invalid design file name.');
       const { documentId } = designDocumentCodec.parse(JSON.parse(content));
@@ -99,7 +148,9 @@ export function createDesignWorkspaceFiles(
         const parent = await resolveEntryParent(root, input.parentPath);
         const target = path.join(parent, name);
         signal.throwIfAborted();
-        await ownership.remember(target, documentId, root);
+        if (chat) await ownership.setProject(target, documentId, root, chat.projectId ?? null, chat.threadId);
+        else if (input.storageId && input.storageId !== 'local') await ownership.setProject(target, documentId, root, null);
+        else await ownership.remember(target, documentId, root);
         try {
           signal.throwIfAborted();
           await createWorkspaceFile(target, content);
@@ -114,30 +165,30 @@ export function createDesignWorkspaceFiles(
       });
     },
     async move({ ref, destination, expectedRevision }, signal) {
-      const [sourceRoot, destinationRoot, boundRoots] = await Promise.all([
-        projects.resolveWorkspaceRoot(workspaceTarget(ref.projectId, ref.rootId)),
-        projects.resolveWorkspaceRoot(workspaceTarget(destination.projectId, destination.rootId)),
-        projects.listBoundWorkspaceRoots(),
+      const [sourceRoot, destinationRoot, roots] = await Promise.all([
+        storage.resolve(ref),
+        storage.resolve(destination),
+        boundRoots(),
       ]);
-      const name = await moveDesignWorkspaceDocument(sourceRoot, ref.path, destinationRoot, boundRoots.all, ownership, signal,
-        { expectedRevision, projectAtDestination: () => destination.projectId, relocateChats });
+      const name = await moveDesignWorkspaceDocument(sourceRoot, ref.path, destinationRoot, roots.all, ownership, signal,
+        { expectedRevision, sourceProject: ref.projectId ?? null, relocateChats });
       return { ...destination, path: name };
     },
     async delete(ref, signal) {
-      const [root, boundRoots] = await Promise.all([
-        projects.resolveWorkspaceRoot(workspaceTarget(ref.projectId, ref.rootId)), projects.listBoundWorkspaceRoots(),
+      const [root, roots] = await Promise.all([
+        storage.resolve(ref), boundRoots(),
       ]);
-      await deleteDesignWorkspaceDocument(root, ref.path, boundRoots.all, ownership, signal, ref.expectedRevision, relocateChats);
+      await deleteDesignWorkspaceDocument(root, ref.path, roots.all, ownership, signal, ref.expectedRevision, relocateChats);
     },
     async resolveResourceRoot(ref, signal) {
-      const [root, listing] = await Promise.all([
-        projects.resolveWorkspaceRoot(workspaceTarget(ref.projectId, ref.rootId)), projects.listProjects(),
+      const [root, listing, directories] = await Promise.all([
+        storage.resolve(ref), projects.listProjects(), storage.list(),
       ]);
-      return resolveDesignResourceRoot(ref, root, listing.projects, ownership, signal);
+      return resolveDesignResourceRoot(ref, root, listing.projects, ownership, signal, directories);
     },
     async readSource(ref, assetPath, maxBytes, signal) {
       signal.throwIfAborted();
-      const root = await projects.resolveWorkspaceRoot(workspaceTarget(ref.projectId, ref.rootId));
+      const root = await storage.resolve(ref);
       await resolveDesignFile(root, ref.path);
       const file = await readWorkspaceDesignSource(root, assetPath, maxBytes);
       signal.throwIfAborted();
@@ -154,6 +205,8 @@ export function createDesignWorkspaceFiles(
         };
         return operation({
           key,
+          chatOrigin: (id) => ownership.chatOrigin(key, id),
+          linkedProject: (id) => ownership.project(key, id),
           read,
           async replace(content, expectedRevision, previous, next) {
             const added = await bindDesignResourcesForEdit(root, key, previous, next, roots, ownership, signal);

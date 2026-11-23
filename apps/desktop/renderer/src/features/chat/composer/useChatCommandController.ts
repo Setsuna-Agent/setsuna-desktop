@@ -10,6 +10,9 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
+import type { ProjectDesignEntry } from '@setsuna-desktop/feature-design/contracts';
+import { useToast } from '@setsuna-desktop/renderer-ui';
+import { useDesignClient } from '../../../composition/design/DesignClientContext.js';
 import type { Translate } from '../../../shared/i18n/I18nProvider.js';
 import { useBrowserTabMentions } from '../mentions/BrowserTabReference.js';
 import { usePluginAppCatalog } from '../../../kernel/declarative-plugin-ui/app-appearance/usePluginAppCatalog.js';
@@ -27,6 +30,7 @@ import {
 
 export function useChatCommandController({
   activeProject,
+  designProjectId,
   draft,
   plugins,
   getInputElement,
@@ -35,6 +39,7 @@ export function useChatCommandController({
   t,
 }: {
   activeProject?: WorkspaceProject;
+  designProjectId?: string;
   draft: string;
   plugins: readonly RuntimePluginSummary[];
   getInputElement: () => HTMLElement | null;
@@ -70,8 +75,22 @@ export function useChatCommandController({
     slashMenuBlocked,
   ]);
 
-  const mentionItems = useMemo(() => chatMentionItems(browserTabs, searchState.entries, state.mentionQuery, apps),
-    [browserTabs, searchState.entries, state.mentionQuery, apps]);
+  const client = useDesignClient();
+  const toast = useToast();
+  const projectId = state.mentionMenuOpen ? designProjectId : undefined;
+  const [designList, setDesignList] = useState<{ projectId: string; owners: ProjectDesignEntry[] }>();
+  useEffect(() => {
+    if (!client || !projectId) return;
+    const controller = new AbortController();
+    setDesignList(undefined);
+    void client.projectDesigns(projectId, controller.signal).then((owners) => {
+      if (!controller.signal.aborted) setDesignList({ projectId, owners });
+    }).catch((error: unknown) => { if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : String(error)); });
+    return () => controller.abort();
+  }, [client, projectId, toast]);
+  const designs = projectId && designList?.projectId === projectId ? designList.owners : undefined;
+  const mentionItems = useMemo(() => chatMentionItems(browserTabs, searchState.entries, state.mentionQuery, apps, designs),
+    [browserTabs, searchState.entries, state.mentionQuery, apps, designs]);
   const browserTabIds = browserTabs.map((tab) => tab.id).join('\n');
   useEffect(() => { setActiveMentionIndex(0); }, [state.mentionQuery, browserTabIds]);
   const mentionIndex = Math.min(activeMentionIndex, Math.max(0, mentionItems.length - 1));

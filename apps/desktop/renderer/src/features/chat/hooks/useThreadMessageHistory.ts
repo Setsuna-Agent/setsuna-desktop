@@ -82,6 +82,7 @@ export function useThreadMessageHistory(
   return {
     error: visibleState.error,
     hasMore: visibleState.nextBefore !== null,
+    nextBefore: visibleState.nextBefore,
     loadOlder,
     loading: visibleState.loading,
     messages: visibleState.messages,

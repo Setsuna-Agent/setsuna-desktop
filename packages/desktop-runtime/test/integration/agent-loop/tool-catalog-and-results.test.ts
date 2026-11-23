@@ -41,7 +41,7 @@ describe('agent loop tool catalog and stored results', () => {
       request: async () => ({ ok: true, status: 200, data: { projects: [] } }),
     }, pluginStore);
     const design = new DesignToolHost();
-    design.bind({ captureSelection: () => undefined, restoreSelection() {}, join() {}, leave: async () => undefined, scope: () => ({ kind: 'selection', root: '/project', path: 'page.design.json' }), definitions: [], execute: async () => { throw new Error('Unexpected canvas command'); } });
+    design.bind({ chatCanvasRole: () => undefined, captureSelection: () => undefined, restoreSelection() {}, join() {}, leave: async () => undefined, scope: () => ({ kind: 'selection', root: '/project', path: 'page.design.json' }), definitions: [], execute: async () => { throw new Error('Unexpected canvas command'); } });
     const loop = new AgentLoop({
       threadStore, modelClient, pluginStore, toolHost: referenceKind === 'design'
         ? new CompositeToolHost([design, toolHost, new CapturingToolHost()]) : toolHost, eventBus: new InMemoryEventBus(), clock: systemClock, ids,

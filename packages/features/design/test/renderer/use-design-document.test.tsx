@@ -33,6 +33,7 @@ it('drains submitted coordinates after unmount and waits for them when reopening
   const read = vi.fn<DesignClient['read']>((ref) => service.read(ref, signal));
   const commit = vi.fn<DesignClient['commit']>((edit) => service.commit(edit, signal));
   const client: DesignClient = {
+    projectDesigns: async () => [], catalog: async () => ({ directories: [], associations: [] }), setProject: vi.fn(),
     fonts: { list: vi.fn().mockResolvedValue([]), read: vi.fn(), import: vi.fn(), remove: vi.fn() },
     read, commit, list: vi.fn(), create: vi.fn(), move: vi.fn(), delete: vi.fn(), importImage: vi.fn(), importScript: vi.fn(),
     readScriptParameters: vi.fn(), renderScript: vi.fn(), importShader: vi.fn(), readShader: vi.fn(), navigate: vi.fn(),

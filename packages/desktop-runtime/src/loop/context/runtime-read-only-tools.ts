@@ -1,5 +1,6 @@
 const RUNTIME_READ_ONLY_TOOL_NAMES = new Set([
   'read_thread',
+  'chat_design', // The host limits this tool to listing and opening in read-only turns.
   'design_inspect',
   'design_preview',
   'design_resources',

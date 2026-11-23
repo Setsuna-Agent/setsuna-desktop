@@ -6,14 +6,14 @@ import type { ChatComposerReferenceSlot } from '../composer/chatComposerSlots.js
 import { applyComposerRange, composerRange } from '../composer/editor/composerDocument.js';
 import type { ComposerEditor } from '../composer/editor/types.js';
 import { ChatInlineReference } from '../references/ChatInlineReference.js';
-import { WorkspaceMentionText } from './WorkspaceMentionText.js';
+import { ChatDesignReferenceText } from './ChatDesignReference.js';
 
-const DesignSelections = createContext<Pick<DesignChatBinding, 'documentId' | 'subscribePicks' | 'reveal'> | null>(null);
+const DesignSelections = createContext<Partial<Pick<DesignChatBinding, 'documentId' | 'subscribePicks' | 'reveal'>> | null>(null);
 export const DesignSelectionProvider = DesignSelections.Provider;
 
 function DesignSelectionLabel({ reference }: { reference: DesignSelectionReference }) {
   const design = useContext(DesignSelections);
-  const reveal = design?.documentId === reference.documentId ? design.reveal : undefined;
+  const reveal = (design?.documentId ? design.documentId === reference.documentId : reference.ref) ? design?.reveal : undefined;
   const Icon = reference.ids.length === 1 && reference.boards.includes(reference.ids[0]) ? Frame : Layers;
   return <ChatInlineReference icon={<Icon size={14} />} label={reference.label} title={reference.label}
     onActivate={reveal && (() => reveal(reference))} />;
@@ -56,9 +56,9 @@ export function DesignSelectionText({ content }: { content: string }) {
   const parts: ReactNode[] = [];
   let offset = 0;
   for (const { reference, start, end } of parseDesignSelectionMentions(content)) {
-    parts.push(<WorkspaceMentionText key={offset} content={content.slice(offset, start)} />);
+    parts.push(<ChatDesignReferenceText key={offset} content={content.slice(offset, start)} />);
     parts.push(<DesignSelectionLabel key={`pick:${start}`} reference={reference} />);
     offset = end;
   }
-  return <Fragment>{parts}<WorkspaceMentionText content={content.slice(offset)} /></Fragment>;
+  return <Fragment>{parts}<ChatDesignReferenceText content={content.slice(offset)} /></Fragment>;
 }

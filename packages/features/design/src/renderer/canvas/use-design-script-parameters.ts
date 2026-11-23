@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { workspaceFileKey } from '@setsuna-desktop/contracts';
+import { designFileKey } from '../../contracts/index.js';
 import type { DesignDocumentRef, DesignScriptParameter } from '../../contracts/index.js';
 import type { DesignClient } from '../client.js';
 import type { WatchDesignDirectories } from '../design-images.js';
@@ -9,7 +9,7 @@ const noParameters: readonly DesignScriptParameter[] = [];
 
 export function useDesignScriptParameters(client: DesignClient, ref: DesignDocumentRef, scriptPath: string | undefined,
   watchDirectories: WatchDesignDirectories | undefined) {
-  const key = JSON.stringify([workspaceFileKey(ref), scriptPath]);
+  const key = JSON.stringify([designFileKey(ref), scriptPath]);
   const [loaded, setLoaded] = useState<Readonly<{ key: string; parameters: readonly DesignScriptParameter[] }>>();
   useEffect(() => {
     if (!scriptPath) return;

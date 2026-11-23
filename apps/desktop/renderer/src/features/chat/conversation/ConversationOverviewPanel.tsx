@@ -1,5 +1,8 @@
+import { ConversationArtifactGroup } from '../artifacts/ConversationArtifactGroup.js';
 import { Button } from '@setsuna-desktop/renderer-ui';
 import type {
+  DesktopRuntimeClient,
+  RuntimeMessage,
   RuntimeThread,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
@@ -24,6 +27,7 @@ export function ConversationOverviewPanel({
   activeProject,
   currentThread,
   overview,
+  messages, client, before,
   reviewControls,
   reviewState,
   onOpenReview,
@@ -32,6 +36,9 @@ export function ConversationOverviewPanel({
   activeProject?: WorkspaceProject;
   currentThread: RuntimeThread | null;
   overview: ConversationOverviewState;
+  messages: readonly RuntimeMessage[];
+  client: Pick<DesktopRuntimeClient, 'listThreadMessages'>;
+  before: number | null;
   reviewControls?: ReactNode;
   reviewState: DesktopReviewState | null;
   onOpenReview?: () => void;
@@ -79,6 +86,8 @@ export function ConversationOverviewPanel({
         {reviewControls}
         {currentThread ? <UsageFeatureConversationSummary thread={currentThread} /> : null}
       </div>
+      {currentThread && <ConversationArtifactGroup key={JSON.stringify([currentThread.id, currentThread.contextBudgetInvalidatedAtSeq])}
+        threadId={currentThread.id} messages={messages} client={client} before={before} />}
       {currentThread ? <ThreadEnvironmentDetails threadId={currentThread.id} /> : null}
       {overview.planItems.length ? (
         <>

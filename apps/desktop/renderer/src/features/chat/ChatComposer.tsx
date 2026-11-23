@@ -55,18 +55,16 @@ import {
   createWorkspaceDraftReferences,
   createSelectedSkillSlot,
   createSelectedPluginSlot,
-  createPluginAppMentionSlot,
   createReferenceDraftSlots,
-  createBrowserTabMentionSlot,
+  createChatMentionSlots,
   createTextSlot,
   createWorkspaceMentionInsertion,
-  createWorkspaceMentionSlots,
   filterSelectedSkillsBySlots,
 } from './composer/chatComposerSlots.js';
 import { createChatSkillCommandItems, createChatSlashCommandItems } from './composer/chatSlashCommandItems.js';
 import type { ChatAttachmentStore } from './composer/chatAttachmentStore.js';
 import { useChatAttachments } from './composer/useChatAttachments.js';
-import type { ChatMentionItem } from './mentions/chatMentionItems.js';
+import { chatDesignProjectId, type ChatMentionItem } from './mentions/chatMentionItems.js';
 import { useChatCommandController } from './composer/useChatCommandController.js';
 import { useChatComposerClipboard } from './composer/useChatComposerClipboard.js';
 import { useChatComposerDrop } from './composer/useChatComposerDrop.js';
@@ -336,7 +334,7 @@ export function ChatComposer({
     onRestore: (slots) => setSelectedSkills(filterSelectedSkillsBySlots(skills, slots)),
   });
   const commandController = useChatCommandController({
-    activeProject,
+    activeProject, designProjectId: chatDesignProjectId(currentThread, activeProject),
     draft,
     plugins,
     getInputElement: getComposerInputElement,
@@ -494,11 +492,7 @@ export function ChatComposer({
       ?? parseMentionCommand(draft, commandController.commandCursorOffset);
     if (!command || !item) return;
     senderRef.current?.insert?.(
-      item.kind === 'app'
-        ? [createPluginAppMentionSlot(item.app), createTextSlot(' ')]
-        : item.kind === 'browser-tab'
-        ? [createBrowserTabMentionSlot(item.tab), createTextSlot(' ')]
-        : createWorkspaceMentionSlots(item.entry),
+      createChatMentionSlots(item),
       'cursor',
       draft.slice(command.start, command.end),
       true,

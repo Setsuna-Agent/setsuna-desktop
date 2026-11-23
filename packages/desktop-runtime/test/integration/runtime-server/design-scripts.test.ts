@@ -71,7 +71,7 @@ it('keeps script parameters with the draft and passes only declared inputs into 
 
     const moved: DesignDocumentRef = await post(`${documents}/move`, { ref, destination: { projectId: to.id } });
     expect(await readFile(path.join(target, scriptPath), 'utf8')).toBe(script);
-    const reopened: DesignSnapshot = await harness.runtimeFetch(`${documents}?${new URLSearchParams(moved)}`);
+    const reopened: DesignSnapshot = await harness.runtimeFetch(`${documents}?${new URLSearchParams(Object.entries(moved))}`);
     const chart = reopened.document.nodes.chart;
     if (chart.kind !== 'script' || !chart.scriptPath) throw new Error('Expected the moved script layer.');
     expect(chart.scriptInputs).toEqual(inputs);

@@ -14,11 +14,20 @@ import { parseDesignScriptInputs, parseDesignScriptParameters, type DesignScript
 import { parseDesignShaderName, parseDesignShaderPath, parseDesignShaderSource } from './design-shader.js';
 import { designCommandFromQuery, designCommandQuery, readDesignCommandKey, type DesignCommandKey } from './design-command-key.js';
 
-export type DesignWorkspace = Readonly<{ projectId: string; rootId?: string }>;
+export type DesignWorkspace = Readonly<{ projectId: string; rootId?: string; storageId?: never }>
+  | Readonly<{ storageId: string; projectId?: never; rootId?: never }>;
+
+export function designFileKey(ref: DesignDocumentRef): string {
+  return JSON.stringify([ref.projectId ?? null, ref.storageId ?? ref.rootId ?? null, ref.path]);
+}
+
+export function parseDesignWorkspace(input: unknown): DesignWorkspace {
+  return workspace(record(input));
+}
 export type DesignDocumentRef = DesignWorkspace & Readonly<{ path: string }>;
 export type CreateDesignDocumentInput = DesignWorkspace & Readonly<{ parentPath: string; name: string; command?: DesignCommandKey }>;
 export type MoveDesignDocumentInput = Readonly<{ ref: DesignDocumentRef; destination: DesignWorkspace; command?: DesignCommandKey; expectedRevision?: string }>;
-export type DesignSnapshot = Readonly<{ document: DesignDocument; revision: string; canUndo: boolean; canRedo: boolean }>;
+export type DesignSnapshot = Readonly<{ document: DesignDocument; revision: string; canUndo: boolean; canRedo: boolean; linkedProjectId?: string | null }>;
 
 export const designImageExtensions = {
   'image/bmp': 'bmp', 'image/gif': 'gif', 'image/jpeg': 'jpg', 'image/png': 'png',
@@ -73,6 +82,7 @@ const snapshotCodec = defineRuntimeCodec<DesignSnapshot>((input) => {
     revision: requiredString(value.revision),
     canUndo: value.canUndo,
     canRedo: value.canRedo,
+    ...(value.linkedProjectId === undefined ? {} : { linkedProjectId: value.linkedProjectId === null ? null : requiredString(value.linkedProjectId) }),
   };
 });
 
@@ -225,6 +235,11 @@ function mutation(value: Record<string, unknown>): DesignMutation {
 }
 
 function workspace(value: Record<string, unknown>): DesignWorkspace {
+  if (value.storageId !== undefined) {
+    if (value.projectId !== undefined || value.rootId !== undefined || typeof value.storageId !== 'string'
+      || !/^(?:local|[a-f0-9]{64})$/u.test(value.storageId)) throw new Error('Invalid design storage directory.');
+    return { storageId: value.storageId };
+  }
   return { projectId: requiredString(value.projectId), ...(value.rootId === undefined ? {} : { rootId: requiredString(value.rootId) }) };
 }
 

@@ -124,12 +124,13 @@ export default function DesignEditor({ layoutEngine, ...props }: DesignDocumentS
 }
 
 function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: documentBusy, synchronize, editFields, appendStroke, commit, navigate,
-  currentRevision, projected, resources, scene, layoutEngine, loadImage, projects, renderChat, onFileAction, onOpenLibrary, watchAssetDirectories }:
+  currentRevision, projected, resources, scene, layoutEngine, loadImage, projects, linkedProjectId, chatActivity, renderChat, onFileAction, onOpenLibrary, watchAssetDirectories }:
   DesignDocumentSurfaceProps & ReturnType<typeof useDesignDocument> & { snapshot: DesignEditorSnapshot; projected: DesignDocument;
     resources: DesignLibraryResources; scene: DesignScene; layoutEngine: Yoga; loadImage: LoadDesignImage },
 ) {
   const fontCatalog = useContext(DesignFontsContext);
-  const { running: agentRunning, focus: agentFocus, setRunning: setAgentRunning, showFocus } = useDesignAgentActivity();
+  const [fitRequest, setFitRequest] = useState<readonly string[] | null>(null);
+  const { running: agentRunning, focus: agentFocus, setRunning: setAgentRunning, showFocus } = useDesignAgentActivity(chatActivity ? setFitRequest : undefined);
   const [agentNetworkAccess, setAgentNetworkAccess] = useState(false);
   const busy = documentBusy || agentRunning;
   const canvas = useRef<DesignCanvasHandle>(null);
@@ -156,11 +157,10 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
   const [drawingInks, setDrawingInks] = useState(initialDrawingInks);
   const lastDrawingTool = useRef<DrawingInkTool>('pencil');
   const [draft, setDraft] = useState<TextDraft | null>(null);
-  const [fitRequest, setFitRequest] = useState<readonly string[] | null>(null);
   const [toolPanel, setToolPanel] = useState<OpenToolPanel>();
   const [importingAsset, setImportingAsset] = useState(false);
   const [canvasAdjustment, setCanvasAdjustment] = useState<Readonly<{ kind: 'crop' | 'layout' | 'path'; id: string }>>();
-  const [showLayers, setShowLayers] = useState(true);
+  const [showLayers, setShowLayers] = useState(!chatActivity);
   const [layerMenu, setLayerMenu] = useState<(DesignLayerMenuTarget & { revision: string }) | null>(null);
   const [variableCollectionKey, setVariableCollectionKey] = useState<string>();
   const [stylePreview, setStylePreview] = useState<{ styleId: string; style: DesignStyle; revision: string }>();
@@ -171,7 +171,16 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
     canvas.current?.captureWebImages(layers, signal, networkAccess) ?? Promise.resolve(undefined), []);
   const exportActions = useDesignExports(client.assets.output, loadImage, t, captureWebImages);
   const { document, revision, canUndo, canRedo } = snapshot;
-  const chatPicks = useDesignChatPicks(document, scene);
+  const chatPicks = useDesignChatPicks(document, scene, {
+    connect: chatActivity?.connectSelection,
+    unavailable: () => toast.error(t('feature.design.selectionUnavailable')),
+    show(ids) {
+      selectLayers(ids);
+      setTool('select');
+      setFitRequest([...ids]);
+      canvas.current?.focus();
+    },
+  });
   const showVariables = toolPanel?.kind === 'variables';
   const imageTarget = toolPanel?.kind === 'image' ? toolPanel.target : undefined;
   const activeStyle = (showVariables || toolPanel?.kind === 'library') && stylePreview?.revision === revision ? stylePreview : undefined;
@@ -761,17 +770,9 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
     return { ...projectOutput(), networkAccess, ids: orderDesignBranches(projected, ids) };
   }
 
-  const chat = renderChat && client.tasks ? <DesignChatBridge renderChat={renderChat} client={client.tasks}
-    subscribePicks={chatPicks.subscribePicks} reveal={({ documentId, ids }) => {
-      if (documentId !== document.documentId || ids.some((id) => !Object.hasOwn(document.nodes, id))) {
-        toast.error(t('feature.design.selectionUnavailable'));
-        return;
-      }
-      selectLayers(ids);
-      setTool('select');
-      setFitRequest([...ids]);
-      canvas.current?.focus();
-    }}
+  const bridge = (renderChat || chatActivity) && client.tasks ? <DesignChatBridge client={client.tasks}
+    canvasRequest={chatActivity?.request} renderChat={renderChat && ((binding) => renderChat(binding, linkedProjectId))}
+    subscribePicks={chatPicks.subscribePicks} reveal={chatPicks.reveal}
     owner={{ ref: documentRef, documentId: document.documentId }} selection={selectedIds} synchronize={synchronize}
     disabled={documentBusy || importingAsset || Boolean(editing)} onRunning={(running) => { setAgentNetworkAccess(false); setAgentRunning(running); }}
     view={{ document, projected, resources, scene, layoutEngine, showFocus, setNetworkAccess: setAgentNetworkAccess, preview: (ids, signal, network) => exportActions.preview(taskOutput(ids, network), signal),
@@ -810,9 +811,10 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
   return <DesignStyleContext.Provider value={styleCatalog}><DesignGradientSessionProvider>
     <section className="design-editor" aria-label={t('feature.design.workspace')} aria-busy={busy || importingAsset}
     onKeyDown={handleKeyDown} onPaste={handlePaste}>
-    <DesignPanelLayout layersOpen={showLayers} inspectorOpen={showInspector} hasChat={Boolean(chat)}>
+    {chatActivity && bridge}
+    <DesignPanelLayout layersOpen={showLayers} inspectorOpen={showInspector} hasChat={Boolean(renderChat && bridge)}>
       <DesignLayers document={document} projected={projected} scene={scene} loadImage={loadImage} revision={revision} drag={layerDrag}
-        chat={chat} open={showLayers} onTogglePanel={() => setShowLayers((visible) => !visible)}
+        chat={renderChat && bridge} open={showLayers} onTogglePanel={() => setShowLayers((visible) => !visible)}
         onContextMenu={openLayerMenu} onHoverLayer={(id) => canvas.current?.highlightLayer(id)}
         selectedIds={selectedIds} disabled={controlsDisabled} onSelect={(id, additive) => selectLayers((ids) =>
           additive ? toggleSelection(ids.filter((item) => Object.hasOwn(document.nodes, item)), id) : [id])}
@@ -826,7 +828,7 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
         translate={t} />
       <DesignCanvas ref={canvas} document={canvasSource} projected={canvasDocument} resources={resources} scene={canvasScene} layoutEngine={layoutEngine}
         revision={revision} layerDrag={layerDrag} onLayerDrop={finishLayerDrop} componentDrag={componentDrag} onComponentDrop={finishComponentDrop}
-        selectedIds={selectedIds} agentFocus={agentFocus} scriptResults={renderedScripts} webHost={webHost} webSession={webSession} automaticWebAccess={!agentRunning || agentNetworkAccess}
+        selectedIds={selectedIds} agentFocus={agentFocus} scriptResults={renderedScripts} webHost={webHost} webSession={webSession} automaticWebAccess={agentRunning ? agentNetworkAccess : chatActivity?.networkAccess ?? true}
         webControlsFor={webControlsFor} editingId={editing?.nodeId ?? null}
         croppingId={croppingId} layoutAdjustmentId={layoutAdjustmentId} pathEditingId={pathEditingId} straightPathId={straightPathId}
         onExitAdjustment={() => setCanvasAdjustment(undefined)}

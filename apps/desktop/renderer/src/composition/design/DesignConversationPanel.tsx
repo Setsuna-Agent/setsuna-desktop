@@ -55,7 +55,7 @@ export function DesignConversationPanel({ binding, project, runtime, readOnly, t
     if (!threadId && next && typeof next !== 'function') onCreated(next.id);
   };
   const actions = useChatTurnActions({
-    activeProjectId: project.id, activeTurnId, client, config, currentThread, draft: composer.draft, composerKey: composer.composerKey,
+    activeProjectId: project?.id ?? null, activeTurnId, client, config, currentThread, draft: composer.draft, composerKey: composer.composerKey,
     createThread, claimComposerForThread: composer.claimForThread, reloadThreads: reload, setError,
     setCurrentThread: selectSnapshot, setActiveTurnId: observed.setActiveTurnId,
     terminalTurnIdsRef: observed.terminalTurnIdsRef, setDraft: composer.setDraft,

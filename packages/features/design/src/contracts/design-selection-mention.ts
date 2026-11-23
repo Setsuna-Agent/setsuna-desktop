@@ -1,8 +1,11 @@
 import type { RuntimeEditorSelection } from '@setsuna-desktop/contracts';
+import { readDesignDocument, type DesignDocumentRef } from './operations.js';
 
 /** Stored in the message itself so queued turns and restored drafts keep the picked IDs. */
 export type DesignSelectionReference = Readonly<{
   documentId: string;
+  /** Main chat can address more than one draft, including copies with the same document ID. */
+  ref?: DesignDocumentRef;
   boards: readonly string[];
   ids: readonly string[];
   label: string;
@@ -10,6 +13,11 @@ export type DesignSelectionReference = Readonly<{
 
 export function designSelectionMentionText(reference: DesignSelectionReference): string {
   const query = new URLSearchParams({ document: reference.documentId });
+  if (reference.ref) {
+    for (const [key, value] of Object.entries(reference.ref)) {
+      if (value !== undefined) query.set(key, value);
+    }
+  }
   for (const board of reference.boards) query.append('board', board);
   for (const id of reference.ids) query.append('layer', id);
   const label = reference.label.replace(/[[\]\p{Cc}]/gu, ' ').trim().slice(0, 200) || '@';
@@ -23,7 +31,11 @@ export function parseDesignSelectionMentions(content: string) {
     const documentId = query.get('document');
     const ids = query.getAll('layer');
     if (!documentId || !ids.length || ids.some((id) => !id)) continue;
-    mentions.push({ reference: { documentId, ids, boards: query.getAll('board'), label: match[1] },
+    let ref: DesignDocumentRef | undefined;
+    if (query.has('path')) {
+      try { ref = readDesignDocument.input.parse(Object.fromEntries(query)); } catch { continue; }
+    }
+    mentions.push({ reference: { documentId, ...(ref && { ref }), ids, boards: query.getAll('board'), label: match[1] },
       start: match.index, end: match.index + match[0].length });
   }
   return mentions;

@@ -470,7 +470,7 @@ export async function activateBuiltinRuntimeFeatures(
       sampling: requiredCapability(modelProviderSamplingCapability),
     }, ({ sampling }) => runtime.providerModelClient.bind(sampling));
 
-    host.bind({ tools: requiredCapability(designToolsCapability) }, ({ tools }) => runtime.designToolHost.bind(tools));
+    host.bind({ tools: requiredCapability(designToolsCapability) }, ({ tools }) => runtime.designToolHost.bind(tools.editor, tools.chat));
 
     host.bind({
       tools: requiredCapability(artifactRuntimeToolServiceCapability),

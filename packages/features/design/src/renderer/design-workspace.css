@@ -227,3 +227,28 @@
   font-size: 11px;
   line-height: 16px;
 }
+
+.design-location-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.design-location-field.sd-button {
+  justify-self: start;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--app-text-secondary);
+}
+
+.design-location-field__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-popover.design-location-popover {
+  width: max-content;
+  max-width: min(300px, calc(var(--radix-popover-content-available-width, 90vw) * var(--app-page-scale-inverse, 1)));
+}

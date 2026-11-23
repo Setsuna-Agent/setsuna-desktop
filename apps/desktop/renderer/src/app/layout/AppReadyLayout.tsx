@@ -670,7 +670,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         }}
         renderDefault={(routeId) => routeId === 'design' ? (
           <DesignWorkspaceRoute projects={designProjects}
-            location={designLocation} onLocationChange={setDesignLocation} onAddProject={navigation.openCreateProject} />
+            location={designLocation} onLocationChange={setDesignLocation} />
         ) : (
           <AppRouteContent
             onSelectConversation={navigation.selectThreadInView}
