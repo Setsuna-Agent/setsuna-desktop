@@ -2,7 +2,7 @@ import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import type { Translate } from '../../../shared/i18n/I18nProvider.js';
 import { builtinToolNameKey } from '../../../shared/i18n/toolNameMessages.js';
 import { activeToolRunOrLast, pendingApprovalRun, toolRunGroupStatus } from './runtimeToolRunGrouping.js';
-import { automaticApprovalReviewTitle, isPreparingToolRun } from './runtimeToolRunPresentationUtils.js';
+import { automaticApprovalReviewTitle, isPreparingToolRun, readSkillReference } from './runtimeToolRunPresentationUtils.js';
 
 /** Single calls and collapsed groups share action wording instead of exposing tool identifiers. */
 export function genericToolRunSummary(runs: RuntimeToolRun[], t: Translate): { title: string } {
@@ -25,7 +25,13 @@ export function genericToolRunSummary(runs: RuntimeToolRun[], t: Translate): { t
   const key = active.plugin ? undefined : builtinToolNameKey(active.name);
   // Extension identifiers have no reliable localized meaning. Use their recorded source,
   // while leaving the original identifiers and grouping identity in the persisted run.
-  const action = key ? t(key) : t('toolRun.action.useTool', { name: active.plugin?.name.trim() || t('toolRun.tool') });
+  let action = key ? t(key) : t('toolRun.action.useTool', { name: active.plugin?.name.trim() || t('toolRun.tool') });
+  const skill = readSkillReference(active);
+  if (skill) {
+    // While the next chunk is loading, its preceding chunk already knows the display name.
+    const name = skill.name || runs.map(readSkillReference).find((entry) => entry?.name)?.name || skill.id;
+    action = t('toolRun.action.readNamedSkill', { name });
+  }
   if (status === 'pending_approval') {
     return { title: automaticApprovalReviewTitle(active, action, t) ?? t('toolRun.aware.awaiting', { action }) };
   }
