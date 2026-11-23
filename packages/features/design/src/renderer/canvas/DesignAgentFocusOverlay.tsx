@@ -8,7 +8,7 @@ import './design-agent-selection-glow.css';
 
 type OverlayView = Readonly<{ scene: DesignScene; viewport: CanvasViewport }>;
 
-export function DesignAgentFocusOverlays({ targets, scene, viewport }: OverlayView & { targets: readonly DesignBoardFocus[] }) {
+export function DesignAgentFocusOverlays({ targets, scene, viewport, mainAgentName }: OverlayView & { mainAgentName: string; targets: readonly DesignBoardFocus[] }) {
   const occupied = new Map<string, number>();
   return targets.map((target) => {
     // Keep names legible when multiple agents point to exactly the same canvas corner.
@@ -17,14 +17,15 @@ export function DesignAgentFocusOverlays({ targets, scene, viewport }: OverlayVi
     const row = occupied.get(anchor) ?? 0;
     occupied.set(anchor, row + 1);
     return <DesignAgentFocusOverlay key={JSON.stringify([target.agent?.threadId, target.boardId])} target={target} point={point}
-      scene={scene} viewport={viewport} cursorOffset={row * 22} />;
+      name={target.agent?.name ?? mainAgentName} scene={scene} viewport={viewport} cursorOffset={row * 22} />;
   });
 }
 
-function DesignAgentFocusOverlay({ target, point, scene, viewport, cursorOffset }: OverlayView & Readonly<{
+function DesignAgentFocusOverlay({ target, point, scene, viewport, cursorOffset, name }: OverlayView & Readonly<{
   target: DesignBoardFocus;
   point: DesignBoardFocus['point'];
   cursorOffset: number;
+  name: string;
 }>) {
   const { ids, agent } = target;
   const color = agent ? { '--design-agent-color': `hsl(${(194 + 137.508 * agent.colorIndex) % 360} 72% 45%)` } as CSSProperties : undefined;
@@ -53,7 +54,7 @@ function DesignAgentFocusOverlay({ target, point, scene, viewport, cursorOffset 
     <span className="design-agent-cursor" aria-hidden="true" style={{ ...color, left: x + point.x * scale, top: y + point.y * scale + cursorOffset }}>
       {cursorOffset > 0 && <i className="design-agent-cursor__leader" style={{ height: cursorOffset }} />}
       <MousePointer2 size={20} strokeWidth={1.5} />
-      {agent && <span className="design-agent-cursor__name">{agent.name}</span>}
+      <span className="design-agent-cursor__name">{name}</span>
     </span>
   </>;
 }

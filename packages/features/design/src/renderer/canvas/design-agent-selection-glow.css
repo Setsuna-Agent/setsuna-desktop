@@ -68,7 +68,7 @@
   border-radius: 5px;
   padding: 2px 6px;
   color: white;
-  background: color-mix(in srgb, var(--design-agent-color) 70%, #191923);
+  background: color-mix(in srgb, var(--design-agent-color, var(--sd-palette-purple)) 70%, #191923);
   font: 600 11px/16px var(--app-font-family, sans-serif);
   white-space: nowrap;
 }

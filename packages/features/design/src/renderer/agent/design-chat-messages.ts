@@ -1,5 +1,6 @@
 export const designChatMessages = {
   'zh-CN': {
+    'feature.design.chat.mainAgent': '主 Agent',
     'feature.design.chat.history': '设计对话记录',
     'feature.design.chat.maximize': '聊天全屏',
     'feature.design.chat.restore': '退出聊天全屏',
@@ -10,6 +11,7 @@ export const designChatMessages = {
     'feature.design.chat.legacy': '项目中的旧版对话（只读）',
   },
   'en-US': {
+    'feature.design.chat.mainAgent': 'Main agent',
     'feature.design.chat.history': 'Design chat history',
     'feature.design.chat.maximize': 'Maximize design chat',
     'feature.design.chat.restore': 'Restore design chat',
