@@ -10,11 +10,10 @@ export const DesignChatHost = createContext<Host | null>(null);
 
 export function useDesignChat(projectId: string | undefined) {
   const host = useContext(DesignChatHost);
-  if (!host || !projectId || !host.conversations) return undefined;
+  if (!host || !host.conversations) return undefined;
   const { projects, fileWorkspace, conversations, runtime } = host;
-  const project = projects.find(({ id }) => id === projectId) ?? (fileWorkspace?.id === projectId ? fileWorkspace : undefined);
-  if (!project) return undefined;
-  return (binding: DesignChatBinding) => <Suspense fallback={null}>
-    <Sidebar binding={binding} conversations={conversations} project={project} runtime={runtime} />
-  </Suspense>;
+  return (binding: DesignChatBinding, linkedId: string | null | undefined = projectId) => {
+    const project = projects.find(({ id }) => id === linkedId) ?? (fileWorkspace?.id === linkedId ? fileWorkspace : undefined);
+    return <Suspense fallback={null}><Sidebar binding={binding} conversations={conversations} project={project} runtime={runtime} /></Suspense>;
+  };
 }

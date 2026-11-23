@@ -1,3 +1,6 @@
+import type { DesignConversationOwner } from '@setsuna-desktop/feature-design/contracts';
+import { ChatDesignCanvas, useLiveChatCanvasKey } from '../../composition/design/ChatDesignCanvas.js';
+import { designEntryKey } from '../../features/chat/artifacts/conversationArtifacts.js';
 import { workspaceProjectRoots, workspaceProjectForRoot, workspaceRootName } from '@setsuna-desktop/contracts';
 import { WorkspaceReviewScope, WorkspaceReviewScopes } from '../../features/workspace/WorkspaceReviewScope.js';
 import { chatThreadModelSelection } from '../../features/chat/chatModelSelection.js';
@@ -168,6 +171,7 @@ export type DesktopWorkspacePanelModel = Readonly<{
     onOpenConversationDebug(): void;
     onOpenChangesPanel?(): void;
     onOpenCommitMessageEditor?: (events: Parameters<CommitMessageEditorLauncher>[0], rootId?: string) => () => void;
+    onOpenDesign(owner: DesignConversationOwner): void;
     onOpenEntry(entry: WorkspaceEntry): void;
     onOpenFileReviewPanel?: DesktopReviewOpenHandler;
     onOpenFilesPanel(): void;
@@ -249,6 +253,7 @@ export function DesktopWorkspacePanelLayer({
     return projects;
   }, [context.threads, currentThreadId, currentThreadProjectId]);
   const chatPanelInstances = panelInstances(panels, 'chat');
+  const liveCanvasKey = useLiveChatCanvasKey();
   const subagentPanelInstances = panelInstances(panels, 'subagent').filter(({ panel }) => panel.subagent);
   const activeDebugPanel = panels.sidePanelPresent && panels.sideActivePanel?.type === 'conversation-debug'
     ? { panel: panels.sideActivePanel, placement: 'side' as const }
@@ -433,6 +438,21 @@ export function DesktopWorkspacePanelLayer({
             </BottomToolsPanel>
           </Suspense>
         ) : null}
+        {panelInstances(panels, 'design').map(({ panel, placement }) => {
+          const hidden = panelHidden(panels, panel.id, placement);
+          // Inspecting a worker tab must not disconnect its live editor. Other hidden drafts load on demand.
+          if (!panel.design || (hidden && designEntryKey(panel.design) !== liveCanvasKey)) return null;
+          return <FloatingWorkspacePanelSlot key={panel.id} hidden={hidden} placement={placement}>
+            {placement === 'side' && <WorkspaceResizeHandle max={layout.workspaceMaxWidth} min={layout.workspaceMinWidth}
+              value={layout.workspaceWidth} onResizeStart={layout.onWorkspaceResizeStart} onResizeStep={layout.onWorkspaceResizeStep} />}
+            <WorkspacePanelRenderer panel={panel} placement={placement} projectId={context.activeProject?.id ?? null}
+              threadId={context.currentThread?.id ?? null} surfaceInstanceId={panel.id} visible={!hidden}>
+              <aside className={'desktop-workspace-panel desktop-workspace-panel--design' + (placement === 'bottom' ? ' desktop-workspace-panel--bottom-floating' : '')}>
+                <ChatDesignCanvas owner={panel.design} visible={!hidden} />
+              </aside>
+            </WorkspacePanelRenderer>
+          </FloatingWorkspacePanelSlot>;
+        })}
         {chatPanelInstances.map(({ panel, placement }) => {
           const hidden = panelHidden(panels, panel.id, placement);
           return (
@@ -580,7 +600,7 @@ function panelHidden(panels: DesktopWorkspacePanelModel['panels'], panelId: stri
 }
 
 function isFloatingPanelType(type: DesktopPanelType): boolean {
-  return type === 'browser' || type === 'chat' || type === 'subagent' || type === 'conversation-debug';
+  return type === 'browser' || type === 'chat' || type === 'subagent' || type === 'conversation-debug' || type === 'design';
 }
 
 function subscribeAppearanceChange(listener: () => void): () => void {

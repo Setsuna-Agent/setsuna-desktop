@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 
 import { parsePluginMentions, pluginAppMentionText, type WorkspaceProject, type DesktopRuntimeClient, type RuntimeMessage, type RuntimePluginSummary, type RuntimeQueuedTurnInput, type RuntimeSkillSummary, type RuntimeThread } from '@setsuna-desktop/contracts';
+import { designMentionText } from '@setsuna-desktop/feature-design/contracts';
+import { parseDesignSelectionMentions } from '@setsuna-desktop/feature-design/contracts/design-selection-mention';
+import type { DesignCanvasSelection, DesignClient } from '@setsuna-desktop/feature-design/renderer';
+import { createChatCanvasSelections } from '../../../../src/composition/design/chatCanvasSelections.js';
+import { DesignSelectionProvider } from '../../../../src/features/chat/mentions/DesignSelectionReference.js';
+import { DesignFeatureServiceBoundary } from '../../../../src/composition/design/DesignClientContext.js';
 import { browserTabMentionText, type BrowserTabReference } from '@setsuna-desktop/feature-browser/contracts';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
@@ -264,6 +270,47 @@ it('restores structured skill references with a recalled prompt and with the uns
   fireEvent.keyDown(input, { key: 'ArrowDown' });
   await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
   expect(send).toHaveBeenLastCalledWith('Skill draft', expect.objectContaining({ skillIds: [skill.id] }));
+});
+
+it('sends the selected linked draft when two storage locations contain the same design filename', async () => {
+  const origins = ['local', 'a'.repeat(64)].map((storageId, i) => ({
+    ref: { storageId, path: '界面 (2).design.json' }, documentId: 'copied-id', directory: i ? '/design-studio' : '/local',
+  }));
+  const project = { id: 'logical-project', name: 'Project' } as WorkspaceProject;
+  const client = { projectDesigns: async (id: string) => id === project.id ? origins : [] } as DesignClient;
+  const send = vi.fn(async () => false);
+  render(<DesignFeatureServiceBoundary client={client}>
+    <Harness newThread project={project} initialDraft="@界面" send={send} />
+  </DesignFeatureServiceBoundary>);
+  const input = screen.getByRole('textbox');
+  act(() => { placeCaret(input, 3); fireEvent.focus(input); });
+  fireEvent.mouseDown(await screen.findByRole('option', { name: /界面.*design-studio/ }));
+  await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
+  expect(send).toHaveBeenCalledExactlyOnceWith(designMentionText(origins[1]) + ' ', expect.anything());
+});
+
+it('sends the picked board from its source draft and drops a gesture started in the previous conversation', async () => {
+  const send = vi.fn(async (..._args: unknown[]) => false);
+  const owner = { documentId: 'copied-id', ref: { path: '首页 (A).design.json', storageId: 'local' } };
+  const board = { documentId: owner.documentId, label: '首页', boards: ['home'], ids: ['home'] };
+  let begin!: Parameters<DesignCanvasSelection['subscribePicks']>[0];
+  function conversation(id: string, storageId: string) {
+    const selections = createChatCanvasSelections(vi.fn());
+    selections.connect({ ...owner, ref: { ...owner.ref, storageId } }, {
+      subscribePicks(listener) { begin = listener; return () => {}; }, reveal: vi.fn(),
+    });
+    return <DesignSelectionProvider value={selections.composer}><Harness key={id} threadId={id} initialDraft="调整间距" send={send} /></DesignSelectionProvider>;
+  }
+  const ui = render(conversation('first', 'local'));
+  const previousGesture = begin()!;
+  const storageId = 'a'.repeat(64);
+  ui.rerender(conversation('second', storageId));
+  act(() => { begin()!(board); previousGesture(board); });
+  await act(async () => { fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' }); });
+  expect(send).toHaveBeenCalledOnce();
+  const content = String(send.mock.calls[0][0]);
+  expect(content).toContain('调整间距');
+  expect(parseDesignSelectionMentions(content).map((entry) => entry.reference)).toEqual([{ ...board, ref: { ...owner.ref, storageId } }]);
 });
 
 it('selects a specific browser tab with the keyboard and sends its identity without a project', async () => {

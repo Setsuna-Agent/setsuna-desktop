@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
+import { designFileKey, type DesignDocumentRef } from '@setsuna-desktop/feature-design/contracts';
 import { resolveDesignInputSelection } from '@setsuna-desktop/feature-design/contracts/design-selection-mention';
 import { DesignSelectionProvider } from '../../features/chat/mentions/DesignSelectionReference.js';
 import { useToast } from '@setsuna-desktop/renderer-ui';
@@ -13,12 +14,12 @@ import { useReviewFeatureService } from '../ReviewFeatureBoundary.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { DesignChatProps } from './DesignChatSidebar.js';
 
-type Props = Omit<DesignChatProps, 'conversations'> & {
+type Props = DesignChatProps & {
   readOnly: boolean; threadId: string | null; create(): Promise<string>; onCreated(id: string): void;
   reload(): Promise<void>; onBusy(busy: boolean): void;
 };
 
-export function DesignConversationPanel({ binding, project, runtime, readOnly, threadId, create, onCreated, reload, onBusy }: Props) {
+export function DesignConversationPanel({ binding, conversations, project, runtime, readOnly, threadId, create, onCreated, reload, onBusy }: Props) {
   const { client, config } = runtime;
   const { locale, t } = useI18n();
   const toast = useToast();
@@ -38,10 +39,12 @@ export function DesignConversationPanel({ binding, project, runtime, readOnly, t
   const owned = useRef(false);
   const lastStatus = currentThread?.turns?.at(-1)?.status;
   const nextInput = currentThread?.queuedTurnInputs?.[0];
+  const pendingTarget = nextInput && resolveDesignInputSelection(nextInput.input, nextInput.editorSelection);
   // Keep the editor across a successful handoff. Interrupted turns leave their queue for a manual retry.
   const busy = submitting || Boolean(activeTurnId) || Boolean(owned.current && nextInput
     && lastStatus !== 'failed' && lastStatus !== 'cancelled'
-    && resolveDesignInputSelection(nextInput.input, nextInput.editorSelection).selection?.documentId === binding.documentId);
+    && pendingTarget?.status === 'resolved' && pendingTarget.selection.documentId === binding.documentId
+    && (nextInput.editorSelection?.ownerThreadId === threadId || pendingTarget.refs.every((ref) => designFileKey(ref) === designFileKey(binding.ref))));
   useEffect(() => {
     onBusy(busy);
     if (!busy && owned.current) {
@@ -54,14 +57,20 @@ export function DesignConversationPanel({ binding, project, runtime, readOnly, t
     observed.setCurrentThread(next);
     if (!threadId && next && typeof next !== 'function') onCreated(next.id);
   };
+  async function matchesFile(ref: DesignDocumentRef, id: string) {
+    if (designFileKey(ref) === designFileKey(binding.ref)) return true;
+    // Overlapping roots can address one physical draft. Its owned chat follows the file.
+    return (await conversations.list({ ref, documentId: binding.documentId })).some((chat) => !chat.legacy && chat.id === id);
+  }
   const actions = useChatTurnActions({
-    activeProjectId: project.id, activeTurnId, client, config, currentThread, draft: composer.draft, composerKey: composer.composerKey,
+    activeProjectId: project?.id ?? null, activeTurnId, client, config, currentThread, draft: composer.draft, composerKey: composer.composerKey,
     createThread, claimComposerForThread: composer.claimForThread, reloadThreads: reload, setError,
     setCurrentThread: selectSnapshot, setActiveTurnId: observed.setActiveTurnId,
     terminalTurnIdsRef: observed.terminalTurnIdsRef, setDraft: composer.setDraft,
     prepareTurn: async (id, content, clientId, queued) => {
       const target = resolveDesignInputSelection(content, queued?.editorSelection);
-      if (target.status === 'conflict' || (target.selection && target.selection.documentId !== binding.documentId)) {
+      if (target.status === 'conflict' || (target.status === 'resolved' && (target.selection.documentId !== binding.documentId
+        || (queued?.editorSelection?.ownerThreadId !== id && !(await Promise.all(target.refs.map((ref) => matchesFile(ref, id)))).every(Boolean))))) {
         throw new Error(t('feature.design.selectionUnavailable'));
       }
       if (queued && target.status === 'missing') throw new Error(t('feature.design.queuedSelectionMissing'));
@@ -79,7 +88,14 @@ export function DesignConversationPanel({ binding, project, runtime, readOnly, t
   };
   // A history switch must load its snapshot before enabling a send against that identity.
   if ((currentThread?.id ?? null) !== threadId) return null;
-  return <DesignSelectionProvider value={binding}><ChatWorkspace readOnly={readOnly} variant="side" client={client} config={config} activeProject={project} activeTurnId={activeTurnId}
+  const reveal = (reference: Parameters<NonNullable<typeof binding.reveal>>[0]) => {
+    if (!reference.ref || designFileKey(reference.ref) === designFileKey(binding.ref)) return binding.reveal?.(reference);
+    if (threadId) void matchesFile(reference.ref, threadId).then((matches) => {
+      if (matches) binding.reveal?.(reference);
+      else toast.error(t('feature.design.selectionUnavailable'));
+    }).catch(report);
+  };
+  return <DesignSelectionProvider value={{ ...binding, reveal: binding.reveal && reveal }}><ChatWorkspace readOnly={readOnly} variant="side" client={client} config={config} activeProject={project} activeTurnId={activeTurnId}
     currentThread={currentThread} composerKey={composer.composerKey} attachmentStore={composer.attachmentStore}
     draft={composer.draft} draftSkillReferences={composer.draftSkillReferences} draftWorkspaceReferences={composer.draftWorkspaceReferences}
     draftSendIntent={composer.draftSendIntent} retrievingQueuedInput={composer.retrievingQueuedInput} onDraftChange={composer.setDraft}

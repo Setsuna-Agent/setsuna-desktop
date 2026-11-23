@@ -1,4 +1,5 @@
-import { workspaceFileKey, type WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import { designFileKey } from '@setsuna-desktop/feature-design/contracts';
 import type { DesignConversation } from '@setsuna-desktop/feature-design/contracts';
 import { DesignChatFullscreenContext, type DesignChatBinding, type DesignClient } from '@setsuna-desktop/feature-design/renderer';
 import { Button, IconButton, SelectField, useToast } from '@setsuna-desktop/renderer-ui';
@@ -11,7 +12,7 @@ import { DesignConversationPanel } from './DesignConversationPanel.js';
 export type DesignChatProps = {
   binding: DesignChatBinding;
   conversations: NonNullable<DesignClient['conversations']>;
-  project: WorkspaceProject;
+  project?: WorkspaceProject;
   runtime: DesignChatRuntime;
 };
 
@@ -21,7 +22,7 @@ export default function DesignChatSidebar({ binding, conversations, project, run
   const fullscreen = useContext(DesignChatFullscreenContext);
   const { ref, documentId } = binding;
   const owner = useMemo(() => ({ ref, documentId }), [ref, documentId]);
-  const preference = 'design-chat:' + JSON.stringify([workspaceFileKey(ref), documentId]);
+  const preference = 'design-chat:' + JSON.stringify([designFileKey(ref), documentId]);
   const [history, setHistory] = useState<DesignConversation[]>([]);
   const [selected, setSelected] = useState<string | null>();
   const [busy, setBusy] = useState(false);
@@ -32,11 +33,11 @@ export default function DesignChatSidebar({ binding, conversations, project, run
     if (current !== version.current) return;
     setHistory(items);
     setSelected((previous) => {
-      if (previous !== undefined) return previous;
+      if (previous === null || items.some((item) => item.id === previous)) return previous;
       const stored = localStorage.getItem(preference);
       return items.find(({ id }) => id === stored)?.id ?? items.find((item) => !item.legacy)?.id ?? null;
     });
-  }, [conversations, owner, preference]);
+  }, [conversations, owner, preference, project?.id]);
   useEffect(() => {
     void reload().catch((error: unknown) => {
       setSelected((previous) => previous ?? null);
@@ -87,7 +88,7 @@ export default function DesignChatSidebar({ binding, conversations, project, run
       </SelectField>
       <IconButton label={newLabel} disabled={navigationDisabled} onClick={() => select(null)}><Plus size={16} /></IconButton>
     </header>}
-    {selected !== undefined && <DesignConversationPanel readOnly={legacyChats.some((item) => item.id === selected)} binding={binding} project={project} runtime={runtime} threadId={selected}
+    {selected !== undefined && <DesignConversationPanel conversations={conversations} readOnly={legacyChats.some((item) => item.id === selected)} binding={binding} project={project} runtime={runtime} threadId={selected}
       reload={reload} onBusy={setBusy} create={async () => {
         const next = await conversations.create(owner);
         setHistory((items) => [next, ...items.filter((item) => item.id !== next.id)]);

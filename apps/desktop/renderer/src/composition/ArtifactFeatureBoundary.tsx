@@ -20,3 +20,5 @@ export function ArtifactFeatureNavigationBoundary({
     </ArtifactNavigationProvider>
   );
 }
+
+export { useArtifactNavigation } from '@setsuna-desktop/feature-artifact/renderer';

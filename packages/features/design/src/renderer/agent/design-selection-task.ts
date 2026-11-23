@@ -34,7 +34,7 @@ function targets(view: DesignTaskView, roots: ReadonlySet<string> | undefined, r
 }
 
 type DesignSelectionTask = {
-  sessionId?: string; clientId?: string; client: DesignTaskClient; ref: DesignDocumentRef; selection: readonly string[]; threadId: string; onReady(): void; signal: AbortSignal;
+  sessionId?: string; canvasRequestId?: string; clientId?: string; client: DesignTaskClient; ref: DesignDocumentRef; selection: readonly string[]; threadId: string; onReady(): void; signal: AbortSignal;
   approve(tool: string, description: string, signal: AbortSignal): Promise<boolean>; view(): DesignTaskView; synchronize(signal: AbortSignal): Promise<DesignSnapshot>;
 };
 
@@ -78,7 +78,7 @@ function designParticipant(input: DesignSelectionTask, sourceId: string, agent?:
     }
     if (name === 'design_edit') {
       if (args.revision !== snapshot.revision) throw new Error(JSON.stringify({ applied: false, code: 'REVISION_CONFLICT', revision: snapshot.revision, error: 'Design revision changed. Inspect before editing again.' }));
-      const plan = await planEditorCommand(view, view.editor, ids, args, !roots, (id) => permits(view, roots, id), signal);
+      const plan = await planEditorCommand(view, view.editor, ids, args, !roots, (id) => permits(view, roots, id), signal, step.libraryId);
       if (!step.networkAccess && args.dryRun !== true) {
         (await import('./design-edit-preflight.js')).checkInstanceWebLayers(view, plan.edits);
       }
@@ -213,7 +213,7 @@ export async function runDesignSelectionTask(input: DesignSelectionTask) {
     await input.synchronize(signal);
     signal.throwIfAborted();
     if (input.view().document.documentId !== sourceId) throw new Error('Design document changed.');
-    let step = await client.start({ sessionId, clientId: input.clientId, ref: input.ref, documentId: sourceId, selection: [...input.selection], threadId: input.threadId }, signal);
+    let step = await client.start({ sessionId, canvasRequestId: input.canvasRequestId, clientId: input.clientId, ref: input.ref, documentId: sourceId, selection: [...input.selection], threadId: input.threadId }, signal);
     while (step.kind !== 'done') {
       signal.throwIfAborted();
       let result: DesignTaskResult;

@@ -217,22 +217,29 @@ it('runs a scoped canvas turn through the tool harness, returns pixels to the mo
     const clientId = 'resume-layer-b';
     await client.bindInput({ sessionId: stopped.key, clientId, selection: ['b'] }, session.signal);
     const queueUrl = '/v1/threads/' + threadId + '/queued-turn-inputs';
-    const queued = await post(queueUrl, { clientId, input: 'Inspect the original target.' });
+    const selected = designSelectionMentionText({ ref, documentId: 'cards', boards: [], ids: ['b'], label: 'Original B' });
+    const queued = await post(queueUrl, { clientId, input: 'Inspect ' + selected });
     expect(queued.disposition).toBe('queued');
     // Old clients only stored mentions in the text; some stored no target at all.
     const mention = designSelectionMentionText({ documentId: 'cards', boards: [], ids: ['c'], label: 'Card C' });
     const referenced = await post(queueUrl, { input: 'Inspect ' + mention });
+    const copyPick = designSelectionMentionText({ ref: other, documentId: 'cards', boards: [], ids: ['c'], label: 'Copy of C' });
+    const copied = await post(queueUrl, { input: 'Modify ' + copyPick });
     const unscoped = await post(queueUrl, { input: 'Modify the selected layer.' });
     await client.stop(stopped.key);
     await expect(stopped.submit('a')).rejects.toThrow();
     expect((await read()).document.rootIds).toEqual(['master', 'a', 'b', 'c']);
     const sendNow = () => post(queueUrl + '/' + queued.queuedInputId + '/send-now', {});
     await expect(sendNow()).rejects.toThrow('editor is unavailable');
+    await harness.runtimeFetch('/v1/projects/' + ref.projectId + '/entries?' + new URLSearchParams({ path: ref.path }), {
+      method: 'PATCH', body: JSON.stringify({ name: 'renamed.design.json' }),
+    });
+    ref.path = 'renamed.design.json';
     await harness.server.close();
     await harness.startRuntimeServer(harness.runtimeDataDir);
     const paused = await harness.runtimeFetch('/v1/threads/' + threadId);
     expect(paused.queuedTurnInputs).toMatchObject([
-      { clientId, editorSelection: { documentId: 'cards', ids: ['b'] } }, { id: referenced.queuedInputId }, { id: unscoped.queuedInputId },
+      { clientId, editorSelection: { documentId: 'cards', ids: ['b'] } }, { id: referenced.queuedInputId }, { id: copied.queuedInputId }, { id: unscoped.queuedInputId },
     ]);
 
     // A fresh editor may be showing C when the user resumes the saved input for B.
@@ -254,6 +261,9 @@ it('runs a scoped canvas turn through the tool harness, returns pixels to the mo
       const inspections = observed.filter((request) => request.messages.at(-1)?.role === 'tool')
         .slice(-2).map((request) => JSON.parse(String(request.messages.at(-1)?.content)).selection);
       expect(inspections).toEqual([['b'], ['c']]);
+      const copyUrl = queueUrl + '/' + copied.queuedInputId;
+      await expect(post(copyUrl + '/send-now', {})).rejects.toThrow('another design');
+      expect(await post(copyUrl + '/retrieve', {})).toMatchObject({ id: copied.queuedInputId });
       const unscopedUrl = queueUrl + '/' + unscoped.queuedInputId;
       expect(await post(unscopedUrl + '/send-now', {})).toMatchObject({ disposition: 'queued', turnId: null });
       expect(await post(unscopedUrl + '/retrieve', {})).toMatchObject({ id: unscoped.queuedInputId, input: 'Modify the selected layer.' });

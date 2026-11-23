@@ -1,24 +1,21 @@
 import { useState } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Button } from '@setsuna-desktop/renderer-ui';
-import type { DesignWorkspace as DesignScope } from '../../contracts/index.js';
-import { DesignScopeFields, designDestination, type DesignCatalogProject } from './DesignScopeFields.js';
+import type { DesignDocumentRef, DesignDirectory, DesignWorkspace } from '../../contracts/index.js';
+import { DesignLocationField, type DesignLocationPicker } from './DesignLocationField.js';
 
-export function DesignMoveForm({ projects, pending, onMove, onClose, translate: t }: Readonly<{
-  projects: readonly DesignCatalogProject[];
-  pending: boolean;
-  onMove(destination: DesignScope): void;
-  onClose(): void;
-  translate: RendererTranslate;
+export function DesignMoveForm({ choose, source, pending, onMove, onClose, translate: t }: Readonly<{
+  choose: DesignLocationPicker; source: DesignDocumentRef; pending: boolean; onMove(destination: DesignWorkspace): void;
+  onClose(): void; translate: RendererTranslate;
 }>) {
-  const [selection, setSelection] = useState<DesignScope | null>(null);
-  const destination = designDestination(projects, selection);
-
+  const [directory, setDirectory] = useState<DesignDirectory | null>(null);
+  const storageId = directory?.id ?? 'local';
+  const sameFile = source.storageId === storageId && !source.path.includes('/');
   return <div className="design-popover-form">
-    <DesignScopeFields projects={projects} scope={selection} mode="choose" disabled={pending} onChange={setSelection} translate={t} />
-    <div className="design-popover-form__actions">
-      <Button size="small" disabled={pending} onClick={onClose}>{t('feature.design.cancel')}</Button>
-      <Button size="small" variant="primary" disabled={!destination} loading={pending} onClick={() => { if (destination) onMove(destination); }}>
+    <div className="design-location-footer">
+      <DesignLocationField directory={directory} choose={choose} onChange={setDirectory} disabled={pending} translate={t} />
+      <Button size="small" variant="ghost" disabled={pending} onClick={onClose}>{t('feature.design.cancel')}</Button>
+      <Button size="small" variant="primary" disabled={sameFile} loading={pending} onClick={() => onMove({ storageId })}>
         {t('feature.design.moveDocumentConfirm')}
       </Button>
     </div>

@@ -279,6 +279,7 @@ export class SkillManagementToolHost implements ToolHost {
           }),
           data: {
             skillId: skill.id,
+            name: skill.name,
             requestedContentVersion: contentVersion,
             contentVersion: currentContentVersion,
             versionMismatch: true,
@@ -337,6 +338,7 @@ export class SkillManagementToolHost implements ToolHost {
         }),
         data: {
           skillId: skill.id,
+          name: skill.name,
           // Attribute usage only after instructions are loaded, not when a keyword matches.
           ...(skill.pluginId ? { pluginId: skill.pluginId } : {}),
           contentVersion: currentContentVersion,

@@ -8,7 +8,7 @@ function record(input: unknown) {
   if (!input || typeof input !== 'object') throw new Error('Invalid design conversation.');
   return input as Record<string, unknown>;
 }
-const owner = defineRuntimeCodec<DesignConversationOwner>((input) => {
+export const designOwnerCodec = defineRuntimeCodec<DesignConversationOwner>((input) => {
   const { ref, documentId } = record(input);
   if (typeof documentId !== 'string' || !documentId || documentId.length > 256) throw new Error('Invalid document identity.');
   return { ref: readDesignDocument.input.parse(ref), documentId };
@@ -20,12 +20,12 @@ const conversation = defineRuntimeCodec<DesignConversation>((input) => {
 });
 export const listDesignConversations = defineFeatureOperation({
   id: 'design.conversations.list', method: 'POST', path: '/v1/features/design/conversations/list', errors: {},
-  idempotency: 'idempotent', input: owner, output: defineRuntimeCodec((value) => {
+  idempotency: 'idempotent', input: designOwnerCodec, output: defineRuntimeCodec((value) => {
     if (!Array.isArray(value)) throw new Error('Invalid design conversations.');
     return value.map((item) => conversation.parse(item));
   }),
 });
 export const createDesignConversation = defineFeatureOperation({
   id: 'design.conversations.create', method: 'POST', path: '/v1/features/design/conversations', errors: {},
-  idempotency: 'non-idempotent', input: owner, output: conversation,
+  idempotency: 'non-idempotent', input: designOwnerCodec, output: conversation,
 });

@@ -28,8 +28,8 @@ type QueuedTurnRun = {
 };
 
 export type QueuedInputEditor = {
-  captureSelection(threadId: string, clientId: string): RuntimeEditorSelection | undefined;
-  restoreQueuedSelection(threadId: string, clientId: string, input: RuntimeQueuedTurnInput): boolean;
+  captureSelection(threadId: string, clientId: string, content: string): Promise<RuntimeEditorSelection | undefined>;
+  restoreQueuedSelection(threadId: string, clientId: string, input: RuntimeQueuedTurnInput): Promise<boolean> | boolean;
 };
 
 type RuntimeQueuedTurnCoordinatorOptions = {
@@ -101,10 +101,10 @@ export class RuntimeQueuedTurnCoordinator {
   }
 
   enqueue(threadId: string, input: QueueTurnInput): Promise<QueuedTurnInputResponse> {
-    const editorSelection = input.clientId ? this.options.editor?.captureSelection(threadId, input.clientId) : undefined;
     return this.runExclusive(threadId, async () => {
       this.assertRunning();
       const text = input.input.trim();
+      const editorSelection = input.clientId ? await this.options.editor?.captureSelection(threadId, input.clientId, text) : undefined;
       const kind = normalizeRuntimeQueuedTurnInputKind(input.kind);
       let attachments = this.options.normalizeAttachments(input.attachments)
         .filter(isRuntimeInputMessageAttachment);
@@ -248,7 +248,7 @@ export class RuntimeQueuedTurnCoordinator {
       this.pausedThreads.delete(threadId);
       if (active) {
         try {
-          const prepared = this.prepareEditorInput(thread, queuedInput);
+          const prepared = await this.prepareEditorInput(thread, queuedInput);
           if (!prepared) return queuedResponse(inputId);
           const response = await this.options.steerQueuedInput(
             threadId,
@@ -328,7 +328,7 @@ export class RuntimeQueuedTurnCoordinator {
       return queuedResponse(queued.id);
     }
 
-    const input = this.prepareEditorInput(thread, queued);
+    const input = await this.prepareEditorInput(thread, queued);
     if (!input) return queuedResponse(queued.id);
     this.dispatchingInputIds.add(input.id);
     try {
@@ -358,12 +358,12 @@ export class RuntimeQueuedTurnCoordinator {
     }
   }
 
-  private prepareEditorInput(thread: RuntimeThread, input: RuntimeQueuedTurnInput) {
+  private async prepareEditorInput(thread: RuntimeThread, input: RuntimeQueuedTurnInput) {
     if (thread.featureId !== 'design' && !input.editorSelection) return input;
     // Legacy design inputs can predate both snapshots and client IDs. Sampling must use the same key as the editor.
     const clientId = input.clientId ?? input.id;
     if (!this.options.editor) throw new Error('The editor is unavailable for this queued input.');
-    if (!this.options.editor.restoreQueuedSelection(thread.id, clientId, input)) return undefined;
+    if (!await this.options.editor.restoreQueuedSelection(thread.id, clientId, input)) return undefined;
     return input.clientId ? input : { ...input, clientId };
   }
 

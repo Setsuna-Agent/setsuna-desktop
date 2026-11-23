@@ -21,6 +21,10 @@ export type ToolExecutionContext = {
   interfaceLanguage?: RuntimeInterfaceLanguage;
   projectId?: string;
   turnId?: string;
+  /** Only the root conversation has a renderer listening for interactive canvas requests. */
+  mainConversation?: boolean;
+  /** Model tool policy is independent of the process sandbox used for review commands. */
+  toolAccess?: 'all' | 'read-only' | 'none';
   inputClientId?: string;
   toolCallId?: string;
   /** Runtime-owned identity shared by all tools generated in one model sampling step. */

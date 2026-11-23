@@ -64,7 +64,7 @@ it('moves and deletes a design in the chosen root while preserving shared resour
     const destination = { projectId: to.id, rootId: workspaceProjectRoots(to)[1].id };
     const route = '/v1/features/design/documents';
     const move = () => post(`${route}/move`, { ref, destination });
-    const remove = (ref: DesignDocumentRef) => harness.runtimeFetch(`${route}?${new URLSearchParams(ref)}`, { method: 'DELETE' });
+    const remove = (ref: DesignDocumentRef) => harness.runtimeFetch(`${route}?${new URLSearchParams(Object.entries(ref))}`, { method: 'DELETE' });
     const library = 'libraries/photo.design.json';
     const foundation = 'libraries/foundation.design.json';
     const photo = 'assets/photo.png';
@@ -116,16 +116,16 @@ void main() { gl_FragColor = texture2D(u_texture, gl_FragCoord.xy / u_resolution
       .rejects.toThrow('REVISION_CONFLICT');
     const moved: DesignDocumentRef = await move();
     expect(moved).toEqual({ ...destination, path: 'screen.design.json' });
-    const opened: DesignSnapshot = await harness.runtimeFetch(`${route}?${new URLSearchParams(moved)}`);
+    const opened: DesignSnapshot = await harness.runtimeFetch(`${route}?${new URLSearchParams(Object.entries(moved))}`);
     expect(opened.document).toMatchObject({ documentId: 'screen', libraries: { photos: library } });
     expect(await readFile(path.join(target, moved.path), 'utf8')).toBe(original);
     expect(await readdir(path.join(source, 'drafts'))).toEqual([]);
     expect(await readdir(primary)).toEqual([]);
-    await expect(harness.runtimeFetch(`${shaderRoute}?${new URLSearchParams({ ...moved, shaderPath })}`)).resolves.toBe(shaderSource);
-    const movedLibrary: DesignSnapshot = await harness.runtimeFetch(`${route}?${new URLSearchParams({ ...moved, path: library })}`);
+    await expect(harness.runtimeFetch(`${shaderRoute}?${new URLSearchParams(Object.entries({ ...moved, shaderPath }))}`)).resolves.toBe(shaderSource);
+    const movedLibrary: DesignSnapshot = await harness.runtimeFetch(`${route}?${new URLSearchParams(Object.entries({ ...moved, path: library }))}`);
     expect(movedLibrary.document.nodes.card).toMatchObject({ fills: [{ shader }] });
     await remove(moved);
-    await expect(harness.runtimeFetch(`${route}?${new URLSearchParams(moved)}`)).rejects.toThrow('DESIGN_NOT_FOUND');
+    await expect(harness.runtimeFetch(`${route}?${new URLSearchParams(Object.entries(moved))}`)).rejects.toThrow('DESIGN_NOT_FOUND');
     for (const resource of [library, foundation, photo, override, shaderPath, texture]) {
       expect(await readFile(path.join(target, resource))).toEqual(await readFile(path.join(source, resource)));
     }
@@ -152,7 +152,7 @@ it.each(['first script', 'archived parent'] as const)('reopens a legacy draft in
       writeFile(path.join(outer, scriptPath), 'return [];'), writeFile(path.join(inner, scriptPath), 'return [];')]);
     if (archived) await post(`/v1/projects/${parent.id}/archive`, {});
     const opened: DesignDocumentRef = await harness.runtimeFetch(`${route}/resource-root?${new URLSearchParams(ref)}`);
-    const { revision }: DesignSnapshot = await harness.runtimeFetch(`${route}?${new URLSearchParams(opened)}`);
+    const { revision }: DesignSnapshot = await harness.runtimeFetch(`${route}?${new URLSearchParams(Object.entries(opened))}`);
     const edit: DesignEdit = archived ? { kind: 'update', nodeId: 'plot', node: { ...plot, name: 'Saved' } }
       : { kind: 'insert', nodeId: 'plot', parentId: null, node: plot };
     await post(`${route}/edits`, { ref: opened, expectedRevision: revision, edits: [edit] });
@@ -192,11 +192,11 @@ it('protects libraries shared through overlapping roots and resolves the resourc
 
     const resolved: DesignDocumentRef = await harness.runtimeFetch(`${route}/resource-root?${new URLSearchParams(ref)}`);
     expect(resolved).toEqual(parentRef);
-    await expect(harness.runtimeFetch(`/v1/features/design/scripts/parameters?${new URLSearchParams({ ...resolved, scriptPath })}`))
+    await expect(harness.runtimeFetch(`/v1/features/design/scripts/parameters?${new URLSearchParams(Object.entries({ ...resolved, scriptPath }))}`))
       .resolves.toMatchObject([{ name: 'width', defaultValue: 12 }]);
     async function expectProtected(source: DesignDocumentRef) {
       await expect(post(`${route}/move`, { ref: source, destination: { projectId: destination.id } })).rejects.toThrow('DESIGN_LIBRARY_IN_USE');
-      await expect(harness.runtimeFetch(`${route}?${new URLSearchParams(source)}`, { method: 'DELETE' })).rejects.toThrow('DESIGN_LIBRARY_IN_USE');
+      await expect(harness.runtimeFetch(`${route}?${new URLSearchParams(Object.entries(source))}`, { method: 'DELETE' })).rejects.toThrow('DESIGN_LIBRARY_IN_USE');
     }
     await expectProtected(ref);
     await Promise.all([
@@ -299,8 +299,8 @@ it('binds new transitive library copies to the destination and rolls their bindi
     const route = '/v1/features/design/documents';
     const ref = (projectId: string, path: string) => ({ projectId, rootId: 'primary', path });
     const move = () => post(`${route}/move`, { ref: ref(outer.id, draftPath), destination: { projectId: inner.id } });
-    const resolve = (reference: DesignDocumentRef) => harness.runtimeFetch(`${route}/resource-root?${new URLSearchParams(reference)}`);
-    const remove = (reference: DesignDocumentRef) => harness.runtimeFetch(`${route}?${new URLSearchParams(reference)}`, { method: 'DELETE' });
+    const resolve = (reference: DesignDocumentRef) => harness.runtimeFetch(`${route}/resource-root?${new URLSearchParams(Object.entries(reference))}`);
+    const remove = (reference: DesignDocumentRef) => harness.runtimeFetch(`${route}?${new URLSearchParams(Object.entries(reference))}`, { method: 'DELETE' });
 
     await expect(move()).rejects.toThrow('workspace_entry_exists');
     await expect(readdir(child)).resolves.toEqual([basePath]);
@@ -381,7 +381,7 @@ it('keeps the original scripts after file-tree relocations and refuses ambiguous
       .map((directory) => mkdir(directory, { recursive: true })));
     const post = (route: string, body: unknown) => harness.runtimeFetch(route, { method: 'POST', body: JSON.stringify(body) });
     const route = '/v1/features/design/documents';
-    const resolve = (ref: DesignDocumentRef) => harness.runtimeFetch(`${route}/resource-root?${new URLSearchParams(ref)}`);
+    const resolve = (ref: DesignDocumentRef) => harness.runtimeFetch(`${route}/resource-root?${new URLSearchParams(Object.entries(ref))}`);
     const [outer, inner, to]: WorkspaceProject[] = await Promise.all([
       post('/v1/projects', { name: 'Parent', path: parent }),
       post('/v1/projects', { name: 'Child', path: child }),
@@ -654,7 +654,7 @@ it('opens a v1 file and preserves nested layout and image references through edi
     await writeFile(file, JSON.stringify(original));
 
     const route = '/v1/features/design/documents';
-    const read = (): Promise<DesignSnapshot> => harness.runtimeFetch(`${route}?${new URLSearchParams(ref)}`);
+    const read = (): Promise<DesignSnapshot> => harness.runtimeFetch(`${route}?${new URLSearchParams(Object.entries(ref))}`);
     const commit = (expectedRevision: string, edits: readonly DesignEdit[]): Promise<DesignSnapshot> =>
       post(`${route}/edits`, { ref, expectedRevision, edits });
     const opened = await read();

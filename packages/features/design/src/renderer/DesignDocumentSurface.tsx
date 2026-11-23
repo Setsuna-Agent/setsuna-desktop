@@ -1,9 +1,10 @@
-import type { RenderDesignChat } from './agent/DesignChatBridge.js';
+import type { DesignCanvasSelection, RenderDesignChat } from './agent/DesignChatBridge.js';
 import { lazy, Suspense } from 'react';
-import { workspaceFileKey, type WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import type { DesignDocumentRef } from '../contracts/index.js';
+import { designFileKey, type DesignDocumentRef } from '../contracts/index.js';
 import type { DesignClient } from './client.js';
+import type { WatchDesignRootDirectories } from './catalog/use-design-document-lists.js';
 import type { WatchDesignDirectories } from './design-images.js';
 
 const LazyDesignEditor = lazy(async () => {
@@ -20,7 +21,11 @@ export type DesignDocumentSurfaceProps = Readonly<{
   onFileAction?(destination?: DesignDocumentRef): void;
   readOnly?: boolean;
   fileRevision?: string;
-  watchChanges?: (changed: () => void) => () => void;
+  expectedDocumentId?: string;
+  chatActivity?: { request?: { threadId: string; id: string }; networkAccess: boolean;
+    connectSelection?(canvas: DesignCanvasSelection): () => void };
+  shouldRefresh?(): boolean;
+  watchDirectories?: WatchDesignRootDirectories;
   watchAssetDirectories?: WatchDesignDirectories;
   onOpenLibrary?(path: string): void;
   onDocumentMissing?(): void;
@@ -28,5 +33,5 @@ export type DesignDocumentSurfaceProps = Readonly<{
 }>;
 
 export function DesignDocumentSurface(props: DesignDocumentSurfaceProps) {
-  return <Suspense fallback={null}><LazyDesignEditor key={workspaceFileKey(props.documentRef)} {...props} /></Suspense>;
+  return <Suspense fallback={null}><LazyDesignEditor key={designFileKey(props.documentRef)} {...props} /></Suspense>;
 }

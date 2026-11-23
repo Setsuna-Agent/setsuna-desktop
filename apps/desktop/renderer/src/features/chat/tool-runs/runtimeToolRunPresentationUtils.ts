@@ -25,6 +25,16 @@ export function stringField(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+export function readSkillReference(run: RuntimeToolRun) {
+  if (run.name !== 'read_skill' || run.plugin) return;
+  const data = isRecord(run.data) ? run.data : {};
+  // Older completed reads stored the display name only in the result preview.
+  const preview = recordFromJson(run.resultPreview);
+  const args = recordFromJson(run.argumentsPreview);
+  const id = stringField(data.skillId) || stringField(preview.skillId) || stringField(args.skill_id ?? args.skillId);
+  if (id) return { id, name: stringField(data.name) || stringField(preview.name) };
+}
+
 export function optionalNumber(value: unknown): number | null {
   const numberValue = typeof value === 'number'
     ? value

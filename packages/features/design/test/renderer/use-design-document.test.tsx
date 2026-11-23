@@ -26,13 +26,14 @@ it('drains submitted coordinates after unmount and waits for them when reopening
     return String(++revision);
   });
   const service = new DesignDocumentService({ create: vi.fn(),
-    withDocument: (_ref, _signal, run) => run({ key: source.documentId,
+    withDocument: (_ref, _signal, run) => run({ key: source.documentId, workspaceRoot: '/designs',
       read: async () => ({ content, revision: String(revision) }), replace }),
   });
   const signal = new AbortController().signal;
   const read = vi.fn<DesignClient['read']>((ref) => service.read(ref, signal));
   const commit = vi.fn<DesignClient['commit']>((edit) => service.commit(edit, signal));
   const client: DesignClient = {
+    projectDesigns: async () => [], catalog: async () => ({ directories: [], associations: [] }), setProject: vi.fn(),
     fonts: { list: vi.fn().mockResolvedValue([]), read: vi.fn(), import: vi.fn(), remove: vi.fn() },
     read, commit, list: vi.fn(), create: vi.fn(), move: vi.fn(), delete: vi.fn(), importImage: vi.fn(), importScript: vi.fn(),
     readScriptParameters: vi.fn(), renderScript: vi.fn(), importShader: vi.fn(), readShader: vi.fn(), navigate: vi.fn(),
@@ -65,6 +66,21 @@ it('drains submitted coordinates after unmount and waits for them when reopening
     });
     await waitFor(() => expect(reopened.result.current.snapshot?.document.nodes.tile).toMatchObject({ x: 12, y: 9 }));
     expect(commit.mock.calls.map(([input]) => input.expectedRevision)).toEqual(['0', '1']);
+    reopened.unmount();
+
+    // The chat receipt still identifies the opening revision while a second editor saves.
+    let notify!: () => void;
+    const watchDirectories = (_root: string, _paths: readonly string[], callback: () => void) => { notify = callback; return () => {}; };
+    const chat = renderHook(() => useDesignDocument({ client, documentRef, translate, fileRevision: '2', watchDirectories }), { wrapper });
+    await waitFor(() => expect(notify).toBeDefined());
+    const previous = await service.read(documentRef, signal);
+    await service.commit({ ref: documentRef, expectedRevision: previous.revision,
+      edits: [{ kind: 'update', nodeId: 'tile', node: { ...previous.document.nodes.tile, y: 23 } }] }, signal);
+    act(() => notify());
+    await waitFor(() => expect(chat.result.current.snapshot?.document.nodes.tile.y).toBe(23));
+    await act(async () => expect(await chat.result.current.editFields(new Map([['tile', (node) => ({ ...node, x: 14 })]]),
+      chat.result.current.snapshot!.revision)).toBe(true));
+    expect((await service.read(documentRef, signal)).document.nodes.tile).toMatchObject({ x: 14, y: 23 });
   } finally {
     releaseSave();
   }

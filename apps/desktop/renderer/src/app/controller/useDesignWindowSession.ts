@@ -1,5 +1,5 @@
 import { isValidWorkspaceEntryName } from '@setsuna-desktop/contracts';
-import { isDesignDocumentPath, type DesignWorkspace } from '@setsuna-desktop/feature-design/contracts';
+import { isDesignDocumentPath, parseDesignWorkspace, type DesignWorkspace } from '@setsuna-desktop/feature-design/contracts';
 import { useEffect, useMemo, useState } from 'react';
 import type { DesignWorkspaceLocation } from '../../composition/design/DesignFeatureBoundary.js';
 import { getDesktopPlatform } from '../../shared/lib/desktopPlatform.js';
@@ -7,10 +7,7 @@ import { readSessionRecord, writeSessionRecord } from '../../shared/preferences/
 import type { MainView } from '../types.js';
 
 function parseScope(value: unknown): DesignWorkspace | undefined {
-  if (!value || typeof value !== 'object') return;
-  const { projectId, rootId } = value as Partial<Record<'projectId' | 'rootId', unknown>>;
-  if (typeof projectId !== 'string' || !projectId || (rootId !== undefined && (typeof rootId !== 'string' || !rootId))) return;
-  return rootId ? { projectId, rootId } : { projectId };
+  try { return parseDesignWorkspace(value); } catch { return undefined; }
 }
 
 function restoredDraftPath(value: unknown): string | undefined {

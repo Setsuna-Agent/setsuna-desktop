@@ -1,5 +1,6 @@
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { LoaderCircle } from 'lucide-react';
+import { chatDesignTitle } from '@setsuna-desktop/feature-design/contracts';
+import { LoaderCircle, PanelsTopLeft } from 'lucide-react';
 import { Fragment } from 'react';
 import { PresetAvatar } from '../../../shared/ui/icon-avatars/PresetAvatar.js';
 import { BrowserFavicon } from '../../../composition/BrowserWorkspaceFeatureBoundary.js';
@@ -31,12 +32,14 @@ export function ChatMentionCommandMenu({
     <div className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label={t('chat.command.mentions')}>
       <div ref={scrollContainerRef} className="chat-command-menu__list">
         {items.map((item, index) => {
+          const design = item.kind === 'design' ? item.owner : null;
           const entry = item.kind === 'workspace' ? item.entry : null;
           const tab = item.kind === 'browser-tab' ? item.tab : null;
           const app = item.kind === 'app' ? item.app : null;
+          const description = design?.directory ?? tab?.url ?? entry?.parent;
           return <Fragment key={chatMentionItemKey(item)}>
             {showSectionTitles && (index === 0 || items[index - 1].kind !== item.kind) ? (
-              <div className="chat-command-menu__title">{t(app ? 'chat.command.apps' : tab ? 'chat.command.browserTabs' : 'chat.command.projectFiles')}</div>
+              <div className="chat-command-menu__title">{t(design ? 'feature.design.documents' : app ? 'chat.command.apps' : tab ? 'chat.command.browserTabs' : 'chat.command.projectFiles')}</div>
             ) : null}
             <Button variant="ghost"
               ref={index === activeIndex ? activeOptionRef : undefined}
@@ -44,16 +47,16 @@ export function ChatMentionCommandMenu({
               className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}
               role="option"
               aria-selected={index === activeIndex}
-              title={app?.name ?? entry?.path ?? tab?.url}
+              title={design?.directory ?? design?.ref.path ?? app?.name ?? entry?.path ?? tab?.url}
               onMouseDown={(event) => { event.preventDefault(); onSelect(item); }}
               onMouseMove={() => onHover(index)}
             >
-              {app ? <PresetAvatar avatar={app.avatar} color={app.avatarColor} variant="inline" className="chat-command-menu__item-icon" />
+              {design ? <PanelsTopLeft size={15} className="chat-command-menu__item-icon" /> : app ? <PresetAvatar avatar={app.avatar} color={app.avatarColor} variant="inline" className="chat-command-menu__item-icon" />
                 : entry ? <WorkspaceEntryIcon className="chat-command-menu__item-icon" path={entry.path} type={entry.kind} />
                 : <span className="chat-command-menu__item-icon"><BrowserFavicon faviconUrl={tab?.faviconUrl ?? null} loading={false} /></span>}
               <span className="chat-command-menu__item-main">
-                <span className="chat-command-menu__item-title">{app?.name ?? (tab ? tab.title || tab.url : entry?.name)}</span>
-                {tab?.url || entry?.parent ? <span className="chat-command-menu__item-desc">{tab?.url ?? entry?.parent}</span> : null}
+                <span className="chat-command-menu__item-title">{design ? chatDesignTitle(design) : app?.name ?? (tab ? tab.title || tab.url : entry?.name)}</span>
+                {description ? <span className="chat-command-menu__item-desc">{description}</span> : null}
               </span>
             </Button>
           </Fragment>;

@@ -1,6 +1,6 @@
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { canContainDesignLayers } from './design-layer-commands.js';
-import { designLayerImagePaths, designLayerShaderPaths, designDocumentCodec, designDocumentVersion, type DesignDocument, type DesignDocumentRef, type DesignEdit, type DesignNode } from '../../contracts/index.js';
+import { designLayerImagePaths, designLayerShaderPaths, parseDesignWorkspace, designDocumentCodec, designDocumentVersion, type DesignWorkspace, type DesignDocument, type DesignDocumentRef, type DesignEdit, type DesignNode } from '../../contracts/index.js';
 import { remapDesignLayerReferences } from '../../contracts/design-references.js';
 import { designResourceId, designResourceParts } from '../../contracts/design-resource-id.js';
 import { bindDesignVariable } from '../../contracts/design-variables.js';
@@ -12,15 +12,13 @@ import { centerDesignLayer, resolveDesignInsertion } from '../design-insertion.j
 import type { DesignLayerBox, DesignScene } from '../design-layout.js';
 import { measureDesignText } from '../design-text.js';
 
-type LayerClipboard = Readonly<{
-  projectId: string;
-  rootId?: string;
+type LayerClipboard = DesignWorkspace & Readonly<{
   path?: string;
   document: DesignDocument;
 }>;
 
 export function designClipboardSharesRoot(clipboard: LayerClipboard, ref: DesignDocumentRef): boolean {
-  return clipboard.projectId === ref.projectId && clipboard.rootId === ref.rootId;
+  return clipboard.storageId === ref.storageId && clipboard.projectId === ref.projectId && clipboard.rootId === ref.rootId;
 }
 
 function localClipboardPlacement(node: DesignNode): DesignNode {
@@ -58,11 +56,8 @@ export function copyDesignBranches(
 
 export function parseDesignClipboard(content: string): LayerClipboard {
   const value = JSON.parse(content) as Partial<LayerClipboard> | null;
-  if (!value || typeof value.projectId !== 'string' || (value.rootId !== undefined && typeof value.rootId !== 'string')
-    || (value.path !== undefined && typeof value.path !== 'string')) {
-    throw new Error('Invalid design clipboard content.');
-  }
-  return { projectId: value.projectId, rootId: value.rootId, path: value.path, document: designDocumentCodec.parse(value.document) };
+  if (!value || (value.path !== undefined && typeof value.path !== 'string')) throw new Error('Invalid design clipboard content.');
+  return { ...parseDesignWorkspace(value), path: value.path, document: designDocumentCodec.parse(value.document) };
 }
 
 type PasteTarget = Readonly<{

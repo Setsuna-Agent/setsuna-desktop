@@ -1,3 +1,4 @@
+import { chatDesignProjectId } from './mentions/chatMentionItems.js';
 import { UserMessageEditor } from './conversation/messages/UserMessageEditor.js';
 import type { WorkspaceDraftReference } from './session/chatDraftReferences.js';
 import type { ChatComposerSendIntent, SetChatComposerDraft } from './hooks/useChatComposerSession.js';
@@ -375,7 +376,7 @@ export function ChatWorkspace({
                 onDeleteMessages, onEditUserMessage, onFileChangesAction, onSelectionModeChange: setSelectionModeActive,
                 onExportMessages: currentThread ? (ids, format) => exportPreview.prepare(currentThread.id, format, ids) : undefined,
                 renderMessageEditor: (props) => <UserMessageEditor key={props.message.id} {...props} client={client}
-                  activeProject={activeProject} skills={skills} plugins={plugins} onSearchProjectEntries={onSearchProjectEntries} />,
+                  activeProject={activeProject} designProjectId={chatDesignProjectId(currentThread, activeProject)} skills={skills} plugins={plugins} onSearchProjectEntries={onSearchProjectEntries} />,
               })}
               onOpenFileReview={onOpenFileReview}
             />
@@ -392,6 +393,7 @@ export function ChatWorkspace({
                     <ConversationOverviewPanel
                       activeProject={activeProject}
                       overview={conversationOverview}
+                      client={client} before={messageHistory.nextBefore} messages={messages}
                       reviewControls={reviewControls}
                       reviewError={reviewError}
                       reviewState={reviewState}

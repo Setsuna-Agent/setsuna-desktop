@@ -3,7 +3,7 @@ import { declareCapabilityProvider, requiredCapability } from '@setsuna-desktop/
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { defineRuntimeDependencies, defineRuntimeFeature, runtimeRouteRegistrarCapability } from '@setsuna-desktop/feature-core/runtime';
 import {
-  commitDesignEdits, createDesignDocument, deleteDesignDocument, designFeature, designFontStorageCapability, designImageExtensions,
+  listProjectDesigns, getDesignCatalog, readDesignImage, searchDesignImages, setDesignProject, commitDesignEdits, createDesignDocument, deleteDesignDocument, designFeature, designFontStorageCapability, designImageExtensions,
   designScriptSandboxCapability, designWorkspaceFilesCapability, importDesignImage, importDesignScript,
   importDesignShader, listDesignDocuments, maxDesignScriptBytes, maxDesignShaderBytes, moveDesignDocument, navigateDesignHistory,
   parseDesignShaderSource, readDesignDocument, readDesignScriptParameters, readDesignShader, renderDesignScript, resolveDesignDocumentRoot,
@@ -14,6 +14,7 @@ import { designScriptParameterValue } from '../contracts/design-script-parameter
 import { designToolsCapability, designTurnHostCapability, startDesignTask, replyDesignTask, bindDesignInput, watchDesignCommand, stopDesignTask } from '../contracts/design-task.js';
 import { createDesignConversation, listDesignConversations } from '../contracts/design-conversations.js';
 import { designCommandFromQuery } from '../contracts/design-command-key.js';
+import { createChatDesignTools } from './chat-design-tools.js';
 import { DesignTasks } from './design-tasks.js';
 import { DesignDocumentService } from './design-document-service.js';
 import { DesignFontStore } from './design-font-store.js';
@@ -35,7 +36,7 @@ export const designRuntimeFeature = defineRuntimeFeature({
   setup({ dependencies: { routes, files, fontStorage, scripts, turns }, scope, provide }) {
     const documents = new DesignDocumentService(files);
     const tasks = new DesignTasks(turns, documents);
-    provide(declareCapabilityProvider(designToolsCapability), tasks);
+    provide(declareCapabilityProvider(designToolsCapability), { editor: tasks, chat: createChatDesignTools(files, documents, tasks) });
     scope.add(() => tasks.dispose());
     routes.register(scope, listDesignConversations, (owner) => turns.list(owner));
     // Keep file identity and chat creation under the same workspace lock as a rename or transfer.
@@ -89,6 +90,14 @@ export const designRuntimeFeature = defineRuntimeFeature({
         const input = Object.fromEntries(parameters.map((parameter) => [parameter.name, designScriptParameterValue(parameter, inputs)]));
         return parseDesignScriptOutput(await scripts.evaluate(source, { width, height, input }, signal));
       }));
+    routes.register(scope, listProjectDesigns, ({ projectId }, { signal }) => files.projectDesigns(projectId, signal));
+    routes.register(scope, getDesignCatalog, (_, { signal }) => files.catalog(signal));
+    routes.register(scope, setDesignProject, async ({ ref, documentId, projectId }, { signal }) => {
+      await files.setProject(ref, documentId, projectId, signal);
+      return null;
+    });
+    routes.register(scope, readDesignImage, ({ ref, path }, { signal }) => files.readImage(ref, path, signal));
+    routes.register(scope, searchDesignImages, ({ ref, query }, { signal }) => files.searchImages(ref, query, signal));
     routes.register(scope, listDesignDocuments, (workspace, { signal }) => files.list(workspace, signal));
     routes.register(scope, createDesignDocument, (input, { signal }) => documents.create(input, tasks.fileOperationSignal(input.command, signal)));
     routes.register(scope, moveDesignDocument, (input, { signal }) => files.move(input, tasks.fileOperationSignal(input.command, signal)));

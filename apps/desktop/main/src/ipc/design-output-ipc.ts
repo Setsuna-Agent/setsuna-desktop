@@ -1,4 +1,7 @@
-import { writeFile } from 'node:fs/promises';
+import { realpath, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { designDirectoryGrant, designDirectoryGrants } from '@setsuna-desktop/feature-design/contracts';
+import { writeJsonAtomically } from '../data-root/atomic-json.js';
 import { clipboard, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import {
   isValidWorkspaceEntryName, MAX_DESIGN_SVG_BYTES, WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
@@ -10,10 +13,19 @@ const layerFormat = 'com.setsuna-desktop.design-layers';
 const maxExportBytes = 32 * 1024 * 1024;
 const svgClipboardFormats = ['image/svg+xml', 'public.svg-image'];
 
-export function registerDesignOutputIpc(): void {
-  for (const channel of ['desktop:copy-design-layers', 'desktop:read-design-layers', 'desktop:paste-design']) {
+export function registerDesignOutputIpc(runtimeRoot: string): void {
+  for (const channel of ['desktop:choose-design-directory', 'desktop:copy-design-layers', 'desktop:read-design-layers', 'desktop:paste-design']) {
     ipcMain.removeHandler(channel);
   }
+  ipcMain.handle('desktop:choose-design-directory', async (event) => {
+    const owner = designOwner(event);
+    if (!owner) throw new Error('Desktop renderer is unavailable.');
+    const choice = await dialog.showOpenDialog(owner, { properties: ['openDirectory', 'createDirectory'] });
+    if (choice.canceled || !choice.filePaths[0]) return null;
+    const directory = await designDirectoryGrant(await realpath(choice.filePaths[0]));
+    await writeJsonAtomically(path.join(runtimeRoot, designDirectoryGrants, directory.id + '.json'), directory.path);
+    return directory;
+  });
   ipcMain.handle('desktop:copy-design-layers', (event, content: unknown) => {
     if (!designOwner(event) || typeof content !== 'string' || Buffer.byteLength(content) > WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES) {
       throw new Error('Design clipboard data is unavailable or too large.');

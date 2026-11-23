@@ -4,9 +4,19 @@ import type { DesignAgentFocus } from './design-agent-focus.js';
 
 const deletionFocusMs = 650;
 
-export function useDesignAgentActivity() {
+export function useDesignAgentActivity(fitBoard?: (ids: readonly string[]) => void) {
   const [running, setActive] = useState(false);
   const [focus, setFocus] = useState<DesignAgentFocus>();
+  const followed = useRef<string>();
+  const board = focus?.[0]?.boardId;
+  // Follow real command targets across boards, preserving manual zoom between edits to the same board.
+  useEffect(() => {
+    if (!running) followed.current = undefined;
+    else if (fitBoard && board && board !== followed.current) {
+      followed.current = board;
+      fitBoard([board]);
+    }
+  }, [board, fitBoard, running]);
   const visible = useRef(new Map<string, DesignAgentFocus>());
   const holds = useRef(new Map<string, { timer: number; next?: DesignAgentFocus }>());
 

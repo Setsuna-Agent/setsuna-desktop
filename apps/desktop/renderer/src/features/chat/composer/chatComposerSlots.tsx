@@ -1,3 +1,6 @@
+import { parseDesignMentions } from '@setsuna-desktop/feature-design/contracts';
+import { designMentionSlot } from '../mentions/ChatDesignReference.js';
+import type { ChatMentionItem } from '../mentions/chatMentionItems.js';
 import type { ComposerSlot } from './editor/types.js';
 import { browserTabMentionText, parseBrowserTabMentions, type BrowserTabReference } from '@setsuna-desktop/feature-browser/contracts';
 import { normalizeRuntimeSkillReferences, parsePluginMentions, parseThreadMentions, pluginAppMentionText, pluginMentionText, threadMentionText, type RuntimeMessage, type RuntimePluginAppReference, type RuntimePluginSummary } from '@setsuna-desktop/contracts';
@@ -25,6 +28,7 @@ const selectedSkillSlotKeyPrefix = 'skill:';
 export type ChatComposerSlotReference =
   | { type: 'skill'; skillId: string }
   | { type: 'plugin'; pluginId: string; contributionId?: string }
+  | { type: 'design'; value: string }
   | { type: 'design-selection'; value: string }
   | { type: 'browser-tab'; tab: BrowserTabReference }
   | { type: 'thread'; thread: RuntimeThreadReference }
@@ -76,6 +80,15 @@ export function createPluginAppMentionSlot(app: RuntimePluginAppReference): Chat
   };
 }
 
+export function createChatMentionSlots(item: ChatMentionItem): ComposerSlot[] {
+  switch (item.kind) {
+    case 'workspace': return createWorkspaceMentionSlots(item.entry);
+    case 'app': return [createPluginAppMentionSlot(item.app), createTextSlot(' ')];
+    case 'browser-tab': return [createBrowserTabMentionSlot(item.tab), createTextSlot(' ')];
+    case 'design': return [designMentionSlot(item.owner), createTextSlot(' ')];
+  }
+}
+
 export function createBrowserTabMentionSlot(tab: BrowserTabReference): ChatComposerReferenceSlot {
   const value = browserTabMentionText(tab);
   return {
@@ -110,6 +123,7 @@ export function createReferenceDraftSlots(
   }).map((reference) => ({ ...reference, slot: createSkillReferenceSlot(reference.skillId, value.slice(reference.start, reference.end), skillsById.get(reference.skillId)) }));
   const selectedReferences = [
     ...references,
+    ...parseDesignMentions(value).map(({ owner, start, end }) => ({ start, end, slot: designMentionSlot(owner, value.slice(start, end)) })),
     ...parseDesignSelectionMentions(value).map(({ reference, start, end }) => ({ start, end, slot: designSelectionSlot(reference, value.slice(start, end)) })),
     ...normalizeWorkspaceDraftReferences(value, workspaceReferences)
       .map((reference) => ({ ...reference, slot: createWorkspaceMentionReferenceSlot(reference.entry) })),

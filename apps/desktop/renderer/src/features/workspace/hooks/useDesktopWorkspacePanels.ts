@@ -1,3 +1,4 @@
+import type { DesignConversationOwner } from '@setsuna-desktop/feature-design/contracts';
 import { workspaceProjectRoots, workspaceProjectForRoot, workspaceTarget, workspaceTargetKey, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { CollaborationTask } from '@setsuna-desktop/feature-collaboration/contracts';
 import type { PullRequestReference } from '@setsuna-desktop/feature-pull-requests/contracts';
@@ -25,6 +26,7 @@ import {
   createConversationDebugPanel,
   createDefaultSidePanelSlot,
   createEmptyPanelSlot,
+  createDesignPanel,
   createFilePanel,
   createFilesPanel,
   createReviewPanel,
@@ -39,6 +41,7 @@ import {
   reorderPanelInSlotState,
   renameFilePanelsInSlot,
   deleteFilePanelsInSlot,
+  isSingletonDesktopPanelType,
   slotHasPanelType,
   updatePanelInSlotState,
   type DesktopPanelDropPlacement,
@@ -398,7 +401,7 @@ export function useDesktopWorkspacePanels({
 
   const openDesktopPanel = useCallback(
     (slot: DesktopPanelSlot, type: DesktopPanelType) => {
-      if (type === 'file' || type === 'commit-message') return;
+      if (type === 'file' || type === 'design' || type === 'commit-message') return;
       if (type === 'conversation-debug' && conversationDebugEnabled !== true) return;
       if (type === 'review' && !activeProject) return;
       if ((type === 'files' || type === 'changes') && !activeProject?.path) return;
@@ -532,6 +535,13 @@ export function useDesktopWorkspacePanels({
     setBottomPanelExpanded(true);
     setBottomPanelSlot(updater);
   }, [setBottomPanelExpanded, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot]);
+
+  const openDesignPanel = useCallback((owner: DesignConversationOwner) => {
+    closeWorkspaceMenus();
+    const panel = createDesignPanel(owner);
+    setBottomPanelSlot((slot) => removePanelFromSlotState(slot, panel.id));
+    addPanelToDesktopSlot('side', panel);
+  }, [addPanelToDesktopSlot, closeWorkspaceMenus, setBottomPanelSlot]);
 
   const openPullRequestPanel = useCallback((threadId: string, reference: PullRequestReference) => {
     closeWorkspaceMenus();
@@ -748,6 +758,7 @@ export function useDesktopWorkspacePanels({
       renameFilePanels,
       deleteFilePanels,
       openSubagentPanel,
+      openDesignPanel,
       openPullRequestPanel,
       openWorkspaceDirectory,
       openWorkspaceInApp,
@@ -807,6 +818,7 @@ export function useDesktopWorkspacePanels({
       renameFilePanels,
       deleteFilePanels,
       openSubagentPanel,
+      openDesignPanel,
       openPullRequestPanel,
       openWorkspaceDirectory,
       openWorkspaceInApp,
@@ -882,10 +894,6 @@ function terminalSessionKey(panelId: string, projectKey: string): string {
 function closeTerminalSession(sessionId: string) {
   clearTerminalWorkspaceRestoreBuffer(sessionId);
   void window.setsunaDesktop?.terminal.close(sessionId).catch(() => undefined);
-}
-
-function isSingletonDesktopPanelType(type: DesktopPanelType): boolean {
-  return type === 'overview' || type === 'conversation-debug' || type === 'review' || type === 'changes' || type === 'files';
 }
 
 export type DesktopWorkspacePanelsState = ReturnType<typeof useDesktopWorkspacePanels>;

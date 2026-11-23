@@ -1,3 +1,4 @@
+import { ChatDesignPanels, MainChatDesignSelection } from '../../composition/design/ChatDesignCanvas.js';
 import { resolveWorkspaceFileReference, type WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { ArtifactFeatureNavigationBoundary } from '../../composition/ArtifactFeatureBoundary.js';
@@ -82,56 +83,58 @@ export function AppChatSurface({
       onReviewRefresh={workspace.actions.onReviewRefresh}
       onOpenMessageEditor={workspace.actions.onOpenCommitMessageEditor}
     >
-      <ChatNavigationBoundaries
-        onOpenBrowser={conversation.onOpenBrowser}
-        projectId={activeWorkspace?.id}
-        onShowInFiles={showInFiles}
-        onOpenPlugin={onOpenPlugin}
-      >
-        <ChatConversationSurface
-          imageAttachmentRequest={imageAttachmentRequest}
-          model={conversation}
-          starterControls={(
-            <ChatStarterWorkspace
-              activeProject={conversation.activeWorkspace}
-              locationSelection={conversation.starterLocationSelection}
-              {...conversation.starterProjectSelection}
-            >
-              <ReviewFeatureConversationGitControls
-                key={conversation.activeWorkspace?.id ?? 'global'}
-                variant="compact"
+      <ChatDesignPanels thread={conversation.currentThread} activeTurnId={conversation.activeTurnId} open={workspace.actions.onOpenDesign}>
+        <ChatNavigationBoundaries
+          onOpenBrowser={conversation.onOpenBrowser}
+          projectId={activeWorkspace?.id}
+          onShowInFiles={showInFiles}
+          onOpenPlugin={onOpenPlugin}
+        >
+          <MainChatDesignSelection><ChatConversationSurface
+            imageAttachmentRequest={imageAttachmentRequest}
+            model={conversation}
+            starterControls={(
+              <ChatStarterWorkspace
                 activeProject={conversation.activeWorkspace}
+                locationSelection={conversation.starterLocationSelection}
+                {...conversation.starterProjectSelection}
+              >
+                <ReviewFeatureConversationGitControls
+                  key={conversation.activeWorkspace?.id ?? 'global'}
+                  variant="compact"
+                  activeProject={conversation.activeWorkspace}
+                  reviewError={workspace.context.reviewError}
+                  reviewLoading={workspace.context.reviewLoading}
+                  reviewState={workspace.context.reviewState}
+                  onReviewRefresh={workspace.actions.onReviewRefresh}
+                />
+              </ChatStarterWorkspace>
+            )}
+            reviewControls={(
+              <ReviewFeatureConversationGitControls
+                activeProject={workspace.context.activeWorkspace}
                 reviewError={workspace.context.reviewError}
                 reviewLoading={workspace.context.reviewLoading}
                 reviewState={workspace.context.reviewState}
                 onReviewRefresh={workspace.actions.onReviewRefresh}
               />
-            </ChatStarterWorkspace>
-          )}
-          reviewControls={(
-            <ReviewFeatureConversationGitControls
-              activeProject={workspace.context.activeWorkspace}
-              reviewError={workspace.context.reviewError}
-              reviewLoading={workspace.context.reviewLoading}
-              reviewState={workspace.context.reviewState}
-              onReviewRefresh={workspace.actions.onReviewRefresh}
-            />
-          )}
-          workspaceMentionRequest={workspaceMentionRequest}
-          onImageAttachmentRequestConsumed={resolveImageAttachmentRequest}
-          onOpenWorkspaceFileContextMenu={setWorkspaceFileContextTarget}
-          activeFileMenuTriggerId={workspaceFileContextTarget?.triggerId}
-          onWorkspaceMentionRequestConsumed={consumeWorkspaceMentionRequest}
-        />
-        <DesktopWorkspacePanelLayer
-          model={workspace}
-          fileRevealRequest={fileRevealRequest}
-          requestImageAttachment={requestImageAttachment}
-          workspaceFileContextTarget={workspaceFileContextTarget}
-          onAddWorkspaceMention={requestWorkspaceMention}
-          onCloseFileContextMenu={() => setWorkspaceFileContextTarget(null)}
-        />
-      </ChatNavigationBoundaries>
+            )}
+            workspaceMentionRequest={workspaceMentionRequest}
+            onImageAttachmentRequestConsumed={resolveImageAttachmentRequest}
+            onOpenWorkspaceFileContextMenu={setWorkspaceFileContextTarget}
+            activeFileMenuTriggerId={workspaceFileContextTarget?.triggerId}
+            onWorkspaceMentionRequestConsumed={consumeWorkspaceMentionRequest}
+          /></MainChatDesignSelection>
+          <DesktopWorkspacePanelLayer
+            model={workspace}
+            fileRevealRequest={fileRevealRequest}
+            requestImageAttachment={requestImageAttachment}
+            workspaceFileContextTarget={workspaceFileContextTarget}
+            onAddWorkspaceMention={requestWorkspaceMention}
+            onCloseFileContextMenu={() => setWorkspaceFileContextTarget(null)}
+          />
+        </ChatNavigationBoundaries>
+      </ChatDesignPanels>
     </ReviewFeatureGitCommitProvider>
   );
 }

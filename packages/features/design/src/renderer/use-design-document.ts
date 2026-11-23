@@ -1,6 +1,7 @@
 import { flushSync } from 'react-dom';
-import { useEffect, useRef, useState } from 'react';
-import { workspaceFileKey } from '@setsuna-desktop/contracts';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { WatchDesignDirectories } from './design-images.js';
+import { designDocumentFileExtension, designFileKey } from '../contracts/index.js';
 import { FeatureOperationFailure, isFeatureOperationCancelled } from '@setsuna-desktop/feature-core/operation';
 import { useToast } from '@setsuna-desktop/renderer-ui';
 import { commitDesignEdits, type DesignEdit, type DesignSnapshot, type NavigateDesignHistoryInput } from '../contracts/index.js';
@@ -13,9 +14,11 @@ import { pendingEditsFor } from './document/pending-design-edits.js';
 type LayerInsertion = Extract<DesignEdit, { kind: 'insert' }>;
 export type DesignEditorSnapshot = DesignSnapshot & Readonly<{ drawingRevision: string }>;
 
-export function useDesignDocument({ client, documentRef, fileRevision, readOnly = false, watchChanges, onDocumentMissing, translate }: DesignDocumentSurfaceProps) {
+export function useDesignDocument({ client, documentRef, fileRevision, expectedDocumentId, readOnly = false, watchAssetDirectories: boundWatch, watchDirectories, shouldRefresh, onDocumentMissing, translate }: DesignDocumentSurfaceProps) {
   const [snapshot, setSnapshot] = useState<DesignEditorSnapshot>();
+  const [linkedProjectId, setLinkedProjectId] = useState<string | null>();
   const [busy, setBusy] = useState(false);
+  const [workspaceRoot, setWorkspaceRoot] = useState<string>();
   const [changeCount, setChangeCount] = useState(0);
   const shown = useRef<DesignEditorSnapshot>();
   const saved = useRef<DesignSnapshot>();
@@ -25,8 +28,19 @@ export function useDesignDocument({ client, documentRef, fileRevision, readOnly 
   const readGeneration = useRef(0);
   const mounted = useRef(false);
   const toast = useToast();
-  const documentKey = workspaceFileKey(documentRef);
+  const documentKey = designFileKey(documentRef);
   const pending = pendingEditsFor(client);
+
+  const matchesReference = useCallback((next: DesignSnapshot) => {
+    if (!expectedDocumentId || next.document.documentId === expectedDocumentId) return true;
+    saved.current = undefined;
+    shown.current = undefined;
+    if (mounted.current) {
+      setSnapshot(undefined);
+      toast.error(translate('feature.design.replacedDraft'));
+    }
+    return false;
+  }, [expectedDocumentId, toast, translate]);
 
   function publish(next: DesignEditorSnapshot) {
     shown.current = next;
@@ -38,18 +52,32 @@ export function useDesignDocument({ client, documentRef, fileRevision, readOnly 
     return () => { mounted.current = false; };
   }, []);
 
-  useEffect(() => watchChanges?.(() => setChangeCount((count) => count + 1)), [watchChanges]);
+  const watchAssetDirectories = useMemo<WatchDesignDirectories | undefined>(() => {
+    if (boundWatch) return boundWatch;
+    if (workspaceRoot && watchDirectories) return (paths, changed, options) => watchDirectories(workspaceRoot, paths, changed, options);
+  }, [boundWatch, watchDirectories, workspaceRoot]);
+  useEffect(() => {
+    if (!watchAssetDirectories) return;
+    const refresh = () => { if (shouldRefresh?.() !== false) setChangeCount((count) => count + 1); };
+    const folder = documentRef.path.slice(0, documentRef.path.lastIndexOf('/') + 1) || '.';
+    const stop = watchAssetDirectories([folder], refresh, { contentExtensions: [designDocumentFileExtension] });
+    window.addEventListener('focus', refresh);
+    return () => { stop(); window.removeEventListener('focus', refresh); };
+  }, [documentRef.path, shouldRefresh, watchAssetDirectories]);
 
   useEffect(() => {
     const controller = new AbortController();
     const refresh = async () => {
       // A reopened editor waits for submitted writes from the previous mount as well.
       for (let task = pending.get(documentKey); task && !controller.signal.aborted; task = pending.get(documentKey)) await task;
-      if (controller.signal.aborted || (saved.current && saved.current.revision === fileRevision)) return;
+      if (controller.signal.aborted || (!watchAssetDirectories && saved.current && saved.current.revision === fileRevision)) return;
       const generation = ++readGeneration.current;
       try {
         const next = await client.read(documentRef, controller.signal);
         if (controller.signal.aborted || generation !== readGeneration.current) return;
+        if (!matchesReference(next)) return;
+        setWorkspaceRoot(next.workspaceRoot);
+        setLinkedProjectId(next.linkedProjectId);
         if (saved.current?.revision === next.revision && saved.current.canUndo === next.canUndo && saved.current.canRedo === next.canRedo) return;
         saved.current = next;
         publish({ ...next, drawingRevision: next.revision });
@@ -62,7 +90,7 @@ export function useDesignDocument({ client, documentRef, fileRevision, readOnly 
     };
     void refresh();
     return () => controller.abort();
-  }, [changeCount, client, documentKey, documentRef, fileRevision, onDocumentMissing, pending, toast, translate]);
+  }, [changeCount, client, documentKey, documentRef, matchesReference, fileRevision, onDocumentMissing, pending, toast, translate, watchAssetDirectories]);
 
   function canSubmit(expectedRevision: string) {
     const pendingWrite = pending.get(documentKey);
@@ -85,8 +113,12 @@ export function useDesignDocument({ client, documentRef, fileRevision, readOnly 
       } catch (error: unknown) {
         if (isFeatureOperationCancelled(error)) return false;
         if (error instanceof FeatureOperationFailure && error.code === 'REVISION_CONFLICT') {
+          const next = mounted.current ? await client.read(documentRef).catch(() => undefined) : undefined;
+          if (next) {
+            if (!matchesReference(next)) return false;
+            saved.current = next;
+          }
           toast.error(translate('feature.design.conflict'));
-          if (mounted.current) await client.read(documentRef).then((next) => { saved.current = next; }).catch(() => undefined);
         } else toast.error(translate('feature.design.saveFailed', { error: errorMessage(error) }));
         return false;
       }
@@ -159,6 +191,7 @@ export function useDesignDocument({ client, documentRef, fileRevision, readOnly 
     signal.throwIfAborted();
     if (!mounted.current || pending.has(documentKey)
       || (generation !== readGeneration.current && saved.current?.revision !== next.revision)) throw new Error('The editor changed. Inspect again.');
+    if (!matchesReference(next)) throw new Error(translate('feature.design.replacedDraft'));
     const current = shown.current;
     if (!current || saved.current?.revision !== next.revision) {
       saved.current = next;
@@ -177,6 +210,8 @@ export function useDesignDocument({ client, documentRef, fileRevision, readOnly 
 
   return {
     snapshot,
+    watchAssetDirectories,
+    linkedProjectId,
     synchronize,
     busy: busy || readOnly,
     editFields,

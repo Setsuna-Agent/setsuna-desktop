@@ -583,7 +583,7 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
           </Group>
         </Layer>
       </Stage>
-      {showSelectionOverlays && onscreenFocus && <DesignAgentFocusOverlays targets={onscreenFocus} scene={displayedScene} viewport={viewport} />}
+      {showSelectionOverlays && onscreenFocus && <DesignAgentFocusOverlays mainAgentName={t('feature.design.chat.mainAgent')} targets={onscreenFocus} scene={displayedScene} viewport={viewport} />}
       {gradientEdit ? <DesignCanvasGradient key={gradientEdit.key} {...gradientEdit.guides}
         viewport={viewport} surface={surface} disabled={blocked} translate={t} /> : null}
     </div>

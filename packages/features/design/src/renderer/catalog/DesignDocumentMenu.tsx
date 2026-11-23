@@ -3,10 +3,11 @@ import { useRef, useState, type ReactNode } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Dropdown, IconButton, Popover } from '@setsuna-desktop/renderer-ui';
 
-export function DesignDocumentMenu({ name, disabled, form, onCloseForm, onMove, onDelete, translate: t }: Readonly<{
+export function DesignDocumentMenu({ name, disabled, placement, form, onCloseForm, onMove, onDelete, translate: t }: Readonly<{
   name: string;
   disabled: boolean;
-  form?: Readonly<{ label: string; content: ReactNode }>;
+  placement: 'bottomLeft' | 'bottomRight';
+  form?: Readonly<{ label: string; content: ReactNode; compact?: boolean }>;
   onCloseForm(): void;
   onMove?(): void;
   onDelete(): void;
@@ -20,8 +21,8 @@ export function DesignDocumentMenu({ name, disabled, form, onCloseForm, onMove, 
     onDelete();
   }
   return <Popover open={Boolean(form)} onOpenChange={(next) => { if (!next && form && !disabled) onCloseForm(); }}
-    placement="bottomRight" className="design-form-popover" contentLabel={form?.label} content={form?.content}>
-    <Dropdown open={menuOpen} onOpenChange={setMenuOpen} placement="bottomRight" disabled={disabled || Boolean(form)}
+    placement={placement} className={form?.compact ? 'design-form-popover design-location-popover' : 'design-form-popover'} contentLabel={form?.label} content={form?.content}>
+    <Dropdown open={menuOpen} onOpenChange={setMenuOpen} placement={placement} disabled={disabled || Boolean(form)}
       onCloseAutoFocus={(event) => {
         // The opened form receives focus as the menu closes.
         if (form || openingForm.current) event.preventDefault();

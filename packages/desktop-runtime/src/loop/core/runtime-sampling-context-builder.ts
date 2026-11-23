@@ -257,6 +257,8 @@ export class RuntimeSamplingContextBuilder {
       threadId,
       projectId: thread.projectId,
       featureId: thread.featureId,
+      mainConversation: !thread.parentThreadId && thread.kind !== 'side',
+      toolAccess,
       inputClientId: thread.featureId === 'design'
         ? conversationMessages.filter((message) => message.turnId === turnId && message.role === 'user' && message.clientId).at(-1)?.clientId : undefined,
       turnId,

@@ -178,6 +178,7 @@ export type SetsunaDesktopBridge = {
     setActiveKeyboardShortcutBindings(bindings: readonly string[]): Promise<boolean>;
     setKeyboardShortcutRecording(recording: boolean): Promise<boolean>;
     onKeyboardShortcutInput(callback: (input: DesktopKeyboardShortcutInput) => void): () => void;
+    chooseDesignDirectory(): Promise<{ id: string; path: string } | null>;
     selectDirectory(options?: { title?: string }): Promise<string | null>;
     getUserProfile(): Promise<DesktopUserProfile>;
     copyImageToClipboard(input: DesktopImageInput): Promise<DesktopImageActionResult>;

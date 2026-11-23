@@ -26,6 +26,7 @@ export const RENDERER_WORKSPACE_PANEL_TYPES = Object.freeze([
   'conversation-debug',
   'files',
   'file',
+  'design',
   'review',
   'pull-request',
   'changes',

@@ -16,6 +16,7 @@ const projects: DesignWorkspaceProps['projects'] = [{ id: 'project', name: 'Proj
 
 function testClient(operations: Partial<DesignWorkspaceProps['client']>): DesignWorkspaceProps['client'] {
   return {
+    projectDesigns: async () => [], catalog: async () => ({ directories: [], associations: [] }), setProject: vi.fn(),
     fonts: { list: vi.fn().mockResolvedValue([]), import: vi.fn(), read: vi.fn(), remove: vi.fn() },
     assets: { search: vi.fn(), read: vi.fn(), readLinkedImage: vi.fn(), requestClipboardPaste: vi.fn(), output: {
       saveDesignHtml: vi.fn(), saveDesignSvg: vi.fn(), saveImageAs: vi.fn(), copyImageToClipboard: vi.fn(),
@@ -47,7 +48,6 @@ it('lists drafts across projects without waiting for a slow root and preserves t
       workspaceChanged = changed;
       return () => { workspaceChanged = undefined; };
     },
-    onAddProject: vi.fn(),
     translate: (key) => key,
   };
   const viewFor = (location: DesignWorkspaceLocation | null) => <ToastProvider>
@@ -103,7 +103,7 @@ it.each([
   const onLocationChange = vi.fn<DesignWorkspaceProps['onLocationChange']>();
   const workspace = (location: DesignWorkspaceLocation | null) => <ToastProvider>
     <DesignWorkspace client={client} projects={overlapping} location={location} onLocationChange={onLocationChange}
-      translate={(key) => key} watchDirectories={() => () => undefined} onAddProject={vi.fn()} />
+      translate={(key) => key} watchDirectories={() => () => undefined} />
   </ToastProvider>;
   const view = render(workspace(null));
   await view.findByRole('button', { name: 'Yuri / parent-only.design.json' });
@@ -124,28 +124,19 @@ it.each([
   await waitFor(() => expect(onLocationChange).toHaveBeenLastCalledWith({ ...source, homeFilter: { projectId: 'agent' } }));
 });
 
-it('creates a draft in the project and folder chosen from the unfiltered catalog', async () => {
+it('opens a newly saved local draft without any projects', async () => {
   const create = vi.fn<DesignWorkspaceProps['client']['create']>().mockResolvedValue({
     name: 'new.design.json', path: 'new.design.json', type: 'file',
   });
-  const onLocationChange = vi.fn<DesignWorkspaceProps['onLocationChange']>();
-  const view = render(<ToastProvider><DesignWorkspace client={testClient({ create })} projects={projects} location={null}
-    onLocationChange={onLocationChange} translate={(key) => key} watchDirectories={() => () => undefined} onAddProject={vi.fn()} /></ToastProvider>);
+  const onLocationChange = vi.fn();
+  const view = render(<ToastProvider><DesignWorkspace client={testClient({ create })} projects={[]} location={null}
+    onLocationChange={onLocationChange} translate={(key) => key} watchDirectories={() => () => undefined} /></ToastProvider>);
   fireEvent.click(view.getByRole('button', { name: 'feature.design.newDocument' }));
-  const form = within(await view.findByRole('dialog', { name: 'feature.design.newDocument' }));
-  const name = form.getByRole('textbox', { name: 'feature.design.name' });
-  fireEvent.change(name, { target: { value: 'new' } });
-  const save = form.getByRole<HTMLButtonElement>('button', { name: 'feature.design.newDocument' });
-  expect(save.disabled).toBe(true);
-  fireEvent.keyDown(form.getByRole('combobox', { name: 'feature.design.project' }), { key: 'Enter' });
-  fireEvent.keyDown(await view.findByRole('option', { name: 'Project' }), { key: 'Enter' });
-  await waitFor(() => expect(view.queryByRole('listbox')).toBeNull());
-  expect(save.disabled).toBe(true);
-  fireEvent.keyDown(form.getByRole('combobox', { name: 'feature.design.directory' }), { key: 'Enter' });
-  fireEvent.keyDown(await view.findByRole('option', { name: 'secondary' }), { key: 'Enter' });
-  fireEvent.click(save);
-  await waitFor(() => expect(onLocationChange).toHaveBeenCalledWith({ projectId: 'project', rootId: 'secondary', path: 'new.design.json' }));
-  expect(create).toHaveBeenCalledExactlyOnceWith({ projectId: 'project', rootId: 'secondary', parentPath: '.', name: 'new.design.json' });
+  const form = within(await view.findByRole('dialog'));
+  fireEvent.change(form.getByRole('textbox'), { target: { value: 'new' } });
+  fireEvent.click(form.getByRole('button', { name: 'feature.design.newDocument' }));
+  await waitFor(() => expect(onLocationChange).toHaveBeenCalledWith({ storageId: 'local', path: 'new.design.json' }));
+  expect(create).toHaveBeenCalledExactlyOnceWith({ storageId: 'local', parentPath: '.', name: 'new.design.json' });
 });
 
 it('chooses the move destination using the source behind an overlapping catalog entry', async () => {
@@ -154,7 +145,7 @@ it('chooses the move destination using the source behind an overlapping catalog 
   const source = { projectId: 'other', rootId: 'primary', path: 'screens/overview.design.json' };
   const { promise: pendingSource, resolve: resolveSource } = Promise.withResolvers<typeof source>();
   const resolveResourceRoot = vi.fn<DesignWorkspaceProps['client']['resolveResourceRoot']>().mockReturnValue(pendingSource);
-  const destination = { projectId: 'project', rootId: 'secondary', path: 'overview.design.json' };
+  const destination = { storageId: 'local', path: 'overview.design.json' };
   const transfer = Promise.withResolvers<typeof destination>();
   const move = vi.fn<DesignWorkspaceProps['client']['move']>().mockReturnValue(transfer.promise);
   const list: DesignWorkspaceProps['client']['list'] = async ({ projectId, rootId }) =>
@@ -168,7 +159,7 @@ it('chooses the move destination using the source behind an overlapping catalog 
   const translate = (key: string) => key;
   const editor = renderHook(() => useDesignDocument({ client, documentRef: listed, translate }), { wrapper: ToastProvider });
   const view = render(<ToastProvider><DesignWorkspace client={client} projects={overlapping} location={null}
-    onLocationChange={onLocationChange} translate={(key) => key} watchDirectories={() => () => undefined} onAddProject={vi.fn()} /></ToastProvider>);
+    onLocationChange={onLocationChange} translate={(key) => key} watchDirectories={() => () => undefined} /></ToastProvider>);
   await view.findByRole('button', { name: 'Project / primary / child/screens/overview.design.json' });
   fireEvent.keyDown(view.getByRole('button', { name: 'feature.design.documentActions' }), { key: 'Enter' });
   fireEvent.click(await view.findByRole('menuitem', { name: 'feature.design.moveDocument' }));
@@ -177,14 +168,7 @@ it('chooses the move destination using the source behind an overlapping catalog 
   await act(async () => { resolveSource(source); await pendingSource; });
   const dialog = within(await view.findByRole('dialog'));
   expect(onLocationChange).not.toHaveBeenCalled();
-  fireEvent.keyDown(dialog.getByRole('combobox', { name: 'feature.design.project' }), { key: 'Enter' });
-  expect(view.queryByRole('option', { name: 'Other' })).toBeNull();
-  fireEvent.keyDown(await view.findByRole('option', { name: 'Project' }), { key: 'Enter' });
-  await waitFor(() => expect(view.queryByRole('listbox')).toBeNull());
   const submit = dialog.getByRole<HTMLButtonElement>('button', { name: 'feature.design.moveDocumentConfirm' });
-  expect(submit.disabled).toBe(true);
-  fireEvent.keyDown(dialog.getByRole('combobox', { name: 'feature.design.directory' }), { key: 'Enter' });
-  fireEvent.keyDown(await view.findByRole('option', { name: 'secondary' }), { key: 'Enter' });
   const insert = () => editor.result.current.commit([{ kind: 'insert', nodeId: 'tile', parentId: null,
     node: { kind: 'rectangle', x: 0, y: 0, width: 10, height: 10, cornerRadius: 0 } }], editor.result.current.currentRevision()!);
   try {
@@ -203,7 +187,7 @@ it('chooses the move destination using the source behind an overlapping catalog 
   await waitFor(() => expect(onLocationChange).toHaveBeenCalledWith(destination));
   expect(move).toHaveBeenCalledExactlyOnceWith({
     ref: source,
-    destination: { projectId: 'project', rootId: 'secondary' },
+    destination: { storageId: 'local' },
   });
   expect(resolveResourceRoot).toHaveBeenCalledTimes(1);
 });
@@ -221,7 +205,7 @@ it('lists a new draft after a directory change arrives during the refresh follow
     return () => { directoryChanged = undefined; };
   };
   const view = render(<ToastProvider><DesignWorkspace client={testClient({ list, delete: remove })} projects={[projects[1]]} location={null}
-    onLocationChange={vi.fn()} translate={(key) => key} watchDirectories={watchDirectories} onAddProject={vi.fn()} /></ToastProvider>);
+    onLocationChange={vi.fn()} translate={(key) => key} watchDirectories={watchDirectories} /></ToastProvider>);
   try {
     await view.findByRole('button', { name: `Other / ${deleted}` });
     fireEvent.keyDown(view.getByRole('button', { name: 'feature.design.documentActions' }), { key: 'Enter' });
@@ -246,7 +230,7 @@ it('deletes a draft only after confirmation and keeps the catalog filter', async
   const ref = { ...scope, path: 'screens/overview.design.json' };
   const view = render(<ToastProvider><DesignWorkspace client={testClient({ list: async () => [ref.path], delete: remove })} projects={projects}
     location={scope} onLocationChange={onLocationChange} translate={(key) => key}
-    watchDirectories={() => () => undefined} onAddProject={vi.fn()} /></ToastProvider>);
+    watchDirectories={() => () => undefined} /></ToastProvider>);
   const openDelete = async () => {
     fireEvent.keyDown(await view.findByRole('button', { name: 'feature.design.documentActions' }), { key: 'Enter' });
     fireEvent.click(await view.findByRole('menuitem', { name: 'feature.design.deleteDocument' }));

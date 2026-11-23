@@ -1,12 +1,16 @@
 import type { RuntimeEditorSelection } from '@setsuna-desktop/contracts';
+import { designFileKey, type DesignConversationOwner, type DesignSnapshot, type DesignDocumentRef, type DesignWorkspaceDocument } from '../contracts/index.js';
 import type { DesignCommandKey } from '../contracts/design-command-key.js';
 import { randomUUID } from 'node:crypto';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
-import { designTaskRecord, readDesignSelection, type DesignAgent, type DesignInputBinding, type DesignToolPolicy, type DesignTaskReply, type DesignTaskResult, type DesignTaskStart, type DesignTaskStep,
+import { designResourcePage, designTaskRecord, readDesignSelection, type DesignAgent, type DesignInputBinding, type DesignToolPolicy, type DesignTaskReply, type DesignTaskResult, type DesignTaskStart, type DesignTaskStep,
   type DesignToolName, type DesignToolService, type DesignTurnHost } from '../contracts/design-task.js';
+import type { ChatDesignAssets } from './chat-design-assets.js';
 import type { DesignDocumentService } from './design-document-service.js';
 import { designToolDefinitions } from './design-tool-definitions.js';
-import { checkDesignTaskEdits } from './design-task-scope.js';
+import { resolveDesignInputSelection } from '../contracts/design-selection-mention.js';
+import { parseDesignLibraryPath } from '../contracts/design-resource-id.js';
+import { checkDesignWebEdits, checkDesignTaskEdits } from './design-task-scope.js';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -19,7 +23,17 @@ function participant(selection: string[], reset: boolean, agent?: DesignAgent): 
   return { selection, roots: new Set(selection), reset, agent };
 }
 
+type ChatCanvas = {
+  requestId: string; turnId: string;
+  listDocuments(signal: AbortSignal): Promise<readonly string[]>;
+  libraryId(path: string, signal: AbortSignal): Promise<string>;
+  assets?: ChatDesignAssets;
+  verify(signal: AbortSignal): Promise<DesignSnapshot>;
+  authorize(documentId: string, file: DesignWorkspaceDocument): Promise<void>;
+};
+
 type Session = {
+  canvas?: ChatCanvas;
   start: DesignTaskStart;
   controller: AbortController;
   main: Participant;
@@ -34,6 +48,11 @@ type Session = {
   saving?: ReturnType<DesignDocumentService['commit']>;
 };
 
+function createSession(start: DesignTaskStart): Session {
+  return { start, main: participant(start.selection, false), inputs: new Map(), queue: Promise.resolve(),
+    controller: new AbortController(), next: deferred() };
+}
+
 /** A request stays with the agent until it yields one command or finishes. Only the originating
  * editor holds the session key. Plans come back to the runtime for a revision-checked commit. */
 export class DesignTasks implements DesignToolService {
@@ -44,20 +63,57 @@ export class DesignTasks implements DesignToolService {
 
   constructor(private readonly host: Pick<DesignTurnHost, 'resolveOwnedRoot' | 'cancel'>, private readonly documents: Pick<DesignDocumentService, 'read' | 'commit'>) {}
 
-  join(parentThreadId: string, agent: DesignAgent) {
+  chatCanvasRole(threadId: string, turnId?: string) {
+    if (!turnId) return;
+    if (this.threads.get(threadId)?.canvas?.turnId === turnId) return 'owner' as const;
+    if (this.worker(threadId, turnId)?.session.canvas) return 'participant' as const;
+  }
+
+  async openChatCanvas(threadId: string, owner: DesignConversationOwner & { selection?: string[] }, canvas: Omit<ChatCanvas, 'requestId'>, signal: AbortSignal) {
+    const previous = this.threads.get(threadId);
+    if (previous) {
+      if (!previous.canvas) throw new Error('This conversation already owns another editor.');
+      await this.close(previous);
+      if (this.threads.get(threadId) !== previous) throw new Error('The active canvas changed.');
+    }
+    signal.throwIfAborted();
+    const requestId = randomUUID();
+    const session = createSession({ ...owner, threadId, selection: owner.selection ?? [], sessionId: requestId });
+    // The first command carries the selection from the message even if the user has since clicked elsewhere.
+    session.main.reset = session.main.selection.length > 0;
+    session.canvas = { ...canvas, requestId };
+    this.threads.set(threadId, session);
+    // Publish the receipt before waiting for the renderer. The next model command can arrive
+    // while the canvas is still mounting, but cannot run until the editor acknowledges ready.
+    session.ready = this.request(session, { kind: 'ready', id: randomUUID() }, session.controller.signal);
+    void session.ready.catch(() => undefined);
+    return requestId;
+  }
+
+  join(parentThreadId: string, agent: DesignAgent, parentTurnId?: string) {
     const session = this.threads.get(parentThreadId);
-    if (!session?.workspaceRoot || session.controller.signal.aborted || this.workers.has(agent.threadId)) throw new Error('Design editor unavailable for this agent.');
+    if (!session || session.controller.signal.aborted || this.workers.has(agent.threadId)
+      || (session.canvas ? session.canvas.turnId !== parentTurnId : !session.workspaceRoot)) {
+      throw new Error('Open the design in the parent conversation for this turn before dispatching a canvas agent.');
+    }
     this.workers.set(agent.threadId, { session, agent, participant: participant(session.main.selection, true, agent), controller: new AbortController() });
   }
 
   async leave(threadId: string, turnId: string) {
+    const canvas = this.threads.get(threadId);
+    if (canvas?.canvas?.turnId === turnId) {
+      await this.close(canvas);
+      if (this.threads.get(threadId) === canvas) this.threads.delete(threadId);
+    }
     const worker = this.workers.get(threadId);
     if (!worker || worker.agent.turnId !== turnId) return;
     worker.controller.abort();
     this.workers.delete(threadId);
     const { session, agent } = worker;
     await this.enqueue(session, async () => {
-      if (!session.controller.signal.aborted) await this.request(session, { kind: 'agentDone', agent, id: randomUUID() }, session.controller.signal);
+      if (!session.controller.signal.aborted && !worker.participant.reset) {
+        await this.request(session, { kind: 'agentDone', agent, id: randomUUID() }, session.controller.signal);
+      }
     });
   }
 
@@ -87,7 +143,20 @@ export class DesignTasks implements DesignToolService {
   async start(input: DesignTaskStart, signal: AbortSignal) {
     signal.throwIfAborted();
     if (this.sessions.has(input.sessionId)) throw new Error('Design task already started.');
-    const session: Session = { start: input, main: participant(input.selection, false), inputs: new Map(), queue: Promise.resolve(), controller: new AbortController(), next: deferred() };
+    if (input.canvasRequestId) {
+      const session = this.threads.get(input.threadId);
+      // A restored tab or another window can observe the same receipt after the turn ends.
+      if (!session?.canvas || session.canvas.requestId !== input.canvasRequestId || session.controller.signal.aborted
+        || session.start.canvasRequestId) return { kind: 'done' as const };
+      if (session.start.documentId !== input.documentId || input.selection.length || designFileKey(input.ref) !== designFileKey(session.start.ref)) {
+        throw new Error('This canvas request belongs to a different design.');
+      }
+      // Each window has a private session ID. A second or stale window cannot stop the owner.
+      session.start = input;
+      this.sessions.set(input.sessionId, session);
+      return this.wait(session, signal);
+    }
+    const session = createSession(input);
     this.sessions.set(input.sessionId, session);
     const run = async () => {
       const { signal } = session.controller;
@@ -141,17 +210,32 @@ export class DesignTasks implements DesignToolService {
     return null;
   }
 
-  captureSelection(threadId: string, clientId: string) {
+  async captureSelection(threadId: string, clientId: string, content: string) {
     const session = this.threads.get(threadId);
     if (!session || session.controller.signal.aborted) return;
     const ids = session.inputs.get(clientId) ?? (session.start.clientId === clientId ? session.start.selection : undefined);
-    return ids && { documentId: session.start.documentId, ids: [...ids] };
+    if (!ids) return;
+    const snapshot = { documentId: session.start.documentId, ids: [...ids], ownerThreadId: threadId };
+    const target = resolveDesignInputSelection(content, snapshot);
+    if (target.status !== 'resolved') throw new Error('Selection belongs to another design.');
+    await this.verifySelectionRefs(session, target.refs);
+    return snapshot;
   }
 
-  restoreSelection(threadId: string, clientId: string, selection: RuntimeEditorSelection) {
+  async restoreSelection(threadId: string, clientId: string, selection: RuntimeEditorSelection, refs: readonly DesignDocumentRef[]) {
     const session = this.threads.get(threadId);
     if (!session || session.controller.signal.aborted || session.start.documentId !== selection.documentId) throw new Error('The design editor is unavailable.');
+    if (selection.ownerThreadId !== threadId) await this.verifySelectionRefs(session, refs);
     session.inputs.set(clientId, [...selection.ids]);
+  }
+
+  private async verifySelectionRefs(session: Session, refs: readonly DesignDocumentRef[]) {
+    const { threadId, documentId } = session.start;
+    for (const ref of refs) {
+      if (designFileKey(ref) !== designFileKey(session.start.ref)
+        && !await this.host.resolveOwnedRoot(threadId, { ref, documentId })) throw new Error('Selection belongs to another design.');
+    }
+    if (session.controller.signal.aborted) throw new Error('The design editor is unavailable.');
   }
 
   fileOperationSignal(command: DesignCommandKey | undefined, signal: AbortSignal) {
@@ -176,23 +260,44 @@ export class DesignTasks implements DesignToolService {
   async execute(threadId: string, name: DesignToolName, input: unknown, turnSignal: AbortSignal, turnId?: string, policy?: DesignToolPolicy) {
     const worker = this.worker(threadId, turnId);
     const session = worker?.session ?? this.threads.get(threadId);
-    if (!session) throw new Error('The design editor is unavailable.');
+    if (!session || (!worker && session.canvas && session.canvas.turnId !== turnId)) throw new Error('The design editor is unavailable.');
     return this.enqueue(session, async () => {
       turnSignal.throwIfAborted();
       session.controller.signal.throwIfAborted();
       if (worker && this.workers.get(threadId) !== worker) throw new Error('The design agent has finished.');
-      await session.ready;
-      const bound = worker?.participant ?? this.mainParticipant(session, policy?.inputClientId);
       const commandSignal = worker ? AbortSignal.any([turnSignal, worker.controller.signal]) : turnSignal;
-      return this.executeBound(session, bound, name, input, commandSignal, policy?.networkAccess === true);
+      // A worker can be interrupted while the shared editor is still mounting.
+      const cancelled = deferred<never>();
+      const stop = () => {
+        if (session.canvas && !worker) void this.close(session);
+        cancelled.reject(commandSignal.reason);
+      };
+      commandSignal.addEventListener('abort', stop, { once: true });
+      try { await Promise.race([session.ready, cancelled.promise]); }
+      finally { commandSignal.removeEventListener('abort', stop); }
+      commandSignal.throwIfAborted();
+      const snapshot = await session.canvas?.verify(AbortSignal.any([commandSignal, session.controller.signal]));
+      const bound = worker?.participant ?? this.mainParticipant(session, policy?.inputClientId);
+      return this.executeBound(session, bound, name, input, commandSignal, policy?.networkAccess === true, snapshot);
     });
   }
 
-  private async executeBound(session: Session, bound: Participant, name: DesignToolName, input: unknown, turnSignal: AbortSignal, networkAccess: boolean) {
+  private async executeBound(session: Session, bound: Participant, name: DesignToolName, input: unknown, turnSignal: AbortSignal, networkAccess: boolean, snapshot?: DesignSnapshot) {
     const { agent, roots } = bound;
     const signal = AbortSignal.any([session.controller.signal, turnSignal]);
     signal.throwIfAborted();
     const args = designTaskRecord(input);
+    const assets = session.canvas?.assets;
+    if (session.canvas && name === 'design_resources') {
+      let paths: readonly string[] | undefined;
+      if (args.kind === 'documents') paths = await session.canvas.listDocuments(signal);
+      if (args.kind === 'images' && assets && snapshot) paths = await assets.images(snapshot.document, signal);
+      if (paths) return { content: JSON.stringify(designResourcePage(paths, args)), containsExternalContext: true as const };
+    }
+    // The renderer only needs the authorized library ID to plan the link.
+    const libraryPath = session.canvas && name === 'design_edit' && args.action === 'linkLibrary'
+      ? parseDesignLibraryPath(designTaskRecord(args.fields).path) : undefined;
+    const libraryId = session.canvas && libraryPath ? await session.canvas.libraryId(libraryPath, signal) : undefined;
     const selection = name === 'design_view' && args.action === 'select' && args.ids !== undefined ? readDesignSelection(args.ids) : undefined;
     if (name === 'design_edit' && args.dryRun !== undefined && typeof args.dryRun !== 'boolean') throw new Error('dryRun must be a boolean.');
     if (bound.reset && bound.selection.length) {
@@ -201,7 +306,7 @@ export class DesignTasks implements DesignToolService {
       signal.throwIfAborted();
     }
     const id = randomUUID();
-    const result = await this.request(session, { kind: 'tool', id, name, args, agent, networkAccess, selection: bound.reset ? bound.selection : undefined },
+    const result = await this.request(session, { kind: 'tool', id, name, args, agent, libraryId, networkAccess, selection: bound.reset ? bound.selection : undefined },
       agent ? session.controller.signal : signal, signal);
     bound.reset = false;
     signal.throwIfAborted();
@@ -213,21 +318,27 @@ export class DesignTasks implements DesignToolService {
     if (result.plan) {
       if (name !== 'design_edit' || result.plan.revision !== args.revision) throw new Error('Unexpected design mutation.');
       const { revision, edits } = result.plan;
+      if (assets && session.canvas && snapshot) {
+        const base = snapshot.revision === revision ? snapshot : await session.canvas.verify(signal);
+        await assets.check(base.document, edits, signal);
+      }
+      if (session.canvas) {
+        for (const edit of edits) {
+          if (edit.kind === 'linkLibrary' && (edit.path !== libraryPath || edit.documentId !== libraryId
+            || await session.canvas.libraryId(edit.path, signal) !== libraryId)) throw new Error('Unauthorized design library.');
+        }
+      }
       const summary = designTaskRecord(JSON.parse(content || '{}'));
       let savedRevision = revision;
       const dryRun = args.dryRun === true;
       let refresh: Record<string, unknown> = {};
       if (edits.length || dryRun) {
         let extended: ReadonlySet<string> | undefined;
-        session.saving = this.documents.commit({ ref: session.start.ref, expectedRevision: revision, edits }, signal, (document) => {
+        session.saving = this.documents.commit({ ref: session.start.ref, expectedRevision: revision, edits }, signal, async (document, file) => {
+          await session.canvas?.authorize(document.documentId, file);
           if (document.documentId !== session.start.documentId) throw new Error('Design document changed.');
           // Validate the resolved plan, including nested inserts, paste and duplication.
-          if (!networkAccess && !dryRun && edits.some((edit) => {
-            if (edit.kind !== 'insert' && edit.kind !== 'update') return false;
-            if (edit.node.kind !== 'web' || !edit.node.url) return false;
-            const previous = document.nodes[edit.nodeId];
-            return edit.kind === 'insert' || previous?.kind !== 'web' || previous.url !== edit.node.url;
-          })) throw new Error('Network access is required to add or change a web layer URL.');
+          if (!networkAccess && !dryRun) checkDesignWebEdits(document, edits);
           if (bound.selection.length) extended = checkDesignTaskEdits(document, edits, roots, args);
         }, dryRun);
         try {
@@ -266,7 +377,7 @@ export class DesignTasks implements DesignToolService {
     const cancel = () => { void this.close(session); };
     signal.addEventListener('abort', cancel, { once: true });
     // A window may disappear between receiving its command and returning its plan.
-    session.lease = setTimeout(cancel, 5 * 60_000);
+    session.lease = setTimeout(cancel, session.canvas && step.kind === 'ready' ? 30_000 : 5 * 60_000);
     try {
       session.next.resolve(step);
       return await reply.promise;
@@ -289,7 +400,6 @@ export class DesignTasks implements DesignToolService {
   }
 
   private async finish(session: Session) {
-    if (this.sessions.get(session.start.sessionId) !== session) return;
     clearTimeout(session.lease);
     if (!session.controller.signal.aborted) {
       session.controller.abort();
@@ -300,7 +410,7 @@ export class DesignTasks implements DesignToolService {
     const children = [...this.workers.values()].filter((worker) => worker.session === session);
     for (const { agent } of children) this.workers.delete(agent.threadId);
     await Promise.all(children.map(({ agent }) => this.host.cancel(agent.threadId, agent.turnId).catch(() => undefined)));
-    if (this.threads.get(session.start.threadId) === session) {
+    if (!session.canvas && this.threads.get(session.start.threadId) === session) {
       await this.host.cancel(session.start.threadId).catch(() => undefined);
       if (this.threads.get(session.start.threadId) === session) this.threads.delete(session.start.threadId);
     }
@@ -308,7 +418,10 @@ export class DesignTasks implements DesignToolService {
     if (this.sessions.get(session.start.sessionId) === session) this.sessions.delete(session.start.sessionId);
   }
 
-  async dispose() { await Promise.all([...this.sessions.keys()].map((id) => this.stop(id))); }
+  async dispose() {
+    await Promise.all([...new Set([...this.threads.values(), ...this.sessions.values()])].map((session) => this.close(session)));
+    this.threads.clear();
+  }
 }
 
 function taskError(error: unknown) {

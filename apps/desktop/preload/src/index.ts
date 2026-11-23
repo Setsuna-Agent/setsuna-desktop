@@ -82,6 +82,7 @@ const desktop: SetsunaDesktopBridge['desktop'] = {
     ipcRenderer.on('desktop:keyboard-shortcut-input', listener);
     return () => ipcRenderer.off('desktop:keyboard-shortcut-input', listener);
   },
+  chooseDesignDirectory: () => ipcRenderer.invoke('desktop:choose-design-directory'),
   selectDirectory: (options) => ipcRenderer.invoke('desktop:select-directory', options ?? {}),
   getUserProfile: () => ipcRenderer.invoke('desktop:get-user-profile'),
   copyImageToClipboard: (input) => ipcRenderer.invoke('desktop:copy-image-to-clipboard', input),

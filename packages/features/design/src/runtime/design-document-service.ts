@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES } from '@setsuna-desktop/contracts';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import {
-  designDocumentCodec, designDocumentVersion, indexDesignParents, type DesignEdit, type CommitDesignEditsInput, type CreateDesignDocumentInput, type DesignDocument,
+  designDocumentCodec, designDocumentVersion, indexDesignParents, type ChatDesignScope, type DesignEdit, type CommitDesignEditsInput, type CreateDesignDocumentInput, type DesignDocument,
   type DesignDocumentRef, type DesignSnapshot, type DesignWorkspaceDocument, type DesignWorkspaceFiles,
   type NavigateDesignHistoryInput,
 } from '../contracts/index.js';
@@ -23,29 +23,34 @@ export class DesignDocumentService {
 
   constructor(private readonly files: Pick<DesignWorkspaceFiles, 'create' | 'withDocument'>) {}
 
-  create(input: CreateDesignDocumentInput, signal: AbortSignal) {
+  create(input: CreateDesignDocumentInput, signal: AbortSignal, chat?: ChatDesignScope) {
     const document: DesignDocument = { schemaVersion: designDocumentVersion, documentId: randomUUID(), rootIds: [], nodes: {} };
-    return this.files.create(input, serializeDocument(document), signal);
+    return this.files.create(input, serializeDocument(document), signal, chat);
   }
 
   read(ref: DesignDocumentRef, signal: AbortSignal): Promise<DesignSnapshot> {
-    return this.withSnapshot(ref, signal, (snapshot) => snapshot);
-  }
-
-  withSnapshot<T>(ref: DesignDocumentRef, signal: AbortSignal, use: (snapshot: DesignSnapshot) => T | Promise<T>): Promise<T> {
     return this.files.withDocument(ref, signal, async (file) => {
       const snapshot = toSnapshot(await this.readHistory(file));
+      const project = await file.linkedProject?.(snapshot.document.documentId);
       signal.throwIfAborted();
-      return use(snapshot);
+      return { ...snapshot, workspaceRoot: file.workspaceRoot, linkedProjectId: project === undefined ? ref.projectId ?? null : project };
     });
   }
 
-  commit(input: CommitDesignEditsInput, signal: AbortSignal, check?: (document: DesignDocument) => void, dryRun = false): Promise<DesignSnapshot> {
+  withSnapshot<T>(ref: DesignDocumentRef, signal: AbortSignal, use: (snapshot: DesignSnapshot, file: DesignWorkspaceDocument) => T | Promise<T>): Promise<T> {
+    return this.files.withDocument(ref, signal, async (file) => {
+      const snapshot = toSnapshot(await this.readHistory(file));
+      signal.throwIfAborted();
+      return use(snapshot, file);
+    });
+  }
+
+  commit(input: CommitDesignEditsInput, signal: AbortSignal, check?: (document: DesignDocument, file: DesignWorkspaceDocument) => void | Promise<void>, dryRun = false): Promise<DesignSnapshot> {
     return this.files.withDocument(input.ref, signal, async (file) => {
       const state = await this.readHistory(file);
+      await check?.(state.document, file);
       assertRevision(state, input.expectedRevision);
       signal.throwIfAborted();
-      check?.(state.document);
       const edited = applyDesignEdits(state.document, input.edits);
       const content = serializeDocument(edited);
       if (content === serializeDocument(state.document)) return toSnapshot(state);

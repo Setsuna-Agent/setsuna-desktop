@@ -2,6 +2,7 @@ import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import type { ToolRunGroupKind } from './runtime-tool-run-types.js';
 import { isRuntimeFileMutationRun } from './runtimeFileChanges.js';
 import { isPendingRuntimeToolApproval } from './runtimeToolRunState.js';
+import { readSkillReference } from './runtimeToolRunPresentationUtils.js';
 import { isShellToolRun, shellSearchForRun } from './runtimeShellSearch.js';
 
 export function toolRunGroupKind(run: RuntimeToolRun): ToolRunGroupKind {
@@ -24,6 +25,8 @@ export function toolRunGroupingKey(run: RuntimeToolRun, resolvedFeatureResultKin
 
 /** A plugin's identically named tool is a separate activity source. */
 export function toolRunIdentity(run: RuntimeToolRun): string {
+  const skill = readSkillReference(run);
+  if (skill) return JSON.stringify(['', run.name, skill.id]);
   return JSON.stringify([run.plugin?.id ?? '', run.name]);
 }
 

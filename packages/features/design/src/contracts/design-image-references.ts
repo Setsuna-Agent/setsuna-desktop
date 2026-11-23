@@ -26,14 +26,24 @@ export function designLayerImagePaths(node: DesignNode, visibleOnly = false): re
   return node.kind === 'image' ? [node.assetPath, ...paths] : paths;
 }
 
-export function designDocumentImagePaths(document: DesignDocument): ReadonlySet<string> {
-  const paths = new Set<string>();
-  for (const node of Object.values(document.nodes)) {
-    for (const path of designLayerImagePaths(node)) paths.add(path);
-    if (node.kind !== 'frame') continue;
-    for (const override of Object.values(node.contentOverrides ?? {})) {
-      if (override.kind === 'image') paths.add(override.assetPath);
-    }
+export function designNodeAssetPaths(node: DesignNode, imagesOnly = false) {
+  const paths = [...designLayerImagePaths(node)];
+  if (node.kind === 'frame') {
+    for (const override of Object.values(node.contentOverrides ?? {})) if (override.kind === 'image') paths.push(override.assetPath);
+  }
+  if (!imagesOnly) {
+    if (node.kind === 'script' && node.scriptPath) paths.push(node.scriptPath);
+    paths.push(...designLayerShaderPaths(node));
   }
   return paths;
+}
+
+export function designDocumentAssetPaths(document: DesignDocument, imagesOnly = false): ReadonlySet<string> {
+  const paths = new Set<string>();
+  for (const node of Object.values(document.nodes)) for (const path of designNodeAssetPaths(node, imagesOnly)) paths.add(path);
+  return paths;
+}
+
+export function designDocumentImagePaths(document: DesignDocument) {
+  return designDocumentAssetPaths(document, true);
 }

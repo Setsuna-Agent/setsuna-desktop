@@ -319,6 +319,7 @@ export function ChatRouteAdapter({
       onOpenBrowser: workspacePanels.openBrowserPanel,
       onOpenConversationDebug: () => workspacePanels.openDesktopPanel('side', 'conversation-debug'),
       onOpenChangesPanel: () => workspacePanels.openDesktopPanel('side', 'changes'),
+      onOpenDesign: workspacePanels.openDesignPanel,
       onOpenEntry: (entry) => { void projectWorkspace.openEntry(entry); },
       onOpenFileReviewPanel: openFileReviewPanel,
       onSelectFileRoot: workspacePanels.openFilesPanelForRoot,

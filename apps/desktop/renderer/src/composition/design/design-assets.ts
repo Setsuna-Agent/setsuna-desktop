@@ -19,6 +19,7 @@ export function createDesignAssets(
 ): DesignAssets {
   const browser = window.setsunaDesktop?.browser;
   return {
+    chooseDirectory: window.setsunaDesktop?.desktop?.chooseDesignDirectory,
     webPreview: typeof browser?.configureWebPreview === 'function'
       && typeof browser.captureWebPreview === 'function' && typeof browser.onWebPreviewEscape === 'function' ? {
       partition: DESKTOP_BROWSER_PREVIEW_PARTITION,
@@ -31,11 +32,13 @@ export function createDesignAssets(
       return { kind: await pasteByWindowControls() ? 'issued' : 'unavailable' };
     },
     async search({ projectId, rootId }, query) {
+      if (!projectId) throw new Error('Project directory required.');
       const { entries } = await runtime.searchProjectEntries(workspaceTarget(projectId, rootId), query, null,
         { fileExtensions: designImageFileExtensions });
       return entries.map(({ path }) => path);
     },
     async read({ projectId, rootId }, path) {
+      if (!projectId) throw new Error('Project directory required.');
       const { preview } = await runtime.readProjectFile(workspaceTarget(projectId, rootId), path);
       return preview?.kind === 'image' ? preview : null;
     },

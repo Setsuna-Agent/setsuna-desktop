@@ -1,9 +1,10 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { expect, it } from 'vitest';
 import { workspaceProjectRoots, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { designDocumentVersion, type DesignDocumentRef } from '@setsuna-desktop/feature-design/contracts';
+import { ONE_PIXEL_PNG_BASE64 } from '../../support/runtime-server/rest-capabilities.js';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 
 const documentId = 'shared-id';
@@ -62,6 +63,9 @@ it('keeps same-ID copies isolated when the file tree deletes or renames a draft 
     for (const ref of [a, b]) await writeFile(path.join(root, ref.path), draft);
     const aChat = await create(a);
     await create(b);
+    const image = (ref: DesignDocumentRef, name: string) => post('/v1/features/design/images', { ref, name, base64: ONE_PIXEL_PNG_BASE64 });
+    const kept = await image(a, 'keep.png');
+    const retired = await image(b, 'retire.png');
     const entry = (file: string) => '/v1/projects/' + projectId + '/entries?' + new URLSearchParams({ path: file });
     const rename = (from: string, name: string) => harness.runtimeFetch(entry(from), { method: 'PATCH', body: JSON.stringify({ name }) });
 
@@ -77,6 +81,40 @@ it('keeps same-ID copies isolated when the file tree deletes or renames a draft 
     await harness.server.close();
     await harness.startRuntimeServer(harness.runtimeDataDir);
     expect(await list(a)).toEqual([aChat]);
+    const moved = await post('/v1/features/design/documents/move', { ref: a, destination: { storageId: 'local' } });
+    const readImage = (path: string) => post('/v1/features/design/storage/images/read', { ref: moved, path });
+    expect(await readImage(kept)).toMatchObject({ base64: ONE_PIXEL_PNG_BASE64 });
+    await expect(readImage(retired)).rejects.toThrow();
+  } finally { await harness.close(); }
+});
+
+it('retires destination bindings when a restored directory takes the path of an externally removed draft', async () => {
+  const harness = await createRuntimeServerTestHarness();
+  try {
+    const { post, create, list } = designApi(harness);
+    const root = path.join(harness.runtimeDataDir, 'project');
+    const original = path.join(root, 'pages');
+    const restored = path.join(root, 'restored');
+    await mkdir(original, { recursive: true });
+    const { id: projectId } = await post('/v1/projects', { path: root });
+    const other = await post('/v1/projects', { name: 'Other' });
+    const ref = { projectId, path: 'pages/page.design.json' };
+    await writeFile(path.join(root, ref.path), draft);
+    const base = '/v1/features/design';
+    await post(base + '/storage/project', { ref, documentId, projectId: other.id });
+    const abandoned = await post(base + '/images', { ref, name: 'old.png', base64: ONE_PIXEL_PNG_BASE64 });
+    const oldChat = await create(ref);
+
+    await rm(original, { recursive: true });
+    await mkdir(restored);
+    await writeFile(path.join(restored, 'page.design.json'), draft);
+    await harness.runtimeFetch('/v1/projects/' + projectId + '/entries?path=restored', { method: 'PATCH', body: JSON.stringify({ name: 'pages' }) });
+
+    expect(await harness.runtimeFetch(base + '/documents?' + new URLSearchParams(ref))).toMatchObject({ linkedProjectId: projectId });
+    expect(await list(ref)).toEqual([]);
+    expect((await harness.runtimeFetch('/v1/threads/' + oldChat.id)).origin?.entityId).toBeNull();
+    const moved = await post(base + '/documents/move', { ref, destination: { storageId: 'local' } });
+    await expect(post(base + '/storage/images/read', { ref: moved, path: abandoned })).rejects.toThrow();
   } finally { await harness.close(); }
 });
 
