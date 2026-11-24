@@ -362,7 +362,7 @@ export class RuntimeSamplingContextBuilder {
       skillCatalogContextWindowTokens: contextBudget?.maxContextTokens,
       skillActivationText,
       skillIds,
-      builtinSkillIds: exclusiveTools?.builtinSkillIds,
+      builtinSkillIds: toolRouter ? this.options.toolHost?.builtinSkillIds?.(toolContext) : undefined,
       referenceMessages: orderedConversationMessages,
       thread,
       toolContext,

@@ -44,6 +44,10 @@ export class CompositeToolHost implements ToolHost {
     return null;
   }
 
+  builtinSkillIds(context: ToolExecutionContext) {
+    return this.hosts.flatMap((host) => host.builtinSkillIds?.(context) ?? []);
+  }
+
   async systemPrompt(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> {
     const advertisedNames = request ? new Set(request.tools.map((tool) => tool.name)) : null;
     const ownedToolNames = advertisedNames ? await this.ownershipFor(context) : null;

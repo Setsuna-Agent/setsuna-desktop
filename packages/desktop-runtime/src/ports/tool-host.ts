@@ -151,8 +151,6 @@ export type ExclusiveToolScope = {
   has(name: string): boolean;
   includeSelectedPlugins?: boolean;
   includeCollaboration?: boolean;
-  /** Bundled workflows supplied while this tool scope is active. The Skill registry owns enablement. */
-  builtinSkillIds?: readonly string[];
 };
 
 export type ToolHost = {
@@ -162,6 +160,8 @@ export type ToolHost = {
    * every other host tool and the runtime's own feature tools (collaboration, goals, dynamic tools) are withheld.
    */
   exclusiveToolScope?(context: ToolExecutionContext): Promise<ExclusiveToolScope | null> | ExclusiveToolScope | null;
+  /** Bundled workflows for this turn, independent of tool restrictions. The Skill registry owns enablement. */
+  builtinSkillIds?(context: ToolExecutionContext): readonly string[];
   environmentForToolContext?(context: ToolExecutionContext): Promise<ToolExecutionEnvironment | null> | ToolExecutionEnvironment | null;
   systemPrompt?(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> | string | null;
   externalContext?(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<ToolExternalContext[]> | ToolExternalContext[];
