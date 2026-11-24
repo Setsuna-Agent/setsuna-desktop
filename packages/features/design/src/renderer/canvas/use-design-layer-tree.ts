@@ -50,6 +50,13 @@ export function useDesignLayerTree({ documentId, scene, selectedIds, visible, re
   const revealId = visible ? selectedIds.at(-1) : undefined;
   const revealRow = useRef<HTMLButtonElement>(null);
   const revealed = useRef<readonly string[]>();
+
+  function collapseAllLayers() {
+    // Keep the current selection without reopening its ancestors.
+    revealed.current = selectedIds;
+    setExpandedLayerIds(new Set());
+  }
+
   useLayoutEffect(() => {
     if (revealId === undefined) {
       revealed.current = undefined;
@@ -69,5 +76,5 @@ export function useDesignLayerTree({ documentId, scene, selectedIds, visible, re
     if (parents.length) expandLayers(parents);
   }, [expandLayers, expandedLayerIds, reordering, revealId, scene, selectedIds]);
 
-  return { expandedLayerIds, expandLayers, toggleLayer, revealId, revealRow };
+  return { expandedLayerIds, expandLayers, toggleLayer, collapseAllLayers, revealId, revealRow };
 }

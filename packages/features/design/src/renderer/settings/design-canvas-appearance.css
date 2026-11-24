@@ -1,0 +1,40 @@
+:is(.design-editor__stage, .design-settings__sample) {
+  --design-stage: light-dark(#e9e7e3, #212125);
+  --design-stage-light: light-dark(#f3f1ed, #2c2b32);
+  --design-grid-ink: light-dark(rgb(68 58 79 / 17%), rgb(221 210 242 / 16%));
+  background-color: var(--design-stage);
+  background-image:
+    var(--design-grid-primary, radial-gradient(circle, var(--design-grid-ink) 0.8px, transparent 1px)),
+    var(--design-grid-secondary, none),
+    radial-gradient(ellipse at 48% 12%, var(--design-stage-light), transparent 72%);
+  background-size: var(--design-grid-step) var(--design-grid-step), var(--design-grid-step) var(--design-grid-step), 100% 100%;
+  background-position: var(--design-grid-x, 0px) var(--design-grid-y, 0px), var(--design-grid-x, 0px) var(--design-grid-y, 0px), center;
+}
+
+[data-design-appearance='light'] { color-scheme: light; }
+[data-design-appearance='dark'] { color-scheme: dark; }
+
+[data-design-background='white'] {
+  --design-stage: light-dark(#f8f9fa, #18191b);
+  --design-stage-light: light-dark(#fff, #212225);
+  --design-grid-ink: light-dark(rgb(45 55 67 / 17%), rgb(223 230 242 / 16%));
+}
+
+[data-design-background='slate'] {
+  --design-stage: light-dark(#dce3ec, #283442);
+  --design-stage-light: light-dark(#eaf0f7, #344254);
+  --design-grid-ink: light-dark(rgb(47 67 94 / 21%), rgb(192 213 239 / 20%));
+}
+
+[data-design-background='charcoal'] {
+  --design-stage: light-dark(#c9cbd0, #20242a);
+  --design-stage-light: light-dark(#dbdde1, #2a3038);
+  --design-grid-ink: light-dark(rgb(35 44 62 / 20%), rgb(223 230 242 / 19%));
+}
+
+[data-design-grid='lines'] {
+  --design-grid-primary: linear-gradient(to right, var(--design-grid-ink) 1px, transparent 1px);
+  --design-grid-secondary: linear-gradient(to bottom, var(--design-grid-ink) 1px, transparent 1px);
+}
+
+[data-design-grid='hidden'] { --design-grid-primary: none; }

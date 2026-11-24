@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { workspaceFilePathKey, workspaceProjectRoots } from '@setsuna-desktop/contracts';
-import { chatDesignTitle, isDesignDocumentPath, type ProjectDesignEntry, type DesignWorkspace } from '@setsuna-desktop/feature-design/contracts';
+import { chatDesignTitle, isDesignDocumentPath, isDesignLibraryPresetDocumentId, type ProjectDesignEntry, type DesignWorkspace } from '@setsuna-desktop/feature-design/contracts';
 import type { FileWorkspaceProjectStore } from './file-workspace-project-store.js';
 import type { designStorageDirectories } from './design-storage-directories.js';
 import { readDraftId, type DesignResourceOwnership } from './design-workspace-resource-root.js';
@@ -22,6 +22,7 @@ export async function listLinkedDesigns(projects: Pick<FileWorkspaceProjectStore
   // Explicitly linked drafts may live outside all roots of this project. Their saved resource root
   // is also the base for image and library paths when the canvas opens.
   for (const { file, root, id } of associations) {
+    if (isDesignLibraryPresetDocumentId(id)) continue;
     const scope = scopes.get(workspaceFilePathKey(root, '.'));
     if (scope) results.set(workspaceFilePathKey(file, '.'), { ref: { ...scope, path: relative(root, file) }, documentId: id, directory: path.dirname(file) });
   }
@@ -31,7 +32,7 @@ export async function listLinkedDesigns(projects: Pick<FileWorkspaceProjectStore
       if (!isDesignDocumentPath(file) || results.has(key)) return true;
       const ref = { projectId, rootId: root.id, path: relative(root.path, file) };
       const documentId = await readDraftId(file).catch(() => undefined);
-      if (documentId) {
+      if (documentId && !isDesignLibraryPresetDocumentId(documentId)) {
         const linked = await ownership.project(file, documentId);
         if (linked === undefined || linked === projectId) results.set(key, { ref, documentId, directory: path.dirname(file) });
       }

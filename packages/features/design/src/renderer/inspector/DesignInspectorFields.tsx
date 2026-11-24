@@ -12,8 +12,11 @@ export function InspectorSection({ title, children, action }: Readonly<{
   </section>;
 }
 
-export function InspectorGroup({ title, children }: Readonly<{ title: string; children: ReactNode }>) {
-  return <div className="design-inspector__group"><h4>{title}</h4>{children}</div>;
+export function InspectorGroup({ title, children, action }: Readonly<{ title: string; children: ReactNode; action?: ReactNode }>) {
+  return <div className="design-inspector__group">
+    <header><h4>{title}</h4>{action}</header>
+    {children}
+  </div>;
 }
 
 export function PaintToggle({ enabled, label, disabled, onToggle }: Readonly<{

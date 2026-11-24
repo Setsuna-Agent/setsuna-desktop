@@ -1,0 +1,335 @@
+.design-workspace-home {
+  --design-home-surface: light-dark(var(--app-surface-muted), #1a1c22);
+  --design-home-border: light-dark(var(--app-border), #272a31);
+  --design-home-muted: light-dark(var(--app-text-muted), #8a8f99);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: light-dark(var(--app-bg), #0f1013);
+}
+
+.design-workspace-home__content {
+  box-sizing: border-box;
+  display: grid;
+  gap: 36px;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: clamp(16px, 4cqi, 56px);
+}
+
+.design-workspace-home__content[data-empty] {
+  min-block-size: 100%;
+  grid-template-rows: auto 1fr;
+}
+
+.design-workspace-home__header,
+.design-workspace-home__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.design-workspace-home__header {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  column-gap: 24px;
+}
+
+.design-workspace-home__title {
+  min-width: 0;
+  color: var(--app-text);
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 34px;
+}
+
+.design-workspace-home__actions .design-workspace__scope .sd-select-field,
+.design-workspace-home__view.sd-segmented-control {
+  box-sizing: border-box;
+  min-height: 38px;
+  border: 1px solid var(--design-home-border);
+  border-radius: var(--app-radius-control);
+  background: var(--design-home-surface);
+}
+
+.design-workspace-home__actions .design-workspace__scope .sd-select-field:is(:focus-visible, .is-open, [data-overlay-open]) {
+  border-color: var(--app-field-focus-border);
+}
+
+.design-workspace-home__project-count {
+  display: grid;
+  flex: none;
+  place-items: center;
+  min-inline-size: 18px;
+  block-size: 18px;
+  padding-inline: 4px;
+  border-radius: var(--app-radius-full);
+  background: var(--app-accent-soft);
+  color: var(--app-text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.design-workspace-home__view.sd-segmented-control {
+  flex: none;
+  width: 76px;
+  padding: 3px;
+}
+
+.design-workspace-home__view.sd-segmented-control::before {
+  inset: 3px auto 3px 3px;
+  width: calc((100% - 6px) / 2);
+  background: light-dark(var(--app-segment-selected-bg), #2c2f37);
+  box-shadow: none;
+}
+
+.design-workspace-home__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+.design-workspace-home__heading > span {
+  color: var(--design-home-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.design-workspace-home__files {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.design-workspace-home__files > li {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+}
+
+.design-workspace-home__files > li::before {
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  content: '';
+}
+
+.design-workspace-home__file.sd-button,
+.design-workspace-home__file.sd-button:is(:hover, :active):not(:disabled) {
+  border: 0;
+  background: transparent;
+  color: var(--app-text);
+}
+
+.design-workspace-home__file.sd-button {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  text-align: start;
+}
+
+.design-workspace-home__file > .design-thumbnail {
+  padding: 0;
+  background: light-dark(var(--app-surface-subtle), #14151a);
+  color: var(--design-home-muted);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .design-workspace-home__file > .design-thumbnail > img:not([hidden]) {
+    animation: design-home-preview-enter 240ms var(--app-ease-out);
+  }
+}
+
+@keyframes design-home-preview-enter {
+  from { opacity: 0; scale: .9; }
+  70% { opacity: 1; scale: 1.02; }
+  to { opacity: 1; scale: 1; }
+}
+
+.design-workspace-home__file-label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.design-workspace-home__file-label > strong,
+.design-workspace-home__file-detail > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.design-workspace-home__file-label > strong {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+.design-workspace-home__file-meta,
+.design-workspace-home__file time {
+  color: var(--design-home-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.design-workspace-home__file-meta,
+.design-workspace-home__file-detail {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.design-workspace-home__file-meta {
+  gap: 8px;
+}
+
+.design-workspace-home__file-detail {
+  gap: 4px;
+}
+
+.design-workspace-home__file-detail > svg {
+  flex: none;
+}
+
+.design-workspace-home__file-meta > time {
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.design-workspace-home__file-menu > .sd-icon-button {
+  color: var(--design-home-muted);
+}
+
+.design-workspace-home__file-menu > .sd-icon-button:is(:hover, :active, :focus-visible, [data-overlay-open]):not(:disabled) {
+  background: transparent;
+  color: var(--app-text);
+}
+
+.design-workspace-home[data-view='grid'] .design-workspace-home__files {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: 12px 20px;
+}
+
+.design-workspace-home[data-view='grid'] .design-workspace-home__files > li {
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-control);
+}
+
+.design-workspace-home[data-view='grid'] .design-workspace-home__files > li::before {
+  inset: -1px;
+  border: 1px solid var(--design-home-border);
+  border-radius: inherit;
+  background: var(--design-home-surface);
+}
+
+.design-workspace-home[data-view='grid'] .design-workspace-home__files > li:is(:hover, :has(:focus-visible, [data-overlay-open]))::before {
+  border-color: var(--app-border-strong);
+  box-shadow: var(--app-shadow-workbench);
+}
+
+.design-workspace-home[data-view='grid'] .design-workspace-home__file {
+  display: block;
+  border-radius: inherit;
+}
+
+.design-workspace-home[data-view='grid'] .design-thumbnail {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 8 / 5;
+  border-radius: var(--app-radius-control) var(--app-radius-control) 0 0;
+}
+
+.design-workspace-home[data-view='grid'] .design-workspace-home__file-label {
+  box-sizing: border-box;
+  min-height: 54px;
+  align-content: start;
+  padding: 8px 12px;
+}
+
+.design-workspace-home[data-view='grid'] .design-workspace-home__file-label > strong {
+  margin-inline-end: 24px;
+}
+
+.design-workspace-home[data-view='grid'] .design-workspace-home__file-menu {
+  position: absolute;
+  inset-inline-end: 4px;
+  inset-block-end: 28px;
+}
+
+.design-workspace-home[data-view='list'] .design-workspace-home__heading {
+  margin-block-end: 8px;
+}
+
+.design-workspace-home[data-view='list'] .design-workspace-home__files > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 56px;
+}
+
+.design-workspace-home[data-view='list'] .design-workspace-home__files > li:not(:last-child) {
+  border-block-end: 1px solid var(--design-home-border);
+}
+
+.design-workspace-home[data-view='list'] .design-workspace-home__files > li::before {
+  inset: 2px 0;
+  border-radius: var(--app-radius-sm);
+}
+
+.design-workspace-home[data-view='list'] .design-workspace-home__files > li:is(:hover, :has(:focus-visible, [data-overlay-open]))::before {
+  background-color: color-mix(in srgb, var(--app-text) 4%, transparent);
+}
+
+.design-workspace-home[data-view='list'] .design-workspace-home__file.sd-button {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-self: stretch;
+  align-items: center;
+  gap: 20px;
+  border-radius: var(--app-radius-sm);
+  padding-inline: 8px 28px;
+}
+
+.design-workspace-home[data-view='list'] .design-thumbnail {
+  width: 56px;
+  height: 38px;
+  border-radius: var(--app-radius-sm);
+}
+
+.design-workspace-home[data-view='list'] .design-workspace-home__file-menu {
+  margin-inline-end: 8px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .design-workspace-home[data-view='grid'] .design-workspace-home__files > li:hover {
+    --design-home-card-lift: 0 -1px;
+  }
+
+  /* Lift the card artwork and menu glyph while keeping the click targets in place. */
+  .design-workspace-home[data-view='grid'] :is(.design-thumbnail, .design-workspace-home__file-label),
+  .design-workspace-home[data-view='grid'] .design-workspace-home__file-menu > .sd-icon-button > svg {
+    translate: var(--design-home-card-lift, none);
+    transition: translate var(--app-duration-fast) var(--app-ease-out);
+  }
+
+  .design-workspace-home[data-view='grid'] .design-workspace-home__files > li::before {
+    translate: var(--design-home-card-lift, none);
+    transition: translate var(--app-duration-fast) var(--app-ease-out), border-color var(--app-duration-fast) ease,
+      box-shadow var(--app-duration-fast) ease;
+  }
+
+  .design-workspace-home[data-view='list'] .design-workspace-home__files > li::before {
+    transition: background-color var(--app-duration-fast) ease;
+  }
+}

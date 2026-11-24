@@ -1,8 +1,10 @@
 import type { DesignDocument, DesignNode, DesignPaint, DesignStyle } from '../../contracts/index.js';
 import { mapDesignLayerReferences } from '../../contracts/design-references.js';
 import { designResourceId, designResourceParts } from '../../contracts/design-resource-id.js';
+import { designLibraryDarkModeId, findBundledDesignLibrary, isDesignLibraryPresetDocumentId } from '../../contracts/design-library-presets.js';
 import { mapDesignVariableAliases } from '../../contracts/design-variable-aliases.js';
-import { designVariableCollectionKey, designVariableCollections, type DesignVariableCollection, type DesignVariableCollections } from '../../contracts/design-variable-collections.js';
+import { designVariableCollectionKey, designVariableCollections, type DesignVariableCollection, type DesignVariableCollections,
+  type DesignVariableModeIds } from '../../contracts/design-variable-collections.js';
 import { mapDesignVariableIds } from '../../contracts/design-variables.js';
 
 export type DesignLibraryResources = Readonly<{
@@ -68,7 +70,11 @@ export function designLibraryVariableCollections(document: DesignDocument, resou
 }
 
 export function designVariableCollectionLabel({ collection, path }: DesignLibraryVariableCollection, defaultName: string): string {
-  return collection.name ?? path?.split('/').at(-1)?.replace(/\.design\.json$/iu, '') ?? defaultName;
+  return collection.name ?? findBundledDesignLibrary(path)?.name ?? path?.split('/').at(-1)?.replace(/\.design\.json$/iu, '') ?? defaultName;
+}
+
+export function designLibrarySourceLabel(path: string | undefined): string | undefined {
+  return findBundledDesignLibrary(path)?.name ?? path;
 }
 
 export function designResourceNode(document: DesignDocument, id: string, resources: DesignLibraryResources | undefined): DesignNode | undefined {
@@ -79,6 +85,22 @@ export function linkedDesignPath(document: Pick<DesignDocument, 'libraries'>, re
   const reference = designResourceParts(resourceId);
   return reference && document.libraries && Object.hasOwn(document.libraries, reference.documentId)
     ? document.libraries[reference.documentId] : undefined;
+}
+
+export function isPresetLibraryPath(document: Pick<DesignDocument, 'libraries'>, path: string): boolean {
+  return Object.entries(document.libraries ?? {}).some(([id, source]) => source === path && isDesignLibraryPresetDocumentId(id));
+}
+
+export function lockDesignLibraryPreview(document: DesignDocument): DesignDocument {
+  // The scene inherits locks from root layers. Linked definitions keep their authored flags.
+  const nodes = { ...document.nodes };
+  for (const id of document.rootIds) nodes[id] = { ...nodes[id], locked: true };
+  return { ...document, nodes };
+}
+
+export function designLibraryDarkModes({ documentId, variableCollections }: DesignDocument): DesignVariableModeIds {
+  return Object.fromEntries(Object.entries(variableCollections ?? {}).flatMap(([id, collection]) =>
+    Object.hasOwn(collection.modes ?? {}, designLibraryDarkModeId) ? [[designVariableCollectionKey(documentId, id), designLibraryDarkModeId]] : []));
 }
 
 export function designStyleChoices(document: DesignDocument, resources: DesignLibraryResources): DesignDocument['styles'] {

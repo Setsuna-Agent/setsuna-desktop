@@ -792,9 +792,9 @@ export function ChatComposer({
         leadingAction={messenger ? <ChatComposerCommandButton iconSize={18}
           active={commandController.forcedSlashMenuOpen} disabled={submitting || queuedTurnEdit.retrieving}
           onOpen={openSlashMenu} /> : undefined}
-        placeholder={placeholder ?? t(messenger ? 'chat.composer.messagePlaceholder' : projectConversation
-          ? 'chat.composer.projectPlaceholder'
-          : 'chat.composer.placeholder')}
+        placeholder={placeholder ?? t(messenger ? 'chat.composer.messagePlaceholder'
+          : commandController.canMentionProjectDesigns ? 'chat.composer.projectDesignPlaceholder'
+            : projectConversation ? 'chat.composer.projectPlaceholder' : 'chat.composer.placeholder')}
         autoSize={{ minRows: messenger ? 1 : 2, maxRows: 6 }}
         onBlur={commandController.handleComposerBlur}
         onChange={handleChange}

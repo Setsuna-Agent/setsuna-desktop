@@ -4,13 +4,14 @@ import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Button, IconButton, Popover, SegmentedControl, TextField, useHoverPreview, useToast } from '@setsuna-desktop/renderer-ui';
 import { designFontFormats, designFontNameKey, type DesignCustomFont } from '../../contracts/design-fonts.js';
 import { designFontFamilies } from '../../contracts/index.js';
+import { bundledDesignFonts } from './design-bundled-fonts.js';
 import { DesignFontPreview, DesignFontPreviewList, designFontPreviewWeight } from './DesignFontPreview.js';
 import { importableDesignFont } from './design-font-loader.js';
 import { DesignFontsContext } from './use-design-fonts.js';
 import './design-font-picker.css';
 
 const accepted = Object.keys(designFontFormats).map((extension) => `.${extension}`).join(',');
-const groups = ['all', 'custom'] as const;
+const groups = ['all', 'bundled', 'custom'] as const;
 type FontFamily = Readonly<{ family: string; face?: DesignCustomFont }>;
 
 function previewOrder(font: DesignCustomFont): number {
@@ -29,12 +30,12 @@ export function DesignFontPicker({ installed, value, onPreview, onSelect, transl
   const [managing, setManaging] = useState(false);
   const [query, setQuery] = useState('');
   const preview = useHoverPreview(onPreview);
-  const imported = library?.fonts;
+  const available = group === 'bundled' ? bundledDesignFonts : group === 'custom' ? library?.imported : library?.fonts;
   const term = designFontNameKey(query.trim());
   const families = useMemo<readonly FontFamily[]>(() => {
     const names = new Map<string, FontFamily>();
     if (group === 'all') for (const family of installed) names.set(designFontNameKey(family), { family });
-    for (const face of imported ?? []) {
+    for (const face of available ?? []) {
       const key = designFontNameKey(face.family);
       const previous = names.get(key)?.face;
       if (!previous || previewOrder(face) < previewOrder(previous)) names.set(key, { family: face.family, face });
@@ -42,7 +43,7 @@ export function DesignFontPicker({ installed, value, onPreview, onSelect, transl
     if (group === 'all') for (const preset of designFontFamilies) names.delete(preset);
     const sorted = [...names.values()].sort((a, b) => a.family.localeCompare(b.family));
     return group === 'all' ? [...designFontFamilies.map((family) => ({ family })), ...sorted] : sorted;
-  }, [group, imported, installed]);
+  }, [group, available, installed]);
   const { options, previews } = useMemo(() => {
     const options = families.flatMap(({ family, face }) => {
       const name = designFontFamilies.some((preset) => preset === family) ? t(`feature.design.font.${family}`) : family;
@@ -89,8 +90,8 @@ function CustomFontManager({ library, term, onBack, onImported, translate: t }: 
   const fileInput = useRef<HTMLInputElement>(null);
   const inputId = useId();
   const toast = useToast();
-  const fonts = useMemo(() => library.fonts.filter(({ family, name }) => !term
-    || [family, name].some((item) => designFontNameKey(item).includes(term))), [library.fonts, term]);
+  const fonts = useMemo(() => library.imported.filter(({ family, name }) => !term
+    || [family, name].some((item) => designFontNameKey(item).includes(term))), [library.imported, term]);
 
   async function run(work: () => Promise<boolean>) {
     if (operation.current) return;

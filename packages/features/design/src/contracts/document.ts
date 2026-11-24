@@ -3,7 +3,7 @@ import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { parseDesignColor as color } from './design-color.js';
 import { parseDesignLayerContext, parseDesignScriptPath, parseDesignWebDevice, parseDesignWebUrl, parseDesignWebZoom } from './design-content-source.js';
 import { designFontStyles, designFontWeights, type DesignFontStyle, type DesignFontWeight } from './design-fonts.js';
-import { designResourceParts, parseDesignId as nodeId, parseDesignLibraryPath, parseDesignResourceId } from './design-resource-id.js';
+import { designResourceParts, parseDesignId as nodeId, parseDesignLibraryLink, parseDesignResourceId } from './design-resource-id.js';
 import { parseDesignScriptInputs, type DesignScriptInputs } from './design-script-parameters.js';
 import { parseDesignShaderPaint, type DesignShaderPaint } from './design-shader.js';
 import { restoreLegacyDesignArrow } from './legacy-design-arrow.js';
@@ -179,6 +179,7 @@ export type DesignDocument = Readonly<{
   schemaVersion: typeof designDocumentVersion;
   documentId: string;
   lastEditedLayerId?: string;
+  prototypeStartId?: string;
   rootIds: readonly string[];
   nodes: Readonly<Record<string, DesignNode>>;
   styles?: Readonly<Record<string, DesignStyle>>;
@@ -196,6 +197,7 @@ export type DesignEdit =
   | Readonly<{ kind: 'remove'; nodeId: string }>
   | Readonly<{ kind: 'setStyle'; styleId: string; style: DesignStyle | null }>
   | Readonly<{ kind: 'setVariableCollection'; collectionId: string; collection: DesignVariableCollection | null }>
+  | Readonly<{ kind: 'setPrototypeStart'; boardId: string | null }>
   | Readonly<{ kind: 'linkLibrary'; documentId: string; path: string }>
   | Readonly<{ kind: 'unlinkLibrary'; documentId: string }>;
 
@@ -209,17 +211,27 @@ export const designDocumentCodec = defineRuntimeCodec<DesignDocument>((input) =>
   // The v10 arrow tool stored its outline as SVG.
   const legacyArrows = version === 10;
   const nodes = Object.fromEntries(Object.entries(record(value.nodes)).map(([id, node]) => [nodeId(id), parseNode(node, legacyPaint, legacyArrows)]));
-  const document = { schemaVersion: designDocumentVersion, documentId: nodeId(value.documentId), rootIds: idList(value.rootIds), nodes,
+  const rootIds = idList(value.rootIds);
+  const startId = typeof value.prototypeStartId === 'string' ? value.prototypeStartId : undefined;
+  const document = { schemaVersion: designDocumentVersion, documentId: nodeId(value.documentId), rootIds, nodes,
     lastEditedLayerId: typeof value.lastEditedLayerId === 'string' && Object.hasOwn(nodes, value.lastEditedLayerId) ? value.lastEditedLayerId : undefined,
+    prototypeStartId: startId && rootIds.includes(startId) && isDesignPrototypeBoard(nodes[startId]) ? startId : undefined,
     styles: optional(value.styles, (value) => Object.fromEntries(Object.entries(record(value)).map(([id, style]) => [nodeId(id), parseDesignStyle(style)]))),
     variableCollections: parseDesignVariableCollections(value.variableCollections, value.variableModes, shortName),
-    libraries: optional(value.libraries, (value) => Object.fromEntries(Object.entries(record(value)).map(([id, path]) => [nodeId(id), parseDesignLibraryPath(path)]))) } as const;
+    libraries: optional(value.libraries, (value) => Object.fromEntries(Object.entries(record(value)).map(([id, source]) => {
+      const { documentId, path } = parseDesignLibraryLink(id, source);
+      return [documentId, path];
+    }))) } as const;
   if (document.libraries && Object.hasOwn(document.libraries, document.documentId)) throw new Error('A draft cannot link to itself.');
   indexDesignParents(document);
   validateDesignComponents(document);
   validateDesignVariableCollections(document.styles, document.variableCollections);
   return document;
 });
+
+export function isDesignPrototypeBoard(node: DesignNode | undefined) {
+  return node?.kind === 'frame' && !node.group && !node.component;
+}
 
 export function indexDesignParents({ nodes, rootIds }: DesignDocument): ReadonlyMap<string, string | null> {
   const parents = new Map<string, string | null>();
@@ -275,8 +287,9 @@ export function validateDesignComponents({ nodes, rootIds, libraries }: DesignDo
 
 export function parseDesignEdit(input: unknown): DesignEdit {
   const value = record(input);
+  if (value.kind === 'setPrototypeStart') return { kind: 'setPrototypeStart', boardId: nullableId(value.boardId) };
   if (value.kind === 'setStyle') return { kind: 'setStyle', styleId: nodeId(value.styleId), style: value.style === null ? null : parseDesignStyle(value.style) };
-  if (value.kind === 'linkLibrary') return { kind: 'linkLibrary', documentId: nodeId(value.documentId), path: parseDesignLibraryPath(value.path) };
+  if (value.kind === 'linkLibrary') return { kind: 'linkLibrary', ...parseDesignLibraryLink(value.documentId, value.path) };
   if (value.kind === 'unlinkLibrary') return { kind: 'unlinkLibrary', documentId: nodeId(value.documentId) };
   if (value.kind === 'setVariableCollection') {
     return { kind: 'setVariableCollection', collectionId: nodeId(value.collectionId),

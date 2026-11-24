@@ -1,14 +1,15 @@
 import {
-  ChevronDown, ChevronRight, Circle, CodeXml, Component, Diamond, Eye, EyeOff, Frame, Globe, Group,
+  ChevronDown, ChevronRight, ChevronsDownUp, Circle, CodeXml, Component, Diamond, Eye, EyeOff, Frame, Globe, Group,
   History, ImageIcon, Layers, Lock, LockOpen, Maximize2, MessageCircle, Minimize2, Square, Type,
 } from 'lucide-react';
-import { useCallback, useId, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type MutableRefObject, type ReactElement } from 'react';
+import { useCallback, useContext, useId, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type MutableRefObject, type ReactElement } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { IconButton, SegmentedControl, useNativeDragPreview, useReorderLayout } from '@setsuna-desktop/renderer-ui';
 import type { DesignDocument } from '../contracts/index.js';
 import { DesignThumbnail, useDesignThumbnails } from './canvas/DesignThumbnail.js';
 import { DesignPanelToggle, DesignSidePanel } from './canvas/DesignSidePanels.js';
 import { useDesignLayerTree } from './canvas/use-design-layer-tree.js';
+import { DesignUiHostContext } from './context/design-ui-host.js';
 import type { DesignLayerMenuTarget } from './context/use-design-layer-actions.js';
 import { activeDesignLayerDrag, canDropDesignLayer, changesDesignLayerOrder, designLayerDragType, designLayerOrder,
   type DesignLayerDestination, type DesignLayerDrag } from './design-layer-drop.js';
@@ -48,7 +49,7 @@ function layerDepth(depth: number): CSSProperties {
 }
 
 export function DesignLayers({
-  document, projected, scene, loadImage, revision, drag, selectedIds, open, disabled, chat,
+  document, projected, scene, loadImage, revision, drag, selectedIds, open, disabled, chat, showThumbnails,
   onTogglePanel, onSelect, onHoverLayer, onToggle, onDrop, onContextMenu, translate: t,
 }: Readonly<{
   document: DesignDocument;
@@ -61,6 +62,7 @@ export function DesignLayers({
   open: boolean;
   disabled: boolean;
   chat?: ReactElement;
+  showThumbnails: boolean;
   onTogglePanel(): void;
   onSelect(id: string, additive: boolean): void;
   onHoverLayer(id: string | undefined): void;
@@ -82,9 +84,13 @@ export function DesignLayers({
   const showChat = Boolean(chat) && view === 'chat';
   const fullscreen = showChat && chatFullscreen;
   const layersVisible = open && !showChat;
+  const [present, setPresent] = useState(open);
+  if (open && !present) setPresent(true);
+  const finishExit = useCallback(() => setPresent(false), []);
   const list = useRef<HTMLDivElement>(null);
+  const ScrollOverlay = useContext(DesignUiHostContext)?.ScrollOverlay;
   const selectThumbnail = useCallback((id: string) => scene[id]?.visible ? { document: projected, scene, ids: [id] } : undefined, [projected, scene]);
-  const observeThumbnail = useDesignThumbnails(list, selectThumbnail, loadImage, { open: layersVisible });
+  const observeThumbnail = useDesignThumbnails(list, selectThumbnail, loadImage, { open: layersVisible && showThumbnails });
   const lastHover = useRef<LayerHover>();
   const [hoverDrop, setHoverDrop] = useState<LayerDrop | null>(null);
   const [pendingDrop, setPendingDrop] = useState<Readonly<{ source: DesignLayerDrag; target: LayerDrop }>>();
@@ -93,7 +99,7 @@ export function DesignLayers({
   const activeDrag = preview.dragging && layersVisible && !disabled && drag.current?.revision === revision ? drag.current : undefined;
   const saving = layersVisible && pendingDrop?.source.revision === revision ? pendingDrop : undefined;
   const reordering = Boolean(activeDrag || saving);
-  const { expandedLayerIds, expandLayers, toggleLayer, revealId, revealRow } = useDesignLayerTree({
+  const { expandedLayerIds, expandLayers, toggleLayer, collapseAllLayers, revealId, revealRow } = useDesignLayerTree({
     documentId: document.documentId, scene, selectedIds, visible: layersVisible, reordering,
   });
   const liftedId = activeDrag === confirmedDrag ? activeDrag?.id : undefined;
@@ -102,6 +108,10 @@ export function DesignLayers({
   const saved = layersVisible && !selectedIds.length ? designSavedLocation(document, scene) : undefined;
   const rootOrder = designLayerOrder(document, null);
   const roots = displayOrder(rootOrder);
+  const hasExpandedLayers = layersVisible && expandedLayerIds.size > 0 && roots.some((id) => {
+    const node = document.nodes[id];
+    return expandedLayerIds.has(id) && node?.kind === 'frame' && node.childIds.length > 0;
+  });
   const layoutKey = movingId ? JSON.stringify([revision, movingId, slot?.parentId, slot?.beforeId]) : revision;
   useReorderLayout(list, layoutKey, reordering);
 
@@ -264,7 +274,7 @@ export function DesignLayers({
           }}
           onClick={(event) => onSelect(id, event.shiftKey || event.metaKey || event.ctrlKey)}>
           <Icon aria-hidden="true" />
-          <DesignThumbnail id={id} observe={observeThumbnail} />
+          {showThumbnails ? <DesignThumbnail id={id} observe={observeThumbnail} /> : null}
           <span className="design-layer__name">{name}</span>
           {recent ? <span aria-hidden="true" title={t('feature.design.lastSaved')}><History size={12} /></span> : null}
         </button>
@@ -281,7 +291,7 @@ export function DesignLayers({
   };
 
   const label = t(chat ? 'feature.design.sidebar' : 'feature.design.layers');
-  const navigation = chat && <SegmentedControl<'chat' | 'layers'> className="design-panel-navigation" label={label}
+  const title = chat ? <SegmentedControl<'chat' | 'layers'> className="design-panel-navigation" label={label}
     value={view} options={[
       { value: 'chat', label: t('feature.design.chat.tab'), icon: <MessageCircle size={12} aria-hidden="true" /> },
       { value: 'layers', label: t('feature.design.layers'), icon: <Layers size={12} aria-hidden="true" /> },
@@ -289,11 +299,18 @@ export function DesignLayers({
       onHoverLayer(undefined);
       if (next === 'layers') setChatFullscreen(false);
       setView(next);
-    }} />;
-  const fullscreenButton = showChat ? <IconButton className="design-panel__toggle" size="small" aria-controls={panelId}
+    }} /> : <h2 className="design-panel__layers-title"><Layers size={12} aria-hidden="true" /><span>{label}</span></h2>;
+  const panelAction = showChat ? <IconButton className="design-panel__toggle" size="small" aria-controls={panelId}
     label={t(fullscreen ? 'feature.design.chat.restore' : 'feature.design.chat.maximize')} aria-pressed={fullscreen}
     onClick={() => setChatFullscreen((current) => !current)}>
     {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+  </IconButton> : hasExpandedLayers ? <IconButton size="small" label={t('feature.design.collapseAllLayers')} disabled={reordering}
+    onClick={(event) => {
+      if (event.detail === 0) list.current?.querySelector<HTMLButtonElement>('.design-layer__expand')?.focus({ preventScroll: true });
+      onHoverLayer(undefined);
+      collapseAllLayers();
+    }}>
+    <ChevronsDownUp size={14} />
   </IconButton> : null;
   function togglePanel(event: MouseEvent<HTMLButtonElement>) {
     // Keyboard focus follows the control between the panel header and the canvas edge.
@@ -304,13 +321,15 @@ export function DesignLayers({
   return <>
     {!open && <DesignPanelToggle side="layers" buttonRef={restoreToggleFocus} label={t('feature.design.expandSidebar')}
       aria-expanded={false} aria-controls={panelId} onClick={togglePanel} />}
-    <DesignSidePanel side="layers" id={panelId} open={open} label={label} title={navigation} resizeLabel={t('feature.design.resizeLayers')}
-      fullscreen={fullscreen} actions={fullscreenButton}
+    <DesignSidePanel side="layers" id={panelId} open={open} label={label} title={title} resizeLabel={t('feature.design.resizeLayers')}
+      fullscreen={fullscreen} actions={panelAction} onExitComplete={present ? finishExit : undefined}
       collapse={{ label: t('feature.design.collapseSidebar'), onClick: togglePanel, buttonRef: restoreToggleFocus }}>
-      <div className="design-layer-list design-panel-scroll" hidden={showChat} ref={list} data-dragging={Boolean(movingId) || undefined}
+      <div className="design-layer-list design-panel-scroll" hidden={showChat} ref={list} data-thumbnails={showThumbnails}
+        data-dragging={Boolean(movingId) || undefined} data-scroll-overlay={Boolean(ScrollOverlay) || undefined}
         onDragOver={onDragOver} onDrop={dropLayer} onDragLeave={onDragLeave}>
-        {layersVisible ? renderList(null, 0, rootOrder, roots) : null}
+        {present && !showChat ? renderList(null, 0, rootOrder, roots) : null}
       </div>
+      {layersVisible && ScrollOverlay ? <ScrollOverlay scrollRef={list} /> : null}
       {/* Keep drafts and active tasks mounted when switching tabs or collapsing the sidebar. */}
       {chat && <div className="design-layers-chat" hidden={!showChat}>
         <DesignChatPanelContext.Provider value={{ visible: open && showChat, showCanvas: fullscreen ? () => setChatFullscreen(false) : undefined }}>

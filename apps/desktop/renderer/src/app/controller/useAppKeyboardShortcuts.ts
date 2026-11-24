@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import {
   keyboardEventMatchesBinding,
   type KeyboardShortcutEvent,
-} from '../../shared/shortcuts/keyboardShortcutBindings.js';
+} from '@setsuna-desktop/renderer-ui';
 import {
   keyboardShortcutCommands,
   type KeyboardShortcutCommandId,

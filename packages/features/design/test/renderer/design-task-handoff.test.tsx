@@ -1,22 +1,98 @@
 // @vitest-environment happy-dom
 
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { ToastProvider, UiProvider } from '@setsuna-desktop/renderer-ui';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Util } from 'konva/lib/Util.js';
+import { useState } from 'react';
 import { expect, it, vi } from 'vitest';
 import { chatDesignResult, designDocumentVersion } from '../../src/contracts/index.js';
 import { designSelectionMentionText, type DesignSelectionReference } from '../../src/contracts/design-selection-mention.js';
 import { createChatDesignTools } from '../../src/runtime/chat-design-tools.js';
+import DesignWorkspace, { type DesignWorkspaceLocation } from '../../src/renderer/DesignWorkspace.js';
 import type { DesignChatBinding } from '../../src/renderer/agent/DesignChatBridge.js';
 import { projectDesignComponents } from '../../src/renderer/components/design-components.js';
 import type { DesignTaskStart } from '../../src/contracts/design-task.js';
 import { DesignTasks } from '../../src/runtime/design-tasks.js';
-import { drawing, mountEditor } from './support/mount-design-editor.js';
+import { createEditorFixture, drawing, mountEditor } from './support/mount-design-editor.js';
 
 function mockTextMetrics() {
   const metrics = { save() {}, restore() {}, measureText: (text: string) => ({ width: text.length * 8 }) };
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(metrics as unknown as CanvasRenderingContext2D);
   vi.spyOn(Util, 'isCanvasFarblingActive').mockReturnValue(false);
 }
+
+it('keeps each draft bound to its own running task when opening another draft', async () => {
+  const board = { kind: 'frame', x: 0, y: 0, width: 200, height: 100, childIds: [] } as const;
+  const original = createEditorFixture({ schemaVersion: designDocumentVersion, documentId: 'overview', rootIds: ['board'],
+    nodes: { board: { ...board, name: 'Overview' } } }, undefined, { documentPath: 'overview.design.json' });
+  const other = createEditorFixture({ schemaVersion: designDocumentVersion, documentId: 'details', rootIds: ['board'],
+    nodes: { board: { ...board, name: 'Details' } } }, undefined, { documentPath: 'details.design.json' });
+  const drafts = new Map([original, other].map((draft) => [draft.documentRef.path, draft]));
+  const read: typeof original.client.read = (ref, signal) => drafts.get(ref.path)!.client.read(ref, signal);
+  const cancel = vi.fn(async () => undefined);
+  const tasks = new DesignTasks({ resolveOwnedRoot: async () => '/project', cancel }, {
+    read,
+    commit: (input, ...args) => drafts.get(input.ref.path)!.service.commit(input, ...args),
+  });
+  const client = { ...original.client, read, tasks, listEntries: async () => [...drafts.keys()].map((path) => ({ path })) };
+  const projects = [{ id: 'project', name: 'Project', roots: [{ id: 'root', path: '/project' }], createdAt: '', updatedAt: '' }];
+  const bindings = new Map<string, DesignChatBinding>();
+  const onBusyChange = vi.fn();
+  const translate = (key: string) => key;
+  const watchDirectories = () => () => undefined;
+  function Workspace() {
+    const [location, setLocation] = useState<DesignWorkspaceLocation | null>(original.documentRef);
+    return <DesignWorkspace client={client} projects={projects} location={location} onLocationChange={setLocation}
+      onBusyChange={onBusyChange} watchDirectories={watchDirectories} translate={translate} renderChat={(binding) => {
+        bindings.set(binding.documentId, binding);
+        return <textarea aria-label={`Chat ${binding.documentId}`} />;
+      }} />;
+  }
+  const view = render(<UiProvider locale="en-US"><ToastProvider><Workspace /></ToastProvider></UiProvider>);
+  async function openDraft(path: string) {
+    fireEvent.click(screen.getByRole('button', { name: 'feature.design.backToDocuments' }));
+    fireEvent.click(await screen.findByRole('button', { name: `Project / ${path}` }));
+  }
+  async function startChat(documentId: string, threadId: string) {
+    const binding = bindings.get(documentId)!;
+    await act(async () => { binding.onBusyChange!(true); await binding.bind(threadId); });
+    return binding;
+  }
+
+  try {
+    const overviewChat = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Chat overview' });
+    fireEvent.change(overviewChat, { target: { value: 'Outline the next step' } });
+    const overviewTask = await startChat('overview', 'overview-thread');
+    await openDraft(other.documentRef.path);
+    await screen.findByRole('textbox', { name: 'Chat details' });
+    const detailsTask = await startChat('details', 'details-thread');
+    const signal = new AbortController().signal;
+    await act(async () => {
+      const edit = await tasks.execute('overview-thread', 'design_edit', { action: 'update', revision: (await original.read()).revision,
+        fields: { name: 'Updated overview' } }, signal);
+      expect(JSON.parse(edit.content)).toMatchObject({ applied: true, refreshed: true });
+    });
+    expect((await original.read()).document.nodes.board.name).toBe('Updated overview');
+    expect((await other.read()).document.nodes.board.name).toBe('Details');
+
+    await openDraft(original.documentRef.path);
+    expect((await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Chat overview' })).value).toBe('Outline the next step');
+    expect(cancel).not.toHaveBeenCalled();
+    await act(async () => { await overviewTask.release(); overviewTask.onBusyChange!(false); });
+    expect(onBusyChange.mock.calls).toEqual([[true]]);
+    await act(async () => {
+      const edit = await tasks.execute('details-thread', 'design_edit', { action: 'update', revision: (await other.read()).revision,
+        fields: { name: 'Updated details' } }, signal);
+      expect(JSON.parse(edit.content)).toMatchObject({ applied: true });
+    });
+    expect((await other.read()).document.nodes.board.name).toBe('Updated details');
+    await act(async () => { await detailsTask.release(); detailsTask.onBusyChange!(false); });
+    expect(onBusyChange.mock.calls).toEqual([[true], [false]]);
+  } finally {
+    view.unmount();
+    await tasks.dispose();
+  }
+});
 
 it('keeps the selected-layer task and its draft through fullscreen and sidebar navigation, then hands the saved edit back for undo', async () => {
   let chat!: DesignChatBinding;

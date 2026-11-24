@@ -1,5 +1,5 @@
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
-import { indexDesignParents, validateDesignComponents, type DesignDocument, type DesignEdit, type DesignNode, type DesignStyle } from './document.js';
+import { indexDesignParents, isDesignPrototypeBoard, validateDesignComponents, type DesignDocument, type DesignEdit, type DesignNode, type DesignStyle } from './document.js';
 import { designStylesForModes, resolveDesignNodeStyles } from './design-styles.js';
 import { rebaseDesignTextRuns } from './design-text-runs.js';
 import { defaultVariableCollectionId, designVariableCollectionKey, validateDesignVariableCollections, withoutDesignModes } from './design-variable-collections.js';
@@ -12,6 +12,7 @@ export function applyDesignEdits(document: DesignDocument, edits: readonly Desig
   let styles = document.styles;
   let variableCollections = document.variableCollections;
   let libraries = document.libraries;
+  let prototypeStartId = document.prototypeStartId;
 
   function siblings(parentId: string | null): readonly string[] {
     if (parentId === null) return rootIds;
@@ -42,6 +43,14 @@ export function applyDesignEdits(document: DesignDocument, edits: readonly Desig
   }
 
   for (const edit of edits) {
+    if (edit.kind === 'setPrototypeStart') {
+      const { boardId } = edit;
+      if (boardId !== null && (parents.get(boardId) !== null || !isDesignPrototypeBoard(nodes[boardId]))) {
+        throw invalidEdit('Choose a top-level artboard as the prototype start.');
+      }
+      prototypeStartId = boardId ?? undefined;
+      continue;
+    }
     if (edit.kind === 'linkLibrary') {
       if (edit.documentId === document.documentId) throw invalidEdit('A draft cannot link to itself.');
       libraries = { ...libraries, [edit.documentId]: edit.path };
@@ -170,7 +179,8 @@ export function applyDesignEdits(document: DesignDocument, edits: readonly Desig
     const componentSet = node.component && base?.kind === 'frame' && base.component && !base.componentSet ? node.componentSet : undefined;
     if (maskId !== node.maskId || componentSet !== node.componentSet) nodes[id] = { ...node, maskId, componentSet };
   }
-  const next = { ...document, rootIds, nodes, styles, libraries, variableCollections };
+  if (prototypeStartId && (parents.get(prototypeStartId) !== null || !isDesignPrototypeBoard(nodes[prototypeStartId]))) prototypeStartId = undefined;
+  const next = { ...document, rootIds, nodes, styles, libraries, variableCollections, prototypeStartId };
   try {
     indexDesignParents(next);
     validateDesignComponents(next);

@@ -82,10 +82,10 @@ it('includes the captured web page in the board prototype and its PNG, SVG and H
 
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: 'Dashboard' }));
-  await user.click(screen.getByRole('button', { name: 'feature.design.prototype.preview' }));
+  await user.click(screen.getByRole('button', { name: 'feature.design.prototype.previewBoard' }));
   const preview = within(await screen.findByRole('dialog', { name: 'feature.design.prototype.preview' }));
   await waitFor(() => expect(prototypeWebImage(preview, 'Dashboard')).toBe(snapshot));
-  await user.click(preview.getByRole('button', { name: 'feature.design.close' }));
+  await user.click(preview.getByRole('button', { name: 'feature.design.prototype.exit' }));
   await user.click(screen.getByRole('button', { name: 'feature.design.exportLayer' }));
   await waitFor(() => expect(saveImageAs).toHaveBeenCalledOnce());
   expect(drawing.exportedImages.get('browser')?.src).toBe(snapshot);
@@ -126,7 +126,7 @@ it('keeps the board capture running when opening a prototype overlay with anothe
     return element;
   });
   const first = await guest('Main page');
-  await user.click(preview.getByRole('button', { name: 'Show detail' }));
+  await user.click(await preview.findByRole('button', { name: 'Show detail' }));
   Object.defineProperty(first, 'getWebContentsId', { value: () => 1 });
   fireEvent(first, new Event('dom-ready'));
   await waitFor(() => expect(prototypeWebImage(preview, 'Board')).toBe(boardImage));
@@ -405,7 +405,7 @@ it('exports and previews the current generated content of a board after its scri
     await user.click(copy());
     await waitFor(() => expect(copyText).toHaveBeenLastCalledWith(expect.stringContaining('Updated chart label')));
 
-    await user.click(screen.getByRole('button', { name: 'feature.design.prototype.preview' }));
+    await user.click(screen.getByRole('button', { name: 'feature.design.prototype.previewBoard' }));
     const preview = within(await screen.findByRole('dialog', { name: 'feature.design.prototype.preview' }));
     const board = await preview.findByRole<HTMLImageElement>('img', { name: 'Dashboard' });
     expect(decodeURIComponent(board.src)).toContain('Updated chart label');

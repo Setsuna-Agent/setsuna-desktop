@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState,
-  type CSSProperties, type MutableRefObject, type PointerEvent, type ReactNode } from 'react';
+  type CSSProperties, type MutableRefObject, type PointerEvent, type ReactNode, type Ref } from 'react';
 import type Konva from 'konva';
 import { Ellipse, Group, Layer, Line, Path, Rect, Shape, Stage } from 'react-konva';
 import type { Yoga } from 'yoga-layout/load';
@@ -7,14 +7,15 @@ import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { DesignDocument, DesignEdit, DesignNode, DesignText } from '../contracts/index.js';
 import { clearDesignChangedBindings } from '../contracts/design-variables.js';
 import type { DesignAgentFocus } from './agent/design-agent-focus.js';
-import type { DesignCanvasSettings } from './context/design-canvas-settings.js';
+import { designGridSpacingRange, type DesignCanvasPreferences } from './context/design-canvas-settings.js';
 import type { DesignLayerMenuTarget } from './context/use-design-layer-actions.js';
 import { DesignCanvasLayoutHandles } from './DesignCanvasLayoutHandles.js';
 import { DesignCanvasLayers } from './DesignCanvasLayers.js';
 import { useDesignCanvasShaders } from './shaders/use-design-canvas-shaders.js';
 import { DesignCanvasSelection, designSelectionColor, DimensionTag, drawingPreview } from './DesignCanvasSelection.js';
-import { DesignTools, type DesignToolPanels } from './DesignTools.js';
+import { DesignTools, type DesignToolPanels, type DesignToolSelectionActions } from './DesignTools.js';
 import { DesignZoomControls } from './DesignZoomControls.js';
+import type { DesignShortcuts } from './settings/design-shortcuts.js';
 import { DesignAgentFocusOverlays } from './canvas/DesignAgentFocusOverlay.js';
 import { DesignDrawingControls } from './canvas/DesignDrawingControls.js';
 import { DesignWebPreview, type DesignWebPreviewHandle } from './canvas/DesignWebPreview.js';
@@ -79,6 +80,7 @@ type DesignCanvasProps = Readonly<{
   onComponentDrop(id: string, point: Point, revision: string): Promise<void>;
   selectedIds: readonly string[];
   agentFocus?: DesignAgentFocus;
+  externalFocus?: DesignAgentFocus;
   scriptResults: DesignScriptResults;
   webHost?: DesignWebPreviewHost;
   automaticWebAccess?: boolean;
@@ -104,10 +106,14 @@ type DesignCanvasProps = Readonly<{
     onChangeInk(ink: DrawingInk): void;
     onCommit(stroke: DrawingPreview, revision: string): Promise<boolean>;
   }>;
-  settings: DesignCanvasSettings;
+  settings: DesignCanvasPreferences;
+  shortcuts: DesignShortcuts;
   onContextMenu(target: DesignLayerMenuTarget): void;
   onToolChange(tool: DesignTool): void;
   toolPanels: DesignToolPanels;
+  selectionActions?: DesignToolSelectionActions;
+  libraryPreview?: boolean;
+  toolbarRef?: Ref<HTMLDivElement>;
   toolbarActions: ReactNode;
   beginPick?: BeginCanvasPick;
   onSelect(ids: readonly string[]): void;
@@ -119,9 +125,9 @@ type DesignCanvasProps = Readonly<{
 
 export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(function DesignCanvas({
   document, projected, resources, scene, layoutEngine, revision, layerDrag, componentDrag, onLayerDrop, onComponentDrop,
-  selectedIds, agentFocus, scriptResults, webHost, automaticWebAccess = true, webSession, webControlsFor, croppingId, layoutAdjustmentId, pathEditingId, straightPathId, onExitAdjustment,
-  onInspectorPreview, editingId, interaction, fitRequest, loadImage, tool, drawing: drawingMode, onToolChange, toolPanels, toolbarActions,
-  settings, onContextMenu, onSelect, beginPick, onEditText, onAction, renderTextInput, translate: t,
+  selectedIds, agentFocus, externalFocus, scriptResults, webHost, automaticWebAccess = true, webSession, webControlsFor, croppingId, layoutAdjustmentId, pathEditingId, straightPathId, onExitAdjustment,
+  onInspectorPreview, editingId, interaction, fitRequest, loadImage, tool, drawing: drawingMode, onToolChange, toolPanels, selectionActions, libraryPreview, toolbarRef, toolbarActions,
+  settings, shortcuts, onContextMenu, onSelect, beginPick, onEditText, onAction, renderTextInput, translate: t,
 }, ref) {
   const surface = useRef<HTMLDivElement>(null);
   const workArea = useRef<HTMLDivElement>(null);
@@ -280,7 +286,8 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
   const range: Bounds = { ...toCanvasWorld(viewport, { x: -96, y: -96 }),
     width: (size.width + 192) / scale, height: (size.height + 192) / scale };
   // Mount animated overlays only near the viewport, including a held cursor after its layer was deleted.
-  const onscreenFocus = agentFocus?.filter(({ ids, point }) => containsBounds(range, { ...point, width: 0, height: 0 })
+  const focus = agentFocus && externalFocus ? [...agentFocus, ...externalFocus] : agentFocus ?? externalFocus;
+  const onscreenFocus = focus?.filter(({ ids, point }) => containsBounds(range, { ...point, width: 0, height: 0 })
     || ids.some((id) => {
       const bounds = displayedScene[id]?.visibleBounds;
       return bounds && intersectBounds(range, bounds);
@@ -319,7 +326,10 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
         if (surface.current) controls.onPointerDown(event, { id, surface: surface.current });
       } : undefined} translate={t} />;
   });
-  const dotGap = Math.min(36, Math.max(18, 32 * scale));
+  const defaultGridSpacing = designGridSpacingRange.initial;
+  const preferredGridSpacing = settings.grid === 'hidden' ? defaultGridSpacing : settings.gridSpacing[settings.grid];
+  // Apply the spacing preference after the zoom clamp so every choice remains distinct.
+  const gridStep = Math.min(36, Math.max(18, defaultGridSpacing * scale)) * preferredGridSpacing / defaultGridSpacing;
   const insertionArea = useCallback(() => {
     const area = readWorkArea(workArea.current, size);
     return { ...toCanvasWorld(viewport, area), width: area.width / viewport.scale, height: area.height / viewport.scale };
@@ -399,21 +409,29 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
     '--design-web-toolbar-height': `${designWebToolbarHeight}px`,
     '--design-web-toolbar-gap': `${designWebToolbarGap}px`,
   } as CSSProperties}>
-    <DesignTools tool={tool} disabled={blocked} navigationDisabled={navigationBlocked} onChange={changeTool} toolPanels={toolPanels} actions={toolbarActions}
-      drawingMode={drawingMode.enabled} onToggleDrawing={() => {
-        pen.cancel();
-        freehand.cancel();
-        drawingMode.onToggle();
-        surface.current?.focus({ preventScroll: true });
-      }} translate={t} />
-    {ink && isDrawingInkTool(tool) ? <DesignDrawingControls tool={tool} ink={ink} disabled={drawingBlocked}
+    <div className="design-canvas__toolbars">
+      {!libraryPreview && <DesignTools toolbarRef={toolbarRef} tool={tool} disabled={blocked} navigationDisabled={navigationBlocked} onChange={changeTool} toolPanels={toolPanels}
+        position={settings.toolbarPosition} shortcuts={shortcuts} selectionActions={selectionActions}
+        drawingMode={drawingMode.enabled} onToggleDrawing={() => {
+          pen.cancel();
+          freehand.cancel();
+          drawingMode.onToggle();
+          surface.current?.focus({ preventScroll: true });
+        }} translate={t} />}
+      {!libraryPreview && toolbarActions}
+      <DesignZoomControls scale={scale} disabled={navigationBlocked} canZoomIn={scale < maxScale} canZoomOut={scale > minScale} shortcuts={shortcuts}
+        canFit={document.rootIds.length > 0} canFitSelection={visibleIds.length > 0} onZoom={zoom} onFit={fit}
+        onZoomTo={(level) => zoomAtCenter(() => level)} translate={t} />
+    </div>
+    {ink && isDrawingInkTool(tool) ? <DesignDrawingControls tool={tool} ink={ink} disabled={drawingBlocked} position={settings.toolbarPosition}
       onChange={drawingMode.onChangeInk} translate={t} /> : null}
     <div className="design-editor__stage" ref={surface} role="region" tabIndex={0} aria-label={t('feature.design.canvas')}
       data-tool={controls.space ? 'hand' : tool} data-panning={controls.panning} data-cropping={Boolean(croppingId)}
+      data-design-background={settings.background} data-design-appearance={settings.appearance} data-design-grid={settings.grid}
       style={{
-        '--design-grid-step': `${dotGap}px`,
-        '--design-grid-x': `${viewport.x % dotGap}px`,
-        '--design-grid-y': `${viewport.y % dotGap}px`,
+        '--design-grid-step': `${gridStep}px`,
+        '--design-grid-x': `${viewport.x % gridStep}px`,
+        '--design-grid-y': `${viewport.y % gridStep}px`,
       } as CSSProperties}
       onContextMenu={(event) => {
         if ((ink && (event.metaKey || event.ctrlKey)) || freehand.isDrawing()) { event.preventDefault(); return; }
@@ -503,7 +521,7 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
           event.stopPropagation();
           return;
         }
-        if (!blocked && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+        if (!blocked && !event.metaKey && !event.ctrlKey && !event.altKey && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
           event.preventDefault();
           const area = readWorkArea(workArea.current, size);
           const { left, top, width, height } = event.currentTarget.getBoundingClientRect();
@@ -514,17 +532,20 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
             y: Math.max(area.y, Math.min(area.y + area.height, viewport.y + anchor.y * scale)),
           } : areaCenter(area);
           onContextMenu({ id, point: { x: left + position.x * width / (size.width || 1), y: top + position.y * height / (size.height || 1) } });
-        } else if (event.code === 'Space' && !event.metaKey && !event.ctrlKey) {
+        } else if (event.code === 'Space' && !event.metaKey && !event.ctrlKey && !event.altKey) {
           event.preventDefault();
           controls.setSpace(true);
         } else if (event.key === 'Escape') {
           cancelGesture();
-        } else if ((event.key === '+' || event.key === '=' || event.key === '-') && !event.metaKey && !event.ctrlKey) {
-          event.preventDefault();
-          zoom(event.key === '-' ? 'out' : 'in');
-        } else if (event.shiftKey && (event.code === 'Digit1' || event.code === 'Digit2')) {
-          event.preventDefault();
-          fit(event.code === 'Digit2' && visibleIds.length > 0);
+        } else if (!event.defaultPrevented && !event.nativeEvent.isComposing) {
+          const action = shortcuts.match(event.nativeEvent)?.id;
+          if (action === 'zoomIn' || action === 'zoomOut') {
+            event.preventDefault();
+            zoom(action === 'zoomIn' ? 'in' : 'out');
+          } else if (action === 'fit' || action === 'fitSelection') {
+            event.preventDefault();
+            fit(action === 'fitSelection' && visibleIds.length > 0);
+          }
         }
       }}>
       <Stage ref={stage} width={size.width} height={size.height}
@@ -542,7 +563,7 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
         <Layer>
           <Group x={viewport.x} y={viewport.y} scaleX={scale} scaleY={scale}>
             <DesignCanvasLayers document={paintDocument} scene={paintScene} placements={placements} shaders={shaders} webImages={web.images}
-              canvas={{ range, scale, editingId, paintPreview: gradientEdit?.paintPreview ?? activePaint, cropPreview: activeCrop,
+              canvas={{ range, scale, editingId, inspect: interaction === 'inspect', paintPreview: gradientEdit?.paintPreview ?? activePaint, cropPreview: activeCrop,
                 floating: hoverDrop, pathPreview: pathEdit.preview, drawingPreviews,
                 inlineWebId: web.live?.mode === 'inline' ? web.live.id : undefined, loadImage, translate: t }} />
             {settings.showPixelGrid && scale >= 4 ? <PixelGrid range={range} scale={scale} /> : null}
@@ -599,9 +620,6 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
     {webToolbars}
     <div className="design-canvas__work-area" ref={workArea} aria-hidden="true" />
     {editingId ? renderTextInput(viewport) : null}
-    <DesignZoomControls scale={scale} disabled={navigationBlocked} canZoomIn={scale < maxScale} canZoomOut={scale > minScale}
-      canFit={document.rootIds.length > 0} canFitSelection={visibleIds.length > 0} onZoom={zoom} onFit={fit}
-      onZoomTo={(level) => zoomAtCenter(() => level)} translate={t} />
   </div>;
 });
 

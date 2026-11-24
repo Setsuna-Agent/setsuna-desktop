@@ -27,6 +27,7 @@ export type ShellRegionSlotProps = Readonly<{
 
 export type ShellSidebarPluginEntrySlotProps = Readonly<{
   activeViewKey: RendererPluginViewKey | null;
+  hiddenEntryIds?: ReadonlySet<string>;
   projectId?: string;
   threadId?: string;
   onOpen(viewKey: RendererPluginViewKey): void;

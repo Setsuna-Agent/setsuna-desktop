@@ -28,7 +28,7 @@ export function clipboardDesignImage(clipboard: DataTransfer): File | undefined 
   return Array.from(clipboard.files).find(({ name, type }) => type.toLowerCase().startsWith('image/') || isDesignImageName(name));
 }
 
-function createDesignImageLoader(assets: Pick<DesignAssets, 'read'>, ref: DesignDocumentRef): LoadDesignImage {
+export function createDesignImageLoader(assets: Pick<DesignAssets, 'read'>, ref: DesignDocumentRef): LoadDesignImage {
   const images = new Map<string, Promise<HTMLImageElement>>();
   return async (path, options) => {
     const existing = images.get(path);

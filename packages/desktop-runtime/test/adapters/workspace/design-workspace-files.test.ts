@@ -1,7 +1,9 @@
-import { mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
+import { WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
+import { createDesignDocument } from '@setsuna-desktop/feature-design/contracts';
 import { createDesignWorkspaceFiles } from '../../../src/adapters/workspace/design-workspace-files.js';
 import { moveDesignWorkspaceDocument } from '../../../src/adapters/workspace/design-workspace-document-mutations.js';
 import { createDesignResourceOwnership } from '../../../src/adapters/workspace/design-workspace-resource-root.js';
@@ -24,6 +26,73 @@ async function workspace() {
 
 const draft = (documentId: string, libraries?: Record<string, string>) =>
   JSON.stringify({ schemaVersion: 1, documentId, rootIds: [], nodes: {}, libraries });
+
+it('returns a watchable local directory before the first draft is saved', async () => {
+  const { data, projects, signal } = await workspace();
+  const files = createDesignWorkspaceFiles(projects, data);
+  const root = path.join(data, 'designs');
+  await expect(stat(root)).rejects.toMatchObject({ code: 'ENOENT' });
+  const { directories } = await files.catalog(signal);
+  expect(directories).toContainEqual({ id: 'local', path: root });
+  expect((await stat(root)).isDirectory()).toBe(true);
+});
+
+it('updates the catalog when a regular design is replaced by a preset file at the same path', async () => {
+  const { root, data, projects, projectId, signal } = await workspace();
+  const files = createDesignWorkspaceFiles(projects, data);
+  const pathName = 'Shared.design.json';
+  const target = path.join(root, pathName);
+  await writeFile(target, draft('setsuna-library-shadcn-ui-brand'));
+  await expect(files.listEntries({ projectId }, signal)).resolves.toMatchObject([{ path: pathName }]);
+  const replacement = path.join(root, 'replacement.json');
+  await writeFile(replacement, draft('setsuna-library-shadcn-ui-123e4567-e89b-42d3-a456-426614174000'));
+  await rename(replacement, target);
+  await expect(files.listEntries({ projectId }, signal)).resolves.toEqual([]);
+  await writeFile(target, draft('setsuna-library-brand'));
+  await expect(files.listEntries({ projectId }, signal)).resolves.toMatchObject([{ path: pathName }]);
+});
+
+it('classifies late, escaped root IDs without mistaking layer data for a preset', async () => {
+  const { root, data, projects, projectId, signal } = await workspace();
+  const files = createDesignWorkspaceFiles(projects, data);
+  const presetId = 'setsuna-library-beui-123e4567-e89b-42d3-a456-426614174000';
+  const ordinaryId = 'setsuna-library-beui-brand';
+  function withLateId(id: string, nestedId: string) {
+    const body = JSON.stringify({ schemaVersion: 1, rootIds: ['label'], nodes: { label: {
+      kind: 'text', x: 0, y: 0, width: 180, fontSize: 14, documentId: nestedId, text: 'Layer { "text" } \\ '.repeat(2000),
+    } } });
+    return `${body.slice(0, -1)}, "document\\u0049d": ${JSON.stringify(id)}}`;
+  }
+  const normal = 'Normal.design.json';
+  const preset = 'Renamed preset.design.json';
+  await Promise.all([
+    writeFile(path.join(root, normal), withLateId(ordinaryId, presetId)),
+    writeFile(path.join(root, preset), withLateId(presetId, ordinaryId)),
+  ]);
+  await expect(files.listEntries({ projectId }, signal)).resolves.toMatchObject([{ path: normal }]);
+  await expect(files.listEntries({ projectId, includePreviewMetadata: true }, signal)).resolves.toMatchObject([
+    { path: normal, revision: expect.any(String) }, { path: preset, revision: expect.any(String), libraryPreset: true },
+  ]);
+});
+
+it('allocates different numbered names for concurrent creates and preserves the existing draft', async () => {
+  const { data, projects, projectId, signal } = await workspace();
+  const files = createDesignWorkspaceFiles(projects, data);
+  const input = { storageId: 'local', parentPath: '.', name: '新建设计稿.design.json' };
+  const original = createDesignDocument.input.parse(input);
+  await files.create(original, draft('original'), signal);
+  await expect(files.create(original, draft('conflict'), signal)).rejects.toMatchObject({ code: WORKSPACE_ENTRY_EXISTS_ERROR_CODE });
+
+  const numbered = createDesignDocument.input.parse({ ...input, autoNumber: true, linkedProjectId: projectId });
+  const created = await Promise.all([files.create(numbered, draft('first'), signal), files.create(numbered, draft('second'), signal)]);
+  expect(created.map(({ path }) => path).sort()).toEqual(['新建设计稿 2.design.json', '新建设计稿 3.design.json']);
+  await expect(readFile(path.join(data, 'designs', input.name), 'utf8')).resolves.toBe(draft('original'));
+  const linked = await files.projectDesigns(projectId, signal);
+  expect(linked).toHaveLength(2);
+  expect(linked).toEqual(expect.arrayContaining(created.map(({ path }, index) => ({
+    ref: { storageId: 'local', path }, documentId: index === 0 ? 'first' : 'second',
+  }))));
+});
 
 it.skipIf(process.platform === 'win32')('moves and deletes the listed macOS filename without touching its nested namesake', async () => {
   const { root, directory, data, projects, projectId, signal } = await workspace();

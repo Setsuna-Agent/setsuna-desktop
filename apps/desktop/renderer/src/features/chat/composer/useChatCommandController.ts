@@ -243,6 +243,7 @@ export function useChatCommandController({
     acceptSlashSelection,
     activeMentionIndex: mentionIndex,
     activeSlashIndex,
+    canMentionProjectDesigns: Boolean(client && designProjectId),
     clearSlashDismissal,
     closeSlashMenu,
     mentionItems,

@@ -20,6 +20,7 @@ const drawing = vi.hoisted(() => ({
   paths: new Map<string, string>(),
   pathStrokeWidths: new Map<string, number>(),
   handles: new Set<string>(),
+  nonListening: new Set<string>(),
   hit: undefined as string | undefined,
 }));
 
@@ -54,6 +55,7 @@ vi.mock('react-konva', async () => {
       } }],
       getIntersection() {
         const hit = drawing.hit;
+        if (hit && drawing.nonListening.has(hit)) return null;
         const image = hit ? drawing.images.get(hit) : undefined;
         if (hit && image) return { hasName: (name: string) => name === image.name,
           findAncestor: () => ({ id: () => hit }), getAttr: (key: string) => key === 'image' ? image.image : undefined };
@@ -63,8 +65,10 @@ vi.mock('react-konva', async () => {
     }), [stageImages]);
     return <StageImages.Provider value={stageImages}>{children}</StageImages.Provider>;
   });
-  function Group({ id, x = 0, offsetX = 0, children }: PropsWithChildren<{ id?: string; x?: number; offsetX?: number }>) {
+  function Group({ id, x = 0, offsetX = 0, listening = true, children }: PropsWithChildren<{ id?: string; x?: number; offsetX?: number; listening?: boolean }>) {
     if (!id) return <>{children}</>;
+    if (listening) drawing.nonListening.delete(id);
+    else drawing.nonListening.add(id);
     drawing.localX.set(id, x - offsetX);
     return <LayerId.Provider value={id}>{children}</LayerId.Provider>;
   }
@@ -125,10 +129,12 @@ afterEach(() => {
   drawing.paths.clear();
   drawing.pathStrokeWidths.clear();
   drawing.handles.clear();
+  drawing.nonListening.clear();
   drawing.hit = undefined;
 });
 
-export async function mountEditor(source: Omit<DesignDocument, 'schemaVersion'> & { schemaVersion: number }, saveGate = Promise.resolve(), options: Readonly<{
+type FixtureDocument = Omit<DesignDocument, 'schemaVersion'> & { schemaVersion: number };
+type EditorFixtureOptions = Readonly<{
   renderChat?: RenderDesignChat;
   tasks?: (service: DesignDocumentService) => NonNullable<DesignClient['tasks']>;
   documentPath?: string;
@@ -145,7 +151,9 @@ export async function mountEditor(source: Omit<DesignDocument, 'schemaVersion'> 
   readDesignLayers?: DesignAssets['output']['readDesignLayers'];
   output?: Partial<DesignAssets['output']>;
   libraries?: Readonly<Record<string, DesignDocument>>;
-}> = {}) {
+}>;
+
+export function createEditorFixture(source: FixtureDocument, saveGate = Promise.resolve(), options: EditorFixtureOptions = {}) {
   const documentRef = { projectId: 'project', rootId: 'root', path: options.documentPath ?? 'test.design.json' };
   let content = JSON.stringify(source);
   let revision = 0;
@@ -172,10 +180,11 @@ export async function mountEditor(source: Omit<DesignDocument, 'schemaVersion'> 
       output: { saveDesignHtml: vi.fn(), saveDesignSvg: vi.fn(), saveImageAs: vi.fn(), copyImageToClipboard: vi.fn(), copyDesignLayers: vi.fn(),
         readDesignLayers: options.readDesignLayers ?? vi.fn(), copyText: vi.fn(), ...options.output },
     },
-    list: vi.fn().mockResolvedValue([]), create: vi.fn(), move: vi.fn(), delete: vi.fn(), importImage: options.importImage ?? vi.fn(), commit,
+    list: vi.fn().mockResolvedValue([]), listEntries: vi.fn().mockResolvedValue([]), create: vi.fn(), move: vi.fn(), delete: vi.fn(), importImage: options.importImage ?? vi.fn(), commit,
     importScript: options.importScript ?? vi.fn(),
     importShader: vi.fn(), readShader: vi.fn(),
     resolveResourceRoot: async (ref) => ref,
+    prepareLibraryPreset: vi.fn(),
     readScriptParameters: options.readScriptParameters ?? vi.fn().mockResolvedValue([]),
     renderScript: options.renderScript ?? vi.fn(),
     read: (ref, readSignal) => {
@@ -184,11 +193,16 @@ export async function mountEditor(source: Omit<DesignDocument, 'schemaVersion'> 
     },
     navigate: (input) => service.navigate(input, signal),
   };
+  return { client, service, documentRef, commit, replace, revision: () => revision, read: () => service.read(documentRef, signal) };
+}
+
+export async function mountEditor(source: FixtureDocument, saveGate = Promise.resolve(), options: EditorFixtureOptions = {}) {
+  const { client, documentRef, commit, replace, revision, read } = createEditorFixture(source, saveGate, options);
   const layoutEngine = await loadYoga();
   const view = (chatActivity?: DesignDocumentSurfaceProps['chatActivity']) => <UiProvider locale="en-US"><ToastProvider>
     <DesignEditor chatActivity={chatActivity} renderChat={options.renderChat} client={client} documentRef={documentRef} layoutEngine={layoutEngine} translate={options.translate ?? ((key) => key)} />
   </ToastProvider></UiProvider>;
   const mounted = render(view());
   return { showChatCanvas: (chatActivity: DesignDocumentSurfaceProps['chatActivity']) => mounted.rerender(view(chatActivity)),
-    documentRef, commit, replace, revision: () => revision, read: () => service.read(documentRef, signal) };
+    documentRef, commit, replace, revision, read };
 }

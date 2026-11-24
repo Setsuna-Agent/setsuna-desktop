@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { expect, it, vi } from 'vitest';
@@ -23,9 +23,10 @@ it('loads Feature sources and publishes a shared change only when both Electron 
   let watcher: Awaited<ReturnType<typeof watchElectronDev>> | undefined;
   try {
     for (const build of [...createElectronBuildOptions(root), ...createRuntimeBuildOptions(root)]) {
-      const [entry] = build.entryPoints as string[];
-      await mkdir(dirname(entry), { recursive: true });
-      await writeFile(entry, '');
+      for (const entry of build.entryPoints as string[]) {
+        await mkdir(dirname(entry), { recursive: true });
+        await writeFile(entry, entry.endsWith('.json') ? '{}' : '');
+      }
     }
     await mkdir(join(root, 'packages/feature-core/src'), { recursive: true });
     await save(shared, 'export const version = 1, suffix = "v1";');
@@ -55,6 +56,11 @@ it('loads Feature sources and publishes a shared change only when both Electron 
     await vi.waitFor(() => expect(reload.mock.calls).toEqual([['restart-runtime'], ['relaunch-electron']]), { timeout: 5_000 });
     expect(run(main)).toBe('2');
     expect(run(runtime)).toBe('edited v2');
+
+    const preset = 'beui.design.json';
+    await save(`packages/features/design/src/resources/design-libraries/${preset}`, '{"updated":true}');
+    await vi.waitFor(() => expect(reload.mock.calls.at(-1)).toEqual(['restart-runtime']), { timeout: 5_000 });
+    await expect(readFile(join(root, 'dist', 'resources', 'design-libraries', preset), 'utf8')).resolves.toBe('{"updated":true}');
   } finally {
     await watcher?.dispose();
     warning.mockRestore();

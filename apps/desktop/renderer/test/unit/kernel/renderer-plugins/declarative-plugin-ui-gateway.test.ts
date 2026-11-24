@@ -14,8 +14,8 @@ import type { ReactElement } from 'react';
 import {
   activateDeclarativePluginUiGateway,
   assertHostAllowedContribution,
-  rendererPluginIdentity,
 } from '../../../../src/kernel/declarative-plugin-ui/gateway.js';
+import { rendererPluginIdentity } from '../../../../src/kernel/declarative-plugin-ui/plugin-identity.js';
 import type { RendererPluginRuntime } from '../../../../src/kernel/renderer-plugins/runtime.js';
 
 describe('declarative Plugin UI gateway', () => {
@@ -208,7 +208,9 @@ describe('declarative Plugin UI gateway', () => {
     ));
     const sidebarCalls = list.mock.calls as unknown as Array<[unknown, Record<string, unknown>]>;
     const sidebarRegistration = sidebarCalls.find(([slot]) => slot === shellSidebarPluginEntrySlot)?.[1];
-    expect(sidebarRegistration).not.toHaveProperty('when');
+    const isVisible = sidebarRegistration?.when as (props: { hiddenEntryIds?: ReadonlySet<string> }) => boolean;
+    expect(isVisible({})).toBe(true);
+    expect(isVisible({ hiddenEntryIds: new Set([String(sidebarRegistration?.id)]) })).toBe(false);
     expect(keyed).toHaveBeenCalledWith(
       shellPluginPageSlot,
       expect.objectContaining({ id: expect.stringContaining('.page'), key: 'release-checker/release.page' }),

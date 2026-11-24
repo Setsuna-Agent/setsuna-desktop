@@ -9,6 +9,7 @@ import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { defineFeatureOperation } from '@setsuna-desktop/feature-core/operation';
 import { parseDesignScriptName, parseDesignScriptPath, parseDesignScriptSource } from './design-content-source.js';
 import { designDocumentCodec, parseAssetPath, parseDesignEdit, type DesignDocument, type DesignEdit } from './document.js';
+import { designLibraryPresets, findBundledDesignLibrary, type DesignLibraryPresetId } from './design-library-presets.js';
 import { isDesignDocumentPath } from './design-resource-id.js';
 import { parseDesignScriptInputs, parseDesignScriptParameters, type DesignScriptInputs } from './design-script-parameters.js';
 import { parseDesignShaderName, parseDesignShaderPath, parseDesignShaderSource } from './design-shader.js';
@@ -25,7 +26,12 @@ export function parseDesignWorkspace(input: unknown): DesignWorkspace {
   return workspace(record(input));
 }
 export type DesignDocumentRef = DesignWorkspace & Readonly<{ path: string }>;
-export type CreateDesignDocumentInput = DesignWorkspace & Readonly<{ parentPath: string; name: string; command?: DesignCommandKey }>;
+export type ListDesignDocumentEntriesInput = DesignWorkspace & Readonly<{ includePreviewMetadata?: true }>;
+export type DesignDocumentListEntry = Readonly<{ path: string; modifiedAt?: string; revision?: string; libraryPreset?: true }>;
+export type CreateDesignDocumentInput = DesignWorkspace & Readonly<{
+  parentPath: string; name: string; autoNumber?: boolean; linkedProjectId?: string; command?: DesignCommandKey;
+}>;
+export type PrepareDesignLibraryPresetInput = Readonly<{ ref: DesignDocumentRef; presetId: DesignLibraryPresetId }>;
 export type MoveDesignDocumentInput = Readonly<{ ref: DesignDocumentRef; destination: DesignWorkspace; command?: DesignCommandKey; expectedRevision?: string }>;
 export type DesignSnapshot = Readonly<{ document: DesignDocument; revision: string; canUndo: boolean; canRedo: boolean; workspaceRoot?: string; linkedProjectId?: string | null }>;
 
@@ -65,7 +71,10 @@ const createCodec = defineRuntimeCodec<CreateDesignDocumentInput>((input) => {
   const name = requiredString(value.name);
   if (!isValidWorkspaceEntryName(name) || !isDesignDocumentPath(name)) throw new Error('Invalid design file name.');
   if (typeof value.parentPath !== 'string') throw new Error('Design parent path is required.');
-  return { ...workspace(value), parentPath: value.parentPath, name, command: readDesignCommandKey(value.command) };
+  if (value.autoNumber !== undefined && typeof value.autoNumber !== 'boolean') throw new Error('Invalid design numbering option.');
+  return { ...workspace(value), parentPath: value.parentPath, name, command: readDesignCommandKey(value.command),
+    ...(value.autoNumber ? { autoNumber: true } : {}),
+    ...(value.linkedProjectId === undefined ? {} : { linkedProjectId: requiredString(value.linkedProjectId) }) };
 });
 
 const entryCodec = defineRuntimeCodec<WorkspaceEntry>((input) => {
@@ -114,6 +123,28 @@ export const listDesignDocuments = defineFeatureOperation({
   output: defineRuntimeCodec<readonly string[]>((input) => {
     if (!Array.isArray(input)) throw new Error('Expected a list of design files.');
     return input.map(designPath);
+  }),
+  errors: {}, idempotency: 'safe',
+});
+
+export const listDesignDocumentEntries = defineFeatureOperation({
+  id: 'design.document.entries', path: `${documentsRoute}/entries`, method: 'GET',
+  input: defineRuntimeCodec<ListDesignDocumentEntriesInput>((input) => {
+    const value = record(input);
+    const scope = workspace(value);
+    return value.includePreviewMetadata === true || value.includePreviewMetadata === 'true' ? { ...scope, includePreviewMetadata: true } : scope;
+  }),
+  output: defineRuntimeCodec<readonly DesignDocumentListEntry[]>((input) => {
+    if (!Array.isArray(input)) throw new Error('Expected a list of design entries.');
+    return input.map((entry) => {
+      const { path, modifiedAt, revision, libraryPreset } = record(entry);
+      if (modifiedAt !== undefined && (typeof modifiedAt !== 'string' || !Number.isFinite(Date.parse(modifiedAt)))) {
+        throw new Error('Invalid design modification time.');
+      }
+      return { path: designPath(path), ...(modifiedAt === undefined ? {} : { modifiedAt }),
+        ...(revision === undefined ? {} : { revision: requiredString(revision) }),
+        ...(libraryPreset === true ? { libraryPreset: true } : {}) };
+    });
   }),
   errors: {}, idempotency: 'safe',
 });
@@ -182,6 +213,23 @@ export const createDesignDocument = defineFeatureOperation({
   errors: { [WORKSPACE_ENTRY_EXISTS_ERROR_CODE]: { status: 409 } }, idempotency: 'non-idempotent',
 });
 
+export const prepareDesignLibraryPreset = defineFeatureOperation({
+  id: 'design.library.prepare-preset', path: '/v1/features/design/libraries/preset', method: 'POST',
+  input: defineRuntimeCodec<PrepareDesignLibraryPresetInput>((input) => {
+    const { ref, presetId } = record(input);
+    const preset = designLibraryPresets.find(({ id }) => id === presetId);
+    if (!preset) throw new Error('Unknown design library preset.');
+    return { ref: refCodec.parse(ref), presetId: preset.id };
+  }),
+  output: defineRuntimeCodec((input) => {
+    const edit = parseDesignEdit(input);
+    if (edit.kind !== 'linkLibrary') throw new Error('Expected a design library link.');
+    return edit;
+  }),
+  errors: { ...documentErrors, ...resourceRootErrors, [WORKSPACE_ENTRY_EXISTS_ERROR_CODE]: { status: 409 } },
+  idempotency: 'idempotent',
+});
+
 export const moveDesignDocument = defineFeatureOperation({
   id: 'design.document.move', path: `${documentsRoute}/move`, method: 'POST',
   input: defineRuntimeCodec<MoveDesignDocumentInput>((input) => {
@@ -190,7 +238,7 @@ export const moveDesignDocument = defineFeatureOperation({
   }),
   output: refCodec,
   errors: { ...documentErrors, ...resourceRootErrors, [WORKSPACE_ENTRY_EXISTS_ERROR_CODE]: { status: 409 },
-    DESIGN_LIBRARY_IN_USE: { status: 409 }, DESIGN_DEPENDENCY_UNAVAILABLE: { status: 409 } },
+    DESIGN_LIBRARY_IN_USE: { status: 409 }, DESIGN_DEPENDENCY_UNAVAILABLE: { status: 409 }, DESIGN_LIBRARY_PROJECT_REQUIRED: { status: 409 } },
   idempotency: 'non-idempotent',
 });
 
@@ -208,7 +256,12 @@ export const deleteDesignDocument = defineFeatureOperation({
 });
 
 export const readDesignDocument = defineFeatureOperation({
-  id: 'design.document.read', path: documentsRoute, method: 'GET', input: refCodec, output: snapshotCodec,
+  id: 'design.document.read', path: documentsRoute, method: 'GET',
+  input: defineRuntimeCodec<DesignDocumentRef>((input) => {
+    const value = record(input);
+    return { ...workspace(value), path: findBundledDesignLibrary(value.path)?.bundledPath ?? designPath(value.path) };
+  }),
+  output: snapshotCodec,
   errors: documentErrors, idempotency: 'safe',
 });
 

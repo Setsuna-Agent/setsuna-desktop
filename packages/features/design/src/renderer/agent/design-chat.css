@@ -17,28 +17,68 @@
   background: var(--app-surface);
 }
 
+.design-chat-sidebar:not([data-fullscreen]) {
+  --design-chat-font-size: calc(var(--app-font-size, 14px) - 1px);
+  font-size: var(--design-chat-font-size);
+}
+
+.design-chat-sidebar:not([data-fullscreen]) :is(.chat-markdown, .chat-prompt__input) {
+  font-size: var(--design-chat-font-size);
+}
+
 .design-chat-sidebar > .desktop-chat-panel--side {
   --chat-content-inline-padding: 10px;
 }
 
+.design-editor__layers[data-fullscreen] {
+  --design-chat-history-width: clamp(180px, 21%, 240px);
+}
+
+.design-editor__layers[data-fullscreen]::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(var(--design-chat-history-width) - 1px);
+  inline-size: 1px;
+  background: color-mix(in srgb, var(--app-border) 70%, transparent);
+  pointer-events: none;
+  content: '';
+}
+
 .design-chat-sidebar[data-fullscreen] {
   display: grid;
-  grid-template-columns: clamp(188px, 22%, 248px) minmax(0, 1fr);
+  grid-template-columns: var(--design-chat-history-width) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   background: transparent;
 }
 
 .design-chat-sidebar[data-fullscreen] > .desktop-chat-panel--side {
+  --design-chat-top-fade: 18px;
   grid-area: 1 / 2;
   --chat-content-inline-padding: inherit;
   --chat-content-max-width: inherit;
+}
+
+.design-chat-sidebar[data-fullscreen] .chat-main-conversation:has(> .chat-messages:not(.chat-messages--starter))::before {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 0;
+  inset-inline: var(--chat-scrollbar-width);
+  block-size: var(--design-chat-top-fade);
+  background: linear-gradient(to bottom, var(--desktop-agent-main-bg), transparent);
+  pointer-events: none;
+  content: '';
+}
+
+.design-chat-sidebar[data-fullscreen] .chat-messages:not(.chat-messages--starter) {
+  padding-block-start: var(--design-chat-top-fade);
+  scroll-padding-block-start: var(--design-chat-top-fade);
 }
 
 .design-chat-sidebar__bar {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 10px 4px 6px;
+  padding: 0 10px 2px 6px;
   border-bottom: 1px solid var(--app-border);
 }
 
@@ -51,6 +91,7 @@
   padding: 2px 6px;
   border: 0;
   background: transparent;
+  font-size: var(--design-control-font-size);
   font-weight: 600;
 }
 
@@ -62,47 +103,49 @@
   outline: 2px solid var(--app-focus-outline);
 }
 
-.design-chat-sidebar :is(.design-chat-sidebar__bar, li) > .sd-icon-button {
+.design-chat-sidebar__history-menu.sd-select-menu {
+  --app-menu-item-height: 24px;
+  padding: 4px;
+  border-radius: var(--app-radius-md);
+  font-size: 13px;
+}
+
+.design-chat-sidebar__history-menu .sd-select-menu__option {
+  gap: 6px;
+  padding: 2px 6px;
+}
+
+:is(.design-chat-sidebar__bar, .design-chat-sidebar__row) > .sd-icon-button {
   flex: none;
   width: 28px;
   height: 28px;
 }
 
 .design-chat-sidebar__navigation {
-  --design-chat-sidebar-surface: var(--app-surface-subtle);
-  --desktop-agent-control-hover-bg: color-mix(in srgb, var(--design-chat-sidebar-surface), var(--app-text) 5%);
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  gap: 6px;
-  margin-inline-start: var(--design-panel-edge);
-  margin-block-end: var(--design-panel-edge);
-  padding: 8px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-container);
-  background: var(--design-chat-sidebar-surface);
+  gap: 12px;
+  padding-block: 4px var(--design-panel-edge);
+  padding-inline: var(--design-panel-edge) 10px;
 }
 
 :is(.design-chat-sidebar__new, .design-chat-sidebar__entry).sd-button {
+  justify-content: flex-start;
+  min-height: 34px;
+  padding-inline: 10px;
   border-radius: var(--app-radius-md);
   font-size: 13px;
+  text-align: start;
 }
 
 .design-chat-sidebar__new.sd-button {
-  justify-content: flex-start;
-  min-height: 38px;
-  padding-inline: 6px;
-  color: var(--app-text);
   font-weight: 600;
 }
 
-.design-chat-sidebar__new .sd-button__icon {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--app-radius-sm);
-  color: var(--design-ink);
-  background: color-mix(in srgb, var(--design-chat-sidebar-surface), var(--design-accent) 13%);
+:is(.design-chat-sidebar__new, .design-chat-sidebar__entry) .sd-button__icon {
+  color: var(--app-text-secondary);
 }
 
 .design-chat-sidebar__conversations {
@@ -111,11 +154,6 @@
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: auto;
-}
-
-.design-chat-sidebar__conversations:not(:empty) {
-  padding-block-start: 6px;
-  border-block-start: 1px solid var(--app-border);
 }
 
 .design-chat-sidebar__conversations ul {
@@ -128,24 +166,33 @@
 
 .design-chat-sidebar__conversations ul + ul {
   margin-block-start: 8px;
-  padding-block-start: 8px;
-  border-block-start: 1px solid var(--app-border);
 }
 
-.design-chat-sidebar__conversations li {
+.design-chat-sidebar__row {
   display: flex;
   align-items: center;
   min-width: 0;
+  border-radius: var(--app-radius-md);
+  transition: background-color var(--app-duration-fast) ease;
+}
+
+.design-chat-sidebar__row:where(:hover):has(> .design-chat-sidebar__entry:enabled) {
+  background: var(--app-toolbar-control-hover-bg);
+}
+
+.design-chat-sidebar__row:has(> .design-chat-sidebar__entry[aria-current='true']) {
+  background: var(--app-accent-soft);
+}
+
+.design-chat-sidebar__row > .sd-icon-button {
+  margin-inline-end: 3px;
 }
 
 .design-chat-sidebar__entry.sd-button {
-  justify-content: space-between;
-  gap: 8px;
+  --desktop-agent-control-hover-bg: transparent;
   flex: 1;
   min-width: 0;
-  min-height: 34px;
-  padding-inline: 12px;
-  text-align: start;
+  padding-inline-end: 6px;
 }
 
 .design-chat-sidebar__label {
@@ -154,14 +201,11 @@
   text-overflow: ellipsis;
 }
 
-.design-chat-sidebar__legacy-icon {
-  flex: none;
-  color: var(--app-text-muted);
+.design-chat-sidebar__entry.sd-button[aria-current='true'] {
+  color: var(--app-text);
+  font-weight: 600;
 }
 
-.design-chat-sidebar__entry.sd-button[aria-current='true'] {
-  --desktop-agent-control-hover-bg: color-mix(in srgb, var(--design-chat-sidebar-surface), var(--app-text) 8%);
+.design-chat-sidebar__entry[aria-current='true'] .sd-button__icon {
   color: var(--app-text);
-  background: var(--desktop-agent-control-hover-bg);
-  font-weight: 600;
 }

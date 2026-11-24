@@ -1,9 +1,10 @@
 import { Search, type LucideIcon } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { IconButton, TextField, useHoverPreview, useToast } from '@setsuna-desktop/renderer-ui';
 import { designDefaultColor } from '../../contracts/design-color.js';
 import { designIconNames, type DesignVector } from '../../contracts/index.js';
+import { DesignUiHostContext } from '../context/design-ui-host.js';
 import { defaultDesignStroke } from '../design-paint.js';
 import type { DesignLucideSource } from './design-svg-source.js';
 import './design-icon-picker.css';
@@ -19,9 +20,10 @@ type IconActions = Readonly<{
   }>;
 }>;
 const commonNames = new Set<string>(designIconNames);
-const tile = 42;
-const gap = 5;
+const tile = 36;
+const gap = 4;
 const rowStep = tile + gap;
+const initialViewport = { width: 300, height: 5 * rowStep - gap };
 const overscan = 2;
 
 export function designLucideLabel(name: string, translate: RendererTranslate) {
@@ -58,9 +60,9 @@ export function DesignLucidePicker({ selected, disabled, searchAction, onPick, p
   }, [t, toast]);
 
   return <>
-    <div className="design-icon-picker__search design-panel-scroll">
+    <div className="design-icon-picker__search">
       <TextField autoFocus appearance="search" aria-label={t('feature.design.searchIcons')} placeholder={t('feature.design.searchIcons')}
-        leadingIcon={<Search size={15} />} value={query} readOnly={disabled} onChange={(event) => setQuery(event.target.value)} />
+        leadingIcon={<Search size={14} />} value={query} readOnly={disabled} onChange={(event) => setQuery(event.target.value)} />
       {searchAction}
     </div>
     <DesignIconGrid key={search} entries={matches} selected={selected} disabled={disabled} onPick={onPick} preview={preview} label={t('feature.design.icon')} />
@@ -73,9 +75,10 @@ function DesignIconGrid({ entries, label, selected, disabled, onPick, preview }:
   selected?: string;
   disabled: boolean;
 }>) {
+  const ScrollOverlay = useContext(DesignUiHostContext)?.ScrollOverlay;
   const scroll = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 300, height: 272 });
+  const [size, setSize] = useState(initialViewport);
   const [scrollTop, setScrollTop] = useState(0);
   const hover = useHoverPreview(disabled ? undefined : preview?.show);
 
@@ -83,8 +86,8 @@ function DesignIconGrid({ entries, label, selected, disabled, onPick, preview }:
     const element = scroll.current;
     if (!element) return;
     function measure() {
-      const width = content.current?.clientWidth || 300;
-      const height = element?.clientHeight || 272;
+      const width = content.current?.clientWidth || initialViewport.width;
+      const height = element?.clientHeight || initialViewport.height;
       setSize((previous) => previous.width === width && previous.height === height ? previous : { width, height });
     }
     measure();
@@ -100,20 +103,23 @@ function DesignIconGrid({ entries, label, selected, disabled, onPick, preview }:
   const firstRow = Math.max(0, Math.floor(top / rowStep) - overscan);
   const pastRow = Math.min(rows, Math.ceil((top + size.height) / rowStep) + overscan);
 
-  return <div ref={scroll} className="design-icon-picker__scroll design-panel-scroll" role="group" aria-label={label} tabIndex={0}
-    onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}>
-    <div ref={content} className="design-icon-picker__spacer" style={{ height }}>
-      <div className="design-icon-picker__grid" style={{
-        top: firstRow * rowStep, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridAutoRows: tile, gap,
-      }}>
-        {entries.slice(firstRow * columns, pastRow * columns).map((entry) => <CatalogIcon key={entry.name} entry={entry}
-          {...(preview && entry.name !== selected ? hover.option(async (tile) => {
-            const source = iconSource(tile, entry);
-            if (source) return preview.prepare(source);
-          }) : undefined)}
-          selected={entry.name === selected} disabled={disabled} onPick={(source) => { hover.clear(); onPick(source); }} />)}
+  return <div className="design-icon-picker__viewport" style={{ '--design-icon-picker-grid-height': `${initialViewport.height}px` } as CSSProperties}>
+    <div ref={scroll} className="design-icon-picker__scroll" role="group" aria-label={label} tabIndex={0}
+      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}>
+      <div ref={content} className="design-icon-picker__spacer" style={{ height }}>
+        <div className="design-icon-picker__grid" style={{
+          top: firstRow * rowStep, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridAutoRows: tile, gap,
+        }}>
+          {entries.slice(firstRow * columns, pastRow * columns).map((entry) => <CatalogIcon key={entry.name} entry={entry}
+            {...(preview && entry.name !== selected ? hover.option(async (tile) => {
+              const source = iconSource(tile, entry);
+              if (source) return preview.prepare(source);
+            }) : undefined)}
+            selected={entry.name === selected} disabled={disabled} onPick={(source) => { hover.clear(); onPick(source); }} />)}
+        </div>
       </div>
     </div>
+    {ScrollOverlay ? <ScrollOverlay scrollRef={scroll} /> : null}
   </div>;
 }
 

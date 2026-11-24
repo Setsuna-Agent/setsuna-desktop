@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { lstat, readdir, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { workspaceFilePathKey, workspaceProjectRoots, type WorkspaceProject } from '@setsuna-desktop/contracts';
-import { designDocumentAssetPaths, isDesignDocumentPath,
+import { designDocumentAssetPaths, designLibraryFileLinks, isDesignDocumentPath, isDesignLibraryPresetDocumentId,
   type DesignDirectory, type DesignWorkspace, type DesignDocument, type DesignDocumentRef } from '@setsuna-desktop/feature-design/contracts';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { RuntimeUseCaseError } from '../../runtime/use-cases/errors.js';
@@ -262,6 +262,9 @@ export function resolveDesignResourceRoot(ref: DesignDocumentRef, root: string, 
   return withDesignSource(root, ref.path, scopes.map(({ directory }) => directory), undefined, signal, async (file, roots) => {
     const target = await realpath(file.target);
     const { document } = await readDesignDocumentFile(target, ref.path);
+    if (isDesignLibraryPresetDocumentId(document.documentId)) throw new FeatureOperationFailure({
+      code: 'INVALID_INPUT', message: 'Open built-in design libraries from the design resource library.', retryable: false,
+    });
     const directory = await designResourceDirectory(root, target, document, roots, ownership, signal);
     const relativePath = path.relative(directory, target).split(path.sep).join('/');
     if (!path.relative(root, directory)) return { ...ref, path: relativePath };
@@ -290,7 +293,7 @@ export async function designResourceDirectory(root: string, target: string, docu
 export async function bindDesignResourcesForEdit(root: string, target: string, previous: DesignDocument, next: DesignDocument,
   roots: readonly string[], ownership: DesignResourceOwnership, signal: AbortSignal) {
   if (await ownership.read(target, previous.documentId) !== undefined) return false;
-  if (!Object.keys(next.libraries ?? {}).length && !designDocumentAssetPaths(next).size) return false;
+  if (!designLibraryFileLinks(next.libraries).length && !designDocumentAssetPaths(next).size) return false;
   // A newly referenced path may exist in several roots. Infer ownership from the draft as it was opened.
   const directory = roots.length === 1 ? root : await inferResourceDirectory(root, previous, roots, signal);
   return ownership.remember(target, previous.documentId, directory);
@@ -299,7 +302,7 @@ export async function bindDesignResourcesForEdit(root: string, target: string, p
 async function inferResourceDirectory(root: string, document: DesignDocument, candidates: readonly string[], signal: AbortSignal,
   requireReadableDependencies = false) {
   const assets = designDocumentAssetPaths(document);
-  const libraries = Object.entries(document.libraries ?? {});
+  const libraries = designLibraryFileLinks(document.libraries);
   const onDependencyError = requireReadableDependencies ? ignoreMissingDependency : () => undefined;
   let match: string | undefined;
   for (const candidate of candidates) {

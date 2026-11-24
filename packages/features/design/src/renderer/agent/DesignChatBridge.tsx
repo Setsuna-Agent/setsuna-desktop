@@ -14,6 +14,7 @@ export type DesignCanvasSelection = {
 export type DesignChatBinding = DesignConversationOwner & Partial<DesignCanvasSelection> & {
   bind(threadId: string, ids?: readonly string[], clientId?: string): Promise<void>;
   release(): Promise<void>;
+  onBusyChange?(busy: boolean): void;
 };
 export type RenderDesignChat = (binding: DesignChatBinding, projectId?: string | null) => ReactNode;
 

@@ -1,0 +1,85 @@
+.design-chat-starter {
+  box-sizing: border-box;
+  inline-size: min(100%, 296px);
+  margin: auto;
+  padding: 24px 10px;
+}
+
+.design-chat-starter__sketch {
+  position: relative;
+  display: block;
+  inline-size: 66px;
+  block-size: 48px;
+  margin-block-end: 16px;
+  margin-inline-start: 8px;
+}
+
+.design-chat-starter__sketch::before,
+.design-chat-starter__sketch::after {
+  position: absolute;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 6px;
+  content: '';
+}
+
+.design-chat-starter__sketch::before {
+  inset: 4px 17px 9px 4px;
+  border-color: var(--app-border);
+  background: var(--app-surface-subtle);
+  transform: rotate(-9deg);
+}
+
+.design-chat-starter__sketch::after {
+  inset: 9px 1px 2px 14px;
+  --design-chat-sketch-detail: var(--app-border);
+  background:
+    linear-gradient(var(--app-border-strong) 0 0) 7px 8px / 16px 2px no-repeat,
+    linear-gradient(var(--design-chat-sketch-detail) 0 0) 7px 15px / 11px 13px no-repeat,
+    linear-gradient(var(--design-chat-sketch-detail) 0 0) 22px 16px / 18px 2px no-repeat,
+    linear-gradient(var(--design-chat-sketch-detail) 0 0) 22px 22px / 13px 2px no-repeat,
+    var(--app-surface);
+}
+
+.design-chat-starter__prompts {
+  display: grid;
+  gap: 1px;
+  padding-block-start: 5px;
+  border-block-start: 1px solid var(--app-border);
+}
+
+.design-chat-starter__prompt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-inline-size: 0;
+  min-block-size: 34px;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: start;
+  cursor: pointer;
+}
+
+.design-chat-starter__prompt:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+  color: var(--app-text);
+}
+
+.design-chat-starter__prompt:focus-visible {
+  outline: 1px solid var(--app-text-muted);
+  outline-offset: 1px;
+}
+
+.design-chat-starter__arrow {
+  opacity: 0;
+}
+
+.design-chat-starter__prompt:is(:hover, :focus-visible) .design-chat-starter__arrow {
+  opacity: 0.6;
+}

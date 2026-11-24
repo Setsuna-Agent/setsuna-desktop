@@ -1,6 +1,6 @@
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { useCallback, useMemo } from 'react';
-import { usePinnedSidebarIds } from './usePinnedSidebarIds.js';
+import { useStoredSidebarIds } from './useStoredSidebarIds.js';
 
 export const PINNED_THREADS_STORAGE_KEY = 'setsuna-pinned-threads-v1';
 
@@ -9,7 +9,7 @@ export function usePinnedThreads(
   threadsByProjectId: Map<string, RuntimeThreadSummary[]>,
   globalThreads: RuntimeThreadSummary[],
 ) {
-  const { ids: pinnedThreadIds, toggle } = usePinnedSidebarIds(PINNED_THREADS_STORAGE_KEY);
+  const { ids: pinnedThreadIds, toggle } = useStoredSidebarIds(PINNED_THREADS_STORAGE_KEY, 'sidebar.pinSaveFailed');
   const togglePinnedThread = useCallback((thread: RuntimeThreadSummary) => toggle(thread.id), [toggle]);
 
   const pinnedThreads = useMemo(() => {

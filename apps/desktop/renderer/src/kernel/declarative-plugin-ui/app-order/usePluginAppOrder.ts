@@ -10,10 +10,11 @@ import { reorderListPreferences, type ListDropPosition } from '../../renderer-pl
 
 const APP_DRAG_TYPE = 'application/x-setsuna-sidebar-app';
 
-export function usePluginAppOrder() {
+export function usePluginAppOrder(hiddenEntryIds?: ReadonlySet<string>) {
   const runtime = useRendererPluginRuntime();
   const slots = useRendererOwnedSlots();
-  const entryIds = slots.listEntryIds(shellSidebarPluginEntrySlot);
+  const allEntryIds = slots.listEntryIds(shellSidebarPluginEntrySlot);
+  const entryIds = hiddenEntryIds?.size ? allEntryIds.filter((id) => !hiddenEntryIds.has(id)) : allEntryIds;
   const controller = useMemo(() => createRendererLayoutPreferenceController(
     runtime, createRendererLayoutPreferenceStore(window.localStorage),
   ), [runtime]);
@@ -59,7 +60,9 @@ export function usePluginAppOrder() {
     const dropTarget = target ?? { id: targetId, position: dropPosition(event) };
     reset();
     if (pendingRef.current || payload !== sourceId) return;
-    const next = reorderListPreferences(controller.get(), shellSidebarPluginEntrySlot.id, entryIds, sourceId, dropTarget.id, dropTarget.position);
+    const next = reorderListPreferences(
+      controller.get(), shellSidebarPluginEntrySlot.id, entryIds, sourceId, dropTarget.id, dropTarget.position, allEntryIds,
+    );
     if (!next) return;
     pendingRef.current = true;
     try {

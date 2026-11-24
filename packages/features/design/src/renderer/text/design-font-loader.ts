@@ -1,5 +1,6 @@
 import { designFontFormats, designFontNameKey, maxDesignFontBytes, type DesignCustomFont, type DesignFontStyle } from '../../contracts/design-fonts.js';
 import type { DesignFontClient } from '../client.js';
+import { bundledDesignFonts, mergeDesignFontCatalog, readBundledDesignFont } from './design-bundled-fonts.js';
 import { designCustomFontFamily } from './design-typography.js';
 
 type Registration = {
@@ -10,6 +11,7 @@ type Registration = {
 };
 
 export type DesignFontRequest = Readonly<{ family: string; weight: number; style: DesignFontStyle }>;
+export const designFontCatalogChannel = 'setsuna-design-fonts';
 
 export function matchDesignFontFaces(fonts: readonly DesignCustomFont[], requests: readonly DesignFontRequest[]) {
   const chosen = new Set<string>();
@@ -43,7 +45,7 @@ function fontWeightRank(wanted: number, available: number) {
 export class DesignFontLoader {
   private readonly registrations = new Map<string, Registration>();
 
-  constructor(private readonly client: DesignFontClient, private readonly changed: (font: DesignCustomFont) => void) {}
+  constructor(private readonly client: Pick<DesignFontClient, 'read'>, private readonly changed?: (font: DesignCustomFont) => void) {}
 
   isSettled(font: DesignCustomFont) {
     return this.registrations.get(font.id)?.settled ?? false;
@@ -60,7 +62,7 @@ export class DesignFontLoader {
         registration.face = face;
         return true;
       }).catch(() => false).finally(() => {
-        if (!request.signal.aborted) { registration.settled = true; this.changed(font); }
+        if (!request.signal.aborted) { registration.settled = true; this.changed?.(font); }
       }),
     };
     this.registrations.set(font.id, registration);
@@ -87,6 +89,39 @@ export class DesignFontLoader {
     for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
     return new FontFace(designCustomFontFamily(font.family), bytes, { weight: fontWeight(font), style: font.style }).load();
   }
+}
+
+export function createDesignPreviewFontLoader(client: Pick<DesignFontClient, 'list' | 'read'>) {
+  const loader = new DesignFontLoader({ read: (id, signal) => readBundledDesignFont(id, signal) ?? client.read(id, signal) });
+  let catalog: readonly DesignCustomFont[] | undefined;
+
+  async function loadFonts(requests: readonly DesignFontRequest[], signal: AbortSignal) {
+    if (!catalog) {
+      const imported = await client.list(signal).catch(() => undefined);
+      signal.throwIfAborted();
+      if (imported) catalog = mergeDesignFontCatalog(imported);
+    }
+    const needed = matchDesignFontFaces(catalog ?? bundledDesignFonts, requests);
+    loader.retain(needed);
+    await Promise.all(needed.map((font) => loader.load(font, true)));
+  }
+
+  return {
+    async load(requests: readonly DesignFontRequest[], signal: AbortSignal) {
+      if (!requests.length) return;
+      signal.throwIfAborted();
+      // Release the preview queue even if a font decode is still finishing in Chromium.
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          loader.retain([]);
+          reject(signal.reason);
+        };
+        signal.addEventListener('abort', abort, { once: true });
+        void loadFonts(requests, signal).then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+      });
+    },
+    dispose() { loader.retain([]); },
+  };
 }
 
 export function importableDesignFont(file: File): boolean {

@@ -3,9 +3,9 @@ import { workspaceFilePathKey, workspaceProjectRoots, workspaceRootName, type Wo
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { DesignCatalog, DesignDirectory, DesignDocumentRef } from '../../contracts/index.js';
 import type { DesignClient } from '../client.js';
-import type { DesignListingScope } from './use-design-document-lists.js';
+import { designListingKey, type DesignListingScope } from './use-design-document-lists.js';
 
-const emptyCatalog: DesignCatalog = { directories: [], associations: [] };
+const emptyCatalog: DesignCatalog & { ready: boolean } = { directories: [], associations: [], ready: false };
 
 export function useDesignCatalog(client: DesignClient, projects: readonly WorkspaceProject[], translate: RendererTranslate, onError: (error: unknown) => void) {
   const [catalog, setCatalog] = useState(emptyCatalog);
@@ -17,7 +17,7 @@ export function useDesignCatalog(client: DesignClient, projects: readonly Worksp
     try {
       const next = await client.catalog(controller.signal);
       if (!controller.signal.aborted) setCatalog((previous) => ({
-        ...next, directories: previous.directories.length === next.directories.length && next.directories.every((entry, index) =>
+        ...next, ready: true, directories: previous.directories.length === next.directories.length && next.directories.every((entry, index) =>
           entry.id === previous.directories[index].id && entry.path === previous.directories[index].path) ? previous.directories : next.directories,
       }));
     } catch (error) { if (!controller.signal.aborted) onError(error); }
@@ -45,5 +45,15 @@ export function useDesignCatalog(client: DesignClient, projects: readonly Worksp
     const key = workspaceFilePathKey(root, ref.path);
     return associations.has(key) ? associations.get(key) : ref.projectId;
   }, [associations]);
-  return { scopes, projectFor, refresh, rememberDirectory };
+  const mayContainProjectDrafts = useCallback((listing: DesignListingScope, projectIds: ReadonlySet<string>) => {
+    if (listing.scope.projectId && projectIds.has(listing.scope.projectId)) return true;
+    const directory = designListingKey(listing);
+    const prefix = directory.endsWith('/') ? directory : `${directory}/`;
+    // A draft linked to this project can be stored under a different listing root.
+    for (const [file, linkedProject] of associations) {
+      if (linkedProject && projectIds.has(linkedProject) && file.startsWith(prefix)) return true;
+    }
+    return false;
+  }, [associations]);
+  return { scopes, projectFor, mayContainProjectDrafts, catalogReady: catalog.ready, refresh, rememberDirectory };
 }

@@ -1,20 +1,15 @@
-import { Check, Settings2 } from 'lucide-react';
+import { Check, Settings } from 'lucide-react';
 import { PointMenu, type MenuItem } from '@setsuna-desktop/renderer-ui';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { ComponentActions } from '../components/DesignComponentActions.js';
 import type { Point } from '../design-geometry.js';
 import type { DesignCanvasSetting, DesignCanvasSettings } from './design-canvas-settings.js';
 import type { DesignLayerActions, DesignLayerCommand } from './design-layer-commands.js';
-import { designLayerShortcutLabel } from './design-layer-shortcuts.js';
+import { designClipboardLabel } from './design-layer-shortcuts.js';
+import { designLayerLabels, type DesignShortcuts } from '../settings/design-shortcuts.js';
 
 const settingsKeys = ['showPixelGrid', 'snapToPixelGrid', 'snapToObjects'] as const;
 
-const commands = {
-  copy: 'copyLayers', paste: 'pasteHere', replace: 'pasteReplace', front: 'bringToFront', back: 'sendToBack',
-  group: 'groupSelection', frame: 'wrapInFrame', ungroup: 'ungroup', addLayout: 'addAutoLayout', removeLayout: 'removeAutoLayout',
-  component: 'createComponent', detach: 'detachComponent', flipX: 'flipHorizontal', flipY: 'flipVertical', delete: 'delete',
-  mask: 'createMask', removeMask: 'removeMask', union: 'unionPaths', subtract: 'subtractPaths',
-} satisfies Record<DesignLayerCommand, string>;
 const divider: MenuItem = { type: 'divider' };
 
 type SettingsControls = Readonly<{
@@ -23,23 +18,23 @@ type SettingsControls = Readonly<{
   translate: RendererTranslate;
 }>;
 
-export function DesignLayerMenu({ point, actions, hasSelection, components, onCopyPng, onCopyHtml, onClose, settings, onToggle, translate: t }: SettingsControls & Readonly<{
+export function DesignLayerMenu({ point, actions, hasSelection, components, onCopyPng, onCopyHtml, onClose, settings, shortcuts, onToggle, translate: t }: SettingsControls & Readonly<{
   point: Point;
   actions: DesignLayerActions;
   hasSelection: boolean;
   components: Pick<ComponentActions, 'library' | 'onInsert'>;
   onCopyPng?: () => void;
   onCopyHtml?: () => void;
+  shortcuts: DesignShortcuts;
   onClose(): void;
 }>) {
-  const mac = /Mac/u.test(navigator.platform);
   const command = (key: DesignLayerCommand): MenuItem => {
-    const shortcut = designLayerShortcutLabel(key, mac);
-    return { key, label: t(`feature.design.${commands[key]}`), disabled: !actions[key], danger: key === 'delete',
+    const shortcut = key === 'copy' || key === 'paste' ? designClipboardLabel(key, shortcuts.platform) : shortcuts.label(`layer.${key}`);
+    return { key, label: t(`feature.design.${designLayerLabels[key]}`), disabled: !actions[key], danger: key === 'delete',
       extra: shortcut ? <span className="sd-menu__extra">{shortcut}</span> : undefined, onClick: actions[key] };
   };
   const settingsMenu: MenuItem = {
-    key: 'settings', label: t('feature.design.canvasSettings'), icon: <Settings2 size={14} />,
+    key: 'settings', label: t('feature.design.canvasSettings'), icon: <Settings size={14} />,
     children: settingsKeys.map((key): MenuItem => ({
       key, label: t(`feature.design.${key}`),
       extra: settings[key] ? <Check size={14} className="sd-menu__extra" aria-hidden="true" /> : null,

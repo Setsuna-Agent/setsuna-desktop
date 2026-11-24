@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { workspaceFilePathKey, type WorkspaceProjectRoot } from '@setsuna-desktop/contracts';
-import { designDocumentFileExtension, type DesignWorkspace } from '../../contracts/index.js';
+import { designDocumentFileExtension, type DesignDocumentListEntry, type DesignWorkspace } from '../../contracts/index.js';
 import type { DesignClient } from '../client.js';
 import type { WatchDesignDirectories } from '../design-images.js';
 
@@ -15,7 +15,7 @@ const concurrentListings = 4;
 
 export function useDesignDocumentLists(client: DesignClient, scopes: readonly DesignListingScope[],
   watchDirectories: WatchDesignRootDirectories | undefined, onError: (error: unknown) => void) {
-  const [lists, setLists] = useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
+  const [lists, setLists] = useState<ReadonlyMap<string, readonly DesignDocumentListEntry[]>>(() => new Map());
   const scheduleRefresh = useRef<() => void>();
   useEffect(() => {
     if (!scopes.length) return;
@@ -34,13 +34,15 @@ export function useDesignDocumentLists(client: DesignClient, scopes: readonly De
         pending.delete(key);
         running.add(key);
         const { root } = scope;
-        void client.list(scope.scope, signal).then((paths) => {
+        void client.listEntries(scope.scope, signal).then((entries) => {
           if (signal.aborted) return;
           failed.delete(key);
           setLists((current) => {
             const previous = current.get(key);
-            return previous?.length === paths.length && previous.every((path, index) => path === paths[index])
-              ? current : new Map(current).set(key, paths);
+            return previous?.length === entries.length && previous.every(({ path, modifiedAt, revision, libraryPreset }, index) =>
+              path === entries[index].path && modifiedAt === entries[index].modifiedAt
+                && revision === entries[index].revision && libraryPreset === entries[index].libraryPreset)
+              ? current : new Map(current).set(key, entries);
           });
           if (watchDirectories && !watchers.has(key)) {
             watchers.set(key, watchDirectories(root.path, ['.'], () => schedule([scope]), {

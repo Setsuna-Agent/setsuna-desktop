@@ -10,7 +10,7 @@ import { Tooltip } from './popover.js';
 export type MenuAction = { key: string; domEvent: Event };
 export type MenuItem = {
   key?: string; type?: 'divider' | 'group'; label?: ReactNode; icon?: ReactNode;
-  className?: string; extra?: ReactNode; danger?: boolean; disabled?: boolean; children?: (MenuItem | null | false)[];
+  className?: string; extra?: ReactNode; danger?: boolean; disabled?: boolean; checked?: boolean; children?: (MenuItem | null | false)[];
   submenuClassName?: string;
   /** Optional control (such as search) before the submenu's roving menu items. */
   submenuInitialFocusRef?: RefObject<HTMLElement>;
@@ -102,7 +102,7 @@ function MenuItems({ menu, context }: { menu: MenuProps; context: boolean }) {
     const key = item.key ?? String(index);
     if (item.type === 'divider') return <ui.Separator key={key} className="sd-menu__separator" />;
     if (item.type === 'group') return <ui.Group key={key} className={item.className}>{item.label != null ? <ui.Label className="sd-menu__label">{item.label}</ui.Label> : null}<MenuItems context={context} menu={{ ...menu, items: item.children }} /></ui.Group>;
-    const selected = menu.selectedKeys?.includes(key);
+    const selected = item.checked ?? menu.selectedKeys?.includes(key);
     const content = <>
       {item.icon ? <span className="sd-menu__icon">{item.icon}</span> : null}
       <span className="sd-menu__text">{item.label}</span>
@@ -126,18 +126,22 @@ function MenuItems({ menu, context }: { menu: MenuProps; context: boolean }) {
         </ui.SubContent>
       </ui.Portal>
     </ui.Sub>;
-    const row = <ui.Item key={key} className={cn('sd-menu__item', item.className, selected && 'is-selected', item.danger && 'is-danger')} disabled={item.disabled}
-      {...(item.disabled ? undefined : item.hover)}
-      onSelect={(event) => { const action = { key, domEvent: event }; item.onClick?.(action); menu.onClick?.(action); }}>{content}</ui.Item>;
+    const rowProps = {
+      className: cn('sd-menu__item', item.className, selected && 'is-selected', item.danger && 'is-danger'), disabled: item.disabled,
+      ...(item.disabled ? undefined : item.hover),
+      onSelect(event: Event) { const action = { key, domEvent: event }; item.onClick?.(action); menu.onClick?.(action); },
+    };
+    const row = item.checked === undefined ? <ui.Item key={key} {...rowProps}>{content}</ui.Item>
+      : <ui.CheckboxItem key={key} {...rowProps} checked={item.checked}>{content}</ui.CheckboxItem>;
     return item.tooltip ? <Tooltip key={key} title={item.tooltip} className={item.tooltipClassName} placement="right" mouseEnterDelay={0.35}>{row}</Tooltip> : row;
   })}</>;
 }
 
 function handleMenuControlNavigation(event: KeyboardEvent<HTMLDivElement>, control?: HTMLElement | null) {
   if (!control || event.nativeEvent.isComposing || !(event.target instanceof HTMLElement)) return;
-  const row = event.target.closest('[role="menuitem"]');
+  const row = event.target.closest('[role="menuitem"], [role="menuitemcheckbox"]');
   if (!row || row.closest('[role="menu"]') !== event.currentTarget) return;
-  const firstRow = event.currentTarget.querySelector('[role="menuitem"]:not([data-disabled])');
+  const firstRow = event.currentTarget.querySelector(':is([role="menuitem"], [role="menuitemcheckbox"]):not([data-disabled])');
   if (event.key !== 'Tab' && !(event.key === 'ArrowUp' && row === firstRow)) return;
   // Capture before Radix's roving focus consumes Tab or schedules ArrowUp focus.
   event.preventDefault();

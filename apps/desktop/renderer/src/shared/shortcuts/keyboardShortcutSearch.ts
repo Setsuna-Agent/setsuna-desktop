@@ -1,24 +1,26 @@
-import type { Translate } from '../i18n/I18nProvider.js';
-import { formatKeyboardShortcutBinding } from './keyboardShortcutBindings.js';
-import {
-  keyboardShortcutCommands,
-  type KeyboardShortcutCommandId,
-  type KeyboardShortcutPlatform,
-} from './keyboardShortcutCommands.js';
+import type { AppMessageKey, Translate } from '../i18n/I18nProvider.js';
+import { formatKeyboardShortcutBinding } from '@setsuna-desktop/renderer-ui';
+import type { KeyboardShortcutPlatform } from './keyboardShortcutCommands.js';
+
+export type SearchableShortcut<Id extends string> = {
+  id: Id;
+  labelKey: AppMessageKey;
+  descriptionKey?: AppMessageKey;
+};
 
 /** Search the effective bindings, including readable modifier names on macOS. */
-export function searchKeyboardShortcuts(query: string, {
+export function searchKeyboardShortcuts<Command extends SearchableShortcut<string>>(commands: readonly Command[], query: string, {
   bindingsFor, platform, translate,
 }: {
-  bindingsFor(commandId: KeyboardShortcutCommandId): readonly string[];
+  bindingsFor(commandId: Command['id']): readonly string[];
   platform: KeyboardShortcutPlatform;
   translate: Translate;
 }) {
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  if (!normalizedQuery) return keyboardShortcutCommands;
-  return keyboardShortcutCommands.filter((command) => [
+  if (!normalizedQuery) return commands;
+  return commands.filter((command) => [
     translate(command.labelKey),
-    translate(command.descriptionKey),
+    command.descriptionKey ? translate(command.descriptionKey) : '',
     ...bindingsFor(command.id).flatMap((binding) => [
       formatKeyboardShortcutBinding(binding, platform),
       formatKeyboardShortcutBinding(binding, platform, true),

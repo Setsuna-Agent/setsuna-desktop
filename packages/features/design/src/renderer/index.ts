@@ -6,8 +6,10 @@ import { designMessages } from './messages.js';
 
 export { designAssetsCapability, designClientCapability, type DesignAssets, type DesignClient } from './client.js';
 export { DesignDocumentSurface } from './DesignDocumentSurface.js';
-export type { DesignWorkspaceLocation, DesignWorkspaceProps } from './DesignWorkspace.js';
+export type { DesignWorkspaceProps } from './DesignWorkspace.js';
+export { designHomeFilterForLocation, designHomeFilterForProjects, type DesignHomeFilter, type DesignWorkspaceLocation } from './catalog/design-workspace-location.js';
 export { DesignWorkspaceSurface } from './DesignWorkspaceSurface.js';
+export { DesignUiHostContext, type DesignShortcutSettingsProps } from './context/design-ui-host.js';
 
 const dependencies = defineRendererDependencies({
   transport: requiredCapability(rendererFeatureOperationTransportCapability),

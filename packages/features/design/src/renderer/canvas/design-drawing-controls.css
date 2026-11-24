@@ -1,23 +1,49 @@
-.design-drawing-controls {
-  --design-inspector-control-height: 28px;
-  --design-inspector-control-radius: 7px;
-  --design-inspector-gap: 4px;
-  --design-inspector-focus: var(--design-accent-soft);
+.design-editor__canvas {
+  anchor-scope: --design-drawing-mode;
+}
+
+.design-tools[aria-orientation='vertical'] .design-tools__drawing-toggle {
+  anchor-name: --design-drawing-mode;
+}
+
+.design-drawing-controls__position {
   position: absolute;
   z-index: 2;
-  inset-block-start: var(--design-tools-top);
-  inset-inline-start: var(--design-left-inset);
-  box-sizing: border-box;
-  inline-size: max-content;
-  max-inline-size: calc(100% - var(--design-left-inset) - var(--design-right-inset));
-  max-block-size: calc(100% - var(--design-tools-top) - var(--design-panel-edge));
-  overflow: auto;
+  inset-block-start: var(--design-work-top);
+  inset-inline: var(--design-left-inset) var(--design-right-inset);
   display: flex;
-  flex-direction: column;
-  align-items: start;
+  justify-content: center;
+  container: design-drawing-options / inline-size;
+  pointer-events: none;
+}
+
+[data-toolbar-position='side'] .design-drawing-controls__position {
+  /* Follow the drawing toggle when the side toolbar scrolls. */
+  position-anchor: --design-drawing-mode;
+  position-visibility: anchors-visible;
+  inset-block: var(--design-tools-top) var(--design-panel-edge);
+  block-size: max-content;
+  align-self: anchor-center;
+  justify-content: start;
+}
+
+[data-toolbar-position='bottom'] .design-drawing-controls__position {
+  inset-block: auto var(--design-work-bottom);
+}
+
+.design-drawing-controls {
+  --design-inspector-control-height: 28px;
+  --design-inspector-control-radius: var(--app-radius-sm);
+  --design-inspector-gap: 4px;
+  --design-inspector-focus: var(--design-accent-soft);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
-  padding: 4px 6px;
-  border-radius: 11px;
+  max-inline-size: 100%;
+  padding: 4px;
+  border-radius: var(--app-radius-control);
+  pointer-events: auto;
 }
 
 .design-drawing-controls > .sd-color-picker__trigger {
@@ -29,9 +55,7 @@
 
 .design-drawing-controls__width {
   display: grid;
-  grid-auto-flow: column;
-  grid-template-columns: minmax(0, 68px);
-  grid-auto-columns: minmax(0, 76px);
+  grid-template-columns: minmax(0, 60px) minmax(0, 68px);
   align-items: center;
   min-width: 0;
   max-width: 100%;
@@ -81,8 +105,9 @@
   background: var(--app-accent-soft);
 }
 
-@container design-editor (max-width: 540px) {
+@container design-drawing-options (inline-size < 180px) {
   .design-drawing-controls__width {
+    grid-template-columns: minmax(0, 60px);
     padding-inline-end: 0;
   }
 
@@ -91,6 +116,6 @@
   }
 
   .design-drawing-controls__preset .design-drawing-preset-stroke {
-    min-width: 0;
+    inline-size: 42px;
   }
 }

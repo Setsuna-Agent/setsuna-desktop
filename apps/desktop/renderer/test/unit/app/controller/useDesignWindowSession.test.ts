@@ -17,7 +17,7 @@ it('restores the active draft in the same window after switching away and reopen
     { initialProps: {} });
   expect(view.result.current.designLocation).toBeNull();
   view.rerender({ destination: 'design' });
-  const draft = { projectId: 'site', rootId: 'web', path: 'screens\\old/CON.design.json', homeFilter: { projectId: 'site' } };
+  const draft = { projectId: 'site', rootId: 'web', path: 'screens\\old/CON.design.json', homeFilter: { projectId: 'site' }, projectCanvas: true } as const;
   act(() => view.result.current.setDesignLocation(draft));
   view.rerender({ destination: 'chat' });
   view.rerender({ destination: 'design' });
@@ -45,16 +45,21 @@ it('restores a Windows relative path and falls back to the filter for rooted or 
   expect(reopen('drafts\\..\\..\\home.design.json')).toEqual(scope);
 });
 
-it('keeps the design filter while giving an explicitly opened conversation priority', () => {
-  const filter = { projectId: 'site', rootId: 'web' };
+it.each([
+  { kind: 'design filter', location: { projectId: 'site', rootId: 'web' } },
+  { kind: 'multi-project filter', location: { projectIds: ['site', 'mobile'] } },
+  { kind: 'draft opened from multiple projects', location: { projectId: 'site', rootId: 'web', path: 'draft.design.json',
+    homeFilter: { projectIds: ['site', 'mobile'] } } },
+  { kind: 'empty project canvas', location: { projectId: 'site', projectCanvas: true } as const },
+])('keeps the $kind while giving an explicitly opened conversation priority', ({ location }) => {
   const view = renderHook(() => useDesignWindowSession('thread:sample:0', 'design', false));
-  act(() => view.result.current.setDesignLocation(filter));
+  act(() => view.result.current.setDesignLocation(location));
   view.unmount();
 
   const thread = renderHook(() => useDesignWindowSession('thread:sample:0', undefined, true));
-  expect(thread.result.current).toMatchObject({ activeView: 'chat', designLocation: filter });
+  expect(thread.result.current).toMatchObject({ activeView: 'chat', designLocation: location });
   thread.unmount();
 
   const reopened = renderHook(() => useDesignWindowSession('thread:sample:0', undefined, false));
-  expect(reopened.result.current).toMatchObject({ activeView: 'chat', designLocation: filter });
+  expect(reopened.result.current).toMatchObject({ activeView: 'chat', designLocation: location });
 });

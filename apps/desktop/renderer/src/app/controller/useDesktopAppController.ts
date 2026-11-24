@@ -44,7 +44,7 @@ import { useConversationDebugFeatureEnabled } from '../../composition/Conversati
 import { useUsageFeatureInvalidation } from '../../composition/UsageFeatureBoundary.js';
 import { useCapabilitiesRefreshCoordinator } from '../../composition/CapabilitiesRefreshBoundary.js';
 import { useReviewFeatureService } from '../../composition/ReviewFeatureBoundary.js';
-import { useDesignClient } from '../../composition/design/DesignFeatureBoundary.js';
+import { designHomeFilterForLocation, useDesignClient } from '../../composition/design/DesignFeatureBoundary.js';
 import type { RuntimeTurnSettlement } from '../../services/runtime-client/useRuntimeThreadState.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { useDesignWindowSession } from './useDesignWindowSession.js';
@@ -221,7 +221,7 @@ export function useDesktopAppController() {
     if (designClient && activeWorkspace && isDesignDocumentPath(filePath)) {
       // An asynchronous file read belongs to the view that initiated it.
       if (latestView.current !== activeView) return;
-      const homeFilter = designLocation?.path ? designLocation.homeFilter : designLocation;
+      const homeFilter = designHomeFilterForLocation(designLocation);
       void designClient.resolveResourceRoot({ projectId: activeWorkspace.id, rootId, path: filePath }).then((source) => {
         if (!isCurrent()) return;
         if (source.projectId === activeWorkspace.id && !projects.some(({ id }) => id === activeWorkspace.id)) {

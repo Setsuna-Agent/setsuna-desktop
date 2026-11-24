@@ -321,8 +321,10 @@ async function createWindow(): Promise<void> {
   let activatedMainFeatures: ActivatedBuiltinMainFeatures | null = null;
   let nativeBridge: Awaited<ReturnType<typeof currentDesktopNativeBridgeServer.start>>;
   try {
+    const bootstrapLayout = dataRootBootstrapLayout(desktopAppDataRoot);
     activatedMainFeatures = await activateBuiltinMainFeatures({
-      diagnosticLogDirectory: dataRootBootstrapLayout(desktopAppDataRoot).diagnosticLogsRoot,
+      diagnosticLogDirectory: bootstrapLayout.diagnosticLogsRoot,
+      designMcpDirectory: bootstrapLayout.designMcpRoot,
       credentialVault,
       activeKeyboardShortcutBindings: (senderId) => activeKeyboardShortcutBindings.get(senderId) ?? new Set<string>(),
       interfaceLanguage: () => interfaceLanguage,
@@ -489,6 +491,7 @@ async function createWindow(): Promise<void> {
   await waitForRendererFirstPaint(currentMainWindow);
   startupInProgress = false;
   startupSplashLayer.reveal();
+  activatedMainFeatures.designMcp.restore();
   currentDesktopTray.refreshMenu();
   void currentActivityPreferences.initialize().catch((error) => console.error('[desktop] preferences initialization failed', error));
   prepareDesktopAppIdentity();

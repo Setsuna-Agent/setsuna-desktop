@@ -62,11 +62,11 @@ function designParticipant(input: DesignSelectionTask, sourceId: string, agent?:
       const searchDraft = args.scope === 'document' || (args.scope === undefined && args.name !== undefined);
       const fallback = searchDraft ? view.document.rootIds : selection ?? (args.scope === 'selection' ? [] : view.document.rootIds);
       const ids = targets(view, undefined, args.ids ?? fallback);
-      const { content, focusIds } = await inspectDesignLayers(view, ids, snapshot.revision, args,
+      const { inspection, focusIds } = await inspectDesignLayers(view, ids, snapshot.revision, args,
         searchDraft || (!roots && args.scope !== 'selection'), selection ?? []);
       signal.throwIfAborted();
       showTargets(view, focusIds);
-      return { content };
+      return { content: JSON.stringify(inspection) };
     }
     const browse = name === 'design_preview' || name === 'design_view';
     const individual = (name === 'design_view' && args.action === 'select') || (name === 'design_edit' && (args.action === 'update' || args.action === 'bindTokens'));

@@ -478,10 +478,12 @@ importers:
 
   packages/features/design:
     specifiers:
+      '@modelcontextprotocol/sdk': ^1.32.0
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
       '@setsuna-desktop/renderer-ui': workspace:*
       '@types/fontkit': '2'
+      electron: '>=30'
       fontkit: 2.0.4
       konva: ^10.0.0
       lucide-react: ^0.468.0
@@ -489,11 +491,15 @@ importers:
       react: ^18.3.1
       react-dom: ^18.3.1
       react-konva: 18.2.14
+      toml-eslint-parser: 1.0.3
       yoga-layout: 3.2.1
+      zod: 4.6.7
     dependencies:
+      '@modelcontextprotocol/sdk': 1.32.1_zod@4.6.7
       '@setsuna-desktop/contracts': link:../../contracts
       '@setsuna-desktop/feature-core': link:../../feature-core
       '@setsuna-desktop/renderer-ui': link:../../renderer-ui
+      electron: 43.8.3
       fontkit: 2.0.4
       konva: 10.9.1
       lucide-react: 0.468.0_react@18.3.1
@@ -501,7 +507,9 @@ importers:
       react: 18.3.1
       react-dom: 18.3.1_react@18.3.1
       react-konva: 18.2.14_24mriur4p4dzd3yrrwnyckke5m
+      toml-eslint-parser: 1.0.3
       yoga-layout: 3.2.1
+      zod: 4.6.7
     devDependencies:
       '@types/fontkit': 2.0.9
 
@@ -7465,7 +7473,6 @@ packages:
   /eslint-visitor-keys/5.0.1:
     resolution: {integrity: sha512-tD40eHxA35h0PEIZNeIjkHoDR4YjjJp34biM0mDvplBe//mB+IHCqHDGV7pxF+7MklTvighcCPPZC7ynWyjdTA==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
-    dev: true
 
   /eslint/9.39.5:
     resolution: {integrity: sha512-DgZS62aPLXKlnxILS/AYCoRvHaZeXceIzlXPkkGGzJWSow1aEk0lbTlxUSlyjC8jcaKxAdOnTDz+o1JFSBsyjw==}
@@ -11038,6 +11045,13 @@ packages:
   /toidentifier/1.0.1:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
     engines: {node: '>=0.6'}
+    dev: false
+
+  /toml-eslint-parser/1.0.3:
+    resolution: {integrity: sha512-A5F0cM6+mDleacLIEUkmfpkBbnHJFV1d2rprHU2MXNk7mlxHq2zGojA+SRvQD1RoMo9gqjZPWEaKG4v1BQ48lw==}
+    engines: {node: ^20.19.0 || ^22.13.0 || >=24}
+    dependencies:
+      eslint-visitor-keys: 5.0.1
     dev: false
 
   /tree-kill/1.2.2:

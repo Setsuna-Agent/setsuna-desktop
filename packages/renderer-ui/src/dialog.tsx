@@ -15,15 +15,16 @@ export type DialogProps = {
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
-  width?: number;
+  width?: number | string;
   closeLabel?: string;
   dismissible?: boolean;
   showClose?: boolean;
   onClose(): void;
   'aria-label'?: string;
   onPaste?: ClipboardEventHandler<HTMLElement>;
-} & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>, 'onCloseAutoFocus'>;
-export function Dialog({ open = true, title, description, headerActions, children, footer, className, width = 640, closeLabel, dismissible = true, showClose = true, onClose, onCloseAutoFocus, onPaste, 'aria-label': label }: DialogProps) {
+} & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>, 'onCloseAutoFocus' | 'onEscapeKeyDown'>;
+export function Dialog({ open = true, title, description, headerActions, children, footer, className, width = 640, closeLabel, dismissible = true, showClose = true,
+  onClose, onCloseAutoFocus, onEscapeKeyDown, onPaste, 'aria-label': label }: DialogProps) {
   const labels = useUiLabels();
   const closeText = closeLabel ?? labels.close;
   const contentRef = useRef<HTMLElement | null>(null);
@@ -48,7 +49,7 @@ export function Dialog({ open = true, title, description, headerActions, childre
           event.preventDefault();
           previousFocus.current?.focus({ preventScroll: true });
         }}
-        onEscapeKeyDown={(event) => { if (!dismissible) event.preventDefault(); }}
+        onEscapeKeyDown={(event) => { onEscapeKeyDown?.(event); if (!dismissible) event.preventDefault(); }}
         onPointerDownOutside={(event) => {
           const target = event.detail.originalEvent.target;
           // Dismissing feedback must not discard the form that reported the failure.

@@ -1,14 +1,12 @@
 import type { DesignDocument, DesignInteraction } from '../../contracts/index.js';
+import { isDesignPrototypeBoard } from '../../contracts/document.js';
 import { designFrameMask } from '../../contracts/design-references.js';
 import type { DesignScene } from '../design-layout.js';
 
 export type PrototypeState = Readonly<{ board: string; history: readonly string[]; overlays: readonly string[] }>;
 
 export function designPrototypeBoards(document: DesignDocument, scene: DesignScene) {
-  return document.rootIds.filter((id) => {
-    const node = document.nodes[id];
-    return node.kind === 'frame' && !node.group && !node.component && scene[id]?.visible;
-  });
+  return document.rootIds.filter((id) => isDesignPrototypeBoard(document.nodes[id]) && scene[id]?.visible);
 }
 
 export function designPrototypeBoardFor(id: string | null, scene: DesignScene) {

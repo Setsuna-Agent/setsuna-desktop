@@ -8,6 +8,7 @@ import { conversationArtifacts, designEntryKey } from '../../features/chat/artif
 import { ChatDesignNavigation } from '../../features/chat/mentions/ChatDesignReference.js';
 import { DesignSelectionProvider } from '../../features/chat/mentions/DesignSelectionReference.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { useResolvedThemeMode } from '../../shared/preferences/useThemeTransition.js';
 import { FeatureRecoveryShell } from '../FeatureRecoveryShell.js';
 import { useDesignClient } from './DesignClientContext.js';
 import { watchDesignDirectories } from './design-assets.js';
@@ -65,6 +66,7 @@ export function ChatDesignPanels({ thread, activeTurnId, open, children }: {
 
 export function ChatDesignCanvas({ owner, visible = true }: { owner: DesignConversationOwner; visible?: boolean }) {
   const client = useDesignClient();
+  const colorScheme = useResolvedThemeMode();
   const { t } = useI18n();
   const toast = useToast();
   const { entries, turnId, threadId } = useContext(Activity);
@@ -90,7 +92,7 @@ export function ChatDesignCanvas({ owner, visible = true }: { owner: DesignConve
   }, [client, key, owner.ref, t, toast]);
   if (!client) return <FeatureRecoveryShell candidateFeatureIds={['design']} reason="view-missing" />;
   if (source?.key !== key) return null;
-  return <DesignDocumentSurface client={client} documentRef={source.ref} expectedDocumentId={owner.documentId}
+  return <DesignDocumentSurface client={client} documentRef={source.ref} colorScheme={colorScheme} expectedDocumentId={owner.documentId} visible={visible}
     watchDirectories={watchDesignDirectories} fileRevision={design?.revision} chatActivity={{ connectSelection: visible ? connectSelection ?? undefined : undefined, networkAccess: design?.networkAccess === true,
       request: threadId && turnId && entry?.kind === 'design' && entry.turnId === turnId && design?.canvasRequestId
         ? { threadId, id: design.canvasRequestId } : undefined }} translate={t} />;

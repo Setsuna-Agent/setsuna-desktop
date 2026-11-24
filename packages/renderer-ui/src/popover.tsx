@@ -4,7 +4,7 @@ import { floatingPlacement, overlayContainer, type Placement } from './portal.js
 import { cn } from './utils.js';
 
 export type PopoverProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'content'> & Pick<ComponentPropsWithoutRef<typeof Primitive.Content>,
-  'onOpenAutoFocus' | 'onCloseAutoFocus' | 'onInteractOutside' | 'hideWhenDetached' | 'sideOffset'> & {
+  'onOpenAutoFocus' | 'onCloseAutoFocus' | 'onInteractOutside' | 'hideWhenDetached' | 'sideOffset' | 'avoidCollisions'> & {
   'data-overlay-open'?: '';
   children: ReactElement; content: ReactNode; contentLabel?: string; open?: boolean; onOpenChange?(open: boolean): void;
   /** Keep outside clicks in the host document, including over embedded webviews. */
@@ -15,7 +15,7 @@ export type PopoverProps = Omit<HTMLAttributes<HTMLElement>, 'children' | 'conte
   getAnchorRect?(trigger: HTMLElement): DOMRect;
 };
 export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ children, content, contentLabel, open, onOpenChange, modal = false, trigger = 'click', placement, className, style, mouseEnterDelay = 0.15, mouseLeaveDelay = 0.15,
-  onOpenAutoFocus, onCloseAutoFocus, onInteractOutside, hideWhenDetached, sideOffset = 6, getAnchorRect, ...triggerProps }, ref) {
+  onOpenAutoFocus, onCloseAutoFocus, onInteractOutside, hideWhenDetached, sideOffset = 6, avoidCollisions, getAnchorRect, ...triggerProps }, ref) {
   const [internalOpen, setInternalOpen] = useState(false);
   const actualOpen = open ?? internalOpen;
   const triggerElement = useRef<HTMLElement | null>(null);
@@ -34,7 +34,7 @@ export const Popover = forwardRef<HTMLElement, PopoverProps>(function Popover({ 
   };
   // Multiple overlays may share a trigger; any open owner keeps that trigger active.
   const overlayOpen = actualOpen ? '' : triggerProps['data-overlay-open'];
-  const panel = { ...floatingPlacement(placement), className: cn('sd-popover', className), style, sideOffset, collisionPadding: 8, hideWhenDetached };
+  const panel = { ...floatingPlacement(placement), className: cn('sd-popover', className), style, sideOffset, collisionPadding: 8, hideWhenDetached, avoidCollisions };
   if (trigger === 'hover') return <HoverCard.Root open={actualOpen} onOpenChange={changeOpen} openDelay={mouseEnterDelay * 1000} closeDelay={mouseLeaveDelay * 1000}>
     <HoverCard.Trigger asChild><Slot.Root {...triggerProps} data-overlay-open={overlayOpen} ref={ref}>{children}</Slot.Root></HoverCard.Trigger>
     <HoverCard.Portal container={overlayContainer()}><HoverCard.Content {...panel} hideWhenDetached>{content}</HoverCard.Content></HoverCard.Portal>

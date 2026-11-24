@@ -411,6 +411,21 @@ body.desktop-agent-workspace-resizing .app-topbar {
   grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr) 0;
 }
 
+.app-design-route-layer {
+  display: contents;
+}
+
+.app-design-route-layer[inert] {
+  /* Agent web captures still need a viewport while the editor is in the background. */
+  position: absolute;
+  grid-area: content / 1 / bottom / -1;
+  inset: 0;
+  display: grid;
+  grid-template-rows: [content] minmax(0, 1fr);
+  opacity: 0;
+  pointer-events: none;
+}
+
 .app-design-route {
   display: grid;
   grid-row: content;

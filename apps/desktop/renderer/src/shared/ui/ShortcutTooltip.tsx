@@ -2,7 +2,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import {
   formatKeyboardShortcutBinding,
   formatKeyboardShortcutBindingParts,
-} from '../shortcuts/keyboardShortcutBindings.js';
+} from '@setsuna-desktop/renderer-ui';
 import type { KeyboardShortcutCommandId } from '../shortcuts/keyboardShortcutCommands.js';
 import { useKeyboardShortcuts } from '../shortcuts/KeyboardShortcutsProvider.js';
 import { AppTooltip } from './primitives.js';

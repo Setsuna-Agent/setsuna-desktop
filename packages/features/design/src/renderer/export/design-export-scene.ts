@@ -1,4 +1,4 @@
-import { designLayerShaderPaths, type DesignDocument, type DesignNode } from '../../contracts/index.js';
+import { designFontFamilies, designLayerShaderPaths, type DesignDocument, type DesignNode } from '../../contracts/index.js';
 import { designFrameMask } from '../../contracts/design-references.js';
 import { designFontNameKey } from '../../contracts/design-fonts.js';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
@@ -60,14 +60,16 @@ export async function loadExportImages(selection: DesignExportSelection, loadIma
   return new Map(await Promise.all(designExportImagePaths(selection).map(async (path) => [path, await loadImage(path, { fresh: true })] as const)));
 }
 
-export function designExportFontRequests({ document, scene, ids }: DesignExportSelection) {
+const systemFontFamilies = new Set<string>(designFontFamilies);
+
+export function designExportFontRequests({ document, scene, ids }: Pick<DesignExportSelection, 'document' | 'ids'> & { scene?: DesignScene }) {
   const requests = new Map<string, DesignFontRequest>();
   function visit(id: string) {
-    if (!scene[id]?.visible) return;
     const node = document.nodes[id];
+    if (scene ? !scene[id]?.visible : node.hidden) return;
     if (node.kind === 'text') for (const { text, run } of designTextSegments(node.text, node.runs)) {
       const family = run?.fontFamily ?? node.fontFamily;
-      if (!family || !text || ['system', 'sans', 'serif', 'mono'].includes(family)) continue;
+      if (!family || !text || systemFontFamilies.has(family)) continue;
       const weight = run?.fontWeight ?? node.fontWeight ?? 400;
       const style = node.fontStyle ?? 'normal';
       requests.set(JSON.stringify([designFontNameKey(family), weight, style]), { family, weight, style });

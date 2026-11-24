@@ -64,6 +64,8 @@ export class DesignToolHost implements ToolHost {
     }
     if (context.featureId !== 'design') return null;
     if (!this.service?.scope(context.threadId, context.turnId, context.inputClientId)) return this.names;
+    // Interactive design chats add canvas tools to the ordinary conversation catalog.
+    if (context.mainConversation && !context.unattended) return null;
     const writable = canWriteDesign(context);
     return { has: (name: string) => this.names.has(name) || name === 'read_skill' || name === 'list_skills'
       || (!context.unattended && (workspaceReads.has(name) || (writable && workspaceWritesAndProcesses.has(name)))),

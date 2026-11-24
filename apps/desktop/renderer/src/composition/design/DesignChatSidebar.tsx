@@ -3,7 +3,7 @@ import { designFileKey } from '@setsuna-desktop/feature-design/contracts';
 import type { DesignConversation } from '@setsuna-desktop/feature-design/contracts';
 import { DesignChatFullscreenContext, type DesignChatBinding, type DesignClient } from '@setsuna-desktop/feature-design/renderer';
 import { Button, IconButton, SelectField, useToast } from '@setsuna-desktop/renderer-ui';
-import { Archive, History, SquarePen } from 'lucide-react';
+import { Archive, History, MessageCircle, SquarePen } from 'lucide-react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { DesignChatRuntime } from './DesignChatHost.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -52,6 +52,9 @@ export default function DesignChatSidebar({ binding, conversations, project, run
     const unsubscribe = observeDesignConversationArchives(refresh);
     return () => { ++version.current; unsubscribe(); };
   }, [reload]);
+  useEffect(() => {
+    if (busy && selected) localStorage.setItem(preference, selected);
+  }, [busy, preference, selected]);
   const select = (id: string | null) => {
     setSelected(id);
     if (id) localStorage.setItem(preference, id);
@@ -81,20 +84,21 @@ export default function DesignChatSidebar({ binding, conversations, project, run
   const archiveButton = selected && <IconButton label={t('sidebar.archiveChat')} disabled={navigationDisabled}
     onClick={() => void archiveSelected()}><Archive size={15} /></IconButton>;
   function chatRow({ id, title, legacy }: DesignConversation) {
-    return <li key={id}>
+    const active = id === selected;
+    const Icon = legacy ? History : MessageCircle;
+    return <li className="design-chat-sidebar__row" key={id}>
       <Button className="design-chat-sidebar__entry" variant="ghost" size="small" title={title}
-        aria-current={id === selected ? 'true' : undefined}
+        aria-current={active ? 'true' : undefined} icon={<Icon size={15} aria-hidden="true" />}
         disabled={navigationDisabled} onClick={() => select(id)}>
         <span className="design-chat-sidebar__label">{title}</span>
-        {legacy ? <History className="design-chat-sidebar__legacy-icon" size={13} aria-hidden="true" /> : null}
       </Button>
-      {id === selected && archiveButton}
+      {active && archiveButton}
     </li>;
   }
 
   return <section className="design-chat-sidebar desktop-side-chat-panel" data-fullscreen={fullscreen || undefined} aria-label={t('feature.design.chat.title')}>
     {fullscreen ? <nav className="design-chat-sidebar__navigation" aria-label={historyLabel}>
-      <Button className="design-chat-sidebar__new" variant="ghost" size="small" icon={<SquarePen size={15} aria-hidden="true" />}
+      <Button className="design-chat-sidebar__new" size="small" icon={<SquarePen size={15} aria-hidden="true" />}
         title={newLabel} disabled={navigationDisabled} onClick={() => select(null)}>
         <span className="design-chat-sidebar__label">{newLabel}</span>
       </Button>
@@ -103,7 +107,8 @@ export default function DesignChatSidebar({ binding, conversations, project, run
         {legacyChats.length ? <ul aria-label={legacyLabel}>{legacyChats.map(chatRow)}</ul> : null}
       </div>
     </nav> : <header className="design-chat-sidebar__bar">
-      <SelectField className="design-chat-sidebar__history" aria-label={historyLabel} menuAlign="start" menuMinWidth={240}
+      <SelectField className="design-chat-sidebar__history" menuClassName="design-chat-sidebar__history-menu"
+        aria-label={historyLabel} menuAlign="start" menuMinWidth={192}
         disabled={navigationDisabled} value={selected ?? ''} onValueChange={(id) => select(id || null)}>
         {!selected && <option value="">{newLabel}</option>}
         {designChats.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
