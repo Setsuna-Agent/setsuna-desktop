@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES } from '@setsuna-desktop/contracts';
+import { WORKSPACE_ENTRY_EXISTS_ERROR_CODE, WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES } from '@setsuna-desktop/contracts';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import {
   designDocumentCodec, designDocumentVersion, indexDesignParents, type ChatDesignScope, type DesignEdit, type CommitDesignEditsInput, type CreateDesignDocumentInput, type DesignDocument,
@@ -7,6 +7,8 @@ import {
   type NavigateDesignHistoryInput,
 } from '../contracts/index.js';
 import { applyDesignEdits } from '../contracts/apply-design-edits.js';
+import { designLibraryPresetIdPrefix, designLibraryPresets, findBundledDesignLibrary,
+  isDesignLibraryPresetDocumentId, type DesignLibraryPresetId } from '../contracts/design-library-presets.js';
 
 const historyDepth = 32;
 const historyDocuments = 12;
@@ -28,7 +30,63 @@ export class DesignDocumentService {
     return this.files.create(input, serializeDocument(document), signal, chat);
   }
 
-  read(ref: DesignDocumentRef, signal: AbortSignal): Promise<DesignSnapshot> {
+  async prepareLibraryPreset(ref: DesignDocumentRef, presetId: DesignLibraryPresetId, signal: AbortSignal) {
+    const preset = designLibraryPresets.find(({ id }) => id === presetId)!;
+    const prefix = designLibraryPresetIdPrefix(presetId);
+    const { document, projectBacked } = await this.withSnapshot(ref, signal, ({ document }, file) => ({
+      document, projectBacked: file.projectBacked ?? Boolean(ref.projectId),
+    }));
+    if (isDesignLibraryPresetDocumentId(document.documentId, presetId)) throw new FeatureOperationFailure({
+      code: 'INVALID_INPUT', message: 'A design library cannot link to itself.', retryable: false,
+    });
+    const existing = Object.entries(document.libraries ?? {}).find(([id]) => isDesignLibraryPresetDocumentId(id, presetId));
+    const path = existing?.[1] ?? (projectBacked ? preset.fileName : preset.bundledPath);
+    const link = (documentId: string) => ({ kind: 'linkLibrary' as const, documentId, path });
+    if (path === preset.bundledPath) return link((await this.read({ ...ref, path }, signal)).document.documentId);
+
+    const readLibrary = () => this.files.withDocument({ ...ref, path }, signal, async (file) => {
+      const state = await this.readHistory(file);
+      const source = state.document;
+      if (!isDesignLibraryPresetDocumentId(source.documentId, presetId) || (existing && source.documentId !== existing[0])) throw new FeatureOperationFailure({
+        code: WORKSPACE_ENTRY_EXISTS_ERROR_CODE, message: 'Another design file already uses the preset library name.', retryable: false,
+      });
+      const { refreshPresetLibrary } = await import('./design-library-presets.js');
+      const updated = await refreshPresetLibrary(presetId, source);
+      signal.throwIfAborted();
+      if (updated !== source) await this.replace(file, state, serializeDocument(updated), { document: updated, undo: [], redo: [] });
+      signal.throwIfAborted();
+      return link(source.documentId);
+    });
+
+    try {
+      return await readLibrary();
+    } catch (error) {
+      if (existing || !(error instanceof FeatureOperationFailure) || error.code !== 'DESIGN_NOT_FOUND') throw error;
+    }
+
+    const { createPresetLibrary } = await import('./design-library-presets.js');
+    signal.throwIfAborted();
+    const documentId = `${prefix}${randomUUID()}`;
+    const content = serializeDocument(await createPresetLibrary(presetId, documentId));
+    try {
+      await this.files.create({ ...ref, parentPath: '.', name: path }, content, signal);
+    } catch (error) {
+      // Exclusive creation lets concurrent connections reuse the first copy and its identity.
+      if (!(error instanceof FeatureOperationFailure) || error.code !== WORKSPACE_ENTRY_EXISTS_ERROR_CODE) throw error;
+      return readLibrary();
+    }
+    return link(documentId);
+  }
+
+  async read(ref: DesignDocumentRef, signal: AbortSignal): Promise<DesignSnapshot> {
+    const preset = findBundledDesignLibrary(ref.path);
+    if (preset) {
+      const { readBundledDesignLibrary } = await import('./design-library-presets.js');
+      signal.throwIfAborted();
+      const snapshot = await readBundledDesignLibrary(preset.id);
+      signal.throwIfAborted();
+      return snapshot;
+    }
     return this.files.withDocument(ref, signal, async (file) => {
       const snapshot = toSnapshot(await this.readHistory(file));
       const project = await file.linkedProject?.(snapshot.document.documentId);
@@ -48,6 +106,7 @@ export class DesignDocumentService {
   commit(input: CommitDesignEditsInput, signal: AbortSignal, check?: (document: DesignDocument, file: DesignWorkspaceDocument) => void | Promise<void>, dryRun = false): Promise<DesignSnapshot> {
     return this.files.withDocument(input.ref, signal, async (file) => {
       const state = await this.readHistory(file);
+      assertEditableDocument(state.document);
       await check?.(state.document, file);
       assertRevision(state, input.expectedRevision);
       signal.throwIfAborted();
@@ -67,6 +126,7 @@ export class DesignDocumentService {
   navigate(input: NavigateDesignHistoryInput, signal: AbortSignal): Promise<DesignSnapshot> {
     return this.files.withDocument(input.ref, signal, async (file) => {
       const state = await this.readHistory(file);
+      assertEditableDocument(state.document);
       assertRevision(state, input.expectedRevision);
       const from = state[input.direction];
       const document = from.at(-1);
@@ -127,6 +187,12 @@ function lastSavedLayer(before: DesignDocument, after: DesignDocument, edits: re
 function assertRevision(state: DesignHistory, expected: string): void {
   if (state.revision === expected) return;
   throw new FeatureOperationFailure({ code: 'REVISION_CONFLICT', message: 'The design changed on disk.', retryable: true });
+}
+
+function assertEditableDocument(document: DesignDocument) {
+  if (isDesignLibraryPresetDocumentId(document.documentId)) throw new FeatureOperationFailure({
+    code: 'INVALID_INPUT', message: 'Built-in design library sources are read-only.', retryable: false,
+  });
 }
 
 function toSnapshot(state: DesignHistory): DesignSnapshot {

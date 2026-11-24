@@ -111,7 +111,8 @@ export function useChatMessageRail({ items, scrollRef, contentRef }: {
     const viewport = scrollRef.current;
     const position = measure()?.positions.find((entry) => entry.id === id);
     if (!viewport || !position) return null;
-    return Math.max(0, position.top - Math.max(0, (viewport.clientHeight - position.height) / 2));
+    const topInset = Number.parseFloat(window.getComputedStyle(viewport).scrollPaddingBlockStart) || 0;
+    return Math.max(0, position.top - Math.max(topInset, (viewport.clientHeight - position.height) / 2));
   }, [measure, scrollRef]);
 
   return { layout, messageOffset };

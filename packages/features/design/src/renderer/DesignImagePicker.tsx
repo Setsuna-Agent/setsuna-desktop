@@ -5,7 +5,7 @@ import { Button, Popover, TextField, useToast } from '@setsuna-desktop/renderer-
 import type { DesignDocumentRef } from '../contracts/index.js';
 import type { DesignAssets, DesignClient } from './client.js';
 import { DesignImageGallery, useProjectImagePreview } from './DesignImageGallery.js';
-import { designLayerShortcut } from './context/design-layer-shortcuts.js';
+import { designClipboardShortcut } from './context/design-layer-shortcuts.js';
 import {
   clipboardDesignImage, designImageAccept, isDesignImageName, prepareLocalDesignImage, storePreparedDesignImage,
   type LoadDesignImage, type PreparedDesignImage,
@@ -142,7 +142,7 @@ export function DesignImagePicker({ documentRef, assets, loadImage, currentPath,
   }
 
   function pasteShortcut(event: KeyboardEvent<HTMLElement>) {
-    if (event.defaultPrevented || event.nativeEvent.isComposing || designLayerShortcut(event) !== 'paste') return;
+    if (event.defaultPrevented || event.nativeEvent.isComposing || designClipboardShortcut(event.nativeEvent) !== 'paste') return;
     event.preventDefault();
     if (!event.repeat) void assets.requestClipboardPaste(false).catch((error: unknown) => {
       toast.error(t('feature.design.clipboardFailed', { error: String(error) }));

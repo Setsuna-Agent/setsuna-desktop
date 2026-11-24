@@ -1,10 +1,9 @@
-import { Dialog, TextField } from '@setsuna-desktop/renderer-ui';
+import { Dialog, TextField, formatKeyboardShortcutBinding } from '@setsuna-desktop/renderer-ui';
 import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { useKeyboardShortcuts } from '../../shared/shortcuts/KeyboardShortcutsProvider.js';
-import { formatKeyboardShortcutBinding } from '../../shared/shortcuts/keyboardShortcutBindings.js';
-import { KEYBOARD_SHORTCUT_GROUPS } from '../../shared/shortcuts/keyboardShortcutCommands.js';
+import { KEYBOARD_SHORTCUT_GROUPS, keyboardShortcutCommands } from '../../shared/shortcuts/keyboardShortcutCommands.js';
 import { searchKeyboardShortcuts } from '../../shared/shortcuts/keyboardShortcutSearch.js';
 import '../styles/shortcuts.css';
 
@@ -12,7 +11,7 @@ export function KeyboardShortcutsDialog({ onClose }: { onClose(): void }) {
   const { t } = useI18n();
   const { bindingsFor, platform } = useKeyboardShortcuts();
   const [query, setQuery] = useState('');
-  const commands = useMemo(() => searchKeyboardShortcuts(query, { bindingsFor, platform, translate: t })
+  const commands = useMemo(() => searchKeyboardShortcuts(keyboardShortcutCommands, query, { bindingsFor, platform, translate: t })
     .filter((command) => bindingsFor(command.id).length > 0), [bindingsFor, platform, query, t]);
 
   return (

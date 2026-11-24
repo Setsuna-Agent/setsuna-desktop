@@ -32,7 +32,9 @@ export async function verifyPackagedAppCompiler(root: string, project: string): 
   const { createRuntimeBuildOptions } = await import(new URL('../../../../scripts/build-electron.ts', import.meta.url).href) as {
     createRuntimeBuildOptions(root: string): BuildOptions[];
   };
-  const compiler = createRuntimeBuildOptions(process.cwd())[2];
+  const workerName = 'plugin-app-build-worker.js';
+  const compiler = createRuntimeBuildOptions(process.cwd()).find(({ outfile }) => outfile && path.basename(outfile) === workerName);
+  if (!compiler) throw new Error(`Missing runtime build target ${workerName}.`);
   await build({ ...compiler, outfile: path.join(stage, 'worker.js') });
   await writeFile(path.join(stage, 'main.cjs'), `const {fork} = require('node:child_process');
     const child = fork(require('node:path').join(__dirname, 'worker.js'), [process.argv[2]], {stdio:['ignore','pipe','pipe','ipc']});

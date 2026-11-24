@@ -4,7 +4,8 @@ import { useToast } from '@setsuna-desktop/renderer-ui';
 import { designFontNameKey, type DesignCustomFont } from '../../contracts/design-fonts.js';
 import type { DesignDocument } from '../../contracts/index.js';
 import type { DesignFontClient } from '../client.js';
-import { DesignFontLoader, designFontRule, encodeDesignFont, matchDesignFontFaces, type DesignFontRequest } from './design-font-loader.js';
+import { DesignFontLoader, designFontCatalogChannel, designFontRule, encodeDesignFont, matchDesignFontFaces, type DesignFontRequest } from './design-font-loader.js';
+import { mergeDesignFontCatalog, readBundledDesignFont } from './design-bundled-fonts.js';
 import { collectDesignTextFonts } from './design-typography.js';
 
 const noFonts: readonly DesignCustomFont[] = [];
@@ -46,10 +47,12 @@ export function useDesignFonts(client: DesignFontClient, document: DesignDocumen
   const usedFamilies = useRef(used);
   useLayoutEffect(() => { usedFamilies.current = used; }, [used]);
   const changed = useCallback(() => setRevision((current) => current + 1), []);
-  const loader = useMemo(() => new DesignFontLoader(client, ({ family }) => {
+  const read = useCallback<DesignFontClient['read']>((id, signal) =>
+    readBundledDesignFont(id, signal) ?? client.read(id, signal), [client]);
+  const loader = useMemo(() => new DesignFontLoader({ read }, ({ family }) => {
     // Registering a picker preview only affects layout if the canvas uses that family.
     if (usedFamilies.current.has(designFontNameKey(family))) changed();
-  }), [client, changed]);
+  }), [read, changed]);
   const loadPreview = useCallback((font: DesignCustomFont) => loader.load(font), [loader]);
   const enabled = Boolean(document);
   const refresh = useCallback(async () => {
@@ -71,7 +74,7 @@ export function useDesignFonts(client: DesignFontClient, document: DesignDocumen
   useEffect(() => {
     if (!enabled) return;
     active.current = true;
-    const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('setsuna-design-fonts') : undefined;
+    const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel(designFontCatalogChannel) : undefined;
     const reload = () => { void refresh(); };
     channel?.addEventListener('message', reload);
     window.addEventListener('focus', reload);
@@ -85,7 +88,8 @@ export function useDesignFonts(client: DesignFontClient, document: DesignDocumen
   }, [enabled, refresh]);
   useEffect(() => () => { loader.retain(noFonts); }, [loader]);
 
-  const fonts = catalog ?? noFonts;
+  const imported = catalog ?? noFonts;
+  const fonts = useMemo(() => mergeDesignFontCatalog(imported), [imported]);
   const needed = useMemo(() => fonts.filter(({ family }) => used.has(designFontNameKey(family))), [fonts, used]);
 
   useEffect(() => {
@@ -97,7 +101,7 @@ export function useDesignFonts(client: DesignFontClient, document: DesignDocumen
 
   const updateCatalog = useCallback(async () => {
     if (typeof BroadcastChannel === 'function') {
-      const channel = new BroadcastChannel('setsuna-design-fonts');
+      const channel = new BroadcastChannel(designFontCatalogChannel);
       channel.postMessage(null);
       channel.close();
     }
@@ -108,15 +112,15 @@ export function useDesignFonts(client: DesignFontClient, document: DesignDocumen
     const rules: string[] = [];
     for (const font of matchDesignFontFaces(fonts, requests)) {
       if (exportFile && !font.embeddable) continue;
-      const { base64 } = await client.read(font.id);
+      const { base64 } = await read(font.id);
       rules.push(designFontRule(font, base64));
     }
     return rules.join('\n');
-  }, [client, fonts]);
+  }, [read, fonts]);
 
   const loading = Boolean(used.size && (!catalog || needed.some((font) => !loader.isSettled(font))));
   return useMemo(() => ({
-    fonts, revision, loading, css, loadPreview, updateScriptFonts,
+    fonts, imported, revision, loading, css, loadPreview, updateScriptFonts,
     choose: async (family: string) => {
       const key = designFontNameKey(family);
       const results = await Promise.all(fonts.filter((font) => designFontNameKey(font.family) === key).map((font) => loader.load(font, true)));
@@ -125,5 +129,5 @@ export function useDesignFonts(client: DesignFontClient, document: DesignDocumen
     import: async (file: File) => client.import(await encodeDesignFont(file)),
     remove: (id: string) => client.remove(id),
     updateCatalog,
-  }), [client, css, fonts, loader, loading, loadPreview, revision, updateCatalog, updateScriptFonts]);
+  }), [client, css, fonts, imported, loader, loading, loadPreview, revision, updateCatalog, updateScriptFonts]);
 }

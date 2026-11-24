@@ -17,7 +17,7 @@
 }
 
 .design-web-toolbar[data-expanded] {
-  top: var(--design-panel-top);
+  top: var(--design-work-top);
   inset-inline: var(--design-left-inset) var(--design-right-inset);
   inline-size: auto;
 }

@@ -9,6 +9,11 @@ export const designChatMessages = {
     'feature.design.chat.tab': '聊天',
     'feature.design.chat.title': '设计对话',
     'feature.design.chat.legacy': '项目中的旧版对话（只读）',
+    'feature.design.chat.starter.label': '设计快捷问题',
+    'feature.design.chat.starter.layout': '帮我搭一个移动端登录页',
+    'feature.design.chat.starter.components': '把这组控件整理成可复用组件',
+    'feature.design.chat.starter.palette': '给这个页面换一套配色',
+    'feature.design.chat.starter.review': '这份设计稿哪里最值得先改？',
   },
   'en-US': {
     'feature.design.chat.mainAgent': 'Main agent',
@@ -20,5 +25,10 @@ export const designChatMessages = {
     'feature.design.chat.tab': 'Chat',
     'feature.design.chat.title': 'Design chat',
     'feature.design.chat.legacy': 'Earlier project chats (read-only)',
+    'feature.design.chat.starter.label': 'Design suggestions',
+    'feature.design.chat.starter.layout': 'Build a mobile sign-in page',
+    'feature.design.chat.starter.components': 'Turn these controls into reusable components',
+    'feature.design.chat.starter.palette': 'Try a new palette for this page',
+    'feature.design.chat.starter.review': 'What should I improve first in this design?',
   },
 };

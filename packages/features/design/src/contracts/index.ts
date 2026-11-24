@@ -4,9 +4,10 @@ import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 import type { ChatDesignScope, ProjectDesignEntry } from './chat-design.js';
 import type { DesignStorage } from './design-storage.js';
 import type { DesignDocument } from './document.js';
-import type { CreateDesignDocumentInput, DesignDocumentRef, DesignImageExtension, DesignWorkspace, MoveDesignDocumentInput } from './operations.js';
+import type { CreateDesignDocumentInput, DesignDocumentListEntry, DesignDocumentRef, DesignImageExtension, DesignWorkspace, ListDesignDocumentEntriesInput, MoveDesignDocumentInput } from './operations.js';
 import type { DesignScriptCanvas } from './design-script-parameters.js';
 
+export * from './design-mcp.js';
 export {
   designBlendModes, designDocumentCodec, designDocumentVersion, designFillImageFits, designFontFamilies, designGradientKinds, designImageFits, designTextAlignments,
   indexDesignParents, maxDesignFills, maxDesignGradientStops, maxDesignStrokes, parseAssetPath, validateDesignComponents,
@@ -24,6 +25,7 @@ export { maxDesignShaderBytes, parseDesignShaderPath, parseDesignShaderSource,
   type DesignShaderPaint, type DesignShaderSampler, type DesignShaderValue } from './design-shader.js';
 export { rebaseDesignTextRuns, updateDesignTextRange } from './design-text-runs.js';
 export { designDocumentFileExtension, designDocumentFileName, isDesignDocumentPath } from './design-resource-id.js';
+export { designLibraryFileLinks, findBundledDesignLibrary, isDesignLibraryPresetDocumentId } from './design-library-presets.js';
 export {
   defaultDesignPolygonSides, designBrushPresets, designIconNames, designPencilPresets, designSvgNumberPattern, maxDesignPathAnchors, maxDesignPolygonSides, maxDesignSvgPaths,
   minDesignPolygonSides, parseDesignSvgNumber, parseDesignSvgPathData,
@@ -32,9 +34,9 @@ export {
 } from './vector-geometry.js';
 export {
   designFileKey, parseDesignWorkspace, commitDesignEdits, createDesignDocument, deleteDesignDocument, designImageExtensions, designImageFileExtensions, importDesignImage, importDesignScript,
-  importDesignShader, listDesignDocuments, moveDesignDocument, navigateDesignHistory, readDesignDocument, readDesignScriptParameters, readDesignShader, renderDesignScript, resolveDesignDocumentRoot,
+  importDesignShader, listDesignDocumentEntries, listDesignDocuments, moveDesignDocument, navigateDesignHistory, readDesignDocument, readDesignScriptParameters, readDesignShader, renderDesignScript, resolveDesignDocumentRoot,
   type CommitDesignEditsInput, type CreateDesignDocumentInput, type DesignImageExtension,
-  type DesignDocumentRef, type DesignSnapshot, type DesignWorkspace, type ImportDesignImageInput, type ImportDesignScriptInput, type MoveDesignDocumentInput, type NavigateDesignHistoryInput,
+  type DesignDocumentListEntry, type DesignDocumentRef, type DesignSnapshot, type DesignWorkspace, type ImportDesignImageInput, type ImportDesignScriptInput, type MoveDesignDocumentInput, type NavigateDesignHistoryInput,
   type ImportDesignShaderInput, type ReadDesignScriptParametersInput, type ReadDesignShaderInput, type RenderDesignScriptInput,
 } from './operations.js';
 
@@ -55,6 +57,8 @@ export const designScriptSandboxCapability = defineCapability<Readonly<{
 export type DesignWorkspaceDocument = Readonly<{
   key: string;
   workspaceRoot?: string;
+  /** Whether the resource directory is inside a bound project. */
+  projectBacked?: boolean;
   importedAssets?(documentId: string, accept: (path: string) => boolean): Promise<readonly string[]>;
   chatOrigin?(documentId: string): Promise<string | undefined>;
   linkedProject?(documentId: string): Promise<string | null | undefined>;
@@ -67,6 +71,7 @@ export { designDirectoryGrant, designDirectoryGrants, getDesignCatalog, setDesig
 export interface DesignWorkspaceFiles extends DesignStorage {
   projectDesigns(projectId: string, signal: AbortSignal): Promise<ProjectDesignEntry[]>;
   list(workspace: DesignWorkspace, signal: AbortSignal, chat?: ChatDesignScope): Promise<readonly string[]>;
+  listEntries(workspace: ListDesignDocumentEntriesInput, signal: AbortSignal): Promise<readonly DesignDocumentListEntry[]>;
   create(input: CreateDesignDocumentInput, content: string, signal: AbortSignal, chat?: ChatDesignScope): Promise<WorkspaceEntry>;
   move(input: MoveDesignDocumentInput, signal: AbortSignal): Promise<DesignDocumentRef>;
   delete(ref: DesignDocumentRef & { expectedRevision?: string }, signal: AbortSignal): Promise<void>;

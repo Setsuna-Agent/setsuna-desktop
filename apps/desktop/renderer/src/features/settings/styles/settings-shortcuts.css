@@ -1,5 +1,7 @@
 .settings-shortcuts {
+  display: grid;
   gap: 22px;
+  container: settings-shortcuts / inline-size;
 }
 
 .settings-shortcuts__toolbar {
@@ -54,7 +56,7 @@
 }
 
 .settings-shortcuts__list {
-  border: 1px solid var(--chat-settings-divider);
+  border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
   background: var(--app-surface);
   overflow: hidden;
@@ -70,7 +72,7 @@
 }
 
 .settings-shortcuts__row + .settings-shortcuts__row {
-  border-top: 1px solid var(--chat-settings-divider);
+  border-top: 1px solid var(--app-border);
 }
 
 .settings-shortcuts__copy {
@@ -262,7 +264,7 @@
   font-size: 12px;
 }
 
-@media (max-width: 760px) {
+@container settings-shortcuts (max-width: 555px) {
   .settings-shortcuts__toolbar,
   .settings-shortcuts__row {
     grid-template-columns: minmax(0, 1fr);

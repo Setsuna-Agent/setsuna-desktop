@@ -2,6 +2,10 @@
   height: 336px;
 }
 
+.design-font-picker .sd-segmented-control > .sd-button {
+  padding-inline: 6px;
+}
+
 .sd-icon-button.design-font-field__picker {
   flex: none;
   inline-size: var(--design-inspector-field-action-size, 22px);

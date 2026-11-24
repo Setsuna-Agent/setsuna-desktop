@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react';
 import { afterEach, expect, it } from 'vitest';
 import { loadYoga, type Yoga } from 'yoga-layout/load';
+import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { designDocumentCodec, type DesignDocument, type DesignEdit } from '../../src/contracts/index.js';
 import { DesignLayoutFields, DesignSizeFields } from '../../src/renderer/inspector/DesignLayoutFields.js';
 import { projectDesignComponents } from '../../src/renderer/components/design-components.js';
@@ -16,7 +17,12 @@ afterEach(cleanup);
 const frame = { kind: 'frame', x: 0, y: 0, width: 200, height: 100, childIds: [] } as const;
 const rectangle = { kind: 'rectangle', x: 0, y: 0, width: 20, height: 20, cornerRadius: 0 } as const;
 const layout = { direction: 'horizontal', padding: 10, gap: 10, align: 'start' } as const;
-const t = (key: string) => key;
+const t: RendererTranslate = (key, params) => params?.axis ? `${key} ${params.axis}` : key;
+
+async function chooseOption(label: string, option: string) {
+  fireEvent.keyDown(screen.getByRole('combobox', { name: label }), { key: 'Enter' });
+  fireEvent.keyDown(await screen.findByRole('option', { name: option }), { key: 'Enter' });
+}
 
 function mountFields(initial: DesignDocument, id: string, yoga: Yoga) {
   let document = initial;
@@ -59,10 +65,10 @@ it('keeps automatic distribution while aligning children and applying independen
     return [scene.first, scene.last].map(({ x, y }) => [x, y]);
   };
 
-  fireEvent.click(screen.getByRole('radio', { name: 'feature.design.justify.space-between' }));
+  await chooseOption('feature.design.distribution', 'feature.design.justify.space-between');
   fireEvent.click(screen.getByRole('button', { name: 'feature.design.align.bottom' }));
   expect(positions()).toEqual([[10, 70], [170, 70]]);
-  fireEvent.click(screen.getByRole('radio', { name: 'feature.design.justify.space-around' }));
+  await chooseOption('feature.design.distribution', 'feature.design.justify.space-around');
   expect(positions()).toEqual([[42.5, 70], [137.5, 70]]);
 
   fireEvent.click(screen.getByRole('button', { name: 'feature.design.padding.independent' }));
@@ -74,7 +80,7 @@ it('keeps automatic distribution while aligning children and applying independen
   expect(panel.node()).toMatchObject({ layout: { justify: 'space-around', paddingSides: [10, 10, 10, 30] } });
   expect(positions()).toEqual([[57.5, 70], [142.5, 70]]);
 
-  fireEvent.click(screen.getByRole('radio', { name: 'feature.design.gap.fixed' }));
+  await chooseOption('feature.design.distribution', 'feature.design.gap.fixed');
   expect(positions()).toEqual([[30, 70], [60, 70]]);
   fireEvent.click(screen.getByRole('button', { name: 'feature.design.layout.free' }));
   expect(positions()).toEqual([[30, 70], [60, 70]]);
@@ -88,15 +94,14 @@ it('changes the width mode of a linked instance independently of its inherited h
     instance: { ...frame, instanceOf: 'source' },
   } });
   const panel = mountFields(document, 'instance', await loadYoga());
-  const fill = () => screen.getByRole('checkbox', { name: 'feature.design.size.fill.width' });
-  const hug = () => screen.getByRole('checkbox', { name: 'feature.design.size.hug.width' });
+  const setWidthMode = (mode: string) => chooseOption(t('feature.design.sizeMode', { axis: t('feature.design.width') }), `feature.design.sizeMode.${mode}`);
 
-  fireEvent.click(fill());
+  await setWidthMode('fill');
   expect(panel.scene().instance).toMatchObject({ width: 180, height: 38 });
-  fireEvent.click(hug());
+  await setWidthMode('hug');
   expect(panel.scene().instance).toMatchObject({ width: 66, height: 38 });
-  fireEvent.click(fill());
-  fireEvent.click(fill());
+  await setWidthMode('fill');
+  await setWidthMode('fixed');
   expect(panel.node()).toMatchObject({ instanceOf: 'source', widthMode: 'fixed', width: 180 });
   expect(panel.scene().instance).toMatchObject({ width: 180, height: 38 });
 });

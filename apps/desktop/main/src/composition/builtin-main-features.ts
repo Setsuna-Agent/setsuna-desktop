@@ -1,12 +1,14 @@
 import { notificationsMainFeature, notificationsMainHostCapability } from '@setsuna-desktop/feature-notifications/main';
 import { runtimeActivityMainFeature, runtimeActivityMainHostCapability } from '@setsuna-desktop/feature-runtime-activity/main';
 import { diagnosticsMainFeature, diagnosticsMainHostCapability } from '@setsuna-desktop/feature-diagnostics/main';
+import { designMainFeature, designMcpLifecycleCapability, designMcpMainHostCapability } from '@setsuna-desktop/feature-design/main';
 import { notificationChannels } from '@setsuna-desktop/feature-notifications/contracts';
 import type {
   RuntimeInterfaceLanguage,
   RuntimeRequestInput,
 } from '@setsuna-desktop/contracts';
 import {
+  optionalCapability,
   provideHostCapability,
   requiredCapability,
 } from '@setsuna-desktop/feature-core/capability';
@@ -69,11 +71,12 @@ import {
   type WindowsSandboxMainHost,
   type WindowsSandboxMainService,
 } from '@setsuna-desktop/feature-windows-sandbox/main';
-import { app, BrowserWindow, protocol } from 'electron';
+import { app, BrowserWindow, clipboard, protocol } from 'electron';
 import path from 'node:path';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
 import { desktopWindows } from '../window/registry.js';
 import { desktopShellPath } from '../runtime/desktop-environment.js';
+import { resolveRuntimeNodeExecutable } from '../runtime/runtime-process-environment.js';
 import { resolveWorkspaceFilePreview } from '../workspace/file-opening.js';
 import { prepareDesktopNotification } from '../app-identity.js';
 import { pluginUiDocumentScheme } from '../window/plugin-ui-documents.js';
@@ -91,7 +94,7 @@ const mainFeatures = defineMainFeatureHost({
     windowsSandboxMainFeature,
     workspaceAppsMainFeature,
   ],
-  optional: [diagnosticsMainFeature, notificationsMainFeature, runtimeActivityMainFeature],
+  optional: [designMainFeature, diagnosticsMainFeature, notificationsMainFeature, runtimeActivityMainFeature],
 });
 
 /** Protocol privileges must be declared before Electron creates any renderer or worker. */
@@ -104,6 +107,7 @@ export type ActivatedBuiltinMainFeatures = Readonly<{
   computerControl: ComputerConnection;
   computerLifecycle: ComputerMainLifecycle;
   composition: MainFeatureComposition;
+  designMcp: { restore(): void };
   networkProxy: NetworkProxyMainService;
   updater: UpdaterLifecycle;
   windowsSandbox: WindowsSandboxMainService;
@@ -111,6 +115,7 @@ export type ActivatedBuiltinMainFeatures = Readonly<{
 
 export async function activateBuiltinMainFeatures(input: Readonly<{
   diagnosticLogDirectory: string;
+  designMcpDirectory: string;
   credentialVault: CredentialVault;
   activeKeyboardShortcutBindings(senderId: number): ReadonlySet<string>;
   interfaceLanguage(): RuntimeInterfaceLanguage;
@@ -128,6 +133,15 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
       provideHostCapability(diagnosticsMainHostCapability, {
         directory: input.diagnosticLogDirectory,
         isAllowedSender: (id: number) => Boolean(desktopWindows.get(id)),
+      }),
+      provideHostCapability(designMcpMainHostCapability, {
+        directory: input.designMcpDirectory,
+        appRoot: app.getAppPath(),
+        executable: resolveRuntimeNodeExecutable,
+        writeJsonAtomically,
+        copyText: (text: string) => clipboard.writeText(text),
+        windowFor: (senderId: number) => desktopWindows.get(senderId),
+        onWindowAdded: desktopWindows.onWindowAdded.bind(desktopWindows),
       }),
       provideHostCapability(runtimeActivityMainHostCapability, {
         isRendererSender: (senderId: number) => Boolean(desktopWindows.get(senderId)),
@@ -277,6 +291,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
       browserControl: requiredCapability(browserControlConnectionCapability),
       computerControl: requiredCapability(computerConnectionCapability),
       computerLifecycle: requiredCapability(computerMainLifecycleCapability),
+      designMcp: optionalCapability(designMcpLifecycleCapability, () => ({ restore() {} })),
       networkProxy: requiredCapability(networkProxyMainServiceCapability),
       updater: requiredCapability(updaterLifecycleCapability),
       windowsSandbox: requiredCapability(windowsSandboxMainServiceCapability),
@@ -286,6 +301,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
       computerControl: dependencies.computerControl,
       computerLifecycle: dependencies.computerLifecycle,
       composition: host.composition,
+      designMcp: dependencies.designMcp,
       networkProxy: dependencies.networkProxy,
       updater: dependencies.updater,
       windowsSandbox: dependencies.windowsSandbox,

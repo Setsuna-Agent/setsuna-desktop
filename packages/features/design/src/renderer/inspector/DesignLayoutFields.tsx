@@ -1,10 +1,10 @@
 import {
-  ArrowDownToLine, ArrowLeftRight, ArrowRightToLine, ArrowUpDown, Link2,
-  PanelBottom, PanelLeft, PanelRight, PanelTop, SquareDashed, SquareDashedMousePointer, Unlink2,
+  ArrowDownToLine, ArrowLeftRight, ArrowRightToLine, ArrowUpDown, ChevronsLeftRight, ChevronsRightLeft, Link2,
+  PanelBottom, PanelLeft, PanelRight, PanelTop, SquareDashed, SquareDashedMousePointer, Unlink2, WrapText,
 } from 'lucide-react';
-import { useContext, useId, type ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
-import { Checkbox, IconButton } from '@setsuna-desktop/renderer-ui';
+import { IconButton, SelectField } from '@setsuna-desktop/renderer-ui';
 import type { DesignFrame, DesignLayout, DesignNode, DesignSizeMode } from '../../contracts/index.js';
 import { bindDesignVariable, designPaddingVariableFields, resolveDesignVariableTarget, validDesignWidthLimits } from '../../contracts/design-variables.js';
 import { DesignArtboardPresetPicker } from './DesignArtboardPresetPicker.js';
@@ -25,7 +25,9 @@ const anchors = [
 ] as const;
 const distributions = ['space-between', 'space-around'] as const;
 const sizeAxes = ['width', 'height'] as const;
-const adaptiveSizes = ['fill', 'hug'] as const;
+const widthLimitFields = [
+  { field: 'minWidth', icon: ChevronsRightLeft }, { field: 'maxWidth', icon: ChevronsLeftRight },
+] as const;
 const paddingFields = [
   { side: 'left', index: 3, icon: PanelLeft }, { side: 'right', index: 1, icon: PanelRight },
   { side: 'top', index: 0, icon: PanelTop }, { side: 'bottom', index: 2, icon: PanelBottom },
@@ -46,54 +48,53 @@ export function DesignSizeFields({ node, projectedNode, box, preview, parent, di
   fieldEdits: InspectorFieldEdits;
   translate: RendererTranslate;
 }>) {
-  const axes = sizeAxes.map((axis) => ({
-    axis, mode: designSizeMode(projectedNode, parent, axis), modes: designSizeModes(projectedNode, parent, axis),
-  }));
   const artboard = node.kind === 'frame' && box.parentId === null && !node.group && !node.component && !node.instanceOf;
+  const showUnavailableFill = node.kind === 'web' || node.kind === 'script';
   const presetEdits = bindDesignValue(fieldEdits, (current, { width, height }: Pick<DesignFrame, 'width' | 'height'>) =>
     current.kind === 'frame' ? { ...current, width, height, widthMode: 'fixed', heightMode: 'fixed' } : current);
   const previewNode = previewDesignNode(fieldEdits);
   const widthLimits = { minWidth: projectedNode.minWidth, maxWidth: projectedNode.maxWidth };
 
-  function saveSize(axis: DesignAxis, size: number, mode: DesignSizeMode) {
-    if (axis === 'height' && node.kind === 'text') return Promise.resolve(false);
-    return onSave({ ...bindDesignVariable(node, axis, undefined, size), [`${axis}Mode`]: mode });
+  function saveSizeMode(axis: DesignAxis, mode: DesignSizeMode) {
+    return onSave({ ...bindDesignVariable(node, axis, undefined, Math.max(0.01, box[axis])), [`${axis}Mode`]: mode });
   }
 
   return <div className="design-inspector__size-fields" role="group" aria-label={t('feature.design.size')}>
     {artboard ? <DesignArtboardPresetPicker translate={t}
       disabled={disabled || Boolean(node.variableIds?.width || node.variableIds?.height)}
       onPreview={presetEdits.onPreview} onPick={(preset) => { void presetEdits.onSave(preset); }} /> : null}
-    {axes.map(({ axis, mode }) => {
+    {sizeAxes.map((axis) => {
+      const mode = designSizeMode(projectedNode, parent, axis);
+      const modes = designSizeModes(projectedNode, parent, axis);
+      const options: readonly DesignSizeMode[] = showUnavailableFill && !modes.includes('fill') ? [...modes, 'fill'] : modes;
+      const readOnly = mode !== 'fixed' || (axis === 'height' && node.kind === 'text');
       const field = {
         label: t(`feature.design.${axis}`), prefix: axis === 'width' ? 'W' : 'H', value: box[axis], min: 0.01,
         previewValue: preview?.[axis],
         ...bindDesignNumber(fieldEdits, (current, size) => axis === 'width' ? { ...current, width: size, widthMode: 'fixed' }
           : current.kind === 'text' ? current : { ...current, height: size, heightMode: 'fixed' }),
       };
-      if (mode !== 'fixed' || (axis === 'height' && node.kind === 'text')) return <NumberField key={axis} {...field} readOnly />;
       const binding = bindDesignValue(fieldEdits, (_, next: DesignNode) => ({ ...next, [`${axis}Mode`]: 'fixed' }));
-      return <VariableNumberField key={axis} {...field} target={node} field={axis} disabled={disabled} translate={t}
-        onBind={binding.onSave} onBindPreview={binding.onPreview} />;
+      return <div key={axis} className="design-inspector__size-axis">
+        {readOnly ? <NumberField {...field} readOnly /> : <VariableNumberField {...field} target={node} field={axis}
+          disabled={disabled} translate={t} onBind={binding.onSave} onBindPreview={binding.onPreview} />}
+        {options.length > 1 ? <SelectField aria-label={t('feature.design.sizeMode', { axis: field.label })} value={mode} disabled={disabled}
+          onValueChange={(value) => {
+            const next = modes.find((option) => option === value);
+            if (next && next !== mode) void saveSizeMode(axis, next);
+          }}>
+          {options.map((option) => <option key={option} value={option} disabled={!modes.includes(option)}>
+            {t(`feature.design.sizeMode.${option}`)}
+          </option>)}
+        </SelectField> : null}
+      </div>;
     })}
-    {adaptiveSizes.flatMap((size) => {
-      const showUnavailable = size === 'fill' && (node.kind === 'web' || node.kind === 'script');
-      const availableAxes = axes.filter(({ modes }) => showUnavailable || modes.includes(size));
-      return availableAxes.map(({ axis, mode, modes }) => {
-        const label = t(`feature.design.size.${size}.${axis}`);
-        return <Checkbox key={`${axis}:${size}`} title={label} checked={mode === size} disabled={disabled || !modes.includes(size)}
-          className={availableAxes.length === 1 ? 'design-inspector__size-option--full' : undefined}
-          onChange={(checked) => { void saveSize(axis, Math.max(0.01, box[axis]), checked ? size : 'fixed'); }}>
-          {label}
-        </Checkbox>;
-      });
-    })}
-    {(['minWidth', 'maxWidth'] as const).map((limit) => {
+    {widthLimitFields.map(({ field: limit, icon: Icon }) => {
       const label = t(`feature.design.${limit}`);
       return <DesignVariableField key={limit} field={limit} label={label} target={node} disabled={disabled}
         onBind={onSave} onBindPreview={previewNode} translate={t}
         acceptsValue={(value) => typeof value === 'number' && validDesignWidthLimits({ ...widthLimits, [limit]: value })}>
-        {(_, linked) => <InspectorField label={label} prefix={label} readOnly={disabled || linked}
+        {(_, linked) => <InspectorField label={label} prefix={<Icon size={12} />} readOnly={disabled || linked}
           value={widthLimits[limit] === undefined ? '' : String(widthLimits[limit])} placeholder="—" type="number" step="any" min={0}
           {...bindDesignText(fieldEdits, (current, text) => {
             const size = text.trim() ? Number(text) : undefined;
@@ -125,26 +126,27 @@ export function DesignLayoutFields({ frame, preview, sizeControls, disabled, adj
     aria-pressed={adjustment.active} disabled={disabled || Boolean(preview)} onClick={adjustment.toggle}>
     <SquareDashedMousePointer size={15} />
   </IconButton> : null}>
-    <div className="design-inspector__segments" role="group" aria-label={t('feature.design.layout')}>
-      {directions.map(({ id, icon: Icon }) => <IconButton key={id} size="small"
-        label={t(`feature.design.layout.${id}`)} aria-pressed={direction === id} disabled={disabled || Boolean(preview)}
-        onClick={() => {
-          if (id === direction) return;
-          const next: DesignLayout | undefined = id === 'free' ? undefined : { gap: 12, padding: 16, align: 'start', ...layout, direction: id };
-          void onLayoutChange(next);
-        }}>
-        <Icon size={16} />
-      </IconButton>)}
+    <div className={layout ? 'design-inspector__paired-control' : undefined}>
+      <div className="design-inspector__segments" role="group" aria-label={t('feature.design.layout')}>
+        {directions.map(({ id, icon: Icon }) => <IconButton key={id} size="small"
+          label={t(`feature.design.layout.${id}`)} aria-pressed={direction === id} disabled={disabled || Boolean(preview)}
+          onClick={() => {
+            if (id === direction) return;
+            const next: DesignLayout | undefined = id === 'free' ? undefined : { gap: 12, padding: 16, align: 'start', ...layout, direction: id };
+            void onLayoutChange(next);
+          }}>
+          <Icon size={16} />
+        </IconButton>)}
+      </div>
+      {layout ? <DesignVariableField target={layout} field="wrap" label={t('feature.design.layout.wrap')} disabled={disabled}
+        onBind={(next) => onLayoutChange(next)} onBindPreview={previewDesignLayout(fieldEdits)} translate={t}>
+        {(value, linked) => <IconButton className="design-inspector__layout-wrap" size="small" label={t('feature.design.layout.wrap')}
+          aria-pressed={Boolean(value ?? layout.wrap)} disabled={disabled || linked}
+          onClick={() => { void onLayoutChange({ ...layout, wrap: !layout.wrap }); }}><WrapText size={15} /></IconButton>}
+      </DesignVariableField> : null}
     </div>
     <InspectorGroup title={t('feature.design.size')}>{sizeControls}</InspectorGroup>
     {layout ? <>
-      <DesignVariableField target={layout} field="wrap" label={t('feature.design.layout.wrap')} disabled={disabled}
-        onBind={(next) => onLayoutChange(next)} onBindPreview={previewDesignLayout(fieldEdits)} translate={t}>
-        {(value, linked) => <Checkbox checked={Boolean(value ?? layout.wrap)} disabled={disabled || linked}
-          onChange={(wrap) => { void onLayoutChange({ ...layout, wrap }); }}>
-          {t('feature.design.layout.wrap')}
-        </Checkbox>}
-      </DesignVariableField>
       <div className="design-inspector__layout-controls">
         <InspectorGroup title={t('feature.design.align')}>
           <LayoutAlignment layout={shown ?? layout} spacing={spacing} disabled={disabled || Boolean(preview)} onSave={onLayoutChange} translate={t} />
@@ -154,10 +156,8 @@ export function DesignLayoutFields({ frame, preview, sizeControls, disabled, adj
             onSave={onLayoutChange} fieldEdits={fieldEdits} translate={t} />
         </InspectorGroup>
       </div>
-      <InspectorGroup title={t('feature.design.padding')}>
-        <LayoutPaddingFields layout={layout} preview={preview} disabled={disabled || Boolean(preview)}
-          onSave={onLayoutChange} fieldEdits={fieldEdits} translate={t} />
-      </InspectorGroup>
+      <LayoutPaddingFields layout={layout} preview={preview} disabled={disabled || Boolean(preview)}
+        onSave={onLayoutChange} fieldEdits={fieldEdits} translate={t} />
     </> : null}
   </InspectorSection>;
 }
@@ -203,70 +203,66 @@ function previewDesignLayout(edits: InspectorFieldEdits) {
 }
 
 function LayoutSpacing({ layout, preview, spacing, disabled, onSave, fieldEdits, translate: t }: LayoutNumbers & { spacing: SpacingMode }) {
-  const group = useId();
-  const fixed = spacing === 'fixed';
-  const fixedLabel = t('feature.design.gap.fixed');
   const GapIcon = layout.direction === 'horizontal' ? ArrowLeftRight : ArrowUpDown;
-  return <div className="design-inspector__spacing" role="radiogroup" aria-label={t('feature.design.distribution')}>
-    <div className="design-inspector__spacing-choice">
-      <input type="radio" name={group} value="fixed" checked={fixed} disabled={disabled} aria-label={fixedLabel} title={fixedLabel}
-        onChange={() => { void onSave({ ...layout, justify: 'start' }); }} />
-      <VariableNumberField target={layout} field="gap" disabled={disabled} onBind={onSave} onBindPreview={previewDesignLayout(fieldEdits)} translate={t}
-        label={t(fixed ? 'feature.design.gap' : 'feature.design.gap.minimum')} prefix={<GapIcon size={12} />}
-        value={layout.gap} previewValue={preview?.gap} min={0}
-        {...bindLayoutValue<number>(fieldEdits, (current, gap) => ({ ...current, gap }))} />
-    </div>
-    {distributions.map((mode) => <label key={mode} className="design-inspector__spacing-choice">
-      <input type="radio" name={group} value={mode} checked={spacing === mode} disabled={disabled}
-        onChange={() => { void onSave({ ...layout, justify: mode }); }} />
-      {t(`feature.design.justify.${mode}`)}
-    </label>)}
+  return <div className="design-inspector__spacing">
+    <SelectField aria-label={t('feature.design.distribution')} value={spacing} disabled={disabled}
+      onValueChange={(mode) => { void onSave({ ...layout, justify: distributions.find((item) => item === mode) ?? 'start' }); }}>
+      <option value="fixed">{t('feature.design.gap.fixed')}</option>
+      {distributions.map((mode) => <option key={mode} value={mode}>{t(`feature.design.justify.${mode}`)}</option>)}
+    </SelectField>
+    <VariableNumberField target={layout} field="gap" disabled={disabled} onBind={onSave} onBindPreview={previewDesignLayout(fieldEdits)} translate={t}
+      label={t(spacing === 'fixed' ? 'feature.design.gap' : 'feature.design.gap.minimum')} prefix={<GapIcon size={12} />}
+      value={layout.gap} previewValue={preview?.gap} min={0}
+      {...bindLayoutValue<number>(fieldEdits, (current, gap) => ({ ...current, gap }))} />
   </div>;
 }
 
 function LayoutPaddingFields({ layout, preview, disabled, onSave, fieldEdits, translate: t }: LayoutNumbers) {
   const { styles } = useContext(DesignStyleContext);
   const paired = layout.paddingSides === undefined;
-  const [top, right] = designPadding(layout);
+  const padding = designPadding(layout);
   const previewSides = preview ? designPadding(preview) : undefined;
   const PaddingIcon = paired ? Unlink2 : Link2;
   const binding = { target: layout, disabled, onBind: onSave, onBindPreview: previewDesignLayout(fieldEdits), translate: t };
-  return <div className="design-inspector__paired-control">
-    {paired ? <div className="design-inspector__pair">
-      <VariableNumberField {...binding} field="paddingX" label={t('feature.design.paddingX')} prefix={<ArrowLeftRight size={12} />} value={right} min={0}
-        previewValue={previewSides?.[1]} {...bindLayoutValue<number>(fieldEdits, (current, paddingX) => ({ ...current, paddingX }))} />
-      <VariableNumberField {...binding} field="paddingY" label={t('feature.design.paddingY')} prefix={<ArrowUpDown size={12} />} value={top} min={0}
-        previewValue={previewSides?.[0]} {...bindLayoutValue<number>(fieldEdits, (current, paddingY) => ({ ...current, paddingY }))} />
-    </div> : <div className="design-inspector__pair">
-      {paddingFields.map(({ side, index, icon: Icon }) => <VariableNumberField {...binding} field={designPaddingVariableFields[index]}
+
+  function togglePaddingMode() {
+    let next: DesignLayout;
+    if (paired) {
+      next = { ...layout, paddingSides: padding };
+      for (const [index, field] of designPaddingVariableFields.entries()) {
+        next = bindDesignVariable(next, field, layout.variableIds?.[index % 2 ? 'paddingX' : 'paddingY']);
+      }
+      next = bindDesignVariable(bindDesignVariable(next, 'paddingX', undefined), 'paddingY', undefined);
+    } else {
+      const [effectiveTop, effectiveRight, effectiveBottom, effectiveLeft] = designPadding(resolveDesignVariableTarget(layout, styles));
+      next = { ...layout, paddingSides: undefined, paddingX: (effectiveRight + effectiveLeft) / 2, paddingY: (effectiveTop + effectiveBottom) / 2 };
+      for (const [index, axis] of (['paddingY', 'paddingX'] as const).entries()) {
+        const id = layout.variableIds?.[designPaddingVariableFields[index]];
+        next = bindDesignVariable(next, axis,
+          id === layout.variableIds?.[designPaddingVariableFields[index + 2]] ? id : undefined);
+      }
+      next = designPaddingVariableFields.reduce((current, field) => bindDesignVariable(current, field, undefined), next);
+    }
+    void onSave(next);
+  }
+
+  return <InspectorGroup title={t('feature.design.padding')} action={<IconButton
+    label={t(paired ? 'feature.design.padding.independent' : 'feature.design.padding.paired')} size="small"
+    disabled={disabled} aria-pressed={!paired} onClick={togglePaddingMode}><PaddingIcon size={15} /></IconButton>}>
+    <div className="design-inspector__pair">
+      {paired ? <>
+        <VariableNumberField {...binding} field="paddingX" label={t('feature.design.paddingX')} prefix={<ArrowLeftRight size={12} />} value={padding[1]} min={0}
+          previewValue={previewSides?.[1]} {...bindLayoutValue<number>(fieldEdits, (current, paddingX) => ({ ...current, paddingX }))} />
+        <VariableNumberField {...binding} field="paddingY" label={t('feature.design.paddingY')} prefix={<ArrowUpDown size={12} />} value={padding[0]} min={0}
+          previewValue={previewSides?.[0]} {...bindLayoutValue<number>(fieldEdits, (current, paddingY) => ({ ...current, paddingY }))} />
+      </> : paddingFields.map(({ side, index, icon: Icon }) => <VariableNumberField {...binding} field={designPaddingVariableFields[index]}
         key={side} label={t(`feature.design.padding.${side}`)}
-        prefix={<Icon size={12} />} value={designPadding(layout)[index]} previewValue={previewSides?.[index]} min={0}
+        prefix={<Icon size={12} />} value={padding[index]} previewValue={previewSides?.[index]} min={0}
         {...bindLayoutValue<number>(fieldEdits, (current, value) => {
           const paddingSides: [number, number, number, number] = [...designPadding(current)];
           paddingSides[index] = value;
           return { ...current, paddingSides };
         })} />)}
-    </div>}
-    <IconButton label={t(paired ? 'feature.design.padding.independent' : 'feature.design.padding.paired')}
-      size="small" disabled={disabled} aria-pressed={!paired} onClick={() => {
-        let next: DesignLayout;
-        if (paired) {
-          next = { ...layout, paddingSides: designPadding(layout) };
-          for (const [index, field] of designPaddingVariableFields.entries()) {
-            next = bindDesignVariable(next, field, layout.variableIds?.[index % 2 ? 'paddingX' : 'paddingY']);
-          }
-          next = bindDesignVariable(bindDesignVariable(next, 'paddingX', undefined), 'paddingY', undefined);
-        } else {
-          const [effectiveTop, effectiveRight, effectiveBottom, effectiveLeft] = designPadding(resolveDesignVariableTarget(layout, styles));
-          next = { ...layout, paddingSides: undefined, paddingX: (effectiveRight + effectiveLeft) / 2, paddingY: (effectiveTop + effectiveBottom) / 2 };
-          for (const [index, axis] of (['paddingY', 'paddingX'] as const).entries()) {
-            const id = layout.variableIds?.[designPaddingVariableFields[index]];
-            next = bindDesignVariable(next, axis,
-              id === layout.variableIds?.[designPaddingVariableFields[index + 2]] ? id : undefined);
-          }
-          next = designPaddingVariableFields.reduce((current, field) => bindDesignVariable(current, field, undefined), next);
-        }
-        void onSave(next);
-      }}><PaddingIcon size={15} /></IconButton>
-  </div>;
+    </div>
+  </InspectorGroup>;
 }

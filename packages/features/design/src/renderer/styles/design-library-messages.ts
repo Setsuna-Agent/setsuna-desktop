@@ -1,0 +1,26 @@
+export const designLibraryMessages = {
+  'zh-CN': {
+    'feature.design.backToDraft': '返回稿件',
+    'feature.design.sharedLibraries': '共享库',
+    'feature.design.linkLibrary': '连接资源库',
+    'feature.design.linkPresetFailed': '无法连接设计资源库。{error}',
+    'feature.design.unlinkLibrary': '取消链接',
+    'feature.design.unlinkLibraryUnavailable': '共享组件暂时无法读取。恢复源稿件后可取消链接并保留实例内容。',
+    'feature.design.openLibrarySource': '打开源稿件',
+    'feature.design.openLibraryWebsite': '打开 {name} 官网',
+    'feature.design.librarySource': '来源稿件',
+    'feature.design.librarySearch': '搜索稿件',
+  },
+  'en-US': {
+    'feature.design.backToDraft': 'Back to draft',
+    'feature.design.sharedLibraries': 'Shared libraries',
+    'feature.design.linkLibrary': 'Connect library',
+    'feature.design.linkPresetFailed': 'Could not connect the design library. {error}',
+    'feature.design.unlinkLibrary': 'Unlink',
+    'feature.design.unlinkLibraryUnavailable': 'The shared components could not be loaded. Restore the source design to unlink it and keep the instance contents.',
+    'feature.design.openLibrarySource': 'Open source design',
+    'feature.design.openLibraryWebsite': 'Open the {name} website',
+    'feature.design.librarySource': 'Library sources',
+    'feature.design.librarySearch': 'Search designs',
+  },
+} as const;

@@ -1,8 +1,10 @@
-import type { KeyboardShortcutPlatform } from './keyboardShortcutCommands.js';
+export const KEYBOARD_SHORTCUT_PLATFORMS = ['darwin', 'win32'] as const;
+export type KeyboardShortcutPlatform = typeof KEYBOARD_SHORTCUT_PLATFORMS[number];
+export type KeyboardShortcutConflict<Id extends string> = Readonly<{ commandId: Id; binding: string }>;
 
-export const KEYBOARD_SHORTCUT_MODIFIERS = ['Control', 'Alt', 'Shift', 'Meta'] as const;
+const keyboardShortcutModifiers = ['Control', 'Alt', 'Shift', 'Meta'] as const;
 
-export type KeyboardShortcutModifier = typeof KEYBOARD_SHORTCUT_MODIFIERS[number];
+type KeyboardShortcutModifier = typeof keyboardShortcutModifiers[number];
 
 export type KeyboardShortcutCaptureError =
   | 'alt-graph'
@@ -26,6 +28,7 @@ export type KeyboardShortcutEvent = Pick<
 const modifierCodePattern = /^(?:Alt|Control|Meta|Shift)(?:Left|Right)$/u;
 const functionKeyPattern = /^F(?:[1-9]|1\d|2[0-4])$/u;
 const supportedCodePattern = /^(?:Key[A-Z]|Digit\d|Numpad[A-Za-z0-9]+|F(?:[1-9]|1\d|2[0-4])|Arrow(?:Up|Down|Left|Right)|Backquote|Backslash|BracketLeft|BracketRight|Comma|Period|Minus|Equal|Semicolon|Quote|Slash|Space|Enter|Tab|Backspace|Delete|Insert|Home|End|PageUp|PageDown)$/u;
+const unmodifiedCodePattern = /^(?:Key[A-Z]|Digit\d|Numpad[A-Za-z0-9]+|Backquote|Backslash|BracketLeft|BracketRight|Comma|Period|Minus|Equal|Semicolon|Quote|Slash)$/u;
 
 const displayKeyByCode: Record<string, string> = {
   ArrowDown: '↓',
@@ -55,7 +58,7 @@ const displayKeyByCode: Record<string, string> = {
   Tab: 'Tab',
 };
 
-export function normalizeKeyboardShortcutBinding(value: unknown): string | null {
+export function normalizeKeyboardShortcutBinding(value: unknown, allowUnmodifiedKeys = false): string | null {
   if (typeof value !== 'string') return null;
   const tokens = value.split('+').map((token) => token.trim()).filter(Boolean);
   const code = tokens.at(-1);
@@ -66,17 +69,17 @@ export function normalizeKeyboardShortcutBinding(value: unknown): string | null 
     if (!isKeyboardShortcutModifier(token) || modifiers.has(token)) return null;
     modifiers.add(token);
   }
-  if (!modifiers.size && !functionKeyPattern.test(code)) return null;
+  if (!allowUnmodifiedKeys && !modifiers.size && !functionKeyPattern.test(code)) return null;
   return keyboardShortcutBinding([...modifiers], code);
 }
 
-export function keyboardShortcutBinding(
+function keyboardShortcutBinding(
   modifiers: readonly KeyboardShortcutModifier[],
   code: string,
 ): string {
   const activeModifiers = new Set(modifiers);
   return [
-    ...KEYBOARD_SHORTCUT_MODIFIERS.filter((modifier) => activeModifiers.has(modifier)),
+    ...keyboardShortcutModifiers.filter((modifier) => activeModifiers.has(modifier)),
     code,
   ].join('+');
 }
@@ -84,6 +87,7 @@ export function keyboardShortcutBinding(
 export function captureKeyboardShortcut(
   event: KeyboardShortcutEvent,
   platform: KeyboardShortcutPlatform,
+  allowUnmodifiedKeys = false,
 ): KeyboardShortcutCaptureResult {
   if (event.altGraph || event.getModifierState?.('AltGraph')) return { status: 'invalid', reason: 'alt-graph' };
   if (!event.code || event.code === 'Unidentified') return { status: 'invalid', reason: 'unsupported' };
@@ -92,9 +96,11 @@ export function captureKeyboardShortcut(
 
   const binding = keyboardShortcutBinding(activeModifiers(event), event.code);
   if (!event.ctrlKey && !event.altKey && !event.metaKey && !functionKeyPattern.test(event.code)) {
-    return { status: 'invalid', reason: 'modifier-required' };
+    if (!allowUnmodifiedKeys || !unmodifiedCodePattern.test(event.code)) return { status: 'invalid', reason: 'modifier-required' };
   }
-  if (isReservedKeyboardShortcut(binding, platform)) return { status: 'invalid', reason: 'reserved' };
+  if (isReservedKeyboardShortcut(binding, platform) || (allowUnmodifiedKeys && binding === 'Shift+F10')) {
+    return { status: 'invalid', reason: 'reserved' };
+  }
   return { status: 'captured', binding };
 }
 
@@ -102,14 +108,13 @@ export function keyboardEventMatchesBinding(
   event: KeyboardShortcutEvent,
   binding: string,
 ): boolean {
-  if (event.altGraph || event.getModifierState?.('AltGraph')) return false;
   const normalized = normalizeKeyboardShortcutBinding(binding);
-  if (!normalized || event.code !== bindingCode(normalized)) return false;
-  const modifiers = new Set(bindingModifiers(normalized));
-  return event.ctrlKey === modifiers.has('Control')
-    && event.altKey === modifiers.has('Alt')
-    && event.shiftKey === modifiers.has('Shift')
-    && event.metaKey === modifiers.has('Meta');
+  return normalized !== null && normalized === keyboardShortcutFromEvent(event);
+}
+
+export function keyboardShortcutFromEvent(event: KeyboardShortcutEvent, code = event.code): string | null {
+  if (event.altGraph || event.getModifierState?.('AltGraph')) return null;
+  return keyboardShortcutBinding(activeModifiers(event), code);
 }
 
 export function formatKeyboardShortcutBinding(
@@ -117,7 +122,7 @@ export function formatKeyboardShortcutBinding(
   platform: KeyboardShortcutPlatform,
   accessible = false,
 ): string {
-  const normalized = normalizeKeyboardShortcutBinding(binding);
+  const normalized = normalizeKeyboardShortcutBinding(binding, true);
   if (!normalized) return binding;
   const modifiers = bindingModifiers(normalized);
   const codeLabel = displayKeyLabel(bindingCode(normalized));
@@ -139,7 +144,7 @@ export function formatKeyboardShortcutBindingParts(
   binding: string,
   platform: KeyboardShortcutPlatform,
 ): string[] {
-  const normalized = normalizeKeyboardShortcutBinding(binding);
+  const normalized = normalizeKeyboardShortcutBinding(binding, true);
   if (!normalized) return [binding];
   const modifiers = bindingModifiers(normalized);
   const codeLabel = displayKeyLabel(bindingCode(normalized));
@@ -151,16 +156,16 @@ export function formatKeyboardShortcutBindingParts(
   return [...modifiers.map((modifier) => labels[modifier]), codeLabel];
 }
 
-export function bindingCode(binding: string): string {
+function bindingCode(binding: string): string {
   return binding.split('+').at(-1) ?? '';
 }
 
-export function bindingModifiers(binding: string): KeyboardShortcutModifier[] {
+function bindingModifiers(binding: string): KeyboardShortcutModifier[] {
   return binding.split('+').slice(0, -1).filter(isKeyboardShortcutModifier);
 }
 
 function activeModifiers(event: KeyboardShortcutEvent): KeyboardShortcutModifier[] {
-  return KEYBOARD_SHORTCUT_MODIFIERS.filter((modifier) => {
+  return keyboardShortcutModifiers.filter((modifier) => {
     if (modifier === 'Control') return event.ctrlKey;
     if (modifier === 'Alt') return event.altKey;
     if (modifier === 'Shift') return event.shiftKey;
@@ -169,7 +174,7 @@ function activeModifiers(event: KeyboardShortcutEvent): KeyboardShortcutModifier
 }
 
 function isKeyboardShortcutModifier(value: string): value is KeyboardShortcutModifier {
-  return KEYBOARD_SHORTCUT_MODIFIERS.includes(value as KeyboardShortcutModifier);
+  return keyboardShortcutModifiers.includes(value as KeyboardShortcutModifier);
 }
 
 function displayKeyLabel(code: string): string {

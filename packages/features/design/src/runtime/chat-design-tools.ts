@@ -2,6 +2,7 @@ import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { canAccessChatDesign, chatDesignTool, createDesignDocument, designDocumentFileName, designMentionText, parseDesignMentions,
   type ChatDesignTools, type ChatDesignScope, type DesignConversationOwner, type DesignWorkspaceDocument,
   type DesignWorkspaceFiles } from '../contracts/index.js';
+import { bundledDesignLibraryDocumentId, findBundledDesignLibrary } from '../contracts/design-library-presets.js';
 import { parseDesignSelectionMentions } from '../contracts/design-selection-mention.js';
 import { designTaskRecord, readDesignSelection } from '../contracts/design-task.js';
 import type { DesignDocumentService } from './design-document-service.js';
@@ -61,6 +62,9 @@ export function createChatDesignTools(files: Pick<DesignWorkspaceFiles, 'project
       assets: ref.projectId && ref.projectId === scope.projectId ? undefined : new ChatDesignAssets(ref, documents),
       listDocuments: (signal) => files.list(ref, signal, scope),
       async libraryId(path, signal) {
+        signal.throwIfAborted();
+        const preset = findBundledDesignLibrary(path);
+        if (preset) return bundledDesignLibraryDocumentId(preset.id);
         const library = { ...ref, path };
         const id = await documents.withSnapshot(library, signal, async ({ document }, file) =>
           await allowed(library, document.documentId, file) ? document.documentId : undefined).catch(() => undefined);

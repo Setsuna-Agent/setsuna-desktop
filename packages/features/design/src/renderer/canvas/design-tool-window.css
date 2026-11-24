@@ -1,0 +1,147 @@
+.sd-popover.design-tool-popover--window {
+  --design-tool-window-header-height: 30px;
+  --design-tool-window-close-size: 24px;
+  --design-tool-window-edge-size: 6px;
+  --design-tool-window-corner-size: 14px;
+  --design-tool-window-content-height: max(0px, calc(var(--design-tool-popover-height) - var(--design-tool-window-header-height) - var(--design-tool-window-edge-size) - 2px));
+  position: relative;
+  flex-direction: column;
+}
+
+.sd-popover.design-tool-popover--window.design-tool-popover--floating {
+  max-width: none;
+  max-height: none;
+  animation: none;
+}
+
+.design-tool-popover--window > .design-tool-popover__content {
+  flex: 1;
+  width: auto;
+  margin-inline: var(--design-tool-window-edge-size);
+  margin-block-end: var(--design-tool-window-edge-size);
+}
+
+.design-tool-window__header {
+  display: grid;
+  order: -1;
+  box-sizing: border-box;
+  flex: 0 0 var(--design-tool-window-header-height);
+  grid-template-columns: minmax(0, 1fr);
+  margin-inline: var(--design-tool-window-corner-size);
+  padding-block-start: var(--design-tool-window-edge-size);
+}
+
+.design-tool-window__grip {
+  display: grid;
+  grid-area: 1 / 1;
+  place-items: center;
+  color: var(--app-text-muted);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.design-tool-window__grip:active {
+  cursor: grabbing;
+}
+
+.design-tool-window__grip:focus-visible {
+  border-radius: var(--app-radius-xs);
+  outline: 2px solid var(--app-focus-outline);
+  outline-offset: -2px;
+}
+
+.design-tool-window__close.sd-icon-button {
+  z-index: 1;
+  grid-area: 1 / 1;
+  justify-self: end;
+  align-self: center;
+  inline-size: var(--design-tool-window-close-size);
+  block-size: var(--design-tool-window-close-size);
+  min-height: 0;
+  border-radius: var(--app-radius-xs);
+}
+
+.design-tool-window__edge {
+  position: absolute;
+  z-index: 1;
+  touch-action: none;
+}
+
+.design-tool-window__edge:is([data-edge='top'], [data-edge='bottom']) {
+  left: var(--design-tool-window-corner-size);
+  right: var(--design-tool-window-corner-size);
+  height: var(--design-tool-window-edge-size);
+  cursor: ns-resize;
+}
+
+.design-tool-window__edge:is([data-edge='left'], [data-edge='right']) {
+  top: var(--design-tool-window-corner-size);
+  bottom: var(--design-tool-window-corner-size);
+  width: var(--design-tool-window-edge-size);
+  cursor: ew-resize;
+}
+
+.design-tool-window__edge[data-edge*='-'] {
+  width: var(--design-tool-window-corner-size);
+  height: var(--design-tool-window-corner-size);
+}
+
+.design-tool-window__edge[data-edge^='top'] { top: 0; }
+.design-tool-window__edge[data-edge^='bottom'] { bottom: 0; }
+.design-tool-window__edge[data-edge$='left'] { left: 0; }
+.design-tool-window__edge[data-edge$='right'] { right: 0; }
+.design-tool-window__edge:is([data-edge='top-left'], [data-edge='bottom-right']) { cursor: nwse-resize; }
+.design-tool-window__edge:is([data-edge='top-right'], [data-edge='bottom-left']) { cursor: nesw-resize; }
+
+.design-tool-popover--window .design-variable-panel {
+  block-size: min(380px, var(--design-tool-window-content-height));
+}
+
+.design-tool-popover--window .design-icon-picker {
+  max-block-size: var(--design-tool-window-content-height);
+}
+
+.design-tool-popover--window.design-tool-popover--floating .design-library__viewport {
+  max-block-size: none;
+}
+
+.design-tool-popover--floating .design-library__results--components[data-view='grid'] {
+  grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
+}
+
+.design-tool-popover--window.design-tool-popover--floating :is(.design-variable-panel, .design-icon-picker-panel, .design-icon-picker) {
+  block-size: 100%;
+  max-block-size: none;
+}
+
+.design-tool-popover--floating :is(.design-icon-picker__viewport, .design-icon-picker__scroll) {
+  flex: 1;
+  block-size: auto;
+}
+
+.design-tool-popover--floating :is(.design-image-picker-popover, .design-image-picker) {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.design-tool-popover--floating .design-image-picker-popover {
+  block-size: 100%;
+}
+
+.design-tool-popover--floating :is(.design-image-picker, .design-image-picker__content) {
+  flex: 1;
+  block-size: auto;
+  min-block-size: 0;
+}
+
+.design-tool-popover--floating .design-image-picker-popover__footer {
+  flex: none;
+}
+
+@container (max-width: 480px) {
+  .design-tool-popover--floating .design-image-picker__content {
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+}

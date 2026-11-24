@@ -1,13 +1,22 @@
 import { isValidWorkspaceEntryName } from '@setsuna-desktop/contracts';
 import { isDesignDocumentPath, parseDesignWorkspace, type DesignWorkspace } from '@setsuna-desktop/feature-design/contracts';
 import { useEffect, useMemo, useState } from 'react';
-import type { DesignWorkspaceLocation } from '../../composition/design/DesignFeatureBoundary.js';
+import { designHomeFilterForProjects, type DesignHomeFilter, type DesignWorkspaceLocation } from '../../composition/design/DesignFeatureBoundary.js';
 import { getDesktopPlatform } from '../../shared/lib/desktopPlatform.js';
 import { readSessionRecord, writeSessionRecord } from '../../shared/preferences/sessionStorage.js';
 import type { MainView } from '../types.js';
 
 function parseScope(value: unknown): DesignWorkspace | undefined {
   try { return parseDesignWorkspace(value); } catch { return undefined; }
+}
+
+function parseHomeFilter(value: unknown): DesignHomeFilter | null {
+  if (value && typeof value === 'object' && 'projectIds' in value && Array.isArray(value.projectIds)) {
+    const ids = new Set(value.projectIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim())));
+    return designHomeFilterForProjects([...ids]);
+  }
+  const scope = parseScope(value);
+  return scope?.projectId !== undefined ? scope : null;
 }
 
 function restoredDraftPath(value: unknown): string | undefined {
@@ -23,11 +32,17 @@ function readDesignSession(windowKey: string | null) {
   if (!value || typeof value !== 'object') return;
   const { active, location } = value as { active?: unknown; location?: Partial<Record<keyof DesignWorkspaceLocation, unknown>> | null };
   const scope = parseScope(location);
-  const { path, homeFilter } = location ?? {};
+  const { path, homeFilter, projectCanvas } = location ?? {};
   const draftPath = restoredDraftPath(path);
-  const filter = parseScope(homeFilter);
-  const restoredLocation: DesignWorkspaceLocation | null = draftPath && scope ? { ...scope, path: draftPath, ...(filter ? { homeFilter: filter } : {}) }
-    : path === undefined ? scope ?? null : filter ?? null;
+  const filter = parseHomeFilter(homeFilter);
+  let restoredLocation: DesignWorkspaceLocation | null = filter ?? null;
+  if (draftPath && scope) {
+    restoredLocation = { ...scope, path: draftPath, ...(filter ? { homeFilter: filter } : {}),
+      ...(projectCanvas === true && filter?.projectId ? { projectCanvas: true } : {}) };
+  } else if (path === undefined) {
+    restoredLocation = projectCanvas === true && scope?.projectId ? { projectId: scope.projectId, projectCanvas: true }
+      : parseHomeFilter(location) ?? scope ?? null;
+  }
   return { active: active === true, location: restoredLocation };
 }
 

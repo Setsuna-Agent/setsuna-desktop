@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   captureKeyboardShortcut, keyboardEventMatchesBinding,
-  normalizeKeyboardShortcutBinding
-} from '../../../../src/shared/shortcuts/keyboardShortcutBindings.js';
+  normalizeKeyboardShortcutBinding,
+} from '@setsuna-desktop/renderer-ui';
 import {
   KEYBOARD_SHORTCUT_PLATFORMS,
   keyboardShortcutCommand,

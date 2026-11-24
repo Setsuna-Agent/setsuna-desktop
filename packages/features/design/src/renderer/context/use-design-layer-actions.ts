@@ -8,7 +8,7 @@ import { previewDesignNode, type InspectorFieldEdits } from '../inspector/design
 import type { ComponentActions } from '../components/DesignComponentActions.js';
 import { detachDesignInstance } from '../components/design-components.js';
 import { changeDesignVariant, createDesignVariant, designComponentDefinitions, designComponentVariants, planDesignComponentInsertion } from '../components/design-library.js';
-import { designResourceNode, linkedDesignPath, type DesignLibraryResources } from '../components/design-library-resources.js';
+import { designResourceNode, isPresetLibraryPath, linkedDesignPath, type DesignLibraryResources } from '../components/design-library-resources.js';
 import { canGroupDesignLayers, changeDesignLayout, groupDesignLayers, orderDesignBranches, selectedBranches, ungroupDesignLayer } from '../design-canvas-edits.js';
 import { unionBounds, type Bounds, type Point } from '../design-geometry.js';
 import type { DesignScene } from '../design-layout.js';
@@ -193,7 +193,7 @@ export function useDesignLayerActions({ document, projected, resources, scene, l
     ? changeDesignVariant(document, projected, selectedId, id, resources) : undefined;
   const components: ComponentActions = {
     canCreate, library, sourceId, onCreate: create, onInsert: insertComponent, librarySource: Boolean(libraryPath),
-    onLocate: libraryPath ? onOpenLibrary && (() => onOpenLibrary(libraryPath)) : onLocate,
+    onLocate: libraryPath ? (onOpenLibrary && !isPresetLibraryPath(document, libraryPath) ? () => onOpenLibrary(libraryPath) : undefined) : onLocate,
     onDetach: canDetach ? detach : undefined,
     definition: writableFrame?.component && selectedId ? {
       name: writableFrame.variantName ?? '', add: addVariant,

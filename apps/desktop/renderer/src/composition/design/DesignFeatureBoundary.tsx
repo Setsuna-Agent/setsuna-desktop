@@ -7,7 +7,10 @@ import { useDesignClient } from './DesignClientContext.js';
 import { useDesignChat } from './DesignChatHost.js';
 import { watchDesignDirectories } from './design-assets.js';
 
-export type { DesignChatBinding, DesignWorkspaceLocation } from '@setsuna-desktop/feature-design/renderer';
+export {
+  designHomeFilterForLocation, designHomeFilterForProjects,
+  type DesignChatBinding, type DesignHomeFilter, type DesignWorkspaceLocation,
+} from '@setsuna-desktop/feature-design/renderer';
 
 export { DesignFeatureServiceBoundary, useDesignClient } from './DesignClientContext.js';
 

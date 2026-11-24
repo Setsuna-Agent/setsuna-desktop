@@ -7,7 +7,9 @@ import type { DesignDirectory } from '../../contracts/index.js';
 
 export type DesignLocationPicker = () => Promise<DesignDirectory | null>;
 
-export function DesignLocationField({ directory, choose, onChange, disabled, translate: t }: Readonly<{
+export function DesignLocationField({ id, modal = false, directory, choose, onChange, disabled, translate: t }: Readonly<{
+  id?: string;
+  modal?: boolean;
   directory: DesignDirectory | null; choose: DesignLocationPicker; onChange(value: DesignDirectory | null): void;
   disabled: boolean; translate: RendererTranslate;
 }>) {
@@ -23,14 +25,15 @@ export function DesignLocationField({ directory, choose, onChange, disabled, tra
   }
   const local = t('feature.design.localDesigns');
   const chooseLabel = t('feature.design.chooseLocation');
-  return <Dropdown disabled={disabled || picking} placement="bottomLeft" menu={{
+  return <Dropdown modal={modal} disabled={disabled || picking} placement="bottomLeft" menu={{
     selectedKeys: directory ? [] : ['local'],
     items: [
       { key: 'local', label: local, onClick: () => onChange(null) },
       { key: 'choose', label: chooseLabel, onClick: () => void pick() },
     ],
   }}>
-    <Button size="small" variant="ghost" className="design-location-field" icon={<Folder size={14} />}
+    <Button id={id} size={modal ? 'medium' : 'small'} variant={modal ? 'secondary' : 'ghost'}
+      className="design-location-field" icon={<Folder size={14} aria-hidden="true" />}
       aria-label={chooseLabel} title={directory?.path ?? chooseLabel} disabled={disabled || picking}>
       <span className="design-location-field__name">{directory ? workspaceRootName(directory) : local}</span>
       <ChevronDown size={12} aria-hidden="true" />

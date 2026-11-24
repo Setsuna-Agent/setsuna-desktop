@@ -27,6 +27,7 @@ type CanvasRender = Readonly<{
   range: Bounds;
   scale: number;
   editingId: string | null;
+  inspect?: boolean;
   paintPreview?: DesignPaintPreview;
   cropPreview?: Readonly<{ id: string; value: Point }>;
   pathPreview?: Readonly<{ id: string; geometry: DesignPathGeometry }>;
@@ -170,10 +171,13 @@ export function DesignCanvasLayers({ document, scene, placements, canvas, output
       </>;
     }
 
+    const inspectRoot = canvas?.inspect && box.parentId === null;
     return <Group key={id} id={id} name="design-hit-layer"
       {...center} offsetX={width / 2} offsetY={height / 2} rotation={rotation}
-      scaleX={scaleX} scaleY={scaleY} listening={!box.locked && !floatingCenter && !isGeneratedScriptLayer(id)}>
-      <Group name="design-layer-paint" opacity={node.opacity ?? 1}>
+      scaleX={scaleX} scaleY={scaleY} listening={(inspectRoot || !box.locked) && !floatingCenter && !isGeneratedScriptLayer(id)}>
+      {/* Treat the entire locked sample as one canvas target, including transparent areas. */}
+      {inspectRoot ? <Rect width={width} height={height} fill="transparent" /> : null}
+      <Group name="design-layer-paint" opacity={node.opacity ?? 1} listening={!inspectRoot}>
         {canvas && paintPaths.length ? <DesignCanvasPaintImages paths={paintPaths} loadImage={canvas.loadImage}>
           {renderPaint}
         </DesignCanvasPaintImages> : renderPaint(output?.images ?? emptyDesignPaintImages)}

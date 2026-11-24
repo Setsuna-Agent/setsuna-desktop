@@ -108,27 +108,27 @@ export const DesignInspector = forwardRef<DesignInspectorHandle, InspectorProps>
   const panelPreview = preview?.id === selection?.id && preview?.revision === revision ? preview : undefined;
   const { canCreate, onCreate, ...componentReuse } = components;
   return <DesignSidePanel side="inspector" label={t('feature.design.properties')} resizeLabel={t('feature.design.resizeProperties')}
+    actions={canCreate ? <IconButton size="small" label={t('feature.design.createComponent')} disabled={disabled} onClick={onCreate}>
+      <Component size={15} />
+    </IconButton> : undefined}
     collapse={{ label: t('feature.design.collapseProperties'), onClick: onClose }}
     title={selection ? <LayerIdentity key={selection.id} {...selection} readOnly={disabled || locked} fieldEdits={fieldEdits} translate={t} /> : undefined}>
-    <div className="design-inspector design-panel-scroll" ref={scroll}>
-      {canCreate ? <div className="design-inspector__component-actions design-inspector__component-actions--create">
-        <Button size="small" variant="ghost" disabled={disabled} icon={<Component size={15} />} onClick={onCreate}>
-          {t('feature.design.createComponent')}
-        </Button>
-      </div> : null}
-      {selection ? <fieldset key={selection.id} disabled={locked || disabled} className="design-inspector__fields">
-        {boardModes}
-        <LayerFields {...selection} revision={revision} preview={panelPreview} alignmentControls={alignmentControls} translate={t}
-          disabled={disabled || locked} onSave={onSave} fieldEdits={fieldEdits} onPaintPreview={onPaintPreview}
-          imageActions={imageActions} paintAssets={paintAssets} layoutAdjustment={layoutAdjustment} pathActions={pathActions}
-          instanceActions={instanceActions} onLayoutChange={onLayoutChange} onAddLayout={onAddLayout} contentSource={contentSource} />
-        {prototype ? <DesignPrototypeFields {...prototype} disabled={disabled || locked} translate={t} /> : null}
-      </fieldset> : selectedCount > 1 ? <>
-        {alignmentControls ? <InspectorSection title={alignLabel}>{alignmentControls}</InspectorSection> : null}
-        <DesignBatchFields key={batch.map(({ id }) => id).join(' ')} layers={batch} fieldEdits={fieldEdits} disabled={disabled} translate={t} />
-      </> : null}
-      <DesignComponentActions {...componentReuse} disabled={disabled} translate={t} />
-      <DesignExportFields disabled={exportDisabled} onExport={onExport} translate={t} />
+    <div className="design-panel-scroll" ref={scroll}>
+      <div className="design-inspector">
+        {selection ? <fieldset key={selection.id} disabled={locked || disabled} className="design-inspector__fields">
+          {boardModes}
+          <LayerFields {...selection} revision={revision} preview={panelPreview} alignmentControls={alignmentControls} translate={t}
+            disabled={disabled || locked} onSave={onSave} fieldEdits={fieldEdits} onPaintPreview={onPaintPreview}
+            imageActions={imageActions} paintAssets={paintAssets} layoutAdjustment={layoutAdjustment} pathActions={pathActions}
+            instanceActions={instanceActions} onLayoutChange={onLayoutChange} onAddLayout={onAddLayout} contentSource={contentSource} />
+          {prototype ? <DesignPrototypeFields {...prototype} disabled={disabled || locked} translate={t} /> : null}
+        </fieldset> : selectedCount > 1 ? <>
+          {alignmentControls ? <InspectorSection title={alignLabel}>{alignmentControls}</InspectorSection> : null}
+          <DesignBatchFields key={batch.map(({ id }) => id).join(' ')} layers={batch} fieldEdits={fieldEdits} disabled={disabled} translate={t} />
+        </> : null}
+        <DesignComponentActions {...componentReuse} disabled={disabled} translate={t} />
+        <DesignExportFields disabled={exportDisabled} onExport={onExport} translate={t} />
+      </div>
     </div>
   </DesignSidePanel>;
 });

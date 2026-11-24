@@ -110,7 +110,7 @@ export async function watchElectronDev(root: string, onReload: (reload: DesktopD
     for (const { reload, entries } of groups) {
       for (const options of entries) {
         const buildContext = await context({
-          ...options, absWorkingDir: root, alias, metafile: true, write: false, logLevel: 'warning',
+          ...options, absWorkingDir: root, alias: options.bundle ? alias : undefined, metafile: true, write: false, logLevel: 'warning',
         });
         bundles.push({ reload, context: buildContext, inputs: new Set(), hashes: new Map() });
       }

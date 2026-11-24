@@ -117,7 +117,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     workspacePanels,
   } = controller;
   const designClient = useDesignClient();
-  const designAvailable = Boolean(designClient);
   const designProjects = useMemo(() => {
     const projects = new Map(runtime.projects.map((project) => [project.id, project]));
     for (const source of designSources) if (!projects.has(source.id)) projects.set(source.id, source);
@@ -545,7 +544,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           runtimeActivityTriggerRef={runtimeActivityTriggerRef}
           themeToggleTriggerRef={themeToggleTriggerRef}
           onOpenChat={openChat}
-          onOpenDesign={designAvailable ? openDesign : undefined}
+          onOpenDesign={openDesign}
           onOpenCapabilities={openCapabilities}
           onOpenPullRequests={openPullRequests}
           onOpenAutomation={openAutomation}
@@ -669,7 +668,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           onBack: openChat,
         }}
         renderDefault={(routeId) => routeId === 'design' ? (
-          <DesignWorkspaceRoute projects={designProjects}
+          <DesignWorkspaceRoute projects={designProjects} visible={activeView === 'design'}
             location={designLocation} onLocationChange={setDesignLocation} />
         ) : (
           <AppRouteContent

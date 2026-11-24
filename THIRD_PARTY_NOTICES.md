@@ -29,7 +29,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## Figtree font
+## Bundled fonts
 
 Setsuna Desktop bundles the unmodified Latin variable WOFF2 from
 `@fontsource-variable/figtree@5.3.0` (font revision v9) for offline UI typography.
@@ -37,7 +37,15 @@ Source: https://github.com/erikdkennedy/figtree
 
 Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree) Figtree-Italic[wght].ttf: Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree)
 
-This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The design canvas also bundles the unmodified Latin upright and italic variable WOFF2 files from these releases.
+
+- `@fontsource-variable/geist@5.3.0` and `@fontsource-variable/geist-mono@5.3.0`. Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font).
+- `@fontsource-variable/inter@5.3.0`. Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter). “Inter” is a Reserved Font Name by Rasmus Andersson.
+- `@fontsource-variable/dm-sans@5.3.0`. Copyright 2014 The DM Sans Project Authors (https://github.com/googlefonts/dm-fonts).
+- `@fontsource-variable/source-serif-4@5.3.1`. Copyright 2014–2023 Adobe, with Reserved Font Name “Source”. All Rights Reserved (https://github.com/adobe-fonts/source-serif).
+- `@fontsource-variable/jetbrains-mono@5.3.0`. Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono).
+
+These fonts are licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
 
@@ -269,6 +277,33 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## shadcn/ui
+
+The design resource card includes still images of the public
+[shadcn/ui homepage](https://ui.shadcn.com/).
+
+MIT License
+
+Copyright (c) 2023 shadcn
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ## beUI
 
 The shared controls in `packages/renderer-ui` and the chat prompt surface adapt
@@ -276,6 +311,7 @@ components and motion settings from [beUI](https://beui.dev), maintained at
 [starc007/ui-components](https://github.com/starc007/ui-components).
 Adaptations retain React 18 support and the desktop application's theme, density,
 native form events and nested-menu accessibility.
+The design resource card includes still images of the public beUI homepage.
 
 MIT License
 

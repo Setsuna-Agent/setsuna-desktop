@@ -23,7 +23,7 @@ renderer composition
          └── MCP snapshot + mutation service
 ```
 
-`@modelcontextprotocol/sdk` 只能由 `packages/features/mcp` 依赖。Feature 的公共 runtime export 只有 `mcpRuntimeFeature`；SDK manager、OAuth coordinator 和协议适配器都是包内实现。
+MCP 客户端 SDK 由 `packages/features/mcp` 持有。Feature 的公共 runtime export 只有 `mcpRuntimeFeature`，SDK manager、OAuth coordinator 和协议适配器都留在包内。[设计 MCP](design.md#在外部-agent-中读取设计) 的 stdio 服务入口由 Design Feature 持有。
 
 ## Contracts 与 Capability
 

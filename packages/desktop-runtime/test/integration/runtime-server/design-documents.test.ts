@@ -1,7 +1,7 @@
 import { workspaceFilePathKey, workspaceProjectRoots, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { designDocumentVersion, type DesignDocumentRef, type DesignEdit, type DesignSnapshot } from '@setsuna-desktop/feature-design/contracts';
 import { createHash, randomUUID } from 'node:crypto';
-import { access, chmod, mkdir, readFile, readdir, realpath, symlink, unlink, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readFile, readdir, realpath, symlink, unlink, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, it } from 'vitest';
 import { createRuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
@@ -517,6 +517,11 @@ it('lists every design in the selected root and finds image assets beyond the en
     const list = (rootId: string) => harness.runtimeFetch(`/v1/features/design/documents/list?${new URLSearchParams({ projectId: project.id, rootId })}`);
     await expect(list(secondRoot.id)).resolves.toEqual([...drafts, ref.path, 'screens/final.design.json'].sort((a, b) => a.localeCompare(b)));
     await expect(list(firstRoot.id)).resolves.toEqual([primaryRef.path]);
+    const modifiedAt = new Date('2026-10-01T00:00:00.000Z');
+    await utimes(path.join(secondary, 'screens', 'final.design.json'), modifiedAt, modifiedAt);
+    const entries = (rootId: string) => harness.runtimeFetch(`/v1/features/design/documents/entries?${new URLSearchParams({ projectId: project.id, rootId })}`);
+    await expect(entries(secondRoot.id)).resolves.toContainEqual({ path: 'screens/final.design.json', modifiedAt: modifiedAt.toISOString() });
+    await expect(entries(firstRoot.id)).resolves.toEqual([{ path: primaryRef.path, modifiedAt: expect.any(String) }]);
     await symlink(outside, path.join(primary, 'design-assets'), process.platform === 'win32' ? 'junction' : 'dir');
     await expect(post(route, { ref: primaryRef, name: 'photo.png', base64: ONE_PIXEL_PNG_BASE64 })).rejects.toThrow();
     expect(await readdir(outside)).toEqual([]);

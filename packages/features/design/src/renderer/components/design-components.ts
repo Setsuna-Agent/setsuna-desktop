@@ -1,19 +1,27 @@
 import { rebaseDesignTextRuns, resolveDesignNodeStyles, type DesignContentOverride, type DesignDocument, type DesignEdit, type DesignFrame, type DesignNode } from '../../contracts/index.js';
 import { maxDesignTreeDepth, maxExpandedDesignLayers } from '../../contracts/document.js';
+import type { DesignLibraryColorScheme } from '../../contracts/design-library-presets.js';
 import { remapDesignLayerReferences } from '../../contracts/design-references.js';
 import { designResourceParts } from '../../contracts/design-resource-id.js';
 import { designStylesForModes } from '../../contracts/design-styles.js';
+import type { DesignVariableModeIds } from '../../contracts/design-variable-collections.js';
 import { bindDesignVariable, validDesignWidthLimits, type DesignVariableIds } from '../../contracts/design-variables.js';
-import { designResourceNode, linkedDesignPath, mapDesignNodeResourceIds, type DesignLibraryResources } from './design-library-resources.js';
+import { designLibraryDarkModes, designResourceNode, linkedDesignPath, lockDesignLibraryPreview,
+  mapDesignNodeResourceIds, type DesignLibraryResources } from './design-library-resources.js';
 
 type OverrideScope = Readonly<{ root: string; overrides: NonNullable<DesignFrame['contentOverrides']> }>;
 
-export function projectDesignComponents(authored: DesignDocument, resources?: DesignLibraryResources): DesignDocument {
+export function projectDesignSurface(document: DesignDocument, resources: DesignLibraryResources, libraryPreview?: DesignLibraryColorScheme) {
+  const modes = libraryPreview === 'dark' ? designLibraryDarkModes(document) : undefined;
+  return projectDesignComponents(libraryPreview ? lockDesignLibraryPreview(document) : document, resources, modes);
+}
+
+export function projectDesignComponents(authored: DesignDocument, resources?: DesignLibraryResources, defaultModes?: DesignVariableModeIds): DesignDocument {
   const styles = resources && Object.keys(resources.styles).length ? { ...authored.styles, ...resources.styles } : authored.styles;
   if ((!styles || !Object.keys(styles).length) && !Object.values(authored.nodes).some((node) => node.kind === 'frame' && node.instanceOf)) {
     return authored;
   }
-  const defaults = designStylesForModes(styles, authored.documentId);
+  const defaults = designStylesForModes(styles, authored.documentId, defaultModes);
   const nodes: Record<string, DesignNode> = { ...authored.nodes };
   const instances: { id: string; styles: DesignDocument['styles'] }[] = [];
   function visit(id: string, scoped: DesignDocument['styles']) {
@@ -25,8 +33,8 @@ export function projectDesignComponents(authored: DesignDocument, resources?: De
   }
   for (const id of authored.rootIds) {
     const root = authored.nodes[id];
-    const scoped = root.kind === 'frame' && root.variableModeIds
-      ? designStylesForModes(styles, authored.documentId, root.variableModeIds) : defaults;
+    const modes = root.kind === 'frame' ? root.variableModeIds : undefined;
+    const scoped = modes ? designStylesForModes(styles, authored.documentId, defaultModes ? { ...defaultModes, ...modes } : modes) : defaults;
     visit(id, scoped);
   }
   if (!instances.length) return { ...authored, styles, nodes };

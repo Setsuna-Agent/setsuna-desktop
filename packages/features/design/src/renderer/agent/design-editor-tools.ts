@@ -11,6 +11,7 @@ import type { DesignScriptResults } from '../canvas/design-script-layers.js';
 import { designComponentDefinitions } from '../components/design-library.js';
 import { designLibraryVariableCollections, designStyleChoices } from '../components/design-library-resources.js';
 import type { DesignExportRequest } from '../export/use-design-exports.js';
+import { mergeDesignFontCatalog } from '../text/design-bundled-fonts.js';
 import type { DesignCommandContext } from './design-command.js';
 import { designResourcePage } from '../../contracts/design-task.js';
 import type { DesignCommandKey } from '../../contracts/design-command-key.js';
@@ -41,7 +42,7 @@ export async function readDesignResources(view: DesignCommandContext, editor: De
     case 'components': values = designComponentDefinitions(document, resources).map(({ id, node }) => ({ id, name: node.name, set: node.componentSet, variant: node.variantName })); break;
     case 'libraries': values = Object.entries(document.libraries ?? {}); break;
     case 'boards': values = document.rootIds.filter((id) => document.nodes[id].kind === 'frame').map((id) => ({ id, name: document.nodes[id].name })); break;
-    case 'fonts': values = [...designFontFamilies, ...await editor.client.fonts.list(signal)]; break;
+    case 'fonts': values = [...designFontFamilies, ...mergeDesignFontCatalog(await editor.client.fonts.list(signal))]; break;
     case 'images': values = [...await editor.client.assets.search(editor.ref, query)]; break;
     case 'documents': values = [...await editor.client.list(editor.ref, signal)]; break;
     case 'brushes': {

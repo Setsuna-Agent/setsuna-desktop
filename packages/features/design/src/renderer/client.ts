@@ -5,11 +5,12 @@ import { defineCapability } from '@setsuna-desktop/feature-core/capability';
 import type { FeatureOperationTransport } from '@setsuna-desktop/feature-core/operation';
 import type { SetsunaDesktopBridge, WorkspaceEntry, WorkspaceFilePreview } from '@setsuna-desktop/contracts';
 import { importDesignFont, listDesignFonts, readDesignFont, removeDesignFont, type DesignCustomFont } from '../contracts/design-fonts.js';
+import { prepareDesignLibraryPreset, type PrepareDesignLibraryPresetInput } from '../contracts/operations.js';
 import {
-  type ProjectDesignEntry, listProjectDesigns, getDesignCatalog, setDesignProject, readDesignImage, searchDesignImages, type DesignCatalog, commitDesignEdits, createDesignDocument, deleteDesignDocument, importDesignImage, importDesignScript, listDesignDocuments, moveDesignDocument, navigateDesignHistory,
+  type ProjectDesignEntry, listProjectDesigns, getDesignCatalog, setDesignProject, readDesignImage, searchDesignImages, type DesignCatalog, commitDesignEdits, createDesignDocument, deleteDesignDocument, importDesignImage, importDesignScript, listDesignDocumentEntries, listDesignDocuments, moveDesignDocument, navigateDesignHistory,
   importDesignShader, readDesignDocument, readDesignScriptParameters, readDesignShader, renderDesignScript, resolveDesignDocumentRoot,
-  type CommitDesignEditsInput, type CreateDesignDocumentInput, type DesignDocumentRef, type DesignSnapshot, type DesignWorkspace,
-  type DesignDocument, type DesignScriptParameter, type ImportDesignImageInput, type ImportDesignScriptInput,
+  type CommitDesignEditsInput, type CreateDesignDocumentInput, type DesignDocumentListEntry, type DesignDocumentRef, type DesignSnapshot, type DesignWorkspace,
+  type DesignDocument, type DesignEdit, type DesignScriptParameter, type ImportDesignImageInput, type ImportDesignScriptInput,
   type ImportDesignShaderInput, type MoveDesignDocumentInput, type NavigateDesignHistoryInput,
   type ReadDesignScriptParametersInput, type ReadDesignShaderInput, type RenderDesignScriptInput,
 } from '../contracts/index.js';
@@ -50,7 +51,9 @@ export type DesignClient = Readonly<{
   assets: DesignAssets;
   fonts: DesignFontClient;
   list(workspace: DesignWorkspace, signal?: AbortSignal): Promise<readonly string[]>;
+  listEntries(workspace: DesignWorkspace, signal?: AbortSignal): Promise<readonly DesignDocumentListEntry[]>;
   create(input: CreateDesignDocumentInput, signal?: AbortSignal): Promise<WorkspaceEntry>;
+  prepareLibraryPreset(input: PrepareDesignLibraryPresetInput, signal?: AbortSignal): Promise<Extract<DesignEdit, { kind: 'linkLibrary' }>>;
   move(input: MoveDesignDocumentInput, signal?: AbortSignal): Promise<DesignDocumentRef>;
   delete(ref: DesignDocumentRef & { expectedRevision?: string; command?: DesignCommandKey }, signal?: AbortSignal): Promise<null>;
   resolveResourceRoot(ref: DesignDocumentRef, signal?: AbortSignal): Promise<DesignDocumentRef>;
@@ -109,7 +112,9 @@ export function createDesignClient(transport: FeatureOperationTransport, assets:
       remove: (id, signal, command) => transport.call(removeDesignFont, { id, ...designCommandQuery(command) }, { signal }),
     },
     list: (workspace, signal) => transport.call(listDesignDocuments, workspace, { signal }),
+    listEntries: (workspace, signal) => transport.call(listDesignDocumentEntries, { ...workspace, includePreviewMetadata: true }, { signal }),
     create: (input, signal) => transport.call(createDesignDocument, input, { signal }),
+    prepareLibraryPreset: (input, signal) => transport.call(prepareDesignLibraryPreset, input, { signal }),
     move: (input, signal) => transport.call(moveDesignDocument, input, { signal }),
     delete: ({ command, ...ref }, signal) => transport.call(deleteDesignDocument, { ...ref, ...designCommandQuery(command) }, { signal }),
     resolveResourceRoot: (ref, signal) => transport.call(resolveDesignDocumentRoot, ref, { signal }),

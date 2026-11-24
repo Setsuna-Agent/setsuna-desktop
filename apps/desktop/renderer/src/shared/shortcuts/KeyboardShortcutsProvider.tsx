@@ -12,7 +12,7 @@ import {
   readStorageValue,
   writeStorageValue,
 } from '../preferences/browserStorage.js';
-import { normalizeKeyboardShortcutBinding } from './keyboardShortcutBindings.js';
+import { normalizeKeyboardShortcutBinding, type KeyboardShortcutConflict } from '@setsuna-desktop/renderer-ui';
 import {
   KEYBOARD_SHORTCUT_PLATFORMS,
   isKeyboardShortcutCommandId,
@@ -45,7 +45,7 @@ type KeyboardShortcutsContextValue = {
   isOverridden: (commandId: KeyboardShortcutCommandId) => boolean;
   resetAll: () => void;
   resetCommand: (commandId: KeyboardShortcutCommandId) => void;
-  setBindings: (commandId: KeyboardShortcutCommandId, bindings: readonly string[]) => void;
+  setBindings: (commandId: KeyboardShortcutCommandId, bindings: readonly string[], conflict?: KeyboardShortcutConflict<KeyboardShortcutCommandId>) => void;
   setRecording: (recording: boolean) => void;
 };
 
@@ -83,18 +83,17 @@ export function KeyboardShortcutsProvider({
     [platformOverrides],
   );
 
-  const setBindings = useCallback((commandId: KeyboardShortcutCommandId, bindings: readonly string[]) => {
+  const setBindings = useCallback((commandId: KeyboardShortcutCommandId, bindings: readonly string[], conflict?: KeyboardShortcutConflict<KeyboardShortcutCommandId>) => {
     const normalized = normalizeBindingList(bindings);
-    setPreferences((current) => ({
-      version: 1,
-      platforms: {
-        ...current.platforms,
-        [platform]: {
-          ...(current.platforms[platform] ?? {}),
-          [commandId]: normalized,
-        },
-      },
-    }));
+    setPreferences((current) => {
+      const overrides = current.platforms[platform] ?? emptyKeyboardShortcutOverrides;
+      const next = { ...overrides, [commandId]: normalized };
+      if (conflict) {
+        const resolveBindings = createKeyboardShortcutBindingResolver(platform, overrides);
+        next[conflict.commandId] = resolveBindings(conflict.commandId).filter((binding) => binding !== conflict.binding);
+      }
+      return { version: 1, platforms: { ...current.platforms, [platform]: next } };
+    });
   }, [platform]);
 
   const resetCommand = useCallback((commandId: KeyboardShortcutCommandId) => {
@@ -253,7 +252,7 @@ export function writeKeyboardShortcutPreferences(
 }
 
 function normalizeBindingList(bindings: readonly unknown[]): string[] {
-  return [...new Set(bindings.map(normalizeKeyboardShortcutBinding).filter(Boolean) as string[])];
+  return [...new Set(bindings.flatMap((value) => normalizeKeyboardShortcutBinding(value) ?? []))];
 }
 
 function currentKeyboardShortcutPlatform(): KeyboardShortcutPlatform {

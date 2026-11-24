@@ -1,14 +1,13 @@
-import { Copy, Ellipsis, Group, Play, Redo2, Trash2, Undo2, Ungroup } from 'lucide-react';
 import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type SetStateAction, type SyntheticEvent } from 'react';
 import type { Yoga } from 'yoga-layout/load';
-import { Dropdown, IconButton, Popover, useToast } from '@setsuna-desktop/renderer-ui';
+import { useToast } from '@setsuna-desktop/renderer-ui';
 import type { DesignContentOverride, DesignDocument, DesignEdit, DesignNode, DesignScript, DesignStyle } from '../contracts/index.js';
 import { designDefaultColor } from '../contracts/design-color.js';
 import { maxDesignScriptBytes } from '../contracts/design-content-source.js';
 import { designStylesForModes } from '../contracts/design-styles.js';
 import { bindDesignVariable, defaultDesignImageCrop } from '../contracts/design-variables.js';
 import { isStraightDesignPath } from '../contracts/vector-geometry.js';
-import { defaultDrawingWidths, drawingInkTool, drawingPathNode, isDrawingInkTool, type DrawingInk, type DrawingInkTool, type DrawingPreview } from './canvas/design-drawing.js';
+import { defaultDrawingWidths, drawingInkTool, drawingPathNode, isDrawingInkTool, isFreehandTool, type DrawingInk, type DrawingInkTool, type DrawingPreview } from './canvas/design-drawing.js';
 import { drawnDesignLayer } from './canvas/design-shape-drawing.js';
 import { convertDesignScript, projectDesignScriptLayers, withDesignScriptInput } from './canvas/design-script-layers.js';
 import { readDesignScriptFile, type DesignScriptSource } from './canvas/design-script-source.js';
@@ -18,7 +17,9 @@ import type { DesignWebLayerControls } from './canvas/DesignWebToolbar.js';
 import { useDesignChatPicks } from './agent/use-design-chat-picks.js';
 import { DesignChatBridge } from './agent/DesignChatBridge.js';
 import { useDesignAgentActivity } from './agent/use-design-agent-activity.js';
-import { DesignPanelLayout } from './canvas/DesignSidePanels.js';
+import { useDesignMcpCanvas } from './mcp/use-design-mcp-canvas.js';
+import { DesignInspectorPresence, DesignPanelLayout } from './canvas/DesignSidePanels.js';
+import { useDesignToolbarSlide } from './canvas/use-design-toolbar-slide.js';
 import { DesignCanvas, type CanvasViewport, type DesignCanvasHandle } from './DesignCanvas.js';
 import type { DesignDocumentSurfaceProps } from './DesignDocumentSurface.js';
 import { DesignImagePicker } from './DesignImagePicker.js';
@@ -27,16 +28,17 @@ import { DesignContentSourceFields } from './inspector/DesignContentSourceFields
 import type { DesignScriptParameterEdits } from './inspector/DesignScriptParameterFields.js';
 import { DesignLayers } from './DesignLayers.js';
 import { DesignTextInput } from './DesignTextInput.js';
-import { designToolForKey, designToolPopoverPosition, isDesignImagePickerShortcut, type DesignToolPanel } from './DesignTools.js';
-import { designInstanceContents, projectDesignComponents, withDesignInstanceContent } from './components/design-components.js';
+import type { DesignToolPanel } from './DesignTools.js';
+import { DesignToolbarActions } from './canvas/DesignToolbarActions.js';
+import { designInstanceContents, projectDesignComponents, projectDesignSurface, withDesignInstanceContent } from './components/design-components.js';
 import { planDesignComponentInsertion } from './components/design-library.js';
 import { planDesignLibraryUnlink } from './components/design-library-unlink.js';
-import { designLibraryVariableCollections, designStyleChoices, type DesignLibraryResources } from './components/design-library-resources.js';
+import { designLibraryDarkModes, designLibraryVariableCollections, designStyleChoices, type DesignLibraryResources } from './components/design-library-resources.js';
 import { useDesignLibraryResources } from './components/use-design-library-resources.js';
 import { DesignLayerMenu } from './context/DesignLayerMenu.js';
-import { useDesignCanvasSettings } from './context/design-canvas-settings.js';
+import { useDesignCanvasSettings, useDesignShortcuts } from './context/design-canvas-settings.js';
 import { canContainDesignLayers } from './context/design-layer-commands.js';
-import { designLayerShortcut } from './context/design-layer-shortcuts.js';
+import { designClipboardShortcut } from './context/design-layer-shortcuts.js';
 import { useDesignLayerActions, type DesignLayerMenuTarget } from './context/use-design-layer-actions.js';
 import {
   alignDesignLayers, alignDesignLayerToFrame, changeDesignLayout, dropDesignLayer, duplicateDesignLayers, isFlowChild, moveDesignLayer,
@@ -62,7 +64,9 @@ import { DesignBoardModes } from './styles/DesignBoardModes.js';
 import { DesignGradientSessionProvider } from './styles/DesignGradientSession.js';
 import { DesignStyleContext } from './styles/DesignStyleSelect.js';
 import { DesignVariableTable } from './styles/DesignVariableTable.js';
-import { designPrototypeBoardFor, designPrototypeBoards } from './prototype/design-prototype.js';
+import { designPrototypeBoardFor, designPrototypeBoards, designPrototypeHotspots } from './prototype/design-prototype.js';
+import { DesignPrototypePreview } from './prototype/DesignPrototypePreview.js';
+import { useDesignPrototypeSession } from './prototype/use-design-prototype-session.js';
 import { DesignFontsContext, useDesignFonts, useDesignScriptFonts } from './text/use-design-fonts.js';
 import { DesignIconPicker } from './vectors/DesignIconPicker.js';
 import { clipboardDesignSvg, type DesignSvgSource } from './vectors/design-svg-source.js';
@@ -84,7 +88,6 @@ const directions: Record<string, Point> = {
   ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 },
 };
 const DesignBoardAudit = lazy(() => import('./agent/DesignBoardAudit.js'));
-const DesignPrototypePreview = lazy(() => import('./prototype/DesignPrototypePreview.js'));
 const drawingPaint = { color: designDefaultColor };
 const initialDrawingInks: Readonly<Record<DrawingInkTool, DrawingInk>> = {
   pen: { paint: drawingPaint, width: defaultDrawingWidths.pen },
@@ -103,11 +106,12 @@ function isEditorEvent({ target, currentTarget }: SyntheticEvent<HTMLElement>) {
 }
 
 export default function DesignEditor({ layoutEngine, ...props }: DesignDocumentSurfaceProps & { layoutEngine: Yoga }) {
-  const { client, documentRef } = props;
+  const { client, documentRef, libraryPreview } = props;
   const session = useDesignDocument(props);
   const source = session.snapshot?.document;
   const resources = useDesignLibraryResources(client, documentRef, source, session.watchAssetDirectories);
-  const projected = useMemo(() => source ? projectDesignComponents(source, resources) : null, [resources, source]);
+  const projected = useMemo(() => source ? projectDesignSurface(source, resources, libraryPreview) : null,
+    [libraryPreview, resources, source]);
   const fonts = useDesignFonts(client.fonts, projected, props.translate);
   // Reflow auto-sized text once its actual faces are available to the canvas.
   const scene = useMemo(() => projected ? resolveDesignScene(layoutEngine, projected, measureDesignText) : null,
@@ -124,12 +128,12 @@ export default function DesignEditor({ layoutEngine, ...props }: DesignDocumentS
 }
 
 function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: documentBusy, synchronize, editFields, appendStroke, commit, navigate,
-  currentRevision, projected, resources, scene, layoutEngine, loadImage, projects, linkedProjectId, chatActivity, renderChat, onFileAction, onOpenLibrary, watchAssetDirectories }:
+  currentRevision, projected, resources, scene, layoutEngine, loadImage, projects, linkedProjectId, chatActivity, renderChat, onFileAction, onOpenLibrary, onOpenPresetLibrary, watchAssetDirectories, libraryPreview, colorScheme, visible = true }:
   DesignDocumentSurfaceProps & ReturnType<typeof useDesignDocument> & { snapshot: DesignEditorSnapshot; projected: DesignDocument;
     resources: DesignLibraryResources; scene: DesignScene; layoutEngine: Yoga; loadImage: LoadDesignImage },
 ) {
   const fontCatalog = useContext(DesignFontsContext);
-  const [fitRequest, setFitRequest] = useState<readonly string[] | null>(null);
+  const [fitRequest, setFitRequest] = useState<readonly string[] | null>(() => libraryPreview ? snapshot.document.rootIds : null);
   const { running: agentRunning, focus: agentFocus, setRunning: setAgentRunning, showFocus } = useDesignAgentActivity(chatActivity ? setFitRequest : undefined);
   const [agentNetworkAccess, setAgentNetworkAccess] = useState(false);
   const busy = documentBusy || agentRunning;
@@ -165,8 +169,10 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
   const [variableCollectionKey, setVariableCollectionKey] = useState<string>();
   const [stylePreview, setStylePreview] = useState<{ styleId: string; style: DesignStyle; revision: string }>();
   const [scriptPreview, setScriptPreview] = useState<DesignScriptParameterPreview>();
-  const [prototypeStart, setPrototypeStart] = useState<string>();
+  const { start: prototypeStart, play, close: closePrototype } = useDesignPrototypeSession(visible);
   const { settings, toggleSetting } = useDesignCanvasSettings();
+  const { toolbarRef, captureToolbarPosition } = useDesignToolbarSlide(showLayers, visible && settings.toolbarPosition === 'top');
+  const shortcuts = useDesignShortcuts(settings.shortcuts);
   const captureWebImages = useCallback<CaptureDesignWebImages>((layers, signal, networkAccess) =>
     canvas.current?.captureWebImages(layers, signal, networkAccess) ?? Promise.resolve(undefined), []);
   const exportActions = useDesignExports(client.assets.output, loadImage, t, captureWebImages);
@@ -227,16 +233,21 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
   const prototypeOutput = useMemo(() => prototypeStart ? projectOutput() : undefined, [projectOutput, prototypeStart]);
   const scriptParameters = useDesignScriptParameters(client, documentRef, scriptPath, watchAssetDirectories);
   const webHost = client.assets.webPreview;
-  const webSession = selectedId && node?.kind === 'web' && node.url && box?.visible && !box.locked && webHost
+  const webSession = visible && !prototypeStart && selectedId && node?.kind === 'web' && node.url && box?.visible && !box.locked && webHost
     && webMode && tool === 'select' ? { id: selectedId, mode: webMode, close: closeWeb } : undefined;
   const boardId = designPrototypeBoardFor(selectedId, scene);
+  const selectedBoard = boardId && boards.includes(boardId) ? boardId : undefined;
+  const startBoard = document.prototypeStartId && boards.includes(document.prototypeStartId) ? document.prototypeStartId : selectedBoard ?? boards[0];
+  const prototypeInteractive = useMemo(() => Boolean(startBoard && designPrototypeHotspots(projected, scene, startBoard).some(({ interaction }) =>
+    'targetId' in interaction && interaction.targetId !== startBoard && boards.includes(interaction.targetId))), [boards, projected, scene, startBoard]);
   const board = boardId ? document.nodes[boardId] : undefined;
   const modes = board?.kind === 'frame' ? board.variableModeIds : undefined;
   const inspectorCatalog = useMemo(() => {
-    if (!showInspector) return styleCatalog;
-    const resolved = designStylesForModes(canvasDocument.styles, document.documentId, modes);
-    return { ...styleCatalog, styles: styles && Object.fromEntries(Object.keys(styles).map((id) => [id, resolved?.[id] ?? styles[id]])) };
-  }, [canvasDocument.styles, document.documentId, modes, showInspector, styleCatalog, styles]);
+    if (!showInspector) return { ...styleCatalog, modeIds: undefined };
+    const scopedModes = libraryPreview === 'dark' ? { ...designLibraryDarkModes(document), ...modes } : modes;
+    const resolved = designStylesForModes(canvasDocument.styles, document.documentId, scopedModes);
+    return { ...styleCatalog, modeIds: scopedModes, styles: styles && Object.fromEntries(Object.keys(styles).map((id) => [id, resolved?.[id] ?? styles[id]])) };
+  }, [canvasDocument.styles, document, libraryPreview, modes, showInspector, styleCatalog, styles]);
   const parent = box?.parentId ? document.nodes[box.parentId] : undefined;
   const adjustment = canvasAdjustment?.id === selectedId ? canvasAdjustment : undefined;
   const croppingId = adjustment?.kind === 'crop' && node?.kind === 'image' && node.fit !== 'contain' && !box?.locked ? adjustment.id : undefined;
@@ -257,7 +268,7 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
     }
   }, [toolPanel, revision]);
   useEffect(() => () => assetImport.current?.abort(), []);
-  const inspectorLayerIds = selectedIds.filter((id) => !scene[id].locked);
+  const inspectorLayerIds = libraryPreview ? selectedIds : selectedIds.filter((id) => !scene[id].locked);
   const fieldEdits = inspectorEdits();
   const { commands, components, branches, editable, canWrap } = useDesignLayerActions({
     document, projected, resources, scene, layoutEngine, selectedIds, documentRef, output: client.assets.output, onOpenLibrary,
@@ -268,9 +279,8 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
   const canAlign = editable.length > 1 && editable.length === branches.length
     && editable.every((id) => scene[id].parentId === scene[editable[0]].parentId && !isFlowChild(projected, scene, id));
   const canAlignInFrame = Boolean(selectedId && box?.parentId && !box.locked && !isFlowChild(projected, scene, selectedId));
-  const canUngroup = Boolean(actions.ungroup);
   const editing = draft?.documentId === document.documentId && document.nodes[draft.nodeId]?.kind === 'text' ? draft : null;
-  const canvasInteraction = documentBusy || importingAsset || editing ? 'disabled' : agentRunning ? 'navigate' : 'edit';
+  const canvasInteraction = documentBusy || importingAsset || editing || prototypeStart ? 'disabled' : libraryPreview ? 'inspect' : agentRunning ? 'navigate' : 'edit';
   const controlsDisabled = canvasInteraction !== 'edit';
   const activeLayerMenu = layerMenu?.revision === revision && !controlsDisabled ? layerMenu : null;
   const inspectorSelection = selectedId && node && box ? { id: selectedId, node, projectedNode: canvasDocument.nodes[selectedId],
@@ -278,7 +288,6 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
   const exportScripts = designExportScriptIds({ document: projected, scene, ids: branches });
   const exportDisabled = controlsDisabled || exportActions.busy || Boolean(activeScriptPreview)
     || exportScripts.some((id) => pendingScripts.has(id)) || !branches.some((id) => scene[id].visible);
-
   function changeTool(next: DesignTool) {
     if (next !== 'select') setWebMode(undefined);
     if (drawingMode && isDrawingInkTool(next)) lastDrawingTool.current = next;
@@ -496,8 +505,7 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
   }
 
   function handlePaste(event: ClipboardEvent<HTMLElement>) {
-    if (event.defaultPrevented || controlsDisabled || activeLayerMenu
-      || prototypeStart || !isEditorEvent(event) || isTextEntry(event.target)) return;
+    if (event.defaultPrevented || controlsDisabled || activeLayerMenu || !isEditorEvent(event) || isTextEntry(event.target)) return;
     const svg = clipboardDesignSvg(event.clipboardData);
     const image = svg ? undefined : clipboardDesignImage(event.clipboardData);
     if (!svg && !image) {
@@ -599,13 +607,14 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (canvasInteraction === 'disabled' || activeLayerMenu || prototypeStart
+    if (!visible || canvasInteraction === 'disabled' || activeLayerMenu
       || event.defaultPrevented || event.nativeEvent.isComposing || !isEditorEvent(event)) return;
     if (isTextEntry(event.target)) return;
-    const toolShortcut = !event.metaKey && !event.ctrlKey && !event.altKey ? designToolForKey(event, drawingMode) : undefined;
-    const layerCommand = designLayerShortcut(event);
+    const command = shortcuts.match(event.nativeEvent);
+    const toolShortcut = command?.kind === 'tool' && (drawingMode || !isFreehandTool(command.tool)) ? command.tool : undefined;
+    const layerCommand = designClipboardShortcut(event.nativeEvent) ?? (command?.kind === 'layer' ? command.layer : undefined);
     const navigationShortcut = !layerCommand && (toolShortcut === 'hand' || toolShortcut === 'select');
-    if (canvasInteraction === 'navigate' && !navigationShortcut) return;
+    if (controlsDisabled && !navigationShortcut && !(canvasInteraction === 'inspect' && event.key === 'Escape')) return;
     if (layerCommand === 'paste') {
       event.preventDefault();
       event.stopPropagation();
@@ -619,21 +628,23 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
       });
       return;
     }
-    const shortcut = event.key.toLowerCase();
     if (layerCommand) {
       const action = actions[layerCommand];
       if (!action) return;
       if (!event.repeat) action();
-    } else if (event.metaKey || event.ctrlKey) {
-      if (!drawingMode && isDesignImagePickerShortcut(event)) {
+    } else if (command?.kind === 'editor') {
+      if (command.id === 'image' && !drawingMode) {
         if (!event.repeat && toolPanel?.kind !== 'image') changeToolPanel('image', true);
-      } else if (shortcut === 'z' || shortcut === 'y') history(shortcut === 'y' || event.shiftKey ? 'redo' : 'undo');
-      else if (shortcut === 'd') void duplicate();
-      else if (shortcut === 'a') {
+      } else if (command.id === 'undo' || command.id === 'redo') history(command.id);
+      else if (command.id === 'duplicate') void duplicate();
+      else if (command.id === 'selectAll') {
         const order = parent?.kind === 'frame' ? parent.childIds : document.rootIds;
         selectLayers(order.filter((id) => scene[id].visible && !scene[id].locked));
       } else return;
-    } else if (shortcut === 'escape') {
+    } else if (toolShortcut) {
+      changeTool(toolShortcut);
+    } else if (event.metaKey || event.ctrlKey) return;
+    else if (event.key === 'Escape') {
       if (webSession) closeWeb();
       else if (layoutAdjustmentId || pathEditingId) setCanvasAdjustment(undefined);
       else if (drawingMode) toggleDrawingMode();
@@ -641,17 +652,14 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
         selectLayers([]);
         setTool('select');
       }
-    } else if (shortcut === 'enter' && selectedId && node?.kind === 'text' && !node.variableIds?.text && !box?.locked && box?.visible
+    } else if (event.key === 'Enter' && selectedId && node?.kind === 'text' && !node.variableIds?.text && !box?.locked && box?.visible
       && event.target instanceof Element && event.target.closest('.design-editor__stage')) {
       setDraft({ documentId: document.documentId, nodeId: selectedId, text: node.text, revision });
     } else if (directions[event.key] && editable.length && editable.every((id) => !isFlowChild(projected, scene, id))) {
       const direction = directions[event.key];
       const step = event.shiftKey ? 10 : 1;
       void applyMove(movePositions(scene, editable, { x: direction.x * step, y: direction.y * step }));
-    } else {
-      if (!toolShortcut) return;
-      changeTool(toolShortcut);
-    }
+    } else return;
     event.preventDefault();
     event.stopPropagation();
   }
@@ -752,11 +760,12 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
     </Suspense>
     : toolPanel?.kind === 'library' ? <DesignLibraryPanel document={document} documentRef={documentRef} client={client} sources={canvasDocument.styles}
       componentPreviews={{ projected, resources, layoutEngine, loadImage }}
-      components={components.library} componentDrag={componentDrag} revision={revision}
+      components={components.library} componentDrag={componentDrag} revision={revision} colorScheme={colorScheme} watchDirectories={watchAssetDirectories}
       disabled={controlsDisabled} onSetStyle={(styleId, style) => commitEdits([{ kind: 'setStyle', styleId, style }])}
       onPreviewStyle={previewStyle}
       onOpenLibrary={onOpenLibrary} translate={t}
-      onLink={(documentId, path) => commitEdits([{ kind: 'linkLibrary', documentId, path }])}
+      onOpenPresetLibrary={onOpenPresetLibrary && ((source) => { setToolPanel(undefined); onOpenPresetLibrary(source); })}
+      onLink={(documentId, path) => commitEdits([{ kind: 'linkLibrary', documentId, path }], currentRevision() ?? revision)}
       onUnlink={(path) => {
         const edits = planDesignLibraryUnlink(document, projected, resources, path);
         if (edits) return commitEdits(edits);
@@ -770,53 +779,39 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
     if (designExportScriptIds({ document: projected, scene, ids }).some((id) => !currentScripts.has(id))) throw new Error(t('feature.design.scriptFailed'));
     return { ...projectOutput(), networkAccess, ids: orderDesignBranches(projected, ids) };
   }
-
-  const bridge = (renderChat || chatActivity) && client.tasks ? <DesignChatBridge client={client.tasks}
+  const designView = { document, projected, resources, scene, layoutEngine,
+    preview: (ids: readonly string[], signal: AbortSignal, network = false) => exportActions.preview(taskOutput(ids, network), signal) };
+  const mcp = useDesignMcpCanvas(visible, { ...designView, name: documentRef.path.split('/').at(-1)!, selection: selectedIds });
+  const bridge = !libraryPreview && (renderChat || chatActivity) && client.tasks ? <DesignChatBridge client={client.tasks}
     canvasRequest={chatActivity?.request} renderChat={renderChat && ((binding) => renderChat(binding, linkedProjectId))}
     subscribePicks={chatPicks.subscribePicks} reveal={chatPicks.reveal}
     owner={{ ref: documentRef, documentId: document.documentId }} selection={selectedIds} synchronize={synchronize}
     disabled={documentBusy || importingAsset || Boolean(editing)} onRunning={(running) => { setAgentNetworkAccess(false); setAgentRunning(running); }}
-    view={{ document, projected, resources, scene, layoutEngine, showFocus, setNetworkAccess: setAgentNetworkAccess, preview: (ids, signal, network) => exportActions.preview(taskOutput(ids, network), signal),
+    view={{ ...designView, showFocus, setNetworkAccess: setAgentNetworkAccess,
       editor: { client, ref: documentRef, projects, settings, toggleSetting, completeFileAction: onFileAction, scripts: currentScripts,
         translate: t, canvas: () => canvas.current, select: selectLayers, refreshFonts: () => fontCatalog?.updateCatalog() ?? Promise.resolve(),
         deliver: (ids, request, signal, network) => exportActions.deliver(taskOutput(ids, network), document.nodes[ids[0]]?.name ?? documentRef.path.split('/').at(-1)!, request, signal) },
     }} /> : undefined;
 
-  const toolbarActions = <>
-    <IconButton label={t('feature.design.undo')} size="small" disabled={controlsDisabled || !canUndo} onClick={() => history('undo')}><Undo2 size={16} /></IconButton>
-    <IconButton label={t('feature.design.redo')} size="small" disabled={controlsDisabled || !canRedo} onClick={() => history('redo')}><Redo2 size={16} /></IconButton>
-    <Popover {...designToolPopoverPosition} open={Boolean(prototypeStart)} contentLabel={t('feature.design.prototype.preview')}
-      className="design-tool-popover design-tool-popover--prototype" onOpenChange={(open) => {
-        setPrototypeStart(open ? (boardId && boards.includes(boardId) ? boardId : boards[0]) : undefined);
-      }} content={prototypeStart && prototypeOutput ? <Suspense fallback={null}>
-        <DesignPrototypePreview start={prototypeStart} boards={boards} {...prototypeOutput} loadImage={loadImage} captureWebImages={captureWebImages}
-          onClose={() => setPrototypeStart(undefined)} translate={t} />
-      </Suspense> : null}>
-      <IconButton label={t('feature.design.prototype.preview')} size="small" disabled={controlsDisabled || !boards.length}><Play size={15} /></IconButton>
-    </Popover>
-    {editable.length ? <Dropdown placement={designToolPopoverPosition.placement} disabled={controlsDisabled}
-      align={{ offset: [0, designToolPopoverPosition.sideOffset] }} menu={{ items: [
-        canUngroup || (canWrap && editable.length > 1) ? {
-          key: 'group', label: t(canUngroup ? 'feature.design.ungroup' : 'feature.design.groupSelection'),
-          icon: canUngroup ? <Ungroup size={15} /> : <Group size={15} />,
-          onClick: canUngroup ? actions.ungroup : actions.group, disabled: controlsDisabled,
-        } : null,
-        { key: 'duplicate', label: t('feature.design.duplicate'), icon: <Copy size={15} />, disabled: controlsDisabled,
-          onClick: () => { void duplicate(); } },
-        { key: 'delete', label: t('feature.design.delete'), icon: <Trash2 size={15} />, danger: true,
-          disabled: controlsDisabled, onClick: actions.delete },
-      ] }}>
-      <IconButton label={t('feature.design.layerActions')} size="small" disabled={controlsDisabled}><Ellipsis size={17} /></IconButton>
-    </Dropdown> : null}
-  </>;
+  function playPrototype(board: string) {
+    setToolPanel(undefined);
+    setLayerMenu(null);
+    play(board);
+  }
+
+  const selectionActions = editable.length ? { group: canWrap && editable.length > 1 ? actions.group : undefined,
+    ungroup: actions.ungroup, duplicate: () => { void duplicate(); }, delete: actions.delete } : undefined;
+  const toolbarActions = <DesignToolbarActions visible={visible} shortcuts={shortcuts} disabled={controlsDisabled}
+    history={{ undo: canUndo, redo: canRedo }} onHistory={history} translate={t}
+    prototype={{ interactive: prototypeInteractive, play: startBoard ? () => playPrototype(startBoard) : undefined }} />;
   return <DesignStyleContext.Provider value={styleCatalog}><DesignGradientSessionProvider>
     <section className="design-editor" aria-label={t('feature.design.workspace')} aria-busy={busy || importingAsset}
-    onKeyDown={handleKeyDown} onPaste={handlePaste}>
+    onKeyDown={handleKeyDown} onPaste={handlePaste} onPointerDownCapture={mcp.activate} onFocusCapture={mcp.activate}>
     {chatActivity && bridge}
-    <DesignPanelLayout layersOpen={showLayers} inspectorOpen={showInspector} hasChat={Boolean(renderChat && bridge)}>
+    <DesignPanelLayout layersOpen={showLayers} inspectorOpen={showInspector} hasChat={Boolean(renderChat && bridge)} toolbarPosition={settings.toolbarPosition}>
       <DesignLayers document={document} projected={projected} scene={scene} loadImage={loadImage} revision={revision} drag={layerDrag}
-        chat={renderChat && bridge} open={showLayers} onTogglePanel={() => setShowLayers((visible) => !visible)}
-        onContextMenu={openLayerMenu} onHoverLayer={(id) => canvas.current?.highlightLayer(id)}
+        chat={renderChat && bridge} open={showLayers} onTogglePanel={() => { captureToolbarPosition(); setShowLayers((open) => !open); }}
+        showThumbnails={settings.showLayerThumbnails} onContextMenu={openLayerMenu} onHoverLayer={(id) => canvas.current?.highlightLayer(id)}
         selectedIds={selectedIds} disabled={controlsDisabled} onSelect={(id, additive) => selectLayers((ids) =>
           additive ? toggleSelection(ids.filter((item) => Object.hasOwn(document.nodes, item)), id) : [id])}
         onToggle={(nodeId, flag) => {
@@ -827,31 +822,31 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
         }}
         onDrop={(id, destination, base) => finishLayerDrop(id, dropDesignLayer(document, scene, id, destination, projected), base)}
         translate={t} />
-      <DesignCanvas ref={canvas} document={canvasSource} projected={canvasDocument} resources={resources} scene={canvasScene} layoutEngine={layoutEngine}
+      <DesignCanvas ref={canvas} toolbarRef={toolbarRef} document={canvasSource} projected={canvasDocument} resources={resources} scene={canvasScene} layoutEngine={layoutEngine}
         revision={revision} layerDrag={layerDrag} onLayerDrop={finishLayerDrop} componentDrag={componentDrag} onComponentDrop={finishComponentDrop}
-        selectedIds={selectedIds} agentFocus={agentFocus} scriptResults={renderedScripts} webHost={webHost} webSession={webSession} automaticWebAccess={agentRunning ? agentNetworkAccess : chatActivity?.networkAccess ?? true}
+        selectedIds={selectedIds} agentFocus={agentFocus} externalFocus={mcp.focus} scriptResults={renderedScripts} webHost={webHost} webSession={webSession}
+        automaticWebAccess={!libraryPreview && visible && (agentRunning ? agentNetworkAccess : chatActivity?.networkAccess ?? true)}
         webControlsFor={webControlsFor} editingId={editing?.nodeId ?? null}
         croppingId={croppingId} layoutAdjustmentId={layoutAdjustmentId} pathEditingId={pathEditingId} straightPathId={straightPathId}
-        onExitAdjustment={() => setCanvasAdjustment(undefined)}
-        onInspectorPreview={publishInspectorPreview}
-        onContextMenu={openLayerMenu} settings={settings}
+        onExitAdjustment={() => setCanvasAdjustment(undefined)} onInspectorPreview={publishInspectorPreview}
+        onContextMenu={openLayerMenu} settings={settings} shortcuts={shortcuts}
         interaction={canvasInteraction} fitRequest={fitRequest} loadImage={loadImage} tool={tool} onToolChange={changeTool}
         drawing={{ enabled: drawingMode, ink: drawingInk, disabled: importingAsset || busy,
           revision: snapshot.drawingRevision, onToggle: toggleDrawingMode, onChangeInk: changeDrawingInk, onCommit: saveFreehandStroke }}
-        toolbarActions={toolbarActions}
-        toolPanels={{ active: toolPanel?.kind, content: toolPanelContent, onOpenChange: changeToolPanel }}
+        libraryPreview={Boolean(libraryPreview)} toolbarActions={toolbarActions} selectionActions={selectionActions}
+        toolPanels={{ active: visible ? toolPanel?.kind : undefined, content: toolPanelContent, onOpenChange: changeToolPanel }}
         onSelect={selectLayers} beginPick={chatPicks.beginPick} translate={t} onEditText={(nodeId, text) => {
           if (!controlsDisabled && !text.variableIds?.text) setDraft({ documentId: document.documentId, nodeId, text: text.text, revision });
         }}
         onAction={finishGesture} renderTextInput={renderTextInput} />
-      {showInspector ? <DesignStyleContext.Provider value={inspectorCatalog}><DesignInspector ref={inspector} selection={inspectorSelection} selectedCount={selectedIds.length} revision={revision}
+      <DesignInspectorPresence>{showInspector ? <DesignStyleContext.Provider value={inspectorCatalog}><DesignInspector ref={inspector} selection={inspectorSelection} selectedCount={selectedIds.length} revision={revision}
         onClose={() => {
           setInspectorCollapsed(true);
           canvas.current?.focus();
         }}
         components={components} contentSource={contentSource} onAddLayout={actions.addLayout} exportDisabled={exportDisabled} onExport={exportSelection}
         boardModes={selectedId && boardId === selectedId && node?.kind === 'frame' && !node.group
-          ? <DesignBoardModes frame={node} document={document} resources={resources} disabled={controlsDisabled || Boolean(box?.locked)}
+          ? <DesignBoardModes modeIds={inspectorCatalog.modeIds} document={document} resources={resources} disabled={controlsDisabled || Boolean(box?.locked)}
             fieldEdits={fieldEdits} translate={t} /> : null}
         paintAssets={{ documentRef, assets: client.assets, loadImage, onImport: client.importImage }}
         fieldEdits={fieldEdits}
@@ -864,8 +859,11 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
         pathActions={isDesignPath(node) && !straightPath ? { active: Boolean(pathEditingId), toggle: () => toggleCanvasAdjustment('path') } : undefined}
         prototype={selectedId && node && boards.length ? {
           interaction: node.interaction,
-          targets: boards.filter((id) => id !== designPrototypeBoardFor(selectedId, scene))
+          targets: boards.filter((id) => id !== boardId)
             .map((id) => ({ id, name: document.nodes[id].name || t('feature.design.artboard') })),
+          onPlayBoard: selectedBoard ? () => playPrototype(selectedBoard) : undefined,
+          start: selectedId === selectedBoard ? { selected: document.prototypeStartId === selectedId,
+            toggle: () => { void commitEdits([{ kind: 'setPrototypeStart', boardId: document.prototypeStartId === selectedId ? null : selectedId }]); } } : undefined,
           onChange: (interaction) => { void commitEdits([{ kind: 'update', nodeId: selectedId, node: { ...node, interaction } }]); },
         } : undefined}
         instanceActions={instanceId ? {
@@ -887,14 +885,16 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
         onSave={(next) => selectedId && currentRevision() === revision
           ? commitEdits([{ kind: 'update', nodeId: selectedId, node: next }]) : Promise.resolve(false)}
         onLayoutChange={(layout) => selectedId && node?.kind === 'frame' && !node.instanceOf && currentRevision() === revision
-          ? commitEdits(changeDesignLayout(document, scene, selectedId, node, layout)) : Promise.resolve(false)} /></DesignStyleContext.Provider> : null}
+          ? commitEdits(changeDesignLayout(document, scene, selectedId, node, layout)) : Promise.resolve(false)} /></DesignStyleContext.Provider> : null}</DesignInspectorPresence>
     </DesignPanelLayout>
     {activeLayerMenu ? <DesignLayerMenu
       point={activeLayerMenu.point} hasSelection={selectedIds.length > 0} actions={commands(activeLayerMenu)} components={components}
       onCopyPng={exportDisabled ? undefined : () => exportSelection({ kind: 'image', action: 'copy', scale: 1 })}
       onCopyHtml={exportDisabled ? undefined : () => exportSelection({ kind: 'code', action: 'copy', format: 'html' })}
-      settings={settings} onToggle={toggleSetting} translate={t}
+      settings={settings} shortcuts={shortcuts} onToggle={toggleSetting} translate={t}
       onClose={() => setLayerMenu(null)} /> : null}
   </section>
+  {prototypeStart && prototypeOutput ? <DesignPrototypePreview start={prototypeStart} boards={boards} {...prototypeOutput}
+    loadImage={loadImage} captureWebImages={captureWebImages} onClose={closePrototype} translate={t} /> : null}
   </DesignGradientSessionProvider></DesignStyleContext.Provider>;
 }

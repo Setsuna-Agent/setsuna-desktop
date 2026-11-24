@@ -1,0 +1,139 @@
+.settings-shortcuts.design-settings-shortcuts {
+  gap: 0;
+}
+
+.design-settings-shortcuts .settings-shortcuts__toolbar {
+  position: sticky;
+  z-index: 1;
+  inset-block-start: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-block-size: var(--design-shortcuts-toolbar-height);
+  background: var(--app-surface-overlay);
+}
+
+.design-settings-shortcuts :is(.settings-shortcuts__search, .settings-shortcuts__reset-all.sd-button) {
+  block-size: var(--app-control-height);
+}
+
+.design-settings-shortcuts .settings-shortcuts__search {
+  border-color: transparent;
+  border-radius: var(--app-radius-control);
+  background: color-mix(in srgb, var(--app-text) 5%, var(--app-surface-overlay));
+}
+
+.design-settings-shortcuts .settings-shortcuts__search input {
+  min-block-size: 0;
+  padding: 0;
+}
+
+.design-settings-shortcuts .settings-shortcuts__reset-all.sd-button {
+  gap: 6px;
+  padding-inline: 10px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+}
+
+.design-settings-shortcuts .settings-shortcuts__list {
+  border: 0;
+  border-radius: var(--app-radius-group);
+  background: var(--app-surface-subtle);
+}
+
+.design-settings-shortcuts .settings-shortcuts__row {
+  grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr);
+  min-block-size: 50px;
+  padding: 8px 12px;
+}
+
+.design-settings-shortcuts .settings-shortcuts__row:has(.settings-shortcuts__recorder) {
+  background: var(--app-accent-subtle);
+}
+
+.design-settings-shortcuts .settings-shortcuts__copy strong {
+  font-size: 13px;
+}
+
+.design-settings-shortcuts .settings-shortcuts__bindings {
+  gap: 9px;
+}
+
+.design-settings-shortcuts .settings-shortcuts__values {
+  justify-content: flex-end;
+  gap: 4px 6px;
+}
+
+.design-settings-shortcuts .settings-shortcuts__binding {
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 2px;
+  max-inline-size: 100%;
+  height: auto;
+  min-block-size: 32px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+}
+
+.design-settings-shortcuts :is(.settings-shortcuts__binding-key, .settings-shortcuts__binding-key-placeholder) {
+  min-inline-size: 0;
+  min-block-size: 32px;
+  padding: 3px 4px;
+  border-radius: var(--app-radius-sm);
+  overflow: hidden;
+}
+
+.design-settings-shortcuts .settings-shortcuts__binding kbd {
+  display: flex;
+  min-inline-size: 0;
+  gap: 3px;
+}
+
+.design-settings-shortcuts .settings-shortcuts__keycap {
+  min-inline-size: 24px;
+  padding: 1px 5px;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-surface);
+  box-shadow: 0 1px 0 var(--app-border);
+  text-align: center;
+  text-overflow: ellipsis;
+}
+
+.design-settings-shortcuts .settings-shortcuts__key-separator {
+  display: none;
+}
+
+.design-settings-shortcuts :is(.settings-shortcuts__binding-remove, .settings-shortcuts__binding-remove-placeholder) {
+  flex: 0 0 20px;
+  inline-size: 20px;
+  min-block-size: 24px;
+  border: 0;
+  border-radius: 6px;
+}
+
+.design-settings-shortcuts .settings-shortcuts__recorder {
+  color: var(--app-text);
+  background: var(--app-accent-subtle);
+}
+
+.design-settings-shortcuts .settings-shortcuts__recorder--binding {
+  inset: 1px;
+  width: calc(100% - 2px);
+}
+
+.design-settings-shortcuts .settings-shortcuts__empty {
+  border: 0;
+  border-radius: var(--app-radius-group);
+  background: var(--app-surface-subtle);
+}
+
+@container settings-shortcuts (max-width: 490px) {
+  .design-settings-shortcuts .settings-shortcuts__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .design-settings-shortcuts .settings-shortcuts__values {
+    justify-content: flex-start;
+  }
+}

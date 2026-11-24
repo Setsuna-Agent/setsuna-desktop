@@ -20,7 +20,7 @@ import { defaultImageCrop, designImageFit, moveImageCrop } from './design-image-
 import { findDesignFrameAtPoint } from './design-layer-drop.js';
 import type { DesignLayerBox, DesignScene } from './design-layout.js';
 
-export type CanvasInteraction = 'edit' | 'navigate' | 'disabled';
+export type CanvasInteraction = 'edit' | 'navigate' | 'inspect' | 'disabled';
 export type CanvasViewport = Point & Readonly<{ scale: number }>;
 export type DrawingTool = 'frame' | 'rectangle' | 'ellipse' | 'text' | 'web' | 'script' | VectorDrawingTool;
 export type DesignTool = 'select' | 'hand' | 'pen' | FreehandTool | DrawingTool;
@@ -97,6 +97,8 @@ export function useDesignCanvasGestures({
   const [preview, setPreview] = useState<Preview & { revision: string }>();
   const [panning, setPanning] = useState(false);
   const [space, setSpace] = useState(false);
+  const canEdit = interaction === 'edit';
+  const inspecting = interaction === 'inspect';
   useLayoutEffect(() => {
     drawingHandlers.current = { calculateDrawing, commit };
     const active = gesture.current;
@@ -110,11 +112,15 @@ export function useDesignCanvasGestures({
     }
   }, []);
 
+  function canSelectLayer(box: DesignLayerBox | undefined) {
+    return box?.visible && (inspecting ? box.parentId === null : !box.locked);
+  }
+
   function onPointerDown(event: PointerEvent<HTMLElement>, handle?: Readonly<{ id: string; surface: HTMLDivElement }>) {
     if (interaction === 'disabled' || finishing.current || gesture.current || (event.button !== 0 && event.button !== 1)) return;
     const surface = handle?.surface ?? event.currentTarget;
     const wantsPan = space || tool === 'hand' || event.button === 1;
-    if (interaction === 'navigate' && !wantsPan && tool !== 'select') {
+    if (!canEdit && !wantsPan && tool !== 'select') {
       surface.focus({ preventScroll: true });
       return;
     }
@@ -125,8 +131,8 @@ export function useDesignCanvasGestures({
     const start: Start = { pointerId: event.pointerId, revision, screen, world, viewport, pick };
     const hit = handle ? undefined : stage.current?.getIntersection(screen);
     const hitId = handle?.id ?? hit?.findAncestor('.design-hit-layer', true)?.id();
-    const layerId = hitId && Object.hasOwn(document.nodes, hitId) && scene[hitId]?.visible && !scene[hitId]?.locked ? hitId : null;
-    if (handle && (wantsPan || tool !== 'select' || layerId === null)) return;
+    const layerId = hitId && Object.hasOwn(document.nodes, hitId) && canSelectLayer(scene[hitId]) ? hitId : null;
+    if (handle && (!canEdit || wantsPan || tool !== 'select' || layerId === null)) return;
     const selected = selectedBranches(selectedIds, scene);
     const primary = selected.length === 1 ? selected[0] : null;
     const isFrameInterior = hit?.hasName('design-frame-interior') && (layerId !== primary || event.shiftKey);
@@ -138,7 +144,7 @@ export function useDesignCanvasGestures({
       gesture.current = { ...start, kind: 'pan' };
       surface.style.cursor = '';
       setPanning(true);
-    } else if (interaction === 'navigate') {
+    } else if (!canEdit) {
       gesture.current = { ...start, kind: 'marquee', additive: event.shiftKey, clickedId: layerId };
     } else if (tool === 'pen' || isFreehandTool(tool)) {
       return;
@@ -336,7 +342,7 @@ export function useDesignCanvasGestures({
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
     const active = gesture.current;
     if (!active) {
-      const hit = tool === 'select' && !space && interaction === 'edit' ? stage.current?.getIntersection(pointer(event)) : null;
+      const hit = tool === 'select' && !space && canEdit ? stage.current?.getIntersection(pointer(event)) : null;
       const index = designAnchors.findIndex((_, index) => hit?.hasName(`design-anchor-${index}`));
       const anchor = designAnchors[index];
       const pose = selectedIds.length === 1 ? scene[selectedIds[0]] : undefined;
@@ -396,9 +402,10 @@ export function useDesignCanvasGestures({
       let matching = active.clickedId ? [active.clickedId] : [];
       if (next?.marquee) {
         const area = next.marquee;
-        matching = selectedBranches(Object.keys(document.nodes).filter((id) => {
+        const candidates = inspecting ? document.rootIds : Object.keys(document.nodes);
+        matching = selectedBranches(candidates.filter((id) => {
           const box = scene[id];
-          return box.visible && !box.locked && box.visibleBounds && containsBounds(area, box.visibleBounds);
+          return canSelectLayer(box) && box.visibleBounds && containsBounds(area, box.visibleBounds);
         }), scene);
         const selection = active.additive ? [...new Set([...selectedIds, ...matching])] : matching;
         onSelect(selection);
@@ -447,7 +454,7 @@ export function useDesignCanvasGestures({
     if (interaction === 'disabled') return false;
     // Panning changes only the viewport and can continue across an AI commit.
     if (active.kind === 'pan') return true;
-    if (active.revision !== revision || (interaction === 'navigate' && active.kind !== 'marquee')) return false;
+    if (active.revision !== revision || (!canEdit && active.kind !== 'marquee')) return false;
     if (active.kind === 'draw') return active.tool === tool;
     if (active.kind !== 'layout' && active.kind !== 'crop') return true;
     return tool === 'select' && selectedIds.length === 1 && selectedIds[0] === active.id

@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
 
+import { createHash } from 'node:crypto';
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
-import type { DesignCustomFont } from '../../../src/contracts/design-fonts.js';
+import { designBundledFontFamilies, type DesignCustomFont } from '../../../src/contracts/design-fonts.js';
 import { designDocumentVersion } from '../../../src/contracts/index.js';
+import { bundledDesignFonts } from '../../../src/renderer/text/design-bundled-fonts.js';
 import { designCustomFontFamily } from '../../../src/renderer/text/design-typography.js';
 import { drawing, mountEditor } from '../support/mount-design-editor.js';
 
@@ -114,6 +116,36 @@ it('waits for fonts used only by generated text and embeds its selected faces in
     }
   } finally {
     decode.resolve();
+    restore();
+  }
+});
+
+it('embeds the bundled italic face in a standalone export without reading the custom font store', async () => {
+  const { restore } = stubFontFaces();
+  const italicFace = bundledDesignFonts.find(({ family, style }) => family === designBundledFontFamilies.geist && style === 'italic');
+  const read = vi.fn().mockRejectedValue(new Error('No imported font data'));
+  const saveDesignHtml = vi.fn().mockResolvedValue({ ok: true, cancelled: true });
+  try {
+    await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'offline-font', rootIds: ['label'], nodes: {
+      label: { kind: 'text', name: 'Caption', text: 'Preview', x: 0, y: 0, width: 128, fontSize: 16,
+        fontFamily: designBundledFontFamilies.geist, fontStyle: 'italic', fontWeight: 700,
+        runs: [{ start: 0, end: 7, fontWeight: 700 }] },
+    } }, undefined, {
+      fonts: { list: vi.fn().mockResolvedValue([]), read, import: vi.fn(), remove: vi.fn() },
+      output: { saveDesignHtml },
+    });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Caption' }));
+    const save = screen.getByRole<HTMLButtonElement>('button', { name: 'feature.design.saveHtml' });
+    await waitFor(() => expect(save.disabled).toBe(false));
+    await user.click(save);
+    await waitFor(() => expect(saveDesignHtml).toHaveBeenCalledOnce());
+    const html: string = saveDesignHtml.mock.calls[0][0].html;
+    const face = html.match(/data:font\/woff2;base64,([A-Za-z0-9+/=]+)/u)?.[1];
+    expect(createHash('sha256').update(Buffer.from(face ?? '', 'base64')).digest('hex'))
+      .toBe(italicFace?.id);
+    expect(read).not.toHaveBeenCalled();
+  } finally {
     restore();
   }
 });

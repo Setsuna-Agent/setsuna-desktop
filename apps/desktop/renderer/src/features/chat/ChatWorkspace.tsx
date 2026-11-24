@@ -211,8 +211,10 @@ export function ChatWorkspace({
     || (conversationOverviewVisibility === 'auto' && overviewLayout !== 'hidden');
   const overviewShiftsContent = overviewVisible && overviewLayout === 'shifted';
   const hasOverview = Boolean(conversationInfo || conversationOverview);
-  const starterSourceVisible = !readOnly && variant === 'main' && !activeTurnId && !pendingMessages.length
+  const starterVisible = !readOnly && !activeTurnId && !pendingMessages.length
     && (starterPresentation?.visible ?? messages.length === 0);
+  const starterSourceVisible = variant === 'main' && starterVisible;
+  const showSideStarter = variant === 'side' && starterPresentation !== undefined && starterVisible;
   const starterIdentity = currentThread?.id ?? composerKey;
   const starterTransition = useChatStarterTransition({
     conversationRef,
@@ -369,8 +371,10 @@ export function ChatWorkspace({
               pendingMessages={pendingMessages}
               plugins={plugins}
               scrollToBottomRef={scrollToBottomRef}
+              showEmptyStarter={showSideStarter}
               showThinkingInTranscript={showThinkingInTranscript}
               skills={skills}
+              starterContent={starterPresentation?.content}
               onAnswerApproval={onAnswerApproval}
               {...(readOnly ? { readOnly: true } : {
                 onDeleteMessages, onEditUserMessage, onFileChangesAction, onSelectionModeChange: setSelectionModeActive,

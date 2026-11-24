@@ -1,8 +1,7 @@
+import type { KeyboardShortcutPlatform } from '@setsuna-desktop/renderer-ui';
 import type { MessageKey } from '../i18n/messages.js';
 
-export const KEYBOARD_SHORTCUT_PLATFORMS = ['darwin', 'win32'] as const;
-
-export type KeyboardShortcutPlatform = typeof KEYBOARD_SHORTCUT_PLATFORMS[number];
+export { KEYBOARD_SHORTCUT_PLATFORMS, type KeyboardShortcutPlatform } from '@setsuna-desktop/renderer-ui';
 
 export const KEYBOARD_SHORTCUT_GROUPS = ['general', 'navigation', 'chat', 'workspace'] as const;
 

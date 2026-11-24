@@ -4,6 +4,15 @@ import { defineFeatureOperation } from '@setsuna-desktop/feature-core/operation'
 
 export const designFontWeights = [100, 200, 300, 400, 500, 600, 700, 800, 900] as const;
 export const designFontStyles = ['normal', 'italic'] as const;
+export const designBundledFontFamilies = {
+  geist: 'Geist',
+  geistMono: 'Geist Mono',
+  inter: 'Inter',
+  dmSans: 'DM Sans',
+  sourceSerif: 'Source Serif 4',
+  jetBrainsMono: 'JetBrains Mono',
+} as const;
+export type DesignBundledFontFamily = (typeof designBundledFontFamilies)[keyof typeof designBundledFontFamilies];
 export type DesignFontWeight = (typeof designFontWeights)[number];
 export type DesignFontStyle = (typeof designFontStyles)[number];
 

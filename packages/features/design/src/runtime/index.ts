@@ -5,7 +5,7 @@ import { defineRuntimeDependencies, defineRuntimeFeature, runtimeRouteRegistrarC
 import {
   listProjectDesigns, getDesignCatalog, readDesignImage, searchDesignImages, setDesignProject, commitDesignEdits, createDesignDocument, deleteDesignDocument, designFeature, designFontStorageCapability, designImageExtensions,
   designScriptSandboxCapability, designWorkspaceFilesCapability, importDesignImage, importDesignScript,
-  importDesignShader, listDesignDocuments, maxDesignScriptBytes, maxDesignShaderBytes, moveDesignDocument, navigateDesignHistory,
+  importDesignShader, listDesignDocumentEntries, listDesignDocuments, maxDesignScriptBytes, maxDesignShaderBytes, moveDesignDocument, navigateDesignHistory,
   parseDesignShaderSource, readDesignDocument, readDesignScriptParameters, readDesignShader, renderDesignScript, resolveDesignDocumentRoot,
   type DesignDocumentRef, type DesignScriptParameter,
 } from '../contracts/index.js';
@@ -14,6 +14,7 @@ import { designScriptParameterValue } from '../contracts/design-script-parameter
 import { designToolsCapability, designTurnHostCapability, startDesignTask, replyDesignTask, bindDesignInput, watchDesignCommand, stopDesignTask } from '../contracts/design-task.js';
 import { createDesignConversation, listDesignConversations } from '../contracts/design-conversations.js';
 import { designCommandFromQuery } from '../contracts/design-command-key.js';
+import { prepareDesignLibraryPreset } from '../contracts/operations.js';
 import { createChatDesignTools } from './chat-design-tools.js';
 import { DesignTasks } from './design-tasks.js';
 import { DesignDocumentService } from './design-document-service.js';
@@ -99,7 +100,10 @@ export const designRuntimeFeature = defineRuntimeFeature({
     routes.register(scope, readDesignImage, ({ ref, path }, { signal }) => files.readImage(ref, path, signal));
     routes.register(scope, searchDesignImages, ({ ref, query }, { signal }) => files.searchImages(ref, query, signal));
     routes.register(scope, listDesignDocuments, (workspace, { signal }) => files.list(workspace, signal));
+    routes.register(scope, listDesignDocumentEntries, (workspace, { signal }) => files.listEntries(workspace, signal));
     routes.register(scope, createDesignDocument, (input, { signal }) => documents.create(input, tasks.fileOperationSignal(input.command, signal)));
+    routes.register(scope, prepareDesignLibraryPreset, async ({ ref, presetId }, { signal }) =>
+      documents.prepareLibraryPreset(await files.resolveResourceRoot(ref, signal), presetId, signal));
     routes.register(scope, moveDesignDocument, (input, { signal }) => files.move(input, tasks.fileOperationSignal(input.command, signal)));
     routes.register(scope, deleteDesignDocument, async (ref, { signal }) => {
       await files.delete(ref, tasks.fileOperationSignal(designCommandFromQuery(ref), signal));

@@ -17,27 +17,27 @@
   background: var(--app-menu-highlight-bg);
 }
 
-.sd-menu-surface [role='menuitem'] {
+.sd-menu-surface :is([role='menuitem'], [role='menuitemcheckbox']) {
   min-height: var(--app-menu-item-height);
   padding: 3px 8px;
   font-family: var(--app-font-family);
   line-height: 20px;
 }
 
-.sd-menu-surface :is([role='menuitem'], [role='option'], .sd-picker__item) {
+.sd-menu-surface :is([role='menuitem'], [role='menuitemcheckbox'], [role='option'], .sd-picker__item) {
   border-radius: var(--app-menu-item-radius);
   transition: none;
 }
 
 /* Every row reads as primary text; picker rows are ghost buttons whose muted tone would
    otherwise apply. :where keeps this below semantic states such as `.is-danger`. */
-.sd-menu-surface :where([role='menuitem'], [role='option'], .sd-picker__item) {
+.sd-menu-surface :where([role='menuitem'], [role='menuitemcheckbox'], [role='option'], .sd-picker__item) {
   color: var(--app-text);
 }
 
 /* The row itself highlights immediately, including when focus enters a submenu.
    Only the fill changes; text and icons keep their semantic colors (e.g. danger). */
-.sd-menu-surface :is([role='menuitem'], [role='option'], .sd-picker__item):not(:disabled, [data-disabled]):is(
+.sd-menu-surface :is([role='menuitem'], [role='menuitemcheckbox'], [role='option'], .sd-picker__item):not(:disabled, [data-disabled]):is(
   :hover:not(.sd-menu__item, .sd-select-menu__option, [aria-selected]), :focus-visible, [data-highlighted], [data-state='open'], [data-overlay-open], [aria-selected='true']
 ) {
   background: var(--app-menu-highlight-bg);

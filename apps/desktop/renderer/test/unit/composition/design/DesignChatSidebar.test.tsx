@@ -2,7 +2,7 @@
 import { parsePluginMentions, type DesktopRuntimeClient, type RuntimeThread, type SendTurnInput, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { parseDesignSelectionMentions, type DesignSelectionReference } from '@setsuna-desktop/feature-design/contracts/design-selection-mention';
 import { DesignChatFullscreenContext } from '@setsuna-desktop/feature-design/renderer';
-import { appReadySlot, shellRouteSlot } from '@setsuna-desktop/renderer-contracts/shell';
+import { appReadySlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { workspacePanelSlot } from '@setsuna-desktop/renderer-contracts/workspace';
 import { ToastProvider } from '@setsuna-desktop/renderer-ui';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
@@ -10,6 +10,8 @@ import { activateBuiltinRendererFeatures } from '../../../../src/composition/ren
 import { RendererKernelProvider, RendererOwnedKeyedSlot, RendererRootSingleSlot } from '../../../../src/kernel/renderer-plugins/RendererKernelProvider.js';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import { AppRouteSurface } from '../../../../src/app/layout/AppRouteSurface.js';
+import { DesignRouteBusyContext } from '../../../../src/composition/design/DesignChatHost.js';
 import DesignChatSidebar from '../../../../src/composition/design/DesignChatSidebar.js';
 
 vi.mock('../../../../src/composition/SkillsFeatureBoundary.js', () => ({
@@ -21,7 +23,7 @@ vi.mock('../../../../src/composition/PluginManagementFeatureBoundary.js', () => 
 vi.mock('../../../../src/composition/ReviewFeatureBoundary.js', () => ({ useReviewFeatureService: () => ({}) }));
 afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); });
 
-it('opens a saved conversation in fullscreen, then sends a new design draft that resumes in the file panel', async ({ onTestFinished }) => {
+it('finishes a design turn across main-page navigation and reopens the conversation in the file panel', async ({ onTestFinished }) => {
   vi.stubGlobal('setsunaDesktop', {
     desktop: { platform: 'darwin' },
     runtime: { request: vi.fn().mockResolvedValue({ ok: true, value: { plugins: [] } }), startSse: () => () => undefined },
@@ -40,43 +42,60 @@ it('opens a saved conversation in fullscreen, then sends a new design draft that
   const earlierThread: RuntimeThread = { ...thread, id: earlier.id, title: earlier.title, messages: [
     { id: 'reference', role: 'user', content: 'Earlier design reference', createdAt: thread.createdAt },
   ] };
+  let created = false;
+  let finishCreate!: () => void;
+  const creation = new Promise<void>((resolve) => { finishCreate = resolve; });
   const conversations = { list: vi.fn(async () => [
-    ...(thread.messages.length ? [chat] : []), ...(earlierThread.archived ? [] : [earlier]),
-  ]), create: vi.fn(async () => chat) };
+    ...(created ? [chat] : []), ...(earlierThread.archived ? [] : [earlier]),
+  ]), create: vi.fn(async () => { await creation; created = true; return chat; }) };
   const image = new File(['png'], 'card.png', { type: 'image/png' });
   const attachment = { id: 'card', assetId: 'card', source: 'runtime', type: image.type, name: image.name, size: image.size };
   const sendTurn = vi.fn(async (id: string, input: SendTurnInput) => {
-    thread.messages.push({ id: 'message-' + thread.messages.length, role: 'user', content: input.input, createdAt: '2026-01-05T00:00:00.000Z', attachments: input.attachments });
+    if (!thread.messages.length) {
+      thread.activeTurnId = 'turn';
+      thread.lastSeq = 2;
+    }
+    thread.messages.push({ id: 'message-' + thread.messages.length, turnId: 'turn', role: 'user', content: input.input,
+      clientId: input.clientId, createdAt: thread.createdAt, attachments: input.attachments, skillReferences: input.skillReferences });
     return { turnId: 'turn' };
   });
   const sendQueuedTurnInputNow = vi.fn(async () => ({ disposition: 'started', turnId: 'resumed' }));
   let onBatch!: Parameters<DesktopRuntimeClient['subscribeEvents']>[2];
+  const unsubscribe = vi.fn();
+  const subscribeEvents = vi.fn((id: string, _seq: number, listener: typeof onBatch) => {
+    onBatch = listener;
+    return () => { unsubscribe(id); };
+  });
   const updateThread = vi.fn<DesktopRuntimeClient['updateThread']>(async (id, patch) => {
     const target = id === earlier.id ? earlierThread : thread;
     return Object.assign(target, patch);
   });
   const client = { sendTurn, sendQueuedTurnInputNow, updateThread, getThread: async (id: string) => structuredClone(id === earlier.id ? earlierThread : thread), linkAttachment: vi.fn(async () => attachment),
-    subscribeEvents: (_id: string, _seq: number, listener: typeof onBatch) => { onBatch = listener; return () => {}; },
+    subscribeEvents,
     deleteAttachment: vi.fn(), getThreadIfChanged: async () => null,
     searchProjectEntries: vi.fn(async () => ({ entries: [] })) } as unknown as DesktopRuntimeClient;
-  const renderChat = () => <DesignChatSidebar binding={binding} project={project} conversations={conversations}
+  const renderChat = (onBusyChange?: (busy: boolean) => void) => <DesignChatSidebar binding={{ ...binding, onBusyChange }} project={project} conversations={conversations}
     runtime={{ client, config: null, selectConversationModel: vi.fn(), saveRuntimePreferences: vi.fn() }} />;
   const renderFile = () => <RendererOwnedKeyedSlot slot={workspacePanelSlot} entryKey="file" instanceKey="file" props={{
     panelId: 'file', panelType: 'file', placement: 'side', projectId: project.id, threadId: null,
     surfaceInstanceId: 'file', translate: (key) => key, visible: true, renderDefault: renderChat,
   }} />;
-  const mount = (routeId: 'design' | 'chat') => render(
+  type Route = 'design' | 'chat' | 'settings';
+  const tree = (activeView: Route) => (
     <I18nProvider initialLocale="zh-CN" messageCatalog={features.messages}><ToastProvider>
       <RendererKernelProvider runtime={features.rendererPlugins}>
-        <DesignChatFullscreenContext.Provider value={routeId === 'design'}>
-          <RendererRootSingleSlot slot={appReadySlot} props={{
-            renderDefault: () => <RendererOwnedKeyedSlot slot={shellRouteSlot} entryKey={routeId}
-              props={{ routeId, renderDefault: routeId === 'design' ? renderChat : renderFile }} />,
-          }} />
-        </DesignChatFullscreenContext.Provider>
+        <RendererRootSingleSlot slot={appReadySlot} props={{
+          renderDefault: () => <AppRouteSurface activeView={activeView} pluginProps={{ selectedViewKey: null, onBack: () => {} }}
+            renderDefault={(routeId) => routeId === 'design'
+              ? <DesignChatFullscreenContext.Provider value><DesignRouteBusyContext.Consumer>
+                {(onBusyChange) => renderChat(onBusyChange)}
+              </DesignRouteBusyContext.Consumer></DesignChatFullscreenContext.Provider>
+              : routeId === 'chat' ? renderFile() : null} />,
+        }} />
       </RendererKernelProvider>
-    </ToastProvider></I18nProvider>,
+    </ToastProvider></I18nProvider>
   );
+  const mount = (routeId: Route) => render(tree(routeId));
   const sidebar = mount('design');
   const earlierChat = await screen.findByRole<HTMLButtonElement>('button', { name: earlier.title });
   await waitFor(() => expect(earlierChat.disabled).toBe(false));
@@ -102,14 +121,49 @@ it('opens a saved conversation in fullscreen, then sends a new design draft that
   const data = new DataTransfer();
   data.items.add(image);
   await act(async () => { fireEvent.drop(input, { dataTransfer: data }); });
-  await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
+  const quickPrompt = '这份设计稿哪里最值得先改？';
+  fireEvent.click(await screen.findByRole('button', { name: quickPrompt }));
+  expect(document.activeElement).toBe(input);
+  expect(input.textContent).toContain('Use this card');
+  expect(input.textContent).toContain(quickPrompt);
+  expect(conversations.create).not.toHaveBeenCalled();
+  expect(sendTurn).not.toHaveBeenCalled();
+  fireEvent.keyDown(input, { key: 'Enter' });
+  await waitFor(() => expect(conversations.create).toHaveBeenCalledOnce());
+  sidebar.rerender(tree('settings'));
+  await act(async () => { finishCreate(); });
   await waitFor(() => expect(sendTurn).toHaveBeenCalledOnce());
   const [id, sent] = sendTurn.mock.calls[0]!;
   expect(id).toBe(chat.id);
+  expect(sent.input).toContain(quickPrompt);
   expect(binding.bind).toHaveBeenLastCalledWith(id, reference.ids, sent.clientId);
   expect(parseDesignSelectionMentions(sent.input).map((mention) => mention.reference)).toEqual([reference]);
   expect(parsePluginMentions(sent.input)).toMatchObject([{ pluginId: 'tables' }]);
   expect(sent).toMatchObject({ attachments: [attachment], skillReferences: [{ skillId: 'layout' }] });
+  await waitFor(() => expect(subscribeEvents).toHaveBeenCalledWith(chat.id, expect.any(Number), expect.any(Function)));
+  const firstTurnEvent = { threadId: chat.id, turnId: 'turn', createdAt: thread.createdAt };
+  act(() => onBatch({ events: [
+    { ...firstTurnEvent, seq: 1, id: 'started', type: 'turn.started', payload: { input: sent.input } },
+    { ...firstTurnEvent, seq: 2, id: 'sent', type: 'message.created', payload: { message: thread.messages[0]! } },
+  ] }));
+  sidebar.rerender(tree('design'));
+  await screen.findByText(/Use this card/u);
+  sidebar.rerender(tree('settings'));
+  expect(unsubscribe).not.toHaveBeenCalledWith(chat.id);
+  expect(binding.release).not.toHaveBeenCalled();
+  const answer = { id: 'answer', role: 'assistant', status: 'complete', phase: 'final_answer', turnId: 'turn',
+    createdAt: thread.createdAt, content: 'The layout has been updated.' } satisfies RuntimeThread['messages'][number];
+  thread.messages.push(answer);
+  delete thread.activeTurnId;
+  thread.lastSeq = 4;
+  act(() => onBatch({ events: [
+    { ...firstTurnEvent, seq: 3, id: 'answer-created', type: 'message.created', payload: { message: answer } },
+    { ...firstTurnEvent, seq: thread.lastSeq, id: 'completed', type: 'turn.completed', payload: {} },
+  ] }));
+  await waitFor(() => expect(unsubscribe).toHaveBeenCalledWith(chat.id));
+  expect(binding.release).toHaveBeenCalledOnce();
+  sidebar.rerender(tree('design'));
+  await screen.findByText(answer.content);
   sidebar.unmount();
   type History = Awaited<ReturnType<typeof conversations.list>>;
   let rejectStaleHistory!: (error: Error) => void;
@@ -153,8 +207,8 @@ it('opens a saved conversation in fullscreen, then sends a new design draft that
   binding.release.mockClear();
   const event = { threadId: chat.id, turnId: 'resumed', createdAt: thread.createdAt };
   act(() => onBatch({ events: [
-    { ...event, seq: 1, id: 'error', type: 'runtime.error', payload: { message: 'Model unavailable' } },
-    { ...event, seq: 2, id: 'end', type: 'turn.completed', payload: {} },
+    { ...event, seq: thread.lastSeq + 1, id: 'error', type: 'runtime.error', payload: { message: 'Model unavailable' } },
+    { ...event, seq: thread.lastSeq + 2, id: 'end', type: 'turn.completed', payload: {} },
   ] }));
   await waitFor(() => expect(newChat.disabled).toBe(false));
   expect(binding.release).toHaveBeenCalledOnce();

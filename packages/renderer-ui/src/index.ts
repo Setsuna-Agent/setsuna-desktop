@@ -9,6 +9,11 @@ export { TextField, TextArea, type TextFieldProps, type TextAreaProps } from './
 export { parseNumberExpression } from './fields/number-expression.js';
 export { Checkbox, CheckField, SegmentedControl, Switch, type CheckboxProps } from './selection-controls.js';
 export { Dialog, type DialogProps } from './dialog.js';
+export {
+  KEYBOARD_SHORTCUT_PLATFORMS, captureKeyboardShortcut, formatKeyboardShortcutBinding, formatKeyboardShortcutBindingParts,
+  keyboardEventMatchesBinding, keyboardShortcutFromEvent, normalizeKeyboardShortcutBinding,
+  type KeyboardShortcutCaptureError, type KeyboardShortcutConflict, type KeyboardShortcutEvent, type KeyboardShortcutPlatform,
+} from './keyboard-shortcuts/bindings.js';
 export { Dropdown, PointMenu, type DropdownProps, type MenuProps, type MenuItem } from './menu.js';
 export { MenuSurface } from './menu-surface.js';
 export { AnchoredPopover, Popover, Tooltip, type TooltipProps } from './popover.js';

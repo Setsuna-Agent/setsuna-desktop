@@ -6,7 +6,7 @@ import type { DesignDocument, DesignStyle } from '../../contracts/index.js';
 import { designResourceParts } from '../../contracts/design-resource-id.js';
 import { designVariableCollectionKey } from '../../contracts/design-variable-collections.js';
 import { designVariableFieldKind, designVariableFieldValue, type DesignVariableField, type DesignVariableValue } from '../../contracts/design-variables.js';
-import { linkedDesignPath } from '../components/design-library-resources.js';
+import { designLibrarySourceLabel, linkedDesignPath } from '../components/design-library-resources.js';
 import './design-variable-link.css';
 
 export const DesignStyleContext = createContext<Pick<DesignDocument, 'styles' | 'libraries'> & Readonly<{
@@ -41,11 +41,11 @@ export function DesignStyleSelect({ kind, field, fieldLabel, value, disabled, co
       const resolved = designVariableFieldValue(field, style);
       if (resolved === undefined || acceptsValue && !acceptsValue(resolved)) return [];
     } else if (style.kind !== kind) return [];
-    const path = linkedDesignPath(catalog, id);
+    const source = designLibrarySourceLabel(linkedDesignPath(catalog, id));
     const owner = designResourceParts(id)?.documentId ?? catalog.documentId;
     const key = owner && style.kind !== 'text' ? designVariableCollectionKey(owner, style.collectionId) : undefined;
     const collection = key && catalog.collectionNames && Object.hasOwn(catalog.collectionNames, key) ? catalog.collectionNames[key] : undefined;
-    return [{ id, style, label: [collection, style.name, path].filter(Boolean).join(' · ') }];
+    return [{ id, style, label: [collection, style.name, source].filter(Boolean).join(' · ') }];
   });
   const openVariables = !choices.length && field && designVariableFieldKind(field) === 'number' ? catalog.openVariables : undefined;
   if (!choices.length && !value && !openVariables) return null;

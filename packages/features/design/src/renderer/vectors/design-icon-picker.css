@@ -1,42 +1,50 @@
 .design-icon-picker {
-  --desktop-panel-search-height: 36px;
-  display: grid;
-  gap: 12px;
+  --design-icon-picker-inset: 10px;
+  display: flex;
+  flex-direction: column;
+  max-block-size: calc(var(--radix-popover-content-available-height, 70vh) * var(--app-page-scale-inverse, 1) - 2px);
+  gap: 6px;
+  padding-block: 8px;
 }
 
-.design-icon-picker-panel > .design-icon-picker {
-  padding: 10px 12px 12px;
-  gap: 8px;
+.design-tool-popover--icon > .design-tool-popover__content {
+  overflow: hidden;
 }
 
 .design-icon-picker__search,
 .design-icon-picker__scroll {
-  padding-inline: var(--design-icon-picker-inset, 0px);
-}
-
-.design-icon-picker-panel .design-icon-picker__scroll {
-  height: clamp(96px, calc(var(--design-tool-popover-height) - 68px), 248px);
+  padding-inline: var(--design-icon-picker-inset);
 }
 
 .design-icon-picker__search {
   display: flex;
+  flex: none;
   align-items: center;
-  gap: 8px;
-  overflow: hidden;
-}
-
-.design-icon-picker-panel .design-icon-picker__search {
-  scrollbar-gutter: auto;
+  gap: 6px;
 }
 
 .design-icon-picker__search > .sd-button {
-  min-height: var(--desktop-panel-search-height);
+  min-height: var(--desktop-panel-search-height, 28px);
+  gap: 6px;
+}
+
+.design-icon-picker__viewport {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.design-icon-picker__viewport > .sd-scrollbar-overlay {
+  right: 2px;
 }
 
 .design-icon-picker__scroll {
-  height: min(272px, 42vh);
-  overflow-y: auto;
+  block-size: var(--design-icon-picker-grid-height);
+  min-block-size: 0;
+  overflow: hidden auto;
   overscroll-behavior: contain;
+  scrollbar-width: none;
 }
 
 .design-icon-picker__scroll:focus {
@@ -58,7 +66,7 @@
   height: 100%;
   justify-content: center;
   padding: 0;
-  border-radius: 9px;
+  border-radius: var(--app-radius-xs);
   background: transparent;
 }
 
@@ -68,14 +76,14 @@
 }
 
 .design-icon-picker__grid .sd-icon-button svg {
-  width: 22px;
-  height: 22px;
+  /* Preview size is independent of the SVG dimensions used for insertion. */
+  width: 18px;
+  height: 18px;
 }
 
 .sd-popover.design-icon-picker__popover {
-  --design-icon-picker-inset: 10px;
   width: min(320px, calc(var(--radix-popover-content-available-width, 100vw) * var(--app-page-scale-inverse, 1)));
-  padding: 10px 0;
+  padding: 0;
 }
 
 .design-icon-picker__trigger.sd-button {

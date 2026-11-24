@@ -1,7 +1,7 @@
 import { lstat, mkdir, realpath, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { isValidWorkspaceEntryName, workspaceFilePathKey, WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
-import { designDocumentImagePaths, designLayerShaderPaths, isDesignDocumentPath,
+import { designDocumentImagePaths, designLayerShaderPaths, designLibraryFileLinks, findBundledDesignLibrary, isDesignDocumentPath, isDesignLibraryPresetDocumentId,
   maxDesignScriptBytes, maxDesignShaderBytes, type DesignDocument } from '@setsuna-desktop/feature-design/contracts';
 import { FeatureOperationFailure, isFeatureOperationCancelled } from '@setsuna-desktop/feature-core/operation';
 import { isNodeError } from '../../shared/node-errors.js';
@@ -15,7 +15,8 @@ import { walkWorkspaceFiles } from './workspace-file-walk.js';
 import type { DesignConversationRelocation, DesignDestinationProject } from './design-conversation-relocation.js';
 
 type TrackedFile = DesignFile & { root: string; relativePath: string; revision?: string };
-type MoveOptions = { sourceProject?: string | null; expectedRevision?: string; projectAtDestination?: DesignDestinationProject; relocateChats?: DesignConversationRelocation };
+type MoveOptions = { sourceProject?: string | null; expectedRevision?: string; projectAtDestination?: DesignDestinationProject;
+  relocateChats?: DesignConversationRelocation; allowPresetLibraries?: boolean };
 
 export function deleteDesignWorkspaceDocument(root: string, relativePath: string, boundRoots: readonly string[],
   ownership: DesignResourceOwnership, signal: AbortSignal, expectedRevision?: string, relocateChats?: DesignConversationRelocation) {
@@ -40,7 +41,7 @@ export function moveDesignWorkspaceDocument(sourceRoot: string, sourcePath: stri
 
 async function moveDocument(sourceRoot: string, sourcePath: string, destinationRoot: string, source: DesignFile,
   roots: readonly string[], boundRoots: readonly string[], ownership: DesignResourceOwnership, signal: AbortSignal,
-  { expectedRevision, projectAtDestination, relocateChats, sourceProject }: MoveOptions) {
+  { expectedRevision, projectAtDestination, relocateChats, sourceProject, allowPresetLibraries }: MoveOptions) {
   const name = path.basename(source.target);
   if (process.platform === 'win32' && !isValidWorkspaceEntryName(name)) {
     throw new FeatureOperationFailure({ code: 'INVALID_INPUT', message: 'The design requires a valid destination file name.', retryable: false });
@@ -76,6 +77,9 @@ async function moveDocument(sourceRoot: string, sourcePath: string, destinationR
 
   const write: TransferWrite = async (relativePath, { content, revision, documentId }) => {
     signal.throwIfAborted();
+    if (allowPresetLibraries === false && isDesignLibraryPresetDocumentId(documentId)) throw new FeatureOperationFailure({
+      code: 'DESIGN_LIBRARY_PROJECT_REQUIRED', message: 'Design library sources require a project directory.', retryable: false,
+    });
     const parent = await ensureParent(destinationRoot, relativePath, createdDirectories);
     const target = path.join(parent, path.posix.basename(relativePath));
     let stats: DesignFile['stats'];
@@ -155,7 +159,7 @@ async function copyDependencies(root: string, document: DesignDocument, imports:
   const imagePaths = new Set<string>();
   const sourcePaths = new Set<string>();
   const libraries = new Map<string, string>();
-  const links = Object.entries(document.libraries ?? {});
+  const links = designLibraryFileLinks(document.libraries);
   async function copySource(relativePath: string, maxBytes: number) {
     signal.throwIfAborted();
     if (sourcePaths.has(relativePath)) return;
@@ -194,7 +198,7 @@ async function copyDependencies(root: string, document: DesignDocument, imports:
     await write(relativePath, { content: file.content, revision: file.revision, documentId: id });
     await copyAssets(file.document);
     libraries.set(relativePath, id);
-    links.push(...Object.entries(file.document.libraries ?? {}));
+    links.push(...designLibraryFileLinks(file.document.libraries));
   }
   for (const [path, revision] of Object.entries(imports)) {
     signal.throwIfAborted();
@@ -220,7 +224,7 @@ async function assertLibraryNotUsed(roots: readonly string[], boundRoots: readon
       seen.add(key);
       const other = await readDependency(relativePath, () => readValidDesignDocument(target, relativePath));
       const link = other?.document.libraries?.[id];
-      if (!other || typeof link !== 'string') return true;
+      if (!other || typeof link !== 'string' || findBundledDesignLibrary(link)) return true;
       const resourceRoot = await readDependency(relativePath, () =>
         designResourceDirectory(root, target, other.document, boundRoots, ownership, signal, { requireReadableDependencies: true }));
       const linked = await readDependency(relativePath, () => resolveDesignFile(resourceRoot, link)

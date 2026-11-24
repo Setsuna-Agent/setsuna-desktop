@@ -1,15 +1,17 @@
 import { listLinkedDesigns } from './design-project-catalog.js';
 import { createHash } from 'node:crypto';
-import { mkdir, realpath } from 'node:fs/promises';
+import { mkdir, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { isValidWorkspaceEntryName, WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
-import { canAccessChatDesign, designDocumentCodec, designImageFileExtensions, isDesignDocumentPath, maxDesignShaderBytes,
-  type DesignDocumentRef, type DesignImageExtension, type DesignWorkspaceFiles } from '@setsuna-desktop/feature-design/contracts';
+import { canAccessChatDesign, designDocumentCodec, designDocumentFileExtension, designImageFileExtensions, isDesignDocumentPath, isDesignLibraryPresetDocumentId, maxDesignShaderBytes,
+  type DesignDocumentRef, type DesignImageExtension, type DesignWorkspace, type DesignWorkspaceFiles } from '@setsuna-desktop/feature-design/contracts';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { isNodeError } from '../../shared/node-errors.js';
+import { isPathWithin } from '../search/workspace-search-policy.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { writeTextFile } from '../store/json-file.js';
 import { safeStorageFileStem } from '../store/storage-file-name.js';
+import { createDesignCatalogFileReader } from './design-workspace-catalog-file.js';
 import { designChanged, readDesignDocumentFile, readDesignFile, resolveDesignFile, withDesignSource, type DesignFile } from './design-workspace-document-file.js';
 import { deleteDesignWorkspaceDocument, moveDesignWorkspaceDocument, removeUnchangedFile } from './design-workspace-document-mutations.js';
 import { bindDesignResourcesForEdit, createDesignResourceOwnership, designResourceDirectory, designResourceRootUnavailable, readDraftId, resolveDesignResourceRoot } from './design-workspace-resource-root.js';
@@ -29,20 +31,40 @@ export function createDesignWorkspaceFiles(
 ): DesignWorkspaceFiles {
   const ownership = createDesignResourceOwnership(dataDir);
   const storage = designStorageDirectories(dataDir, projects);
+  const startCatalogScan = createDesignCatalogFileReader();
   async function boundRoots() {
     const [projectsRoots, directories] = await Promise.all([projects.listBoundWorkspaceRoots(), storage.list()]);
     const paths = directories.map((directory) => directory.path);
-    return { all: [...new Set([...projectsRoots.all, ...paths])], active: new Set([...projectsRoots.active, ...paths]) };
+    return { all: [...new Set([...projectsRoots.all, ...paths])], active: new Set([...projectsRoots.active, ...paths]), projectRoots: projectsRoots.active };
+  }
+
+  async function listDesignFiles<T extends { path: string }>(scope: DesignWorkspace, signal: AbortSignal,
+    read: (file: string, relativePath: string, readCatalogFile: ReturnType<typeof startCatalogScan>['read']) => Promise<T | undefined>) {
+    const root = await storage.resolve(scope);
+    const scan = startCatalogScan(signal);
+    const entries: T[] = [];
+    await walkWorkspaceFiles(root, async (file) => {
+      signal.throwIfAborted();
+      if (isDesignDocumentPath(file)) {
+        const entry = await read(file, path.relative(root, file).split(path.sep).join('/'), scan.read);
+        if (entry) entries.push(entry);
+      }
+      return true;
+    }, { signal });
+    signal.throwIfAborted();
+    scan.finish();
+    return entries.sort((a, b) => a.path.localeCompare(b.path));
   }
 
   async function withDocumentSource<T>(ref: DesignDocumentRef, signal: AbortSignal,
-    operation: (root: string, file: DesignFile, resourceRoots: readonly string[]) => Promise<T>) {
+    operation: (root: string, file: DesignFile, resourceRoots: readonly string[], projectBacked: boolean) => Promise<T>) {
     const [root, bindings] = await Promise.all([
       storage.resolve(ref), boundRoots(),
     ]);
     // Archived directories still share the file lock, but only roots available when opening can supply its resources.
     return withDesignSource(root, ref.path, bindings.all, undefined, signal, (file, enclosing) =>
-      operation(root, file, enclosing.filter((candidate) => candidate === root || bindings.active.has(candidate))));
+      operation(root, file, enclosing.filter((candidate) => candidate === root || bindings.active.has(candidate)),
+        isProjectDirectory(ref, root, bindings.projectRoots)));
   }
 
   async function importAsset(ref: DesignDocumentRef, asset: Readonly<{
@@ -97,7 +119,9 @@ export function createDesignWorkspaceFiles(
 
   return {
     async catalog(signal) {
-      const [directories, associations] = await Promise.all([storage.list(), ownership.associations(signal)]);
+      // The local watcher needs a real directory before the first chat-created draft is saved.
+      const localRoot = storage.resolve({ storageId: 'local' }).catch(() => undefined);
+      const [directories, associations] = await Promise.all([storage.list(), ownership.associations(signal), localRoot]);
       return { directories, associations: associations.map(({ file, projectId }) => ({ file, projectId })) };
     },
     projectDesigns: (projectId, signal) => listLinkedDesigns(projects, storage, ownership, projectId, signal),
@@ -137,45 +161,66 @@ export function createDesignWorkspaceFiles(
       return preview?.kind === 'image' ? preview : null;
     },
     async list(scope, signal, chat) {
-      const root = await storage.resolve(scope);
-      const paths: string[] = [];
-      await walkWorkspaceFiles(root, async (file) => {
-        signal.throwIfAborted();
-        if (!isDesignDocumentPath(file)) return true;
+      const entries = await listDesignFiles(scope, signal, async (file, path, readCatalogFile) => {
+        const id = chat ? await readDraftId(file).catch(() => undefined)
+          : (await readCatalogFile(file).catch(() => undefined))?.documentId;
+        if (isDesignLibraryPresetDocumentId(id)) return;
         if (chat) {
-          const id = await readDraftId(file).catch(() => undefined);
-          if (!id) return true;
+          if (!id) return;
           const linked = await ownership.project(file, id);
-          if (!await canAccessChatDesign(chat, linked === undefined ? scope.projectId : linked, () => ownership.chatOrigin(file, id))) return true;
+          if (!await canAccessChatDesign(chat, linked === undefined ? scope.projectId : linked, () => ownership.chatOrigin(file, id))) return;
         }
-        paths.push(path.relative(root, file).split(path.sep).join('/'));
-        return true;
-      }, { signal });
-      signal.throwIfAborted();
-      return paths.sort((a, b) => a.localeCompare(b));
+        return { path };
+      });
+      return entries.map(({ path }) => path);
     },
+    listEntries: (scope, signal) => listDesignFiles(scope, signal, async (file, path, readCatalogFile) => {
+      try {
+        const entry = await readCatalogFile(file);
+        if (!entry) return;
+        const libraryPreset = isDesignLibraryPresetDocumentId(entry.documentId);
+        const draftEntry = { path, modifiedAt: entry.modifiedAt };
+        if (!scope.includePreviewMetadata) return libraryPreset ? undefined : draftEntry;
+        return { ...draftEntry, revision: entry.revision, ...(libraryPreset ? { libraryPreset: true as const } : {}) };
+      } catch (error) {
+        // A file can disappear between the directory walk and the stat.
+        if (!isNodeError(error) || (error.code !== 'ENOENT' && error.code !== 'ENOTDIR')) return { path };
+      }
+    }),
     async create(input, content, signal, chat) {
       const root = await storage.resolve(input);
-      const { name } = input;
-      if (!isValidWorkspaceEntryName(name)) throw new Error('Invalid design file name.');
+      const { autoNumber, linkedProjectId, name: requestedName } = input;
+      if (!isValidWorkspaceEntryName(requestedName)) throw new Error('Invalid design file name.');
+      if (linkedProjectId && !(await projects.listProjects()).projects.some(({ id }) => id === linkedProjectId)) throw new Error('Unknown project.');
       const { documentId } = designDocumentCodec.parse(JSON.parse(content));
       return withFileStateUpdate(root, async () => {
         const parent = await resolveEntryParent(root, input.parentPath);
-        const target = path.join(parent, name);
-        signal.throwIfAborted();
-        if (chat) await ownership.setProject(target, documentId, root, chat.projectId ?? null, chat.threadId);
-        else if (input.storageId && input.storageId !== 'local') await ownership.setProject(target, documentId, root, null);
-        else await ownership.remember(target, documentId, root);
-        try {
+        const existing = autoNumber ? new Set(await readdir(parent)) : undefined;
+        const extensionStart = requestedName.length - designDocumentFileExtension.length - 1;
+        const stem = requestedName.slice(0, extensionStart);
+        const extension = requestedName.slice(extensionStart);
+        for (let ordinal = 1; ; ordinal += 1) {
           signal.throwIfAborted();
-          await createWorkspaceFile(target, content);
-          return { name, path: path.relative(root, target).split(path.sep).join('/'), type: 'file' };
-        } catch (error) {
-          await ownership.forget(target, documentId).catch(() => undefined);
-          if (!isNodeError(error) || error.code !== 'EEXIST') throw error;
-          throw new FeatureOperationFailure({
-            code: WORKSPACE_ENTRY_EXISTS_ERROR_CODE, message: 'A file or folder with that name already exists.', retryable: false,
-          });
+          const name = ordinal === 1 ? requestedName : `${stem} ${ordinal}${extension}`;
+          if (existing?.has(name)) continue;
+          const target = path.join(parent, name);
+          if (chat) await ownership.setProject(target, documentId, root, chat.projectId ?? null, chat.threadId);
+          else if (linkedProjectId || (input.storageId && input.storageId !== 'local')) {
+            await ownership.setProject(target, documentId, root, linkedProjectId ?? null);
+          } else await ownership.remember(target, documentId, root);
+          try {
+            signal.throwIfAborted();
+            await createWorkspaceFile(target, content);
+            return { name, path: path.relative(root, target).split(path.sep).join('/'), type: 'file' };
+          } catch (error) {
+            await ownership.forget(target, documentId).catch(() => undefined);
+            if (!isNodeError(error) || error.code !== 'EEXIST') throw error;
+            // Exclusive creation still handles entries added after the directory scan.
+            if (autoNumber) continue;
+            throw new FeatureOperationFailure({
+              code: WORKSPACE_ENTRY_EXISTS_ERROR_CODE, message: 'A file or folder with that name already exists.', retryable: false,
+            });
+          }
         }
       });
     },
@@ -185,8 +230,9 @@ export function createDesignWorkspaceFiles(
         storage.resolve(destination),
         boundRoots(),
       ]);
+      const allowPresetLibraries = isProjectDirectory(destination, destinationRoot, roots.projectRoots);
       const name = await moveDesignWorkspaceDocument(sourceRoot, ref.path, destinationRoot, roots.all, ownership, signal,
-        { expectedRevision, sourceProject: ref.projectId ?? null, relocateChats });
+        { expectedRevision, sourceProject: ref.projectId ?? null, relocateChats, allowPresetLibraries });
       return { ...destination, path: name };
     },
     async delete(ref, signal) {
@@ -212,14 +258,14 @@ export function createDesignWorkspaceFiles(
     importImage: (ref, { name, extension, bytes }, signal) => importAsset(ref, { name, extension, content: bytes }, signal),
     importSource: (ref, { name, source, extension }, signal) => importAsset(ref, { name, extension, content: source }, signal),
     async withDocument(ref, signal, operation) {
-      return withDocumentSource(ref, signal, async (root, { target, stats }, roots) => {
+      return withDocumentSource(ref, signal, async (root, { target, stats }, roots, projectBacked) => {
         const key = await realpath(target);
         const read = async () => {
           signal.throwIfAborted();
           return readDesignFile(target, ref.path);
         };
         return operation({
-          key, workspaceRoot: root,
+          key, workspaceRoot: root, projectBacked,
           async importedAssets(id, accept) {
             const paths: string[] = [];
             for (const [path, revision] of Object.entries(await ownership.imports(key, id))) {
@@ -254,4 +300,10 @@ export function createDesignWorkspaceFiles(
       });
     },
   };
+}
+
+function isProjectDirectory(scope: DesignWorkspace, directory: string, projectRoots: ReadonlySet<string>) {
+  if (scope.projectId) return true;
+  for (const root of projectRoots) if (isPathWithin(root, directory)) return true;
+  return false;
 }

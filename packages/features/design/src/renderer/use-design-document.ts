@@ -1,7 +1,7 @@
 import { flushSync } from 'react-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WatchDesignDirectories } from './design-images.js';
-import { designDocumentFileExtension, designFileKey } from '../contracts/index.js';
+import { designDocumentFileExtension, designFileKey, isDesignLibraryPresetDocumentId } from '../contracts/index.js';
 import { FeatureOperationFailure, isFeatureOperationCancelled } from '@setsuna-desktop/feature-core/operation';
 import { useToast } from '@setsuna-desktop/renderer-ui';
 import { commitDesignEdits, type DesignEdit, type DesignSnapshot, type NavigateDesignHistoryInput } from '../contracts/index.js';
@@ -14,7 +14,7 @@ import { pendingEditsFor } from './document/pending-design-edits.js';
 type LayerInsertion = Extract<DesignEdit, { kind: 'insert' }>;
 export type DesignEditorSnapshot = DesignSnapshot & Readonly<{ drawingRevision: string }>;
 
-export function useDesignDocument({ client, documentRef, fileRevision, expectedDocumentId, readOnly = false, watchAssetDirectories: boundWatch, watchDirectories, shouldRefresh, onDocumentMissing, translate }: DesignDocumentSurfaceProps) {
+export function useDesignDocument({ client, documentRef, fileRevision, expectedDocumentId, readOnly = false, libraryPreview, watchAssetDirectories: boundWatch, watchDirectories, shouldRefresh, onDocumentMissing, translate }: DesignDocumentSurfaceProps) {
   const [snapshot, setSnapshot] = useState<DesignEditorSnapshot>();
   const [linkedProjectId, setLinkedProjectId] = useState<string | null>();
   const [busy, setBusy] = useState(false);
@@ -30,17 +30,20 @@ export function useDesignDocument({ client, documentRef, fileRevision, expectedD
   const toast = useToast();
   const documentKey = designFileKey(documentRef);
   const pending = pendingEditsFor(client);
+  const isLibraryPreview = Boolean(libraryPreview);
 
   const matchesReference = useCallback((next: DesignSnapshot) => {
-    if (!expectedDocumentId || next.document.documentId === expectedDocumentId) return true;
+    const canOpen = isLibraryPreview === isDesignLibraryPresetDocumentId(next.document.documentId);
+    if (canOpen && (!expectedDocumentId || next.document.documentId === expectedDocumentId)) return true;
     saved.current = undefined;
     shown.current = undefined;
     if (mounted.current) {
       setSnapshot(undefined);
-      toast.error(translate('feature.design.replacedDraft'));
+      if (canOpen) toast.error(translate('feature.design.replacedDraft'));
+      else onDocumentMissing?.();
     }
     return false;
-  }, [expectedDocumentId, toast, translate]);
+  }, [expectedDocumentId, isLibraryPreview, onDocumentMissing, toast, translate]);
 
   function publish(next: DesignEditorSnapshot) {
     shown.current = next;
@@ -94,7 +97,7 @@ export function useDesignDocument({ client, documentRef, fileRevision, expectedD
 
   function canSubmit(expectedRevision: string) {
     const pendingWrite = pending.get(documentKey);
-    return mounted.current && !readOnly && !blocking.current && (!pendingWrite || pendingWrite === tail.current)
+    return mounted.current && !readOnly && !isLibraryPreview && !blocking.current && (!pendingWrite || pendingWrite === tail.current)
       && shown.current?.revision === expectedRevision;
   }
 

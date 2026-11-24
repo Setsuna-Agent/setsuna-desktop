@@ -2,6 +2,8 @@ import { Check, ChevronDown } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Button, Popover, Slider, type PickerColor } from '@setsuna-desktop/renderer-ui';
+import { designToolPopoverPosition } from '../DesignTools.js';
+import type { DesignToolbarPosition } from '../context/design-canvas-settings.js';
 import type { DesignFreehandStyle, DesignPaint } from '../../contracts/index.js';
 import { designDefaultColor, splitDesignColor } from '../../contracts/design-color.js';
 import { NumberField } from '../inspector/DesignInspectorFields.js';
@@ -13,10 +15,11 @@ import {
 } from './design-drawing.js';
 import './design-drawing-controls.css';
 
-export function DesignDrawingControls({ tool, ink, disabled, onChange, translate: t }: Readonly<{
+export function DesignDrawingControls({ tool, ink, disabled, onChange, position, translate: t }: Readonly<{
   tool: DrawingInkTool;
   ink: DrawingInk;
   disabled: boolean;
+  position: DesignToolbarPosition;
   onChange(ink: DrawingInk): void;
   translate: RendererTranslate;
 }>) {
@@ -25,36 +28,40 @@ export function DesignDrawingControls({ tool, ink, disabled, onChange, translate
   const { color, opacity } = splitDesignColor(paint.color);
   const display = preview?.source === paint ? preview.paint : paint;
   const widthLabel = t('feature.design.strokeWidth');
+  const { placement } = designToolPopoverPosition(position);
   const previewPaint = (next: DesignPaint | undefined) => setPreview(next ? { source: paint, paint: next } : undefined);
   const solidPaint = (next: PickerColor): DesignPaint => ({ ...paint, color: next.color, opacity: next.opacity });
   const savePaint = async (next: DesignPaint) => { setPreview(undefined); onChange({ ...ink, paint: next }); return true; };
-  return <div className="design-drawing-controls" role="toolbar" aria-orientation="vertical" aria-label={t('feature.design.drawingControls')}
-    onKeyDown={(event) => event.stopPropagation()}>
-    <DesignPaintPicker paint={paint} display={display} color={color} opacity={opacity * (paint.opacity ?? 1)}
-      label={t('feature.design.color')} disabled={disabled} placement="rightTop" translate={t}
-      onColorPreview={(next) => previewPaint(next && solidPaint(next))}
-      onColorCommit={(next) => savePaint(solidPaint(next))} onPreview={previewPaint} onSave={savePaint} />
-    <div className="design-drawing-controls__width">
-      <NumberField label={widthLabel} suffix="px" value={width} min={minDrawingWidth} max={maxDrawingWidth} readOnly={disabled}
-        onSave={async (width) => { onChange({ ...ink, width }); return true; }} />
-      <Slider aria-label={widthLabel} value={width} min={minDrawingWidth} max={maxDrawingWidth} step={0.5} disabled={disabled}
-        onChange={(event) => onChange({ ...ink, width: event.currentTarget.valueAsNumber })} />
+  return <div className="design-drawing-controls__position">
+    <div className="design-drawing-controls" role="toolbar" aria-label={t('feature.design.drawingControls')}
+      onKeyDown={(event) => event.stopPropagation()}>
+      <DesignPaintPicker paint={paint} display={display} color={color} opacity={opacity * (paint.opacity ?? 1)}
+        label={t('feature.design.color')} disabled={disabled} placement={placement} translate={t}
+        onColorPreview={(next) => previewPaint(next && solidPaint(next))}
+        onColorCommit={(next) => savePaint(solidPaint(next))} onPreview={previewPaint} onSave={savePaint} />
+      <div className="design-drawing-controls__width">
+        <NumberField label={widthLabel} suffix="px" value={width} min={minDrawingWidth} max={maxDrawingWidth} readOnly={disabled}
+          onSave={async (width) => { onChange({ ...ink, width }); return true; }} />
+        <Slider aria-label={widthLabel} value={width} min={minDrawingWidth} max={maxDrawingWidth} step={0.5} disabled={disabled}
+          onChange={(event) => onChange({ ...ink, width: event.currentTarget.valueAsNumber })} />
+      </div>
+      {isFreehandTool(tool) && preset ? <DrawingPresetPicker key={tool} presets={drawingPresets[tool]} selected={preset} disabled={disabled} placement={placement}
+        onChange={(preset) => onChange({ ...ink, preset })} translate={t} /> : null}
     </div>
-    {isFreehandTool(tool) && preset ? <DrawingPresetPicker key={tool} presets={drawingPresets[tool]} selected={preset} disabled={disabled}
-      onChange={(preset) => onChange({ ...ink, preset })} translate={t} /> : null}
   </div>;
 }
 
-function DrawingPresetPicker({ presets, selected, disabled, onChange, translate: t }: Readonly<{
+function DrawingPresetPicker({ presets, selected, disabled, placement, onChange, translate: t }: Readonly<{
   presets: readonly DesignFreehandStyle['preset'][];
   selected: DesignFreehandStyle['preset'];
   disabled: boolean;
+  placement: ReturnType<typeof designToolPopoverPosition>['placement'];
   onChange(preset: DesignFreehandStyle['preset']): void;
   translate: RendererTranslate;
 }>) {
   const [open, setOpen] = useState(false);
   const label = t('feature.design.drawingPreset');
-  return <Popover className="design-drawing-presets" placement="rightTop" contentLabel={label} open={open} onOpenChange={setOpen}
+  return <Popover className="design-drawing-presets" placement={placement} contentLabel={label} open={open} onOpenChange={setOpen}
     content={<div className="design-drawing-presets__list" role="group" aria-label={label}>
       {presets.map((preset) => <Button key={preset} size="small" className="design-drawing-presets__option"
         aria-pressed={preset === selected} onClick={() => { onChange(preset); setOpen(false); }}>

@@ -34,13 +34,13 @@ export async function readWorkspaceFilePreview(
       // Non-editable previews need an invalidation token, not a full-file content hash.
       revision: `stat:${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`,
     };
-    const header = await readPrefix(file, Math.min(info.size, FILE_TYPE_SAMPLE_BYTES));
+    const header = await readWorkspaceFilePrefix(file, Math.min(info.size, FILE_TYPE_SAMPLE_BYTES));
     const imageMimeType = detectWorkspacePreviewImageMimeType(header);
     if (imageMimeType) {
       if (info.size > MAX_WORKSPACE_IMAGE_BYTES) {
         return { ...metadata, preview: { kind: 'unsupported', reason: 'image-too-large' } };
       }
-      const bytes = await readPrefix(file, info.size, header);
+      const bytes = await readWorkspaceFilePrefix(file, info.size, header);
       return {
         ...metadata, revision: contentRevision(bytes),
         preview: { kind: 'image', base64: bytes.toString('base64'), mimeType: imageMimeType },
@@ -63,7 +63,7 @@ export async function readWorkspaceFilePreview(
     const editable = info.size <= WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES;
     // Preserve content-based save conflicts for editable files. Larger files only
     // read the requested prefix, even when an internal caller asks for more.
-    const bytes = await readPrefix(file, Math.min(info.size, editable ? WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES : textLimit), header);
+    const bytes = await readWorkspaceFilePrefix(file, Math.min(info.size, editable ? WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES : textLimit), header);
     return {
       ...metadata,
       content: bytes.subarray(0, textLimit).toString('utf8'),
@@ -77,7 +77,7 @@ export async function readWorkspaceFilePreview(
 }
 
 /** Reads a fixed byte budget from one descriptor; a growing file cannot expand the allocation. */
-async function readPrefix(file: FileHandle, length: number, prefix?: Buffer): Promise<Buffer> {
+export async function readWorkspaceFilePrefix(file: FileHandle, length: number, prefix?: Buffer): Promise<Buffer> {
   if (prefix && prefix.length >= length) return prefix.subarray(0, length);
   const bytes = Buffer.alloc(length);
   let offset = prefix?.copy(bytes) ?? 0;

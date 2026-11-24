@@ -6,6 +6,7 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "resolveJsonModule": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
     "skipLibCheck": true,
@@ -14,7 +15,7 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/resources/design-libraries/*.design.json"],
   "references": [
     { "path": "../../contracts/tsconfig.build.json" },
     { "path": "../../feature-core/tsconfig.build.json" },

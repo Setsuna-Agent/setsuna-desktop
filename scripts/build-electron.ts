@@ -42,6 +42,12 @@ export function createRuntimeBuildOptions(projectRoot: string): BuildOptions[] {
       external: runtimeExternals,
     },
     {
+      entryPoints: ['shadcn-ui', 'beui'].map((id) =>
+        resolve(projectRoot, 'packages/features/design/src/resources/design-libraries', `${id}.design.json`)),
+      outdir: resolve(projectRoot, 'dist/resources/design-libraries'),
+      loader: { '.json': 'copy' },
+    },
+    {
       entryPoints: [resolve(projectRoot, 'packages/desktop-runtime/src/extensions/extension-worker-entry.ts')],
       outfile: resolve(projectRoot, 'dist/runtime/extension-worker-entry.js'),
       bundle: true,
@@ -89,6 +95,11 @@ export function createElectronBuildOptions(projectRoot: string): BuildOptions[] 
       entryPoints: [resolve(projectRoot, 'packages/features/browser/src/preload/extension-actions.ts')],
       outfile: resolve(projectRoot, 'dist/electron/preload/browser-extensions.cjs'),
       bundle: true, platform: 'node', target: 'node22', format: 'cjs', external: ['electron'],
+    },
+    {
+      entryPoints: [resolve(projectRoot, 'packages/features/design/src/main/mcp/stdio-entry.ts')],
+      outfile: resolve(projectRoot, 'dist/electron/design-mcp.cjs'),
+      bundle: true, platform: 'node', target: 'node22', format: 'cjs',
     },
   ];
 }

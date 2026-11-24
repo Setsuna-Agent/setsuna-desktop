@@ -13,8 +13,9 @@ import {
   type DesignVariable, type DesignVariableKind, type DesignVariableValue,
 } from '../../contracts/design-variables.js';
 import {
-  designLibraryVariableCollections, designVariableCollectionLabel, type DesignLibraryResources,
+  designLibrarySourceLabel, designLibraryVariableCollections, designVariableCollectionLabel, isPresetLibraryPath, type DesignLibraryResources,
 } from '../components/design-library-resources.js';
+import { DesignUiHostContext } from '../context/design-ui-host.js';
 import { InspectorField, InspectorTextArea, NumberField } from '../inspector/DesignInspectorFields.js';
 import { ColorField } from '../inspector/DesignPaintField.js';
 import { designColorStyle, DesignStyleContext } from './DesignStyleSelect.js';
@@ -44,6 +45,8 @@ type TableProps = Readonly<{
 export function DesignVariableTable({ document, resources, previewStyles, disabled, selectedCollection, onSelectCollection,
   onCommit, onPreviewStyle, onOpenLibrary, translate: t }: TableProps) {
   const { styles } = useContext(DesignStyleContext);
+  const ScrollOverlay = useContext(DesignUiHostContext)?.ScrollOverlay;
+  const scrollRef = useRef<HTMLDivElement>(null);
   const sources = useMemo(() => Object.keys(resources.styles).length ? { ...styles, ...resources.styles } : styles, [resources.styles, styles]);
   const [renaming, setRenaming] = useState<string>();
   const [renamingMode, setRenamingMode] = useState<{ collectionKey: string; id?: string }>();
@@ -134,116 +137,122 @@ export function DesignVariableTable({ document, resources, previewStyles, disabl
   }
 
   return <div className="design-variable-panel">
-    <div className="design-variable-panel__toolbar">
-      <div className="design-variable-panel__collections" role="group" aria-label={t('feature.design.variableCollections')}>
-        {collections.map((entry) => {
-          const { key } = entry;
-          const name = designVariableCollectionLabel(entry, defaultName);
-          const selected = key === active.key;
-          if (selected && key === renaming) {
-            return <div className="design-variable-panel__rename" key={key} onBlur={() => setRenaming(undefined)}>
-              <InspectorField label={t('feature.design.renameVariableCollection')} value={name} maxLength={128} autoFocus
-                onFocus={(event) => event.currentTarget.select()} readOnly={readOnly}
-                onSave={(input) => saveName(input, (name) => saveCollection({ ...collection, name }))} />
-            </div>;
-          }
-          const hasActions = selected && !entry.path;
-          const button = <button type="button" className="design-variable-panel__collection" key={key}
-            title={entry.path ? `${name} · ${entry.path}` : name} aria-pressed={selected}
-            onClick={hasActions ? undefined : () => {
-              onSelectCollection(key);
-              setRenaming(undefined);
-              setRenamingMode(undefined);
-            }}>
-            <span>{name}</span>
-            {hasActions ? <ChevronDown size={12} aria-hidden="true" /> : null}
-          </button>;
-          return hasActions ? <Dropdown key={key} modal disabled={disabled} menu={{ items: [
-            { key: 'rename', label: t('feature.design.renameVariableCollection'), icon: <Pencil size={14} />, onClick: () => setRenaming(key) },
-            { key: 'delete', label: t('feature.design.deleteVariableCollection'), danger: true, icon: <Trash2 size={14} />,
-              disabled: collectionId === defaultVariableCollectionId || rows.length > 0, onClick: () => { void saveCollection(null); } },
-          ] }}>{button}</Dropdown> : button;
-        })}
+    <header className="design-variable-panel__toolbar">
+      <div className="design-variable-panel__collection-controls">
+        <div className="design-variable-panel__collections" role="group" aria-label={t('feature.design.variableCollections')}>
+          {collections.map((entry) => {
+            const { key } = entry;
+            const name = designVariableCollectionLabel(entry, defaultName);
+            const selected = key === active.key;
+            if (selected && key === renaming) {
+              return <div className="design-variable-panel__rename" key={key} onBlur={() => setRenaming(undefined)}>
+                <InspectorField label={t('feature.design.renameVariableCollection')} value={name} maxLength={128} autoFocus
+                  onFocus={(event) => event.currentTarget.select()} readOnly={readOnly}
+                  onSave={(input) => saveName(input, (name) => saveCollection({ ...collection, name }))} />
+              </div>;
+            }
+            const hasActions = selected && !entry.path;
+            const source = designLibrarySourceLabel(entry.path);
+            const button = <button type="button" className="design-variable-panel__collection" key={key}
+              title={source ? `${name} · ${source}` : name} aria-pressed={selected}
+              onClick={hasActions ? undefined : () => {
+                onSelectCollection(key);
+                setRenaming(undefined);
+                setRenamingMode(undefined);
+              }}>
+              <span>{name}</span>
+              {hasActions ? <ChevronDown size={12} aria-hidden="true" /> : null}
+            </button>;
+            return hasActions ? <Dropdown key={key} modal disabled={disabled} menu={{ items: [
+              { key: 'rename', label: t('feature.design.renameVariableCollection'), icon: <Pencil size={14} />, onClick: () => setRenaming(key) },
+              { key: 'delete', label: t('feature.design.deleteVariableCollection'), danger: true, icon: <Trash2 size={14} />,
+                disabled: collectionId === defaultVariableCollectionId || rows.length > 0, onClick: () => { void saveCollection(null); } },
+            ] }}>{button}</Dropdown> : button;
+          })}
+        </div>
+        <IconButton size="small" label={t('feature.design.addVariableCollection')} disabled={disabled} onClick={addCollection}><Plus size={15} /></IconButton>
       </div>
-      <IconButton size="small" label={t('feature.design.addVariableCollection')} disabled={disabled} onClick={addCollection}><Plus size={15} /></IconButton>
-      {path && onOpenLibrary ? <IconButton size="small" label={t('feature.design.openLibrarySource')} disabled={disabled}
+      {path && onOpenLibrary && !isPresetLibraryPath(document, path) ? <IconButton size="small" label={t('feature.design.openLibrarySource')} disabled={disabled}
         onClick={() => onOpenLibrary(path)}><ArrowUpRight size={15} /></IconButton> : null}
+      {!path ? <Dropdown modal disabled={disabled} placement="bottomRight" menu={{ items: designVariableKinds.map((kind) => {
+        const Icon = icons[kind];
+        const name = t(`feature.design.variableType.${kind}`);
+        return { key: kind, label: name, icon: <Icon size={14} />, onClick: () => createVariable({ ...initial[kind], name,
+          collectionId: collectionId === defaultVariableCollectionId ? undefined : collectionId }) };
+      }) }}>
+        <Button className="design-variable-panel__add" size="small" variant="ghost" disabled={disabled}>
+          {addVariableLabel}<ChevronDown size={12} aria-hidden="true" />
+        </Button>
+      </Dropdown> : null}
+    </header>
+    <div className="design-variable-panel__body" key={active.key}>
+      <div className="design-variable-panel__scroll" ref={scrollRef} data-overlay-scroll={ScrollOverlay ? '' : undefined}>
+        <table className="design-variable-panel__table" aria-label={collectionName} data-read-only={Boolean(path) || undefined}
+          style={{ '--design-variable-columns': modes.length } as CSSProperties}>
+          <colgroup><col className="design-variable-panel__name-col" />
+            {modes.map(({ id }) => <col key={id ?? ''} />)}
+            {!path ? <col className="design-variable-panel__actions-col" /> : null}</colgroup>
+          <thead><tr>
+            <th scope="col" className="design-variable-panel__name">{nameLabel}</th>
+            {modes.map(({ id, name }) => <th scope="col" className="design-variable-panel__column-title" key={id ?? ''}>
+              {modeHeading(id, name)}
+            </th>)}
+            {!path ? <th scope="col" className="design-variable-panel__actions"><IconButton size="small"
+              label={t('feature.design.addVariableMode')} disabled={readOnly} onClick={addMode}><Plus size={15} /></IconButton></th> : null}
+          </tr></thead>
+          <tbody>{rows.map(({ id, style }) => {
+            const Icon = icons[style.kind];
+            const icon = <Icon size={13} aria-hidden="true" />;
+            return <tr key={id}>
+              <td className="design-variable-panel__name">{path ? <span className="design-variable-panel__readonly-name" title={style.name}>{icon}<span>{style.name}</span></span>
+                : <InspectorField label={`${nameLabel} · ${style.name}`} prefix={icon} value={style.name} maxLength={128} readOnly={readOnly}
+                  data-variable-name="" autoFocus={focusId === id} onFocus={(event) => event.currentTarget.select()}
+                  onSave={(input) => saveName(input, (name) => saveStyle(id, { ...style, name }))} />}</td>
+              {columns.map(({ id: modeId, name, resolveValue, resolvePreviewValue }) => {
+                const override = modeId !== undefined && Object.hasOwn(style.modeValues ?? {}, modeId);
+                const saveValue = (value: DesignVariableValue | undefined) => saveStyle(id, withDesignVariableValue(style, modeId, value));
+                const label = `${style.name} · ${name}`;
+                const aliasId = designVariableAliasId(style, modeId);
+                const value = resolveValue(id) ?? designVariableValue(style, modeId);
+                // Keep the edited cell's baseline while its aliases follow the preview.
+                const displayedValue = aliasId ? resolvePreviewValue?.(id) ?? value : value;
+                const sourceName = style.kind === 'color' && aliasId
+                  ? designColorStyle(sources, aliasId)?.name ?? t('feature.design.unavailableStyle') : undefined;
+                const withAlias = (source: string | undefined) => {
+                  if (source === aliasId) return;
+                  const fallback = source ? resolveValue(source) : value;
+                  if (fallback !== undefined) return withDesignVariableValue(style, modeId, fallback, source);
+                };
+                const aliasPicker = path ? null : <DesignVariableAliasPicker variableId={id} kind={style.kind} value={aliasId}
+                  label={t('feature.design.bindVariable', { field: label })} sources={sources} resolveValue={resolveValue} disabled={disabled}
+                  onPreview={(source) => onPreviewStyle(id, source === undefined ? undefined : withAlias(source || undefined))}
+                  onChange={(source) => {
+                    const next = withAlias(source);
+                    if (next) void saveStyle(id, next);
+                  }} translate={t} />;
+                return <td key={modeId ?? ''}>
+                  <div className="design-variable-panel__cell" data-inherited={modeId !== undefined && !override || undefined}>
+                    <VariableValueField label={label} opacityLabel={`${opacityLabel} · ${label}`} kind={style.kind}
+                      value={displayedValue} sourceName={sourceName} disabled={readOnly || Boolean(aliasId)} onSave={saveValue}
+                      aliasPicker={style.kind === 'color' ? aliasPicker : null}
+                      onPreview={(value) => onPreviewStyle(id, value === undefined ? undefined : withDesignVariableValue(style, modeId, value))} />
+                    {style.kind !== 'color' ? aliasPicker : null}
+                    {override && !path ? <IconButton size="small" className="design-variable-panel__context-action"
+                      label={`${t('feature.design.resetVariableValue')} · ${label}`} disabled={readOnly}
+                      onClick={() => { void saveValue(undefined); }}><RotateCcw size={12} /></IconButton> : null}
+                  </div>
+                </td>;
+              })}
+              {!path ? <td className="design-variable-panel__actions"><VariableRowActions name={style.name} disabled={readOnly} translate={t}
+                onDuplicate={() => createVariable(style)} onDelete={() => { void saveStyle(id, null); }}
+                moveItems={destinations.map((destination) => ({ key: destination.key, label: designVariableCollectionLabel(destination, defaultName),
+                  onClick: () => { void onCommit(planDesignVariableMove(id, style, collection, destination)); } }))} /></td> : null}
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
+      {ScrollOverlay ? <ScrollOverlay scrollRef={scrollRef} /> : null}
     </div>
-    <div className="design-variable-panel__scroll" key={active.key}>
-      <table className="design-variable-panel__table" aria-label={collectionName}
-        style={{ '--design-variable-columns': modes.length } as CSSProperties}>
-        <colgroup><col className="design-variable-panel__name-col" />
-          {modes.map(({ id }) => <col key={id ?? ''} />)}
-          <col className="design-variable-panel__actions-col" /></colgroup>
-        <thead><tr>
-          <th scope="col" className="design-variable-panel__name">{nameLabel}</th>
-          {modes.map(({ id, name }) => <th scope="col" className="design-variable-panel__column-title" key={id ?? ''}>
-            {modeHeading(id, name)}
-          </th>)}
-          <th scope="col" className="design-variable-panel__actions">{path ? null : <IconButton size="small"
-            label={t('feature.design.addVariableMode')} disabled={readOnly} onClick={addMode}><Plus size={15} /></IconButton>}</th>
-        </tr></thead>
-        <tbody>{rows.map(({ id, style }) => {
-          const Icon = icons[style.kind];
-          const icon = <Icon size={13} aria-hidden="true" />;
-          return <tr key={id}>
-            <td className="design-variable-panel__name">{path ? <span className="design-variable-panel__readonly-name">{icon}<span>{style.name}</span></span>
-              : <InspectorField label={`${nameLabel} · ${style.name}`} prefix={icon} value={style.name} maxLength={128} readOnly={readOnly}
-                data-variable-name="" autoFocus={focusId === id} onFocus={(event) => event.currentTarget.select()}
-                onSave={(input) => saveName(input, (name) => saveStyle(id, { ...style, name }))} />}</td>
-            {columns.map(({ id: modeId, name, resolveValue, resolvePreviewValue }) => {
-              const override = modeId !== undefined && Object.hasOwn(style.modeValues ?? {}, modeId);
-              const saveValue = (value: DesignVariableValue | undefined) => saveStyle(id, withDesignVariableValue(style, modeId, value));
-              const label = `${style.name} · ${name}`;
-              const aliasId = designVariableAliasId(style, modeId);
-              const value = resolveValue(id) ?? designVariableValue(style, modeId);
-              // Keep the edited cell's baseline while its aliases follow the preview.
-              const displayedValue = aliasId ? resolvePreviewValue?.(id) ?? value : value;
-              const sourceName = style.kind === 'color' && aliasId
-                ? designColorStyle(sources, aliasId)?.name ?? t('feature.design.unavailableStyle') : undefined;
-              const withAlias = (source: string | undefined) => {
-                if (source === aliasId) return;
-                const fallback = source ? resolveValue(source) : value;
-                if (fallback !== undefined) return withDesignVariableValue(style, modeId, fallback, source);
-              };
-              const aliasPicker = path ? null : <DesignVariableAliasPicker variableId={id} kind={style.kind} value={aliasId}
-                label={t('feature.design.bindVariable', { field: label })} sources={sources} resolveValue={resolveValue} disabled={disabled}
-                onPreview={(source) => onPreviewStyle(id, source === undefined ? undefined : withAlias(source || undefined))}
-                onChange={(source) => {
-                  const next = withAlias(source);
-                  if (next) void saveStyle(id, next);
-                }} translate={t} />;
-              return <td key={modeId ?? ''}>
-                <div className="design-variable-panel__cell" data-inherited={modeId !== undefined && !override || undefined}>
-                  <VariableValueField label={label} opacityLabel={`${opacityLabel} · ${label}`} kind={style.kind}
-                    value={displayedValue} sourceName={sourceName} disabled={readOnly || Boolean(aliasId)} onSave={saveValue}
-                    aliasPicker={style.kind === 'color' ? aliasPicker : null}
-                    onPreview={(value) => onPreviewStyle(id, value === undefined ? undefined : withDesignVariableValue(style, modeId, value))} />
-                  {style.kind !== 'color' ? aliasPicker : null}
-                  {override && !path ? <IconButton size="small" className="design-variable-panel__context-action"
-                    label={`${t('feature.design.resetVariableValue')} · ${label}`} disabled={readOnly}
-                    onClick={() => { void saveValue(undefined); }}><RotateCcw size={12} /></IconButton> : null}
-                </div>
-              </td>;
-            })}
-            <td className="design-variable-panel__actions">{path ? null : <VariableRowActions name={style.name} disabled={readOnly} translate={t}
-              onDuplicate={() => createVariable(style)} onDelete={() => { void saveStyle(id, null); }}
-              moveItems={destinations.map((destination) => ({ key: destination.key, label: designVariableCollectionLabel(destination, defaultName),
-                onClick: () => { void onCommit(planDesignVariableMove(id, style, collection, destination)); } }))} />}</td>
-          </tr>;
-        })}</tbody>
-      </table>
-    </div>
-    <footer className="design-variable-panel__footer">{path ? null : <Dropdown modal disabled={disabled} menu={{ items: designVariableKinds.map((kind) => {
-      const Icon = icons[kind];
-      const name = t(`feature.design.variableType.${kind}`);
-      return { key: kind, label: name, icon: <Icon size={14} />, onClick: () => createVariable({ ...initial[kind], name,
-        collectionId: collectionId === defaultVariableCollectionId ? undefined : collectionId }) };
-    }) }}>
-      <Button size="small" variant="ghost" icon={<Plus size={14} />} disabled={disabled}>
-        {addVariableLabel}<ChevronDown size={12} aria-hidden="true" />
-      </Button>
-    </Dropdown>}</footer>
   </div>;
 }
 
