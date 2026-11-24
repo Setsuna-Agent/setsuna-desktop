@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { designMcpClients, type DesignMcpClient, type DesignMcpSettings } from '../../contracts/design-mcp.js';
-import { designMcpEntry, designMcpName, updateDesignMcpClient, type DesignMcpStdio } from './client-config.js';
+import { designMcpEntry, designMcpName, updateDesignMcpClient, type DesignMcpConfigAction, type DesignMcpStdio } from './client-config.js';
 import type { DesignMcpCanvasBroker } from './canvas-broker.js';
 import type { DesignMcpLoopback, DesignMcpSource } from './loopback.js';
 
@@ -28,20 +28,16 @@ export class DesignMcpIntegration {
     // Endpoint files also record opt-in across restarts. No client configs are read until opted in.
     this.startup ??= Promise.all([...designMcpClients, 'manual' as const].map(async (source) => {
       try {
-        let file: string;
-        if (source === 'manual') {
-          const entries = await readdir(this.options.directory, { withFileTypes: true });
-          const entry = entries.find((entry) => entry.isFile() && /^manual(?:-[a-f0-9-]{36})?\.json$/u.test(entry.name));
-          if (!entry) return;
-          file = join(this.options.directory, entry.name);
-        } else {
-          file = this.endpointFile(source);
-          if (!(await lstat(file)).isFile()) return;
-        }
+        const [file, ...older] = source === 'manual' ? await this.manualGrantsByRecency(signal) : [this.endpointFile(source)];
+        if (!file || (source !== 'manual' && !(await lstat(file)).isFile())) return;
         // Keep the grant revocable even if restoring the client configuration or listener fails.
         this.grants.set(source, file);
         signal.throwIfAborted();
-        if (source !== 'manual') await this.updateClient(source, true, signal);
+        for (const previous of older) {
+          await rm(previous, { force: true });
+          signal.throwIfAborted();
+        }
+        if (source !== 'manual') await this.updateClient(source, 'restore', signal);
         await this.authorize(source, signal);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !signal.aborted) {
@@ -66,7 +62,7 @@ export class DesignMcpIntegration {
         const previouslyAuthorized = this.authorized.has(client);
         try {
           await this.authorize(client, signal);
-          await this.updateClient(client, true, signal);
+          await this.updateClient(client, 'enable', signal);
         } catch (error) {
           if (!previouslyGranted) await this.revoke(client);
           else if (!previouslyAuthorized) await this.deauthorize(client);
@@ -75,7 +71,7 @@ export class DesignMcpIntegration {
       } else {
         // The client may lock or corrupt its config. Revoke access before touching that file.
         await this.revoke(client);
-        await this.updateClient(client, false, signal);
+        await this.updateClient(client, 'disable', signal);
       }
       return this.snapshot();
     });
@@ -135,8 +131,33 @@ export class DesignMcpIntegration {
     return this.grants.get(source) ?? join(this.options.directory, source === 'manual' ? `manual-${randomUUID()}.json` : `${source}.json`);
   }
 
-  private updateClient(client: DesignMcpClient, enabled: boolean, signal: AbortSignal): Promise<void> {
-    return updateDesignMcpClient(this.options.clientFiles[client], client, this.config(client), enabled, signal);
+  private async manualGrantFiles(): Promise<string[]> {
+    const entries = await readdir(this.options.directory, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    });
+    return entries.filter((entry) => entry.isFile() && /^manual(?:-[a-f0-9-]{36})?\.json$/u.test(entry.name))
+      .map((entry) => join(this.options.directory, entry.name));
+  }
+
+  private async manualGrantsByRecency(signal: AbortSignal) {
+    const files = await this.manualGrantFiles();
+    if (files.length < 2) return files;
+
+    // Prefer the most recently issued endpoint so the current copied config survives recovery.
+    const dated: { file: string; mtimeMs: number }[] = [];
+    for (const file of files) {
+      signal.throwIfAborted();
+      const stats = await lstat(file).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+      });
+      if (stats?.isFile()) dated.push({ file, mtimeMs: stats.mtimeMs });
+    }
+    return dated.sort((a, b) => b.mtimeMs - a.mtimeMs || a.file.localeCompare(b.file)).map(({ file }) => file);
+  }
+
+  private updateClient(client: DesignMcpClient, action: DesignMcpConfigAction, signal: AbortSignal): Promise<void> {
+    return updateDesignMcpClient(this.options.clientFiles[client], client, this.config(client), action, signal);
   }
 
   private async authorize(source: DesignMcpSource, signal: AbortSignal): Promise<void> {
@@ -177,8 +198,11 @@ export class DesignMcpIntegration {
   private async revoke(source: DesignMcpSource): Promise<void> {
     await this.deauthorize(source);
     const file = this.grants.get(source);
-    if (!file) return;
-    await rm(file, { force: true });
+    if (source === 'manual') {
+      // An interrupted cleanup must not leave an older opt-in to be restored on the next launch.
+      for (const previous of await this.manualGrantFiles()) if (previous !== file) await rm(previous, { force: true });
+    }
+    if (file) await rm(file, { force: true });
     this.grants.delete(source);
   }
 }
