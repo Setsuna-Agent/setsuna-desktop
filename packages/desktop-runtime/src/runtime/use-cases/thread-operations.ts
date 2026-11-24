@@ -13,7 +13,7 @@ import {
   type StartReviewInput,
 } from '@setsuna-desktop/feature-review/contracts';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
-import { ThreadBusyError } from '../../loop/core/runtime-turn-errors.js';
+import { ThreadBusyError, ThreadNotArchivedError } from '../../loop/core/runtime-turn-errors.js';
 import type { RuntimeContainer } from '../runtime-factory.js';
 import { randomRuntimeId } from '../runtime-id.js';
 import { RuntimeUseCaseError, runtimeUseCaseErrorMessage } from './errors.js';
@@ -122,7 +122,9 @@ export async function deleteRuntimeThread(
       }
     });
   }, options).catch((error: unknown) => {
-    if (error instanceof ThreadBusyError) throw new RuntimeUseCaseError('conflict', error.message, { threadId });
+    if (error instanceof ThreadBusyError || error instanceof ThreadNotArchivedError) {
+      throw new RuntimeUseCaseError('conflict', error.message, { threadId });
+    }
     throw error;
   });
 }

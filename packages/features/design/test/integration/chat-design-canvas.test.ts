@@ -1,4 +1,6 @@
+import { mkdir, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import path from 'node:path';
 import { loadYoga } from 'yoga-layout/load';
 import { expect, it, vi } from 'vitest';
 import { createRuntimeServerTestHarness } from '../../../../desktop-runtime/test/support/runtime-server/harness.js';
@@ -47,7 +49,11 @@ it('waits for the main chat canvas, edits and inspects real layers, and rejects 
           const edit = result();
           savedRevision = edit.revision;
           board = edit.ids[0];
-          call = { name: 'design_inspect', args: { scope: 'document', name: 'Title' } }; break;
+          call = { name: 'run_code', args: { code: `
+            const { data } = await tools.design_inspect({ mode: 'index', scope: 'document', name: 'Title' });
+            await tools.write_file({ file_path: 'index.html', content: '<h1>' + data.layers[0].name + '</h1>' });
+            text((await tools.read_file({ file_path: 'index.html' })).content);
+          ` } }; break;
         }
         case 4: call = { name: 'design_resources', args: { kind: 'documents' } }; break;
         case 5:
@@ -83,7 +89,9 @@ it('waits for the main chat canvas, edits and inspects real layers, and rejects 
     const address = provider.address();
     if (!address || typeof address === 'string') throw new Error('Expected a provider port.');
     await harness.configureOpenAiProvider('canvas', 'http://127.0.0.1:' + address.port + '/v1');
-    const project = await post('/v1/projects', { name: 'Chat' });
+    const projectRoot = path.join(harness.runtimeDataDir, 'project');
+    await mkdir(projectRoot);
+    const project = await post('/v1/projects', { name: 'Chat', path: projectRoot });
     const other = await post('/v1/projects', { name: 'Other' });
     const base = '/v1/features/design';
     for (const [name, projectId] of [['Main.design.json', project.id], ['Shared.design.json', project.id], ['Other.design.json', other.id]]) {
@@ -109,8 +117,7 @@ it('waits for the main chat canvas, edits and inspects real layers, and rejects 
     const read = (): Promise<DesignSnapshot> => harness.runtimeFetch(base + '/documents?' + new URLSearchParams({ storageId: 'local', path: draft.ref.path }));
     let snapshot = await read();
     expect(snapshot.document.rootIds).toEqual([]);
-    expect(catalogs[1]).toContain('design_edit');
-    expect(catalogs[1]).not.toContain('exec_command');
+    expect(catalogs[1]).toEqual(expect.arrayContaining([...catalogs[0], 'design_edit']));
     const client: DesignTaskClient = { start: (input, signal) => post(base + '/tasks', input, signal),
       reply: (input, signal) => post(base + '/tasks/reply', input, signal), stop: (sessionId) => post(base + '/tasks/stop', { sessionId }),
       bindInput: (input, signal) => post(base + '/tasks/bind-input', input, signal),
@@ -136,6 +143,8 @@ it('waits for the main chat canvas, edits and inspects real layers, and rejects 
     const done = await harness.waitForCompletedTurn(threadId, turnId);
     expect(resourcePaths.sort()).toEqual(['Main.design.json', 'Shared.design.json']);
     const toolRuns = done.messages.flatMap((message) => message.toolRuns ?? []);
+    expect(await readFile(path.join(projectRoot, 'index.html'), 'utf8')).toBe('<h1>Title</h1>');
+    expect(toolRuns.find((run) => run.id === 'canvas_3')).toMatchObject({ status: 'success', resultPreview: expect.stringContaining('<h1>Title</h1>') });
     expect(toolRuns.find((run) => run.id === 'canvas_5')?.status).toBe('error');
     expect(images).toEqual([ownImage]);
     expect(toolRuns.find((run) => run.id === 'canvas_8')).toMatchObject({ status: 'error', resultPreview: expect.stringContaining('Import this asset') });

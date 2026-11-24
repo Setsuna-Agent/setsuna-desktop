@@ -119,13 +119,14 @@ a.chat-markdown__file-link:not([data-markdown-link='workspace-tool']):is(:focus-
 }
 
 .chat-code-highlighter {
+  --chat-code-block-bg: light-dark(var(--app-surface-muted), var(--app-surface));
   width: 100%;
   min-width: 0;
   max-width: 100%;
   margin: var(--chat-markdown-block-start-gap, 12px) 0 var(--chat-markdown-block-gap, 12px);
   overflow: hidden;
   border-radius: var(--app-radius-lg);
-  background: var(--app-surface-muted);
+  background: var(--chat-code-block-bg);
   box-sizing: border-box;
 }
 

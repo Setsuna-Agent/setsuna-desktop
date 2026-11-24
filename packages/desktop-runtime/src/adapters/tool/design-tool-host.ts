@@ -56,9 +56,10 @@ export class DesignToolHost implements ToolHost {
 
   exclusiveToolScope(context: ToolExecutionContext) {
     const canvas = this.service?.chatCanvasRole(context.threadId, context.turnId);
-    if (canvas) {
-      return { has: (name: string) => this.names.has(name) || (canvas === 'owner' && (name === chatDesignTool || name === 'publish_artifact'))
-        || name === 'read_skill' || name === 'list_skills', builtinSkillIds: ['design-canvas'],
+    // Opening a canvas adds tools to the project conversation's existing workspace.
+    if (canvas === 'owner') return null;
+    if (canvas === 'participant') {
+      return { has: (name: string) => this.names.has(name) || name === 'read_skill' || name === 'list_skills',
         includeCollaboration: canWriteDesign(context) && !context.unattended };
     }
     if (context.featureId !== 'design') return null;
@@ -66,7 +67,14 @@ export class DesignToolHost implements ToolHost {
     const writable = canWriteDesign(context);
     return { has: (name: string) => this.names.has(name) || name === 'read_skill' || name === 'list_skills'
       || (!context.unattended && (workspaceReads.has(name) || (writable && workspaceWritesAndProcesses.has(name)))),
-      includeCollaboration: writable && !context.unattended, includeSelectedPlugins: true, builtinSkillIds: context.unattended ? undefined : ['design-canvas'] };
+      includeCollaboration: writable && !context.unattended, includeSelectedPlugins: true };
+  }
+
+  builtinSkillIds(context: ToolExecutionContext) {
+    if (context.unattended) return [];
+    const bound = this.service?.chatCanvasRole(context.threadId, context.turnId)
+      || (context.featureId === 'design' && this.service?.scope(context.threadId, context.turnId));
+    return bound ? ['design-canvas'] : [];
   }
 
   async listTools(context: ToolExecutionContext) {
@@ -91,7 +99,9 @@ export class DesignToolHost implements ToolHost {
     const canvas = this.service?.chatCanvasRole(context.threadId, context.turnId);
     if (canvas === 'participant') return 'You share the parent’s live canvas and have your own selection and cursor. Inspect the draft, select your assigned boards or layers with design_view, and edit them with design_edit. After a revision conflict, inspect again before retrying.';
     if (this.chat && canLaunchCanvas(context)) {
-      if (canvas === 'owner') return 'Use design_inspect, design_view and design_edit on the live canvas. For parallel design work, dispatch named agents with distinct board or layer IDs and ask each to edit its own board on this canvas. Each uses this canvas with its own cursor and selection. Wait for the designers before finishing or switching canvases. Use design_preview to check the rendered result when needed. For other workspace work, finish canvas editing with chat_design finish. If the user closes the editor, pause canvas work.';
+      if (canvas === 'owner') return 'Use design_inspect, design_view and design_edit on the live canvas. Use the available workspace tools for project code, builds and tests while the canvas is open. Edit .design.json through native canvas tools. '
+        + 'For parallel canvas work, assign each named design agent distinct board or layer IDs. Each uses this canvas with its own cursor and selection. Wait for the designers before finishing or switching canvases. '
+        + 'Use design_preview to check the rendered result when needed. If the user closes the editor, pause canvas work.';
       return 'For an editable design request, open the draft with chat_design open (or create a new draft) in this turn before editing or calling spawn_agent, even when a previous turn left its tab open. Then use native canvas tools. Never author or patch .design.json with file or shell tools. Use chat_design list to find linked drafts and return their clickable design mentions.';
     }
     const scope = this.service?.scope(context.threadId, context.turnId, context.inputClientId);

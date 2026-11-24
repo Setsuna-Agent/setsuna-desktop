@@ -1,7 +1,7 @@
 import { splitDesignColor } from '../../contracts/design-color.js';
 import type { DesignNode, DesignText } from '../../contracts/document.js';
 import { containsBounds, type Bounds } from '../design-geometry.js';
-import { designFills } from '../design-paint.js';
+import { designFills, layerCornerRadius } from '../design-paint.js';
 import type { DesignLayerBox } from '../design-layout.js';
 import { designTextSegments } from '../text/design-rich-text.js';
 import type { designAuditSiblings } from './design-audit-siblings.js';
@@ -17,20 +17,33 @@ function simplePaint(node: DesignNode) {
   if (fills.length === 1 || alpha === 1) return { color, alpha };
 }
 
-function interiorCovers(node: DesignNode, bounds: Bounds, text: Bounds) {
+function interiorCovers(node: DesignNode, box: DesignLayerBox, text: Bounds) {
   if (node.kind !== 'frame' && node.kind !== 'rectangle') return false;
+  const bounds = box.paintBounds;
   const inset = Math.max(0, ...(node.strokes ?? []).filter((stroke) => !stroke.hidden && stroke.opacity !== 0)
     .map((stroke) => stroke.alignment === 'outside' ? 0 : stroke.width / (stroke.alignment === 'inside' ? 1 : 2)));
-  if (!containsBounds({ x: bounds.x + inset, y: bounds.y + inset, width: bounds.width - 2 * inset, height: bounds.height - 2 * inset }, text)) return false;
-  const radius = Math.max(...(node.cornerRadii ?? [node.cornerRadius ?? 0]));
-  return (text.x >= bounds.x + radius && text.x + text.width <= bounds.x + bounds.width - radius)
-    || (text.y >= bounds.y + radius && text.y + text.height <= bounds.y + bounds.height - radius);
+  const left = text.x - bounds.x;
+  const top = text.y - bounds.y;
+  const right = bounds.x + bounds.width - (text.x + text.width);
+  const bottom = bounds.y + bounds.height - (text.y + text.height);
+  if (Math.min(left, top, right, bottom) < inset) return false;
+  const radius = layerCornerRadius(node, bounds.width, bounds.height);
+  if (radius === 0) return true;
+  const [topLeft, topRight, bottomRight, bottomLeft] = typeof radius === 'number' ? [radius, radius, radius, radius] : radius;
+  const [localLeft, localRight] = box.scaleX < 0 ? [right, left] : [left, right];
+  const [localTop, localBottom] = box.scaleY < 0 ? [bottom, top] : [top, bottom];
+  // The text box fits if its nearest corner to each arc stays inside the stroke's inner edge.
+  function insideArc(r: number, dx: number, dy: number) {
+    return Math.hypot(Math.max(0, r - dx), Math.max(0, r - dy)) <= Math.max(0, r - inset);
+  }
+  return insideArc(topLeft, localLeft, localTop) && insideArc(topRight, localRight, localTop)
+    && insideArc(bottomRight, localRight, localBottom) && insideArc(bottomLeft, localLeft, localBottom);
 }
 
 export function opaqueInteriorColor(node: DesignNode, box: DesignLayerBox, bounds: Bounds) {
   if ((node.kind !== 'frame' && node.kind !== 'rectangle') || box.angle || !box.visibleBounds || (node.opacity ?? 1) < 1 || !containsBounds(box.visibleBounds, bounds)) return;
   const paint = simplePaint(node);
-  if (paint?.alpha === 1 && interiorCovers(node, box.paintBounds, bounds)) return paint.color;
+  if (paint?.alpha === 1 && interiorCovers(node, box, bounds)) return paint.color;
 }
 
 function background(view: DesignReportView, id: string, bounds: Bounds, behind: ReturnType<typeof designAuditSiblings>) {
@@ -58,7 +71,7 @@ function background(view: DesignReportView, id: string, bounds: Bounds, behind: 
       const paint = simplePaint(parent);
       if (paint !== null) {
         const box = scene[parentId];
-        if (!box.angle && paint?.alpha === 1 && interiorCovers(parent, box.paintBounds, bounds)) return paint.color;
+        if (!box.angle && paint?.alpha === 1 && interiorCovers(parent, box, bounds)) return paint.color;
         return;
       }
     }
