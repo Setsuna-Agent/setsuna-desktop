@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -149,8 +149,14 @@ it('serves only the active canvas over stdio and revokes a disabled client indep
     // A valid client entry left on disk cannot restore permission after the app restarts.
     await writeFile(files.codex, enabledCodexConfig);
     await integration.dispose();
+    const olderManual = ['manual.json', 'manual-00000000-0000-4000-8000-000000000000.json'].map((name) => join(root, 'endpoints', name));
+    for (const file of olderManual) {
+      await writeFile(file, '{}');
+      await utimes(file, 1, 1);
+    }
     integration = createIntegration();
     await expect(integration.settings(signal)).resolves.toEqual({ codex: false, 'claude-code': true, manual: true });
+    for (const file of olderManual) await expect(readFile(file)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(manual.callTool({ name: 'get_active_design' })).resolves.toMatchObject({ content: [{ text: 'Current canvas' }] });
     await expect(codex.callTool({ name: 'get_active_design' })).resolves.toMatchObject({ isError: true });
 
@@ -158,6 +164,7 @@ it('serves only the active canvas over stdio and revokes a disabled client indep
     holdManual = true;
     const reading = manual.callTool({ name: 'get_active_design' });
     const held = await Promise.race([manualStarted.promise, reading.then(() => { throw new Error('Manual read ended before entering the canvas.'); })]);
+    await writeFile(olderManual[0], '{}');
     await expect(integration.revokeManual(signal)).resolves.toEqual({ codex: true, 'claude-code': true, manual: false });
     await expect(reading).resolves.toMatchObject({ isError: true });
     expect(cancelled).toContain(held.requestId);
@@ -258,14 +265,48 @@ it('preserves an existing server with the same name in either client', async () 
     const entries = [
       ['codex', 'config.toml', '[mcp_servers."setsuna-design"]\nurl = "https://example.com/mcp"\n'],
       ['claude-code', '.claude.json', '{"mcpServers":{"setsuna-design":{"type":"stdio","command":"other-server"}}}'],
+      ['claude-code', 'custom.json', JSON.stringify({ mcpServers: { [designMcpName]: {
+        ...config, args: [config.args[0], join(root, 'custom', 'claude-code.json')],
+      } } })],
     ] as const;
     for (const [client, name, source] of entries) {
       const file = join(root, name);
       await writeFile(file, source);
-      await expect(updateDesignMcpClient(file, client, config, true, signal)).rejects.toThrow('already has a setsuna-design MCP server');
-      await updateDesignMcpClient(file, client, config, false, signal);
+      await expect(updateDesignMcpClient(file, client, config, 'enable', signal)).rejects.toThrow('already has a setsuna-design MCP server');
+      await updateDesignMcpClient(file, client, config, 'disable', signal);
       expect(await readFile(file, 'utf8')).toBe(source);
     }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each(['codex', 'claude-code'] as const)('reclaims a missing %s endpoint only on explicit enable', async (client) => {
+  const root = await mkdtemp(join(tmpdir(), 'setsuna-design-mcp-profiles-'));
+  const file = join(root, client === 'codex' ? 'config.toml' : '.claude.json');
+  const signal = new AbortController().signal;
+  const config = (profile: string): DesignMcpStdio => ({
+    command: process.execPath, args: [join(root, profile, designMcpEntry), join(root, profile, 'design-mcp', client + '.json')],
+    env: { ELECTRON_RUN_AS_NODE: '1' },
+  });
+  const dev = config('dev');
+  const installed = config('installed');
+  try {
+    await mkdir(join(root, 'dev', 'design-mcp'), { recursive: true });
+    await writeFile(dev.args[1], '{}');
+    await updateDesignMcpClient(file, client, dev, 'enable', signal);
+    const original = await readFile(file, 'utf8');
+    await expect(updateDesignMcpClient(file, client, installed, 'enable', signal)).rejects.toThrow(dev.args[1]);
+    expect(await readFile(file, 'utf8')).toBe(original);
+
+    await rm(dev.args[1]);
+    await expect(updateDesignMcpClient(file, client, installed, 'restore', signal)).rejects.toThrow(dev.args[1]);
+    await updateDesignMcpClient(file, client, installed, 'disable', signal);
+    expect(await readFile(file, 'utf8')).toBe(original);
+    await updateDesignMcpClient(file, client, installed, 'enable', signal);
+    const source = await readFile(file, 'utf8');
+    const servers = client === 'codex' ? getStaticTOMLValue(parseTOML(source)).mcp_servers : JSON.parse(source).mcpServers;
+    expect(servers[designMcpName].args).toEqual(installed.args);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

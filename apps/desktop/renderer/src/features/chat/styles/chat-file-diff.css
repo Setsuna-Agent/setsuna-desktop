@@ -51,14 +51,7 @@
   margin-top: 2px;
 }
 
-.chat-file-diff__viewport {
-  max-height: 320px;
-  overflow: auto;
-  /* Vertical wheel input continues into the tool history and chat at the diff's edges. */
-  overscroll-behavior: contain auto;
-}
-
-.chat-file-diff__viewport > .setsuna-pierre-surface {
+.chat-file-diff__preview > .setsuna-pierre-surface {
   min-height: 20px;
 }
 

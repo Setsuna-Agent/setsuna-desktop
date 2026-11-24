@@ -31,8 +31,15 @@ const keyboardScrollIntentKeys = new Set([
  * @param scrollSignal 影响滚动高度或活动状态的紧凑信号。
  * @param showEmptyStarter 当前是否处于空线程 starter 页面。
  * @param threadId 当前线程 ID，切换线程时用于重置滚动状态。
+ * @param onScrollUp 用户向上滚动，或已在顶部时继续尝试上滚。
  */
-export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter, threadId }: { contentRef: RefObject<HTMLDivElement | null>; scrollSignal: string; showEmptyStarter: boolean; threadId: string | null }) {
+export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter, threadId, onScrollUp }: {
+  contentRef: RefObject<HTMLDivElement | null>;
+  scrollSignal: string;
+  showEmptyStarter: boolean;
+  threadId: string | null;
+  onScrollUp?: (viewport: HTMLDivElement) => void;
+}) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const { cancelSmoothScroll, setScrollPosition } = useSmoothScroll({
@@ -43,6 +50,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
   const userScrollIntentRef = useRef(false);
   const scrollbarDragRef = useRef(false);
   const lastScrollTopRef = useRef(0);
+  const lastTouchYRef = useRef<number | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
   // token 递增会让已排队的 animation-frame 滚动失效，用于线程切换或用户手势打断。
   const scrollScheduleTokenRef = useRef(0);
@@ -138,10 +146,14 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
   const handleScroll = useCallback(() => {
     const node = scrollRef.current;
     if (!node) return;
-    const movingTowardBottom = node.scrollTop > lastScrollTopRef.current;
-    lastScrollTopRef.current = node.scrollTop;
+    const top = node.scrollTop;
+    const movingTowardBottom = top > lastScrollTopRef.current;
+    const userScrolledUp = top < lastScrollTopRef.current
+      && (userScrollIntentRef.current || scrollbarDragRef.current);
+    lastScrollTopRef.current = top;
     syncScrollBottomState(movingTowardBottom);
-  }, [syncScrollBottomState]);
+    if (userScrolledUp) onScrollUp?.(node);
+  }, [onScrollUp, syncScrollBottomState]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     userScrollIntentRef.current = false;
@@ -217,6 +229,14 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     };
   }, [cancelSmoothScroll, scrollDistanceToBottom, scrollToBottom, syncScrollBottomState, threadId]);
 
+  const handleUpwardGestureAtTop = useCallback((event: Event) => {
+    const node = scrollRef.current;
+    // The viewport cannot emit a native scroll event once it reaches the top.
+    if (!event.defaultPrevented && node && node.scrollTop <= 0 && onScrollUp && upwardGestureReachesViewport(event, node)) {
+      onScrollUp(node);
+    }
+  }, [onScrollUp]);
+
   const handleScrollWheel = useCallback(
     (event: ReactWheelEvent<HTMLDivElement>) => {
       if (showEmptyStarter || event.ctrlKey || event.deltaY === 0) return;
@@ -226,19 +246,30 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
       const distanceToBottom = scrollDistanceToBottom(node);
       if (event.deltaY < 0 || distanceToBottom > scrollBottomThresholdPx) {
         releasePinnedScrollForUser();
+        if (event.deltaY < 0) handleUpwardGestureAtTop(event.nativeEvent);
         return;
       }
       markUserScrollIntent();
     },
-    [cancelSmoothScroll, markUserScrollIntent, releasePinnedScrollForUser, scrollDistanceToBottom, showEmptyStarter],
+    [cancelSmoothScroll, handleUpwardGestureAtTop, markUserScrollIntent, releasePinnedScrollForUser, scrollDistanceToBottom, showEmptyStarter],
   );
 
+  const handleScrollTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    lastTouchYRef.current = event.touches.length === 1 ? event.touches[0].clientY : null;
+  }, []);
+
   const handleScrollTouchMove = useCallback(
-    (_event: ReactTouchEvent<HTMLDivElement>) => {
+    (event: ReactTouchEvent<HTMLDivElement>) => {
       cancelSmoothScroll();
       releasePinnedScrollForUser();
+      const previousY = lastTouchYRef.current;
+      const touchY = event.touches.length === 1 ? event.touches[0].clientY : null;
+      lastTouchYRef.current = touchY;
+      if (touchY !== null && previousY !== null && touchY > previousY) {
+        handleUpwardGestureAtTop(event.nativeEvent);
+      }
     },
-    [cancelSmoothScroll, releasePinnedScrollForUser],
+    [cancelSmoothScroll, handleUpwardGestureAtTop, releasePinnedScrollForUser],
   );
 
   const handleScrollKeyDown = useCallback(
@@ -251,8 +282,11 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
         return;
       }
       releasePinnedScrollForUser();
+      if (event.key === 'ArrowUp' || event.key === 'PageUp' || event.key === 'Home' || (event.key === ' ' && event.shiftKey)) {
+        handleUpwardGestureAtTop(event.nativeEvent);
+      }
     },
-    [cancelSmoothScroll, markUserScrollIntent, releasePinnedScrollForUser],
+    [cancelSmoothScroll, handleUpwardGestureAtTop, markUserScrollIntent, releasePinnedScrollForUser],
   );
 
   useLayoutEffect(() => {
@@ -307,6 +341,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     handleScroll,
     handleScrollPointerDown,
     handleScrollKeyDown,
+    handleScrollTouchStart,
     handleScrollTouchMove,
     handleScrollWheel,
     listRef,
@@ -315,6 +350,17 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     scrollToOffset,
     showScrollBottom,
   };
+}
+
+function upwardGestureReachesViewport(event: Event, viewport: HTMLElement): boolean {
+  for (const target of event.composedPath()) {
+    if (target === viewport) return true;
+    if (!(target instanceof HTMLElement) || target.scrollHeight <= target.clientHeight) continue;
+    const { overflowY, overscrollBehaviorY } = getComputedStyle(target);
+    if (overflowY !== 'auto' && overflowY !== 'scroll' && overflowY !== 'overlay') continue;
+    if (target.scrollTop > 0 || overscrollBehaviorY === 'contain' || overscrollBehaviorY === 'none') return false;
+  }
+  return false;
 }
 
 export function useConversationOverviewLayout(

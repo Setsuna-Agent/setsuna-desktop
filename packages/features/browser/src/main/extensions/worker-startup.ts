@@ -1,7 +1,9 @@
 import type { Extension, ServiceWorkerMain, Session } from 'electron';
 
 const maxConcurrentStarts = 4;
-type WorkerStartup = { id: string; profileStartup: boolean; ready: boolean; running: boolean; failure?: Error };
+type WorkerStartup = { id: string; ready: boolean; running: boolean; failure?: Error };
+
+function workerScope(id: string): string { return `chrome-extension://${id}/`; }
 
 function failedExtension(details: Electron.MessageDetails): string | null {
   // Only uncaught JavaScript errors identify a failed startup; console.error and
@@ -16,22 +18,28 @@ function failedExtension(details: Electron.MessageDetails): string | null {
 /** Bound background restoration without making desktop readiness wait for workers. */
 export class BrowserExtensionWorkerStartup {
   private readonly tasks = new Map<string, WorkerStartup>();
+  // A cold worker can reach running after its active startup slot has timed out.
+  private readonly pendingProfileStarts = new Map<string, string>();
   private active = 0;
 
   constructor(private readonly options: {
     session: Session; signal: AbortSignal; profileStarted(id: string): void;
   }) {
     if (options.signal.aborted) return;
-    options.session.serviceWorkers.on('console-message', this.loadingError);
+    const workers = options.session.serviceWorkers;
+    workers.on('console-message', this.loadingError);
+    workers.on('running-status-changed', this.workerChanged);
     options.signal.addEventListener('abort', () => {
       this.tasks.clear();
-      options.session.serviceWorkers.off('console-message', this.loadingError);
+      this.pendingProfileStarts.clear();
+      workers.off('console-message', this.loadingError);
+      workers.off('running-status-changed', this.workerChanged);
     }, { once: true });
   }
 
   prepare(id: string): void {
     if (this.options.signal.aborted || this.tasks.has(id)) return;
-    this.tasks.set(id, { id, profileStartup: false, ready: false, running: false });
+    this.tasks.set(id, { id, ready: false, running: false });
   }
 
   enqueue(id: string, profileStartup: boolean): void {
@@ -39,11 +47,14 @@ export class BrowserExtensionWorkerStartup {
     const task = this.tasks.get(id);
     if (!task || task.ready) return;
     task.ready = true;
-    task.profileStartup = profileStartup;
+    if (profileStartup && !task.failure) this.pendingProfileStarts.set(workerScope(id), id);
     this.startPending();
   }
 
-  remove(id: string): void { this.tasks.delete(id); }
+  remove(id: string): void {
+    this.tasks.delete(id);
+    this.pendingProfileStarts.delete(workerScope(id));
+  }
 
   private current(task: WorkerStartup): boolean {
     return !this.options.signal.aborted && this.tasks.get(task.id) === task;
@@ -51,25 +62,40 @@ export class BrowserExtensionWorkerStartup {
 
   private readonly loadingError = (_event: Electron.Event, details: Electron.MessageDetails) => {
     const id = failedExtension(details);
-    const task = id && this.tasks.get(id);
+    if (!id) return;
+    this.pendingProfileStarts.delete(workerScope(id));
+    const task = this.tasks.get(id);
     // Native loading starts the script before loadExtension resolves. Retain errors
     // while loading or queued using one listener, independent of the startup limit.
     if (task && !task.running) task.failure ??= new Error(details.message);
   };
+
+  private readonly workerChanged = ({ versionId, runningStatus }: Electron.ServiceWorkersRunningStatusChangedEventParams) => {
+    if (runningStatus !== 'running' || !this.pendingProfileStarts.size) return;
+    const worker = this.options.session.serviceWorkers.getWorkerFromVersionID(versionId);
+    if (worker) this.deliverProfileStartup(worker.scope);
+  };
+
+  private deliverProfileStartup(scope: string): void {
+    const id = this.pendingProfileStarts.get(scope);
+    if (!id) return;
+    this.pendingProfileStarts.delete(scope);
+    this.options.profileStarted(id);
+  }
 
   private startPending(): void {
     if (this.options.signal.aborted) return;
     for (const task of this.tasks.values()) {
       if (this.active >= maxConcurrentStarts) return;
       if (!task.ready || task.running) continue;
-      if (!this.options.session.extensions.getExtension(task.id)) { this.tasks.delete(task.id); continue; }
+      if (!this.options.session.extensions.getExtension(task.id)) { this.remove(task.id); continue; }
       task.running = true;
       ++this.active;
       // Queued workers acquire registration listeners and their timeout only when a slot opens.
       const started = task.failure ? Promise.reject(task.failure)
         : startExtensionWorker(this.options.session, task.id, this.options.signal);
       void started.then(() => {
-        if (this.current(task) && task.profileStartup) this.options.profileStarted(task.id);
+        if (this.current(task)) this.deliverProfileStartup(workerScope(task.id));
       }).catch((error: unknown) => {
         if (this.current(task) && this.options.session.extensions.getExtension(task.id)) {
           console.error(`Failed to start worker for extension ${task.id}`, error);
@@ -86,7 +112,7 @@ export class BrowserExtensionWorkerStartup {
 /** A newly loaded extension may still be registering its background worker. */
 export function startExtensionWorker(session: Session, id: string, signal?: AbortSignal): Promise<ServiceWorkerMain> {
   if (signal?.aborted) return Promise.reject(new Error('Extension worker startup cancelled.'));
-  const scope = `chrome-extension://${id}/`;
+  const scope = workerScope(id);
   return new Promise((resolve, reject) => {
     const workers = session.serviceWorkers;
     let finished = false;

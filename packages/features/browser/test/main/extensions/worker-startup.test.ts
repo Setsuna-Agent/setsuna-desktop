@@ -9,6 +9,7 @@ const worker = { scope } as ServiceWorkerMain;
 const fixture = () => {
   const workers = Object.assign(new EventEmitter(), {
     startWorkerForScope: vi.fn<Session['serviceWorkers']['startWorkerForScope']>(),
+    getWorkerFromVersionID: vi.fn<Session['serviceWorkers']['getWorkerFromVersionID']>(),
   });
   const extensions = Object.assign(new EventEmitter(), { getExtension: (id: string) => ({ id }) });
   return { workers, extensions, session: { serviceWorkers: workers, extensions } as unknown as Session };
@@ -152,6 +153,33 @@ it('bounds a worker that never registers and preserves the native startup error'
   expect(workers.startWorkerForScope).toHaveBeenCalledOnce();
   expect(workers.listenerCount('registration-completed')).toBe(0);
   expect(extensions.listenerCount('extension-unloaded')).toBe(0);
+});
+
+it('delivers a late profile startup exactly once and drops it on unload', async () => {
+  vi.useFakeTimers();
+  const { workers, session } = fixture();
+  const unloadedId = 'b'.repeat(32);
+  workers.startWorkerForScope.mockRejectedValue(new Error('Not registered yet.'));
+  workers.getWorkerFromVersionID.mockImplementation(versionId => versionId === 0
+    ? { scope: `chrome-extension://${unloadedId}/` } as ServiceWorkerMain : worker);
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const lifetime = new AbortController();
+  const profileStarted = vi.fn();
+  const startup = new BrowserExtensionWorkerStartup({ session, signal: lifetime.signal, profileStarted });
+  try {
+    startup.enqueue(id, true);
+    startup.enqueue(unloadedId, true);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(workers.listenerCount('registration-completed')).toBe(0);
+    expect(profileStarted).not.toHaveBeenCalled();
+
+    startup.remove(unloadedId);
+    workers.emit('running-status-changed', { versionId: 0, runningStatus: 'running' });
+    workers.emit('running-status-changed', { versionId: 1, runningStatus: 'running' });
+    workers.emit('running-status-changed', { versionId: 2, runningStatus: 'running' });
+    expect(profileStarted).toHaveBeenCalledExactlyOnceWith(id);
+  } finally { lifetime.abort(); }
+  expect(workers.listenerCount('running-status-changed')).toBe(0);
 });
 
 it('keeps generic native rejection bounded even after registration, which can precede stored registration', async () => {

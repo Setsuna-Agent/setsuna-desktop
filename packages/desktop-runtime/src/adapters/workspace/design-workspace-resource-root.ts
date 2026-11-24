@@ -10,6 +10,7 @@ import { isNodeError } from '../../shared/node-errors.js';
 import { isPathWithin } from '../search/workspace-search-policy.js';
 import { withFileStateUpdate, withFileStateUpdates } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
+import { createDesignCatalogFileReader } from './design-workspace-catalog-file.js';
 import { readDesignDocumentFile, readValidDesignDocument, resolveDesignFile, withDesignSource } from './design-workspace-document-file.js';
 import { resolveExistingWorkspaceEntry, type WorkspaceEntryRelocation } from './workspace-entry-mutations.js';
 import { walkWorkspaceFiles } from './workspace-file-walk.js';
@@ -19,9 +20,11 @@ export type DesignResourceOwnership = ReturnType<typeof createDesignResourceOwne
 type DraftLocation = Readonly<{ file: string; id: string }>;
 type DraftBinding = Readonly<DraftLocation & { root: string; threadId?: string; projectId?: string | null; imports?: Record<string, string> }>;
 const ownershipDirectory = 'design-resource-roots';
+const associationReadBatchSize = 4;
 
 export function createDesignResourceOwnership(dataDir: string) {
   const directory = path.join(dataDir, ownershipDirectory);
+  const startAssociationScan = createDesignCatalogFileReader('validated');
   // Workspace bindings are local. Scope each record to a file and its document ID so duplicate or replaced drafts do not inherit it.
   function recordPath(target: string, documentId: string) {
     const key = workspaceFilePathKey(path.dirname(target), path.basename(target));
@@ -125,20 +128,34 @@ export function createDesignResourceOwnership(dataDir: string) {
         await writeJsonFile(location, { ...binding, imports: { ...binding.imports, ...imports } }, { mode: 0o600 });
       });
     },
-    async setProject(file: string, id: string, root: string, projectId: string | null, threadId?: string) {
-      const previous = await readRecord(recordPath(file, id));
-      await writeJsonFile(recordPath(file, id), { ...(typeof previous === 'object' ? previous : {}), file, id, root, projectId, ...(threadId ? { threadId } : {}) }, { mode: 0o600 });
+    setProject(file: string, id: string, root: string, projectId: string | null, threadId?: string) {
+      const location = recordPath(file, id);
+      return withFileStateUpdate(location, async () => {
+        const previous = await readRecord(location);
+        const binding = { ...(typeof previous === 'object' ? previous : {}), file, id, root, projectId };
+        await writeJsonFile(location, threadId ? { ...binding, threadId } : binding, { mode: 0o600 });
+      });
     },
     async associations(signal: AbortSignal, projectId?: string) {
       const result: (DraftBinding & { projectId: string | null })[] = [];
-      for (const file of await records()) {
-        signal.throwIfAborted();
+      const scan = startAssociationScan(signal);
+      async function readAssociation(file: string) {
         const record = await availableRecord(file);
-        if (typeof record !== 'object' || record.projectId === undefined || (projectId !== undefined && record.projectId !== projectId)) continue;
+        if (typeof record !== 'object' || record.projectId === undefined || (projectId !== undefined && record.projectId !== projectId)) return;
+        signal.throwIfAborted();
         // An offline or unreadable external draft must not hide other drafts in the catalog.
-        const id = await readDraftId(record.file).catch(() => undefined);
-        if (id === record.id) result.push({ ...record, projectId: record.projectId });
+        const entry = await scan.read(record.file).catch(() => undefined);
+        if (entry?.documentId === record.id) return { ...record, projectId: record.projectId };
       }
+      const paths = await records();
+      // Overlap disk reads while bounding the number of full design documents being validated.
+      for (let start = 0; start < paths.length; start += associationReadBatchSize) {
+        signal.throwIfAborted();
+        const batch = await Promise.all(paths.slice(start, start + associationReadBatchSize).map(readAssociation));
+        for (const binding of batch) if (binding) result.push(binding);
+      }
+      signal.throwIfAborted();
+      scan.finish();
       return result;
     },
     remember,

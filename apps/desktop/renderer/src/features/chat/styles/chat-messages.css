@@ -173,6 +173,30 @@
   min-width: 0;
 }
 
+.chat-history-loading {
+  display: flex;
+  flex: none;
+  justify-content: center;
+}
+
+.chat-history-loading > .chat-assistant-loading {
+  padding-inline: 10px;
+  border-radius: var(--app-radius-full);
+  color: var(--app-text-secondary);
+  background: var(--app-surface-muted);
+}
+
+.chat-history-loading .chat-assistant-loading__dots {
+  justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-history-loading .chat-assistant-loading__dots span {
+    opacity: 0.75;
+    animation: none;
+  }
+}
+
 .chat-bubble-list__bottom-spacer {
   display: none;
   flex: 0 0 auto;

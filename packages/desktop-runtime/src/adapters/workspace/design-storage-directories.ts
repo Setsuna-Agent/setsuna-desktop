@@ -34,7 +34,17 @@ export function designStorageDirectories(dataDir: string, projects: Pick<FileWor
         throw error;
       });
       const entries = names.filter((name) => /^[a-f0-9]{64}\.json$/u.test(name));
-      return [await localDirectory(), ...await Promise.all(entries.map((name) => directory(name.slice(0, -5))))];
+      // Opening any draft enumerates these grants, so isolate a failed read to its own entry.
+      const external = await Promise.all(entries.map(async (name) => {
+        try {
+          return await directory(name.slice(0, -5));
+        } catch (error) {
+          const reason = isNodeError(error) ? error.code : 'expected a JSON string containing an absolute path';
+          console.warn(`[design-storage] Skipping ${path.join(grants, name)}: ${reason}.`);
+          return undefined;
+        }
+      }));
+      return [await localDirectory(), ...external.filter((entry) => entry !== undefined)];
     },
   };
 }

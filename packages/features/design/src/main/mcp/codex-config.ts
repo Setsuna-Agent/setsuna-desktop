@@ -1,9 +1,9 @@
 import { getStaticTOMLValue, parseTOML, type AST } from 'toml-eslint-parser';
-import { designMcpName, ownsDesignMcpEntry, type DesignMcpStdio } from './client-config.js';
+import { designMcpName, type DesignMcpStdio } from './client-config.js';
 
 const serverPath = ['mcp_servers', designMcpName];
 
-export function editCodexConfig(source: string, config: DesignMcpStdio, enabled: boolean): string {
+export function editCodexConfig(source: string, config: DesignMcpStdio, enabled: boolean, canEdit: (previous: unknown) => boolean): string {
   let ast: AST.TOMLProgram;
   try {
     ast = parseTOML(source, { tomlVersion: '1.0' });
@@ -12,11 +12,7 @@ export function editCodexConfig(source: string, config: DesignMcpStdio, enabled:
   }
   const servers = getStaticTOMLValue(ast).mcp_servers as Record<string, unknown> | undefined;
   const previous = servers?.[designMcpName];
-  if (previous !== undefined && !ownsDesignMcpEntry(previous, config)) {
-    if (enabled) throw new Error('Codex already has a setsuna-design MCP server.');
-    return source;
-  }
-  if (!enabled && previous === undefined) return source;
+  if (!canEdit(previous)) return source;
 
   const { entry, inline } = locateServer(ast);
   const fields = [`command = ${tomlString(config.command)}`, `args = [${config.args.map(tomlString).join(', ')}]`,

@@ -1,9 +1,9 @@
-import { mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
-import { createDesignDocument } from '@setsuna-desktop/feature-design/contracts';
+import { createDesignDocument, designDirectoryGrant, designDirectoryGrants, type DesignWorkspace } from '@setsuna-desktop/feature-design/contracts';
 import { createDesignWorkspaceFiles } from '../../../src/adapters/workspace/design-workspace-files.js';
 import { moveDesignWorkspaceDocument } from '../../../src/adapters/workspace/design-workspace-document-mutations.js';
 import { createDesignResourceOwnership } from '../../../src/adapters/workspace/design-workspace-resource-root.js';
@@ -37,6 +37,37 @@ it('returns a watchable local directory before the first draft is saved', async 
   expect((await stat(root)).isDirectory()).toBe(true);
 });
 
+it('keeps healthy drafts accessible while reporting and excluding invalid directory grants', async ({ onTestFinished }) => {
+  const { root, data, projects, projectId, signal } = await workspace();
+  const files = createDesignWorkspaceFiles(projects, data);
+  const grants = path.join(data, designDirectoryGrants);
+  const valid = await designDirectoryGrant(root);
+  const invalidJson = 'a'.repeat(64);
+  const relativePath = 'b'.repeat(64);
+  await mkdir(grants);
+  await Promise.all([
+    writeFile(path.join(grants, valid.id + '.json'), JSON.stringify(valid.path)),
+    writeFile(path.join(grants, invalidJson + '.json'), '{'),
+    writeFile(path.join(grants, relativePath + '.json'), JSON.stringify('relative')),
+  ]);
+
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  onTestFinished(() => warn.mockRestore());
+  const local = { id: 'local', path: path.join(data, 'designs') };
+  expect((await files.catalog(signal)).directories).toEqual([local, valid]);
+  for (const storageId of [invalidJson, relativePath]) {
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(storageId + '.json'));
+    await expect(files.list({ storageId }, signal)).rejects.toThrow();
+  }
+
+  const name = 'board.design.json';
+  const read = (scope: DesignWorkspace) => files.withDocument({ ...scope, path: name }, signal, (file) => file.read());
+  await writeFile(path.join(local.path, name), draft('local'));
+  await writeFile(path.join(root, name), draft('project'));
+  await expect(read({ storageId: 'local' })).resolves.toMatchObject({ content: draft('local') });
+  await expect(read({ projectId })).resolves.toMatchObject({ content: draft('project') });
+});
+
 it('updates the catalog when a regular design is replaced by a preset file at the same path', async () => {
   const { root, data, projects, projectId, signal } = await workspace();
   const files = createDesignWorkspaceFiles(projects, data);
@@ -50,6 +81,36 @@ it('updates the catalog when a regular design is replaced by a preset file at th
   await expect(files.listEntries({ projectId }, signal)).resolves.toEqual([]);
   await writeFile(target, draft('setsuna-library-brand'));
   await expect(files.listEntries({ projectId }, signal)).resolves.toMatchObject([{ path: pathName }]);
+});
+
+it('lists a cached association only while the original path holds a valid draft with the bound ID', async () => {
+  const { directory, root, data, projects, projectId, signal } = await workspace();
+  const files = createDesignWorkspaceFiles(projects, data);
+  const file = path.join(root, 'linked.design.json');
+  const binding = { file, projectId };
+  const associations = async () => (await files.catalog(signal)).associations;
+  const modified = new Date('2025-01-01T00:00:00Z');
+  await writeFile(file, draft('first'));
+  await utimes(file, modified, modified);
+  await createDesignResourceOwnership(data).setProject(file, 'first', root, projectId);
+  await expect(associations()).resolves.toEqual([binding]);
+
+  // The replacement has the same size and modification time.
+  const replacement = path.join(root, 'replacement.json');
+  await writeFile(replacement, draft('other'));
+  await utimes(replacement, modified, modified);
+  await rename(replacement, file);
+  await expect(associations()).resolves.toEqual([]);
+  await writeFile(file, JSON.stringify({ schemaVersion: 1, documentId: 'first', rootIds: ['missing'], nodes: {} }));
+  await expect(associations()).resolves.toEqual([]);
+  await writeFile(file, draft('first'));
+  await expect(associations()).resolves.toEqual([binding]);
+
+  // Redirecting the parent leaves the file's own identity and timestamps intact.
+  const moved = path.join(directory, 'moved');
+  await rename(root, moved);
+  await symlink(moved, root, process.platform === 'win32' ? 'junction' : 'dir');
+  await expect(associations()).resolves.toEqual([]);
 });
 
 it('classifies late, escaped root IDs without mistaking layer data for a preset', async () => {

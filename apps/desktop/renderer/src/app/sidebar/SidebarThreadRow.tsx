@@ -105,7 +105,7 @@ export function SidebarThreadRow({
           }}
           onKeyDown={(event) => event.stopPropagation()}
         >
-          <Pin className="desktop-agent-session__pin-icon" size={14} strokeWidth={1.5} fill={pinned ? 'currentColor' : 'none'} />
+          <Pin size={14} fill={pinned ? 'currentColor' : 'none'} aria-hidden="true" />
         </Button>
       </ActionTooltip>
       {/* 运行状态与归档操作共用同一位置，进行中不挂载归档按钮。 */}

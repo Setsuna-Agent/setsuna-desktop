@@ -30,6 +30,25 @@
   --chat-content-inline-padding: 10px;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .design-chat-sidebar .chat-bubble-list {
+    opacity: 1;
+    transition: opacity var(--design-panel-duration, 230ms) ease-out;
+  }
+
+  :is(.design-workspace[data-visible='false'], .design-workspace__editing[inert]) .design-chat-sidebar .chat-bubble-list {
+    /* Busy drafts can stay mounted while another document is open. */
+    opacity: 0;
+    transition: none;
+  }
+
+  @starting-style {
+    .design-chat-sidebar .chat-bubble-list {
+      opacity: 0;
+    }
+  }
+}
+
 .design-editor__layers[data-fullscreen] {
   --design-chat-history-width: clamp(180px, 21%, 240px);
 }

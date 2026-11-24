@@ -530,10 +530,6 @@
   background: var(--desktop-agent-control-hover-bg);
 }
 
-.desktop-agent-session__pin-icon {
-  transform: rotate(45deg);
-}
-
 .desktop-agent-session__navigation-hint {
   position: absolute;
   top: 50%;
