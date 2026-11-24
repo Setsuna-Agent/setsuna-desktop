@@ -39,10 +39,11 @@ import {
   MessageItem,
 } from './ChatMessageItem.js';
 import { ChatSelectionBar } from './ChatSelectionBar.js';
+import { AssistantLoadingIndicator } from './ChatWorkHistory.js';
 import { ChatTurnStartWork } from './activity/ChatTurnStartWork.js';
 import { runtimeHookUsesByTurn, type RuntimeHookUse } from './activity/runtimeHookUsage.js';
-import { TranscriptWindowDivider } from './TranscriptWindowDivider.js';
 import { usePinnedChatScroll } from './ChatWorkspaceScroll.js';
+import { readHistoryScrollAnchor, restoredHistoryScrollTop, type HistoryScrollAnchor } from './chatHistoryScrollAnchor.js';
 import { ChatMessageRail } from './navigation/ChatMessageRail.js';
 import { useChatTurnNavigation } from './navigation/useChatTurnNavigation.js';
 import { ChatFindBar } from './search/ChatFindBar.js';
@@ -69,6 +70,7 @@ export type ChatTranscriptMessageHistory = ReturnType<typeof useThreadMessageHis
 const emptyRuntimePluginUses: RuntimePluginUse[] = [];
 const emptyRuntimeHookUses: RuntimeHookUse[] = [];
 const emptyPendingMessages: RuntimeMessage[] = [];
+const earlierHistoryThresholdPx = 120;
 
 type ChatTranscriptMutationProps =
   | {
@@ -176,7 +178,9 @@ export function ChatTranscript({
   }, [currentThread?.id, messages, messenger, pendingMessages]);
   // Pending submissions cannot participate in operations against persisted message IDs.
   const mutableDisplayItems = useMemo(() => displayItems.filter((item) => !pendingMessageIds.has(item.id)), [displayItems, pendingMessageIds]);
-  const historyScrollAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  const historyScrollAnchorRef = useRef<HistoryScrollAnchor | null>(null);
+  const historyLoadingRowRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => { historyScrollAnchorRef.current = null; }, [currentThread?.id]);
   const pluginUsesByTurnIdRef = useRef<ReturnType<typeof runtimePluginUsesByTurn>>(new Map());
   const pluginUsesByTurnId = useMemo(
     () => {
@@ -215,6 +219,10 @@ export function ChatTranscript({
   });
   const selectingMessages = selection.mode !== null;
   const [showFullHistory, setShowFullHistory] = useState(false);
+  const [scrollLoadBoundary, setScrollLoadBoundary] = useState<{
+    threadId: string;
+    beforeMessageId?: string;
+  } | null>(null);
   const [findThreadId, setFindThreadId] = useState<string | null>(null);
   const findOpen = findThreadId !== null && findThreadId === currentThread?.id;
   const closeFind = useCallback(() => setFindThreadId(null), []);
@@ -225,8 +233,8 @@ export function ChatTranscript({
   }, [currentThread?.id, findRequest]);
   const [expandedWorkHistoryItemIds, setExpandedWorkHistoryItemIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
-    historyScrollAnchorRef.current = null;
     setShowFullHistory(false);
+    setScrollLoadBoundary(null);
     setExpandedWorkHistoryItemIds(new Set());
   }, [currentThread?.id]);
   useEffect(() => {
@@ -270,6 +278,10 @@ export function ChatTranscript({
   const navigatingToTurn = Boolean(turnNavigationRequest && turnNavigationRequest.threadId === currentThread?.id);
   const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !selectingMessages && !showFullHistory && !findOpen && !navigatingToTurn }), [activeTurnId, selectingMessages, displayItems, findOpen, navigatingToTurn, showFullHistory]);
   const renderedDisplayItems = renderWindow.items;
+  const firstRenderedItem = renderedDisplayItems[0];
+  const firstRenderedMessageId = firstRenderedItem && ('messageIds' in firstRenderedItem
+    ? firstRenderedItem.messageIds[0]
+    : firstRenderedItem.message.id);
   const navigationItems = useMemo(() => createChatMessageNavigation(renderedDisplayItems), [renderedDisplayItems]);
   const activeAssistantItemId = useMemo(() => activeAssistantRunItemId(renderedDisplayItems, activeTurnId), [activeTurnId, renderedDisplayItems]);
   const activeAssistantVisible = Boolean(activeAssistantItemId);
@@ -287,8 +299,40 @@ export function ChatTranscript({
     () => `${createChatScrollSignal(renderWindow, { activeTurnId, contextCompactionRunning, threadId: currentThread?.id })}:plugins:${pluginUseScrollSignal}`,
     [activeTurnId, contextCompactionRunning, currentThread?.id, pluginUseScrollSignal, renderWindow],
   );
-  const { handleScroll, handleScrollPointerDown, handleScrollKeyDown, handleScrollTouchMove, handleScrollWheel, listRef, scrollRef: scrollRefInternal, scrollToBottom, scrollToOffset, showScrollBottom } = usePinnedChatScroll({
+  const { hasMore: hasEarlierMessages, loadOlder, loading: historyLoading } = messageHistory;
+  const activeScrollLoadBoundary = historyLoading && scrollLoadBoundary?.threadId === currentThread?.id ? scrollLoadBoundary : null;
+  const historyLoadingRow = !showEmptyStarter && historyLoading ? (
+    <div className="chat-history-loading" ref={historyLoadingRowRef}>
+      <AssistantLoadingIndicator label={t('common.loading')} showLabel={false} />
+    </div>
+  ) : null;
+  const historyBoundary = activeScrollLoadBoundary?.beforeMessageId;
+  // Follow the history boundary even when prepended segments merge into its assistant item.
+  const historyLoadingIndex = historyBoundary ? Math.max(0, renderedDisplayItems.findIndex((item) => (
+    'messageIds' in item ? item.messageIds.includes(historyBoundary) : item.message.id === historyBoundary
+  ))) : 0;
+  const hasHiddenHistory = renderWindow.hiddenItemCount > 0;
+  const captureHistoryScrollAnchor = useCallback((node: HTMLDivElement, expandingWindow = false) => {
+    historyScrollAnchorRef.current = readHistoryScrollAnchor(node, historyLoadingRowRef.current, expandingWindow);
+  }, []);
+  const requestEarlierMessages = useCallback((node: HTMLDivElement | null, expandingWindow = false) => {
+    if (node) captureHistoryScrollAnchor(node, expandingWindow);
+    if (hasEarlierMessages) void loadOlder();
+  }, [captureHistoryScrollAnchor, hasEarlierMessages, loadOlder]);
+  const loadHistoryOnScrollUp = useCallback((node: HTMLDivElement) => {
+    const threadId = currentThread?.id;
+    if (!threadId || showEmptyStarter || historyLoading || node.scrollTop > earlierHistoryThresholdPx
+      || (!hasHiddenHistory && !hasEarlierMessages)) return;
+    if (hasEarlierMessages) setScrollLoadBoundary({ threadId, beforeMessageId: firstRenderedMessageId });
+    setShowFullHistory(true);
+    requestEarlierMessages(node, hasHiddenHistory);
+  }, [currentThread?.id, firstRenderedMessageId, hasEarlierMessages, hasHiddenHistory, historyLoading, requestEarlierMessages, showEmptyStarter]);
+  const {
+    handleScroll, handleScrollPointerDown, handleScrollKeyDown, handleScrollTouchStart, handleScrollTouchMove,
+    handleScrollWheel, listRef, scrollRef: scrollRefInternal, scrollToBottom, scrollToOffset, showScrollBottom,
+  } = usePinnedChatScroll({
     contentRef,
+    onScrollUp: loadHistoryOnScrollUp,
     scrollSignal,
     showEmptyStarter,
     threadId: currentThread?.id ?? null,
@@ -299,19 +343,17 @@ export function ChatTranscript({
       if (scrollToBottomRef) scrollToBottomRef.current = null;
     };
   }, [scrollToBottom, scrollToBottomRef]);
-  const captureHistoryScrollAnchor = useCallback(() => {
-    const node = scrollRefInternal.current;
-    if (node) historyScrollAnchorRef.current = { height: node.scrollHeight, top: node.scrollTop };
-  }, [scrollRefInternal]);
   const scrollToReadingOffset = useCallback((top: number, behavior: ScrollBehavior = 'smooth') => {
     scrollToOffset(top, behavior);
     // A search/rail jump during pagination supersedes the position at request start.
-    if (historyScrollAnchorRef.current) captureHistoryScrollAnchor();
-  }, [captureHistoryScrollAnchor, scrollToOffset]);
+    const node = scrollRefInternal.current;
+    if (historyScrollAnchorRef.current && node) captureHistoryScrollAnchor(node);
+  }, [captureHistoryScrollAnchor, scrollRefInternal, scrollToOffset]);
   const handleTranscriptScroll = useCallback(() => {
+    const node = scrollRefInternal.current;
+    if (historyScrollAnchorRef.current && node) captureHistoryScrollAnchor(node);
     handleScroll();
-    if (historyScrollAnchorRef.current) captureHistoryScrollAnchor();
-  }, [captureHistoryScrollAnchor, handleScroll]);
+  }, [captureHistoryScrollAnchor, handleScroll, scrollRefInternal]);
   const userMessageDisclosure = useMemo(() => ({
     forceExpanded: findOpen,
     onToggle: (element: HTMLElement, expanded: boolean) => {
@@ -325,27 +367,22 @@ export function ChatTranscript({
     },
   }), [findOpen, scrollRefInternal, scrollToReadingOffset]);
   const loadEarlierMessages = useCallback(() => {
+    setScrollLoadBoundary(null);
     const scrollNode = scrollRefInternal.current;
-    if (scrollNode) {
-      scrollToOffset(scrollNode.scrollTop, 'auto');
-      captureHistoryScrollAnchor();
-    }
-    if (messageHistory.hasMore) void messageHistory.loadOlder();
-  }, [captureHistoryScrollAnchor, messageHistory.hasMore, messageHistory.loadOlder, scrollRefInternal, scrollToOffset]);
-  const showEarlierMessages = useCallback(() => {
-    // Search shares pagination, but only manual expansion persists after find closes.
-    setShowFullHistory(true);
-    loadEarlierMessages();
-  }, [loadEarlierMessages]);
+    if (scrollNode) scrollToOffset(scrollNode.scrollTop, 'auto');
+    requestEarlierMessages(scrollNode);
+  }, [requestEarlierMessages, scrollRefInternal, scrollToOffset]);
 
   useLayoutEffect(() => {
     const anchor = historyScrollAnchorRef.current;
     const scrollNode = scrollRefInternal.current;
     if (!anchor || !scrollNode) return;
-    // Prepending a page must not move the message currently under the user's cursor.
-    scrollToOffset(anchor.top + (scrollNode.scrollHeight - anchor.height), 'auto');
-    if (!messageHistory.loading) historyScrollAnchorRef.current = null;
-  }, [messageHistory.loading, messages.length, scrollRefInternal, scrollToOffset, showFullHistory]);
+    const loadingRow = activeScrollLoadBoundary ? historyLoadingRowRef.current : null;
+    const top = restoredHistoryScrollTop(scrollNode, anchor, loadingRow);
+    if (top !== scrollNode.scrollTop) scrollToOffset(top, 'auto');
+    if (historyLoading) captureHistoryScrollAnchor(scrollNode);
+    else historyScrollAnchorRef.current = null;
+  }, [activeScrollLoadBoundary, captureHistoryScrollAnchor, historyLoading, messageHistory.nextBefore, messages.length, scrollRefInternal, scrollToOffset, showFullHistory]);
 
   useChatTurnNavigation({
     request: turnNavigationRequest,
@@ -360,7 +397,18 @@ export function ChatTranscript({
 
   return (
     <UserMessageDisclosureContext.Provider value={userMessageDisclosure}>
-      <div className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`} ref={scrollRefInternal} tabIndex={0} aria-label={t('chat.navigation.messages')} onKeyDownCapture={handleScrollKeyDown} onPointerDownCapture={handleScrollPointerDown} onScroll={handleTranscriptScroll} onTouchMoveCapture={handleScrollTouchMove} onWheelCapture={handleScrollWheel}>
+      <div
+        className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`}
+        ref={scrollRefInternal}
+        tabIndex={0}
+        aria-label={t('chat.navigation.messages')}
+        onKeyDownCapture={handleScrollKeyDown}
+        onPointerDownCapture={handleScrollPointerDown}
+        onScroll={handleTranscriptScroll}
+        onTouchStartCapture={handleScrollTouchStart}
+        onTouchMoveCapture={handleScrollTouchMove}
+        onWheelCapture={handleScrollWheel}
+      >
         <MarkdownViewportProvider scrollRef={scrollRefInternal} renderAll={findOpen}>
           <div className="chat-content-frame" ref={attachContent}>
             {showEmptyStarter ? (
@@ -369,16 +417,10 @@ export function ChatTranscript({
               <StreamingScrollPinProvider key={currentThread?.id ?? 'no-thread'}>
                 <PluginReferenceCatalogProvider plugins={plugins}><SkillReferenceCatalogProvider skills={skills}>
                   <div className="chat-bubble-list" ref={listRef}>
-                    {renderWindow.hiddenItemCount || messageHistory.hasMore ? (
-                      <TranscriptWindowDivider
-                        hiddenMessageCount={renderWindow.hiddenMessageCount}
-                        hasMore={messageHistory.hasMore}
-                        loading={messageHistory.loading}
-                        onShowAll={showEarlierMessages}
-                      />
-                    ) : null}
+                    {renderedDisplayItems.length === 0 ? historyLoadingRow : null}
                     {renderedDisplayItems.map((item, index) => (
                       <ChatThreadProvider key={chatDisplayItemRenderKey(item)} threadId={currentThread?.id ?? null} fileChangeStates={currentThread?.fileChangeStates} fileChangeGroups={messageHistory.fileChangeGroups}>
+                        {index === historyLoadingIndex ? historyLoadingRow : null}
                         {messenger ? <ChatMessageTimestamp value={messengerItemTimestamp(item)} previous={messengerItemTimestamp(renderedDisplayItems[index - 1])} /> : null}
                         <MessageItem
                           presentation={presentation}

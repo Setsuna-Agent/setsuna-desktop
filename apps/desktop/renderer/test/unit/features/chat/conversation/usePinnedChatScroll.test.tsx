@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePinnedChatScroll } from '../../../../../src/features/chat/conversation/ChatWorkspaceScroll.js';
 
@@ -302,6 +302,45 @@ describe('pinned chat scrolling', () => {
     expect(viewport.scrollTop).toBe(600);
   });
 
+  it.each(['wheel', 'touch'] as const)('pages from an upward %s only when it can reach the chat viewport', (gesture) => {
+    const loadHistory = vi.fn();
+    render(<ScrollHarness signal="initial" onScrollUp={loadHistory}>
+      <div data-testid="thinking" style={{ overflowY: 'auto', overscrollBehaviorY: 'auto' }}>
+        <span>Thinking</span>
+      </div>
+    </ScrollHarness>);
+    const viewport = screen.getByTestId('viewport');
+    mockScrollMetrics(viewport);
+    flushFrames();
+    viewport.scrollTop = 0;
+    fireEvent.scroll(viewport);
+    const thinking = screen.getByTestId('thinking');
+    mockScrollMetrics(thinking);
+    const target = screen.getByText('Thinking');
+    const scrollUp = () => {
+      if (gesture === 'wheel') fireEvent.wheel(target, { deltaY: -20 });
+      else {
+        const start = [{ clientX: 0, clientY: 100 }];
+        const move = [{ clientX: 0, clientY: 120 }];
+        fireEvent.touchStart(target, { touches: start, targetTouches: start });
+        fireEvent.touchMove(target, { touches: move, targetTouches: move });
+      }
+    };
+
+    thinking.scrollTop = 80;
+    scrollUp();
+    expect(loadHistory).not.toHaveBeenCalled();
+
+    thinking.scrollTop = 0;
+    thinking.style.overscrollBehaviorY = 'contain';
+    scrollUp();
+    expect(loadHistory).not.toHaveBeenCalled();
+
+    thinking.style.overscrollBehaviorY = 'auto';
+    scrollUp();
+    expect(loadHistory).toHaveBeenCalledExactlyOnceWith(viewport);
+  });
+
   it('resumes following after scrolling down to the bottom or explicitly returning to it', () => {
     render(<ScrollHarness signal="initial" />);
     const viewport = screen.getByTestId('viewport');
@@ -333,13 +372,27 @@ describe('pinned chat scrolling', () => {
   });
 });
 
-function ScrollHarness({ signal, threadId = 'thread-1' }: { signal: string; threadId?: string }) {
+function ScrollHarness({ signal, threadId = 'thread-1', onScrollUp, children }: {
+  signal: string;
+  threadId?: string;
+  onScrollUp?: (viewport: HTMLDivElement) => void;
+  children?: ReactNode;
+}) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const scroll = usePinnedChatScroll({ contentRef, scrollSignal: signal, showEmptyStarter: false, threadId });
+  const scroll = usePinnedChatScroll({ contentRef, scrollSignal: signal, showEmptyStarter: false, threadId, onScrollUp });
   return (
     <>
-      <div ref={scroll.scrollRef} data-testid="viewport" onScroll={scroll.handleScroll} onPointerDownCapture={scroll.handleScrollPointerDown} onKeyDownCapture={scroll.handleScrollKeyDown} onWheelCapture={scroll.handleScrollWheel}>
-        <div ref={contentRef}><div ref={scroll.listRef}><input /></div></div>
+      <div
+        ref={scroll.scrollRef}
+        data-testid="viewport"
+        onScroll={scroll.handleScroll}
+        onPointerDownCapture={scroll.handleScrollPointerDown}
+        onKeyDownCapture={scroll.handleScrollKeyDown}
+        onWheelCapture={scroll.handleScrollWheel}
+        onTouchStartCapture={scroll.handleScrollTouchStart}
+        onTouchMoveCapture={scroll.handleScrollTouchMove}
+      >
+        <div ref={contentRef}><div ref={scroll.listRef}><input />{children}</div></div>
       </div>
       <aside data-testid="overview">Environment information</aside>
       <button onClick={() => scroll.scrollToOffset(450)}>Jump to message</button>

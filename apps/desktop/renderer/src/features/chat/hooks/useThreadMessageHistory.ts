@@ -26,6 +26,7 @@ export function useThreadMessageHistory(
 ) {
   const [state, setState] = useState<ThreadMessageHistoryState>(() => stateFromThread(thread));
   const stateRef = useRef(state);
+  const pendingPageRef = useRef<ThreadMessageHistoryState | null>(null);
   const visibleState = useMemo(
     () => reconcileThreadSnapshot(state, thread),
     [state, thread],
@@ -44,6 +45,10 @@ export function useThreadMessageHistory(
     const requestedThreadId = current.threadId;
     const before = current.nextBefore;
     const windowRevision = current.windowRevision;
+    // Several scroll events can arrive before React commits the loading state.
+    const pending = pendingPageRef.current;
+    if (pending?.threadId === requestedThreadId && pending.windowRevision === windowRevision) return;
+    pendingPageRef.current = current;
     setState((value) => ({ ...value, error: null, loading: true }));
     try {
       const page = await client.listThreadMessages(requestedThreadId, {
@@ -76,6 +81,8 @@ export function useThreadMessageHistory(
           loading: false,
         }
         : value);
+    } finally {
+      if (pendingPageRef.current === current) pendingPageRef.current = null;
     }
   }, [client]);
 

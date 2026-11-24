@@ -47,9 +47,7 @@ export function RuntimeFileDiffPreview({ change }: { change: RuntimeFileChange }
       role="region"
       aria-label={t('toolRun.file.diff.label', { path: previewChange.path })}
     >
-      <div className="chat-file-diff__viewport">
-        <CodePatchView patch={patch} />
-      </div>
+      <CodePatchView patch={patch} wrap />
       {previewChange.truncated ? (
         <div className="chat-file-diff__truncated">
           {t('toolRun.file.diff.truncated')}

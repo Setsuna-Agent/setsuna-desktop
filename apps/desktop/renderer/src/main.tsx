@@ -43,7 +43,6 @@ import './features/workspace/styles/panel-chrome.css';
 import './features/workspace/styles/workspace.css';
 import './features/workspace/styles/bottom-panel.css';
 import './features/chat/styles/chat.css';
-import './features/chat/styles/chat-timeline-divider.css';
 import './shared/styles/loading-indicators.css';
 import './kernel/declarative-plugin-ui/declarative-plugin-ui.css';
 import './features/chat/styles/markdown.css';

@@ -10,26 +10,6 @@ import { RendererPluginTestHost } from '../../support/RendererPluginTestHost.js'
 
 const highlights = new Map<string, Set<Range>>();
 
-// Supply deterministic scrolling in the DOM emulator; keep the transcript's
-// paging, anchor restoration, find navigation and composer wiring real.
-vi.mock('../../../../src/features/chat/conversation/ChatWorkspaceScroll.js', async () => {
-  const { useCallback, useRef } = await import('react');
-  return {
-    useConversationOverviewLayout: () => 'hidden',
-    usePinnedChatScroll: () => {
-      const scrollRef = useRef<HTMLDivElement | null>(null);
-      const listRef = useRef<HTMLDivElement | null>(null);
-      const scrollToOffset = useCallback((top: number) => { if (scrollRef.current) scrollRef.current.scrollTop = top; }, []);
-      const noop = useCallback(() => undefined, []);
-      return {
-        scrollRef, listRef, scrollToOffset, scrollToBottom: noop, showScrollBottom: false,
-        handleScroll: noop, handleScrollKeyDown: noop, handleScrollPointerDown: noop,
-        handleScrollTouchMove: noop, handleScrollWheel: noop,
-      };
-    },
-  };
-});
-
 beforeEach(() => {
   vi.stubGlobal('Highlight', class extends Set<Range> {
     priority = 0;
@@ -53,6 +33,64 @@ afterEach(() => {
   highlights.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it('loads earlier pages as the reader scrolls up and keeps the latest reading position', async () => {
+  const page = deferredPage();
+  const load = vi.fn<DesktopRuntimeClient['listThreadMessages']>()
+    .mockImplementationOnce(page.load)
+    .mockResolvedValueOnce({ messages: [message('oldest', 'first question')], nextBefore: null, total: 4 });
+  const thread = { ...snapshot, messagePage: { nextBefore: 2, total: 4 } };
+  render(<Harness loadOlder={load} thread={thread} />);
+  const viewport = screen.getByLabelText('对话消息');
+  await waitFor(() => expect(viewport.scrollTop).toBe(600));
+  expect(load).not.toHaveBeenCalled();
+
+  scrollUpTo(viewport, 240);
+  expect(load).not.toHaveBeenCalled();
+  act(() => {
+    scrollUpTo(viewport, 80);
+    scrollUpTo(viewport, 25);
+  });
+  expect(load).toHaveBeenCalledExactlyOnceWith(thread.id, { before: 2, limit: 160 });
+
+  await act(async () => { page.resolve({ messages: [message('old', 'earlier question')], nextBefore: 1, total: 4 }); });
+  expect(screen.getByText('earlier question')).toBeTruthy();
+  expect(viewport.scrollTop).toBe(525);
+  expect(load).toHaveBeenCalledOnce();
+
+  scrollUpTo(viewport);
+  await waitFor(() => expect(screen.getByText('first question')).toBeTruthy());
+  expect(load).toHaveBeenLastCalledWith(thread.id, { before: 1, limit: 160 });
+});
+
+it('keeps a cached message in place when the loading row disappears below it', async () => {
+  const page = deferredPage();
+  const thread = { ...longSnapshot, messagePage: { nextBefore: 1, total: 83 }, messageCount: 83 };
+  render(<Harness loadOlder={page.load} thread={thread} />);
+  const viewport = screen.getByLabelText('对话消息');
+  const loadingSpace = 38;
+  vi.spyOn(viewport, 'scrollHeight', 'get').mockImplementation(() => (
+    viewport.querySelectorAll('[data-message-id]').length * 500
+    + (viewport.querySelector('.chat-history-loading') ? loadingSpace : 0)
+  ));
+  vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 600, 400));
+
+  await waitFor(() => expect(viewport.scrollTop).toBeGreaterThan(120));
+  scrollUpTo(viewport, 80);
+  expect(page.load).toHaveBeenCalledExactlyOnceWith(thread.id, { before: 1, limit: 160 });
+  const readingMessage = screen.getByText('history 0 needle').closest<HTMLElement>('[data-message-id]')!;
+  vi.spyOn(readingMessage, 'getBoundingClientRect').mockImplementation(() => {
+    const precedingMessages = Array.from(viewport.querySelectorAll('[data-message-id]')).indexOf(readingMessage);
+    return new DOMRect(0, precedingMessages * 500 - viewport.scrollTop, 600, 500);
+  });
+  // The first cached message occupies the viewport, above the pending history row.
+  scrollUpTo(viewport, 60);
+  const readingOffset = readingMessage.getBoundingClientRect().top;
+
+  await act(async () => { page.resolve({ messages: [message('old', 'earlier question')], nextBefore: null, total: 83 }); });
+  expect(screen.getByText('earlier question')).toBeTruthy();
+  expect(readingMessage.getBoundingClientRect().top).toBe(readingOffset);
 });
 
 it.each(['next result', 'new query', 'reading scroll'] as const)('keeps the latest %s position when an automatic search page arrives', async (action) => {
@@ -85,7 +123,7 @@ it.each([false, true])('recalls paged prompts and restores the draft (already br
     fireEvent.keyDown(input, { key: 'ArrowUp' });
     expect(input.textContent).toBe('two needle');
   }
-  fireEvent.click(screen.getByRole('button', { name: '加载较早记录' }));
+  scrollUpTo(screen.getByLabelText('对话消息'));
   await act(async () => { page.resolve({ messages: [message('old', 'old question')], nextBefore: null, total: 3 }); });
   expect(screen.getByText('old question')).toBeTruthy();
   focusAtStart(input);
@@ -98,11 +136,11 @@ it.each([false, true])('recalls paged prompts and restores the draft (already br
   expect(input.textContent).toBe('unsent draft');
 });
 
-it.each([false, true])('preserves manual history expansion when find opens and closes (expanded: %s)', (expanded) => {
+it.each([false, true])('preserves history revealed by scrolling when find opens and closes (expanded: %s)', (expanded) => {
   const loadOlder = vi.fn();
   render(<Harness loadOlder={loadOlder} thread={longSnapshot} />);
   expect(screen.queryByText('history 0 needle')).toBeNull();
-  if (expanded) fireEvent.click(screen.getByRole('button', { name: /已折叠较早的/ }));
+  if (expanded) scrollUpTo(screen.getByLabelText('对话消息'));
 
   fireEvent.click(screen.getByRole('button', { name: 'Open find' }));
   expect(screen.getByText('history 0 needle')).toBeTruthy();
@@ -135,10 +173,20 @@ it.each(['before close', 'after close'] as const)('restores the message window w
   expect(screen.queryByText('history 0 needle')).toBeNull();
   expect(screen.queryByText('old needle')).toBeNull();
   expect(screen.getByText('history 81 needle')).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: /已折叠较早的/ }));
+  scrollUpTo(screen.getByLabelText('对话消息'));
   expect(screen.getByText('old needle')).toBeTruthy();
   expect(page.load).toHaveBeenCalledOnce();
 });
+
+function scrollUpTo(viewport: HTMLElement, top = 0) {
+  const previousTop = viewport.scrollTop;
+  fireEvent.wheel(viewport, { deltaY: Math.min(-1, top - previousTop) });
+  if (previousTop > top) {
+    // The DOM emulator does not apply the wheel's native scroll position.
+    viewport.scrollTop = top;
+    fireEvent.scroll(viewport);
+  }
+}
 
 function activeRange(): Range {
   return [...highlights.get('content-find-active')!][0];
