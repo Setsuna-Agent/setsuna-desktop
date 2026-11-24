@@ -13,9 +13,9 @@ type MarkdownCodeBlockProps = {
 const maxHighlightedCodeCharacters = 24_000;
 const maxHighlightedCodeLines = 500;
 const chatCodeSurfaceStyle = {
-  '--diffs-dark-bg': 'var(--app-surface-muted)',
+  '--diffs-dark-bg': 'var(--chat-code-block-bg)',
   '--diffs-font-size': '13px',
-  '--diffs-light-bg': 'var(--app-surface-muted)',
+  '--diffs-light-bg': 'var(--chat-code-block-bg)',
   '--diffs-line-height': '21px',
 } as CSSProperties;
 const chatCodeUnsafeCSS = '[data-code] { padding-top: 2px; padding-bottom: 4px; }';
