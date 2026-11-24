@@ -2,24 +2,27 @@ import { constants, type BigIntStats } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES } from '@setsuna-desktop/contracts';
+import { readValidDesignDocument } from './design-workspace-document-file.js';
 import { readWorkspaceFilePrefix } from './workspace-file-preview-reader.js';
 
 type FileIdentity = { revision: string; documentId: string | undefined };
 const catalogCacheSize = 2048;
 const headerBytes = 2048;
+const readFlags = constants.O_RDONLY | constants.O_NONBLOCK | (constants.O_NOFOLLOW ?? 0);
 
-export function createDesignCatalogFileReader() {
+export function createDesignCatalogFileReader(mode: 'header' | 'validated' = 'header') {
   const files = new Map<string, FileIdentity>();
+  const readId = mode === 'validated' ? readValidatedId : readDocumentId;
   return (signal: AbortSignal) => {
     // Admit new entries after the scan so misses cannot evict the hits still ahead of us.
     const updates = new Map<string, FileIdentity>();
     return {
       async read(file: string) {
-        const stats = await lstat(file, { bigint: true });
-        if (!stats.isFile()) return;
+        const stats = mode === 'validated' ? await readableDraftStat(file) : await lstat(file, { bigint: true });
+        if (!stats?.isFile()) return;
         const revision = catalogRevision(stats);
         const previous = files.get(file);
-        const documentId = previous?.revision === revision ? previous.documentId : await readDocumentId(file, stats, revision, signal);
+        const documentId = previous?.revision === revision ? previous.documentId : await readId(file, stats, revision, signal);
         if (previous?.revision !== revision && updates.size < catalogCacheSize) updates.set(file, { revision, documentId });
         return { documentId, modifiedAt: stats.mtime.toISOString(), revision };
       },
@@ -39,11 +42,26 @@ function catalogRevision(stats: BigIntStats) {
   return [stats.dev, stats.ino, stats.size, stats.mtimeNs, stats.ctimeNs].join(':');
 }
 
+async function readableDraftStat(file: string) {
+  // A cached association still requires a readable file at its original canonical path.
+  if (path.relative(file, await realpath(file))) return;
+  const handle = await open(file, readFlags);
+  try { return await handle.stat({ bigint: true }); } finally { await handle.close(); }
+}
+
+async function readValidatedId(file: string, _stats: BigIntStats, revision: string, signal: AbortSignal) {
+  signal.throwIfAborted();
+  const draft = await readValidDesignDocument(file, path.basename(file));
+  // Only cache the validation if the path still identifies the revision we inspected.
+  if (catalogRevision(await lstat(file, { bigint: true })) !== revision) throw new Error('Design file changed during the catalog scan.');
+  return draft?.document.documentId;
+}
+
 async function readDocumentId(file: string, stats: BigIntStats, revision: string, signal: AbortSignal) {
   if (!stats.size || stats.size > WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES) return;
   if (path.relative(file, await realpath(file))) throw new Error('Design file moved during the catalog scan.');
   signal.throwIfAborted();
-  const handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK | (constants.O_NOFOLLOW ?? 0));
+  const handle = await open(file, readFlags);
   try {
     const opened = await handle.stat({ bigint: true });
     if (!opened.isFile() || catalogRevision(opened) !== revision) throw new Error('Design file changed during the catalog scan.');
