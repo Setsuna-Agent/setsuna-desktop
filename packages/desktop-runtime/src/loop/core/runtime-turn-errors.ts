@@ -5,6 +5,13 @@ export class ThreadBusyError extends Error {
   }
 }
 
+export class ThreadNotArchivedError extends Error {
+  constructor() {
+    super('This conversation is no longer archived.');
+    this.name = 'ThreadNotArchivedError';
+  }
+}
+
 export class TurnCancelledError extends Error {
   constructor(message = 'Turn cancelled.') {
     super(message);

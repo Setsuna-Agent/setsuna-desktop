@@ -40,7 +40,9 @@ it('opens a saved conversation in fullscreen, then sends a new design draft that
   const earlierThread: RuntimeThread = { ...thread, id: earlier.id, title: earlier.title, messages: [
     { id: 'reference', role: 'user', content: 'Earlier design reference', createdAt: thread.createdAt },
   ] };
-  const conversations = { list: vi.fn(async () => thread.messages.length ? [chat, earlier] : [earlier]), create: vi.fn(async () => chat) };
+  const conversations = { list: vi.fn(async () => [
+    ...(thread.messages.length ? [chat] : []), ...(earlierThread.archived ? [] : [earlier]),
+  ]), create: vi.fn(async () => chat) };
   const image = new File(['png'], 'card.png', { type: 'image/png' });
   const attachment = { id: 'card', assetId: 'card', source: 'runtime', type: image.type, name: image.name, size: image.size };
   const sendTurn = vi.fn(async (id: string, input: SendTurnInput) => {
@@ -49,7 +51,11 @@ it('opens a saved conversation in fullscreen, then sends a new design draft that
   });
   const sendQueuedTurnInputNow = vi.fn(async () => ({ disposition: 'started', turnId: 'resumed' }));
   let onBatch!: Parameters<DesktopRuntimeClient['subscribeEvents']>[2];
-  const client = { sendTurn, sendQueuedTurnInputNow, getThread: async (id: string) => structuredClone(id === earlier.id ? earlierThread : thread), linkAttachment: vi.fn(async () => attachment),
+  const updateThread = vi.fn<DesktopRuntimeClient['updateThread']>(async (id, patch) => {
+    const target = id === earlier.id ? earlierThread : thread;
+    return Object.assign(target, patch);
+  });
+  const client = { sendTurn, sendQueuedTurnInputNow, updateThread, getThread: async (id: string) => structuredClone(id === earlier.id ? earlierThread : thread), linkAttachment: vi.fn(async () => attachment),
     subscribeEvents: (_id: string, _seq: number, listener: typeof onBatch) => { onBatch = listener; return () => {}; },
     deleteAttachment: vi.fn(), getThreadIfChanged: async () => null,
     searchProjectEntries: vi.fn(async () => ({ entries: [] })) } as unknown as DesktopRuntimeClient;
@@ -105,7 +111,18 @@ it('opens a saved conversation in fullscreen, then sends a new design draft that
   expect(parsePluginMentions(sent.input)).toMatchObject([{ pluginId: 'tables' }]);
   expect(sent).toMatchObject({ attachments: [attachment], skillReferences: [{ skillId: 'layout' }] });
   sidebar.unmount();
+  type History = Awaited<ReturnType<typeof conversations.list>>;
+  let rejectStaleHistory!: (error: Error) => void;
+  let resolveRefreshedHistory!: (items: History) => void;
+  const staleHistory = new Promise<never>((_, reject) => { rejectStaleHistory = reject; });
+  const refreshedHistory = new Promise<History>((resolve) => { resolveRefreshedHistory = resolve; });
+  conversations.list.mockReturnValueOnce(staleHistory).mockReturnValueOnce(refreshedHistory);
   const reopened = mount('chat');
+  await waitFor(() => expect(conversations.list.mock.results.at(-1)?.value).toBe(staleHistory));
+  fireEvent(window, new Event('focus'));
+  expect(conversations.list.mock.results.at(-1)?.value).toBe(refreshedHistory);
+  await act(async () => rejectStaleHistory(new Error('Previous history request failed.')));
+  await act(async () => resolveRefreshedHistory([chat, earlier]));
   await screen.findByText(/Use this card/u);
   fireEvent.click(await screen.findByRole('button', { name: reference.label }));
   expect(binding.reveal).toHaveBeenCalledTimes(2);
@@ -144,4 +161,8 @@ it('opens a saved conversation in fullscreen, then sends a new design draft that
   expect(screen.getAllByRole('button', { name: '立即发送' })).toHaveLength(2);
   fireEvent.click(screen.getByRole('button', { name: earlier.title }));
   await screen.findByText('Earlier design reference');
+  fireEvent.click(screen.getByRole('button', { name: '归档对话' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: earlier.title })).toBeNull());
+  await screen.findByText('Tighten the gap');
+  expect(earlierThread.archived).toBe(true);
 });

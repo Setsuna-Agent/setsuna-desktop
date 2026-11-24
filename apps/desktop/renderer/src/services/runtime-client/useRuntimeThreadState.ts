@@ -523,11 +523,12 @@ export function useRuntimeThreadState({
     return restored;
   }, [client, reloadThreads]);
 
-  const permanentlyDeleteThread = useCallback(async (threadId: string) => {
+  const permanentlyDeleteArchivedThread = useCallback(async (threadId: string) => {
     try {
-      await client.deleteThread(threadId);
+      await client.deleteThread(threadId, { onlyIfArchived: true });
     } catch (error) {
       if (isThreadDeletionCancelled(error)) return;
+      await reloadThreads().catch(() => undefined);
       throw error;
     }
     await reloadThreads();
@@ -538,7 +539,7 @@ export function useRuntimeThreadState({
     if (!uniqueThreadIds.length) return;
 
     const results = await Promise.allSettled(
-      uniqueThreadIds.map((threadId) => client.deleteThread(threadId)),
+      uniqueThreadIds.map((threadId) => client.deleteThread(threadId, { onlyIfArchived: true })),
     );
     await reloadThreads();
 
@@ -622,7 +623,7 @@ export function useRuntimeThreadState({
     contextCompacting,
     currentThread,
     permanentlyDeleteArchivedThreads,
-    permanentlyDeleteThread,
+    permanentlyDeleteArchivedThread,
     reloadThreads,
     restoreArchivedThread,
     setActiveTurnId,

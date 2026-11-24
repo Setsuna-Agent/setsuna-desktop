@@ -67,7 +67,7 @@ import { RuntimeModelSampler } from './runtime-model-sampler.js';
 import { RuntimeModelStreamEventPublisher } from './runtime-model-stream-event-publisher.js';
 import { RuntimeSamplingContextBuilder } from './runtime-sampling-context-builder.js';
 import { createRuntimeThreadTitleGenerationHost } from './runtime-thread-title-generation-host.js';
-import { ThreadBusyError, TurnCancelledError } from './runtime-turn-errors.js';
+import { ThreadBusyError, ThreadNotArchivedError, TurnCancelledError } from './runtime-turn-errors.js';
 import { RuntimeTurnRunFactory, type RuntimeMailboxExecutionOptions } from './runtime-turn-run-factory.js';
 import { ThreadMutationAdmissions } from './thread-mutation-admissions.js';
 
@@ -502,38 +502,40 @@ export class AgentLoop {
   ): Promise<T> {
     if (this.idleMutatingThreads.has(threadId)) throw new ThreadBusyError(threadId);
     if (this.deletingThreads.has(threadId)) throw new Error(`thread ${threadId} is already being deleted`);
-    // Check and block in one synchronous admission step, before cancelling or pausing any work.
-    if (options.onlyIfIdle && (
-      this.turnTasks.registeredForThread(threadId) || this.threadMutationAdmissions.hasPending(threadId)
-    )) {
+    const { onlyIfArchived, onlyIfIdle } = options;
+    // An archive-only deletion must exclude restores already admitted by the mutation gate.
+    if (((onlyIfIdle || onlyIfArchived) && this.threadMutationAdmissions.hasPending(threadId))
+      || (onlyIfIdle && this.turnTasks.registeredForThread(threadId))) {
       throw new ThreadBusyError(threadId);
     }
+    this.turnTasks.blockThread(threadId);
     this.deletingThreads.add(threadId);
     try {
-      this.turnTasks.blockThread(threadId);
-    } catch (error) {
-      this.deletingThreads.delete(threadId);
-      throw error;
-    }
-    this.featureControls.goals.beginThreadDeletion(threadId);
-    let deleted = false;
-    try {
-      // Drain tasks first so an admitted synchronous caller waiting on task.done can observe abort.
-      // Then wait all older mutations (attachment claims, regeneration, shell, compact, goal and
-      // context writes) before the final task check and destructive commit.
-      await this.cancelThreadTurnsAndWait(threadId);
-      await this.threadMutationAdmissions.waitForThread(threadId);
-      await this.cancelThreadTurnsAndWait(threadId);
-      // A concurrent user cancel can hide the task from activeTurnId before its terminal writes settle.
-      await this.turnTermination.waitForThread(threadId);
-      await this.featureControls.goals.waitForThreadDeletionPause(threadId);
-      await this.eventWriter.flushThread(threadId);
-      const result = await operation();
-      deleted = true;
-      return result;
+      if (onlyIfArchived) {
+        const thread = await this.options.threadStore.getThreadPage(threadId, { limit: 1 });
+        if (!thread?.archived) throw new ThreadNotArchivedError();
+      }
+      this.featureControls.goals.beginThreadDeletion(threadId);
+      let deleted = false;
+      try {
+        // Drain tasks first so an admitted synchronous caller waiting on task.done can observe abort.
+        // Then wait all older mutations (attachment claims, regeneration, shell, compact, goal and
+        // context writes) before the final task check and destructive commit.
+        await this.cancelThreadTurnsAndWait(threadId);
+        await this.threadMutationAdmissions.waitForThread(threadId);
+        await this.cancelThreadTurnsAndWait(threadId);
+        // A concurrent user cancel can hide the task from activeTurnId before its terminal writes settle.
+        await this.turnTermination.waitForThread(threadId);
+        await this.featureControls.goals.waitForThreadDeletionPause(threadId);
+        await this.eventWriter.flushThread(threadId);
+        const result = await operation();
+        deleted = true;
+        return result;
+      } finally {
+        this.featureControls.goals.finishThreadDeletion(threadId, deleted);
+        if (deleted) this.options.toolProgramRuntime?.releaseThread?.(threadId);
+      }
     } finally {
-      this.featureControls.goals.finishThreadDeletion(threadId, deleted);
-      if (deleted) this.options.toolProgramRuntime?.releaseThread?.(threadId);
       this.turnTasks.unblockThread(threadId);
       this.deletingThreads.delete(threadId);
     }

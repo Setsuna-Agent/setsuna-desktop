@@ -25,7 +25,7 @@ export function SettingsRouteAdapter({
         onNavigate={onSettingsNavigate}
         onSaveRuntimePreferences={runtime.saveRuntimePreferences}
         onDeleteAllArchivedThreads={runtime.permanentlyDeleteArchivedThreads}
-        onDeleteArchivedThread={runtime.permanentlyDeleteThread}
+        onDeleteArchivedThread={runtime.permanentlyDeleteArchivedThread}
         onRestoreArchivedThread={runtime.restoreArchivedThread}
       />
     </Suspense>

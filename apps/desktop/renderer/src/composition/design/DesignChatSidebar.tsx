@@ -3,10 +3,11 @@ import { designFileKey } from '@setsuna-desktop/feature-design/contracts';
 import type { DesignConversation } from '@setsuna-desktop/feature-design/contracts';
 import { DesignChatFullscreenContext, type DesignChatBinding, type DesignClient } from '@setsuna-desktop/feature-design/renderer';
 import { Button, IconButton, SelectField, useToast } from '@setsuna-desktop/renderer-ui';
-import { History, Plus, SquarePen } from 'lucide-react';
+import { Archive, History, SquarePen } from 'lucide-react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { DesignChatRuntime } from './DesignChatHost.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { notifyDesignConversationArchiveChanged, observeDesignConversationArchives } from '../../services/runtime-client/designConversationArchives.js';
 import { DesignConversationPanel } from './DesignConversationPanel.js';
 
 export type DesignChatProps = {
@@ -26,25 +27,31 @@ export default function DesignChatSidebar({ binding, conversations, project, run
   const [history, setHistory] = useState<DesignConversation[]>([]);
   const [selected, setSelected] = useState<string | null>();
   const [busy, setBusy] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const version = useRef(0);
   const reload = useCallback(async () => {
     const current = ++version.current;
-    const items = await conversations.list(owner);
-    if (current !== version.current) return;
-    setHistory(items);
-    setSelected((previous) => {
-      if (previous === null || items.some((item) => item.id === previous)) return previous;
-      const stored = localStorage.getItem(preference);
-      return items.find(({ id }) => id === stored)?.id ?? items.find((item) => !item.legacy)?.id ?? null;
-    });
-  }, [conversations, owner, preference, project?.id]);
-  useEffect(() => {
-    void reload().catch((error: unknown) => {
+    try {
+      const items = await conversations.list(owner);
+      if (current !== version.current) return;
+      setHistory(items);
+      setSelected((previous) => {
+        if (previous === null || items.some((item) => item.id === previous)) return previous;
+        const stored = localStorage.getItem(preference);
+        return items.find(({ id }) => id === stored)?.id ?? items.find((item) => !item.legacy)?.id ?? null;
+      });
+    } catch (error) {
+      if (current !== version.current) return;
       setSelected((previous) => previous ?? null);
       toast.error(error instanceof Error ? error.message : String(error));
-    });
-    return () => { ++version.current; };
-  }, [reload, toast]);
+    }
+  }, [conversations, owner, preference, project?.id, toast]);
+  useEffect(() => {
+    const refresh = () => void reload();
+    refresh();
+    const unsubscribe = observeDesignConversationArchives(refresh);
+    return () => { ++version.current; unsubscribe(); };
+  }, [reload]);
   const select = (id: string | null) => {
     setSelected(id);
     if (id) localStorage.setItem(preference, id);
@@ -55,7 +62,24 @@ export default function DesignChatSidebar({ binding, conversations, project, run
   const historyLabel = t('feature.design.chat.history');
   const newLabel = t('feature.design.chat.new');
   const legacyLabel = t('feature.design.chat.legacy');
-  const navigationDisabled = busy || selected === undefined;
+  const navigationDisabled = busy || archiving || selected === undefined;
+  async function archiveSelected() {
+    if (!selected || navigationDisabled) return;
+    setArchiving(true);
+    try {
+      await runtime.client.updateThread(selected, { archived: true });
+      ++version.current;
+      setHistory((items) => items.filter(({ id }) => id !== selected));
+      select(designChats.find(({ id }) => id !== selected)?.id ?? null);
+      notifyDesignConversationArchiveChanged();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setArchiving(false);
+    }
+  }
+  const archiveButton = selected && <IconButton label={t('sidebar.archiveChat')} disabled={navigationDisabled}
+    onClick={() => void archiveSelected()}><Archive size={15} /></IconButton>;
   function chatRow({ id, title, legacy }: DesignConversation) {
     return <li key={id}>
       <Button className="design-chat-sidebar__entry" variant="ghost" size="small" title={title}
@@ -64,6 +88,7 @@ export default function DesignChatSidebar({ binding, conversations, project, run
         <span className="design-chat-sidebar__label">{title}</span>
         {legacy ? <History className="design-chat-sidebar__legacy-icon" size={13} aria-hidden="true" /> : null}
       </Button>
+      {id === selected && archiveButton}
     </li>;
   }
 
@@ -78,7 +103,7 @@ export default function DesignChatSidebar({ binding, conversations, project, run
         {legacyChats.length ? <ul aria-label={legacyLabel}>{legacyChats.map(chatRow)}</ul> : null}
       </div>
     </nav> : <header className="design-chat-sidebar__bar">
-      <SelectField className="design-chat-sidebar__history" aria-label={historyLabel}
+      <SelectField className="design-chat-sidebar__history" aria-label={historyLabel} menuAlign="start" menuMinWidth={240}
         disabled={navigationDisabled} value={selected ?? ''} onValueChange={(id) => select(id || null)}>
         {!selected && <option value="">{newLabel}</option>}
         {designChats.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
@@ -86,9 +111,10 @@ export default function DesignChatSidebar({ binding, conversations, project, run
           {legacyChats.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
         </optgroup>}
       </SelectField>
-      <IconButton label={newLabel} disabled={navigationDisabled} onClick={() => select(null)}><Plus size={16} /></IconButton>
+      {archiveButton}
+      <IconButton label={newLabel} disabled={navigationDisabled} onClick={() => select(null)}><SquarePen size={15} /></IconButton>
     </header>}
-    {selected !== undefined && <DesignConversationPanel conversations={conversations} readOnly={legacyChats.some((item) => item.id === selected)} binding={binding} project={project} runtime={runtime} threadId={selected}
+    {selected !== undefined && <DesignConversationPanel conversations={conversations} readOnly={archiving || legacyChats.some((item) => item.id === selected)} binding={binding} project={project} runtime={runtime} threadId={selected}
       reload={reload} onBusy={setBusy} create={async () => {
         const next = await conversations.create(owner);
         setHistory((items) => [next, ...items.filter((item) => item.id !== next.id)]);

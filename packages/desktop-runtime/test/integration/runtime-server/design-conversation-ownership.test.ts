@@ -17,6 +17,42 @@ function designApi(harness: RuntimeServerTestHarness) {
     list: (ref: DesignDocumentRef) => post(chats + '/list', { ref, documentId }) };
 }
 
+it('restores a design conversation to its owning draft and rejects deletion from a stale archive list', async () => {
+  const harness = await createRuntimeServerTestHarness();
+  try {
+    const { create, list, post } = designApi(harness);
+    const root = path.join(harness.runtimeDataDir, 'project');
+    await mkdir(root);
+    const { id: projectId } = await post('/v1/projects', { path: root });
+    const original = { projectId, path: 'original.design.json' };
+    const copy = { projectId, path: 'copy.design.json' };
+    for (const ref of [original, copy]) await writeFile(path.join(root, ref.path), draft);
+    const chat = await create(original);
+    const copyChat = await create(copy);
+    await harness.appServerRpc('thread/inject_items', { threadId: chat.id, items: [
+      { id: 'feedback', type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Keep this layout' }] },
+    ] });
+    const threadPath = '/v1/threads/' + chat.id;
+    const patchArchive = (archived: boolean) => harness.runtimeFetch(threadPath,
+      { method: 'PATCH', body: JSON.stringify({ archived }) });
+    const deleteArchived = () => harness.runtimeFetch(threadPath,
+      { method: 'DELETE', body: JSON.stringify({ onlyIfArchived: true }) });
+    await patchArchive(true);
+    expect(await list(original)).toEqual([]);
+    const archive = await harness.runtimeFetch('/v1/threads?includeArchived=true&includeFeatures=true');
+    expect(archive.threads).toContainEqual(expect.objectContaining({ id: chat.id, featureId: 'design', archived: true }));
+    await patchArchive(false);
+    await expect(deleteArchived()).rejects.toThrow('This conversation is no longer archived.');
+    expect(await list(original)).toMatchObject([{ id: chat.id }]);
+    expect(await list(copy)).toEqual([copyChat]);
+    const restored = await harness.runtimeFetch(threadPath);
+    expect(restored.messages).toMatchObject([{ content: 'Keep this layout' }]);
+    await patchArchive(true);
+    await deleteArchived();
+    await expect(harness.runtimeFetch(threadPath)).rejects.toThrow('Thread not found');
+  } finally { await harness.close(); }
+});
+
 it.each(['design', 'file tree directory'])('detaches the deleted copy’s chats when its path is reused after deletion via %s', async (entry) => {
   const harness = await createRuntimeServerTestHarness();
   try {
