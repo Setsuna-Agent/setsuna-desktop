@@ -21,6 +21,13 @@ describe('reordering live sidebar apps', () => {
     expect(preferences.listPreferences.apps.order).toEqual(['a', 'hidden', 'b', 'removed', 'c']);
   });
 
+  it('retains an unsaved hidden app in place when the visible apps are reordered', () => {
+    const next = reorderListPreferences(
+      emptyRendererLayoutPreferences(), 'apps', ['a', 'b'], 'b', 'a', 'before', ['a', 'hidden', 'b'],
+    );
+    expect(next?.listPreferences.apps.order).toEqual(['b', 'hidden', 'a']);
+  });
+
   it('does not save a cancelled, unchanged, or stale-app move', () => {
     const preferences = emptyRendererLayoutPreferences();
     const ids = ['a', 'b'];

@@ -9,7 +9,9 @@ import { ScrollOverlay } from '../../shared/ui/ScrollOverlay.js';
 import { PluginAppOrderProvider } from '../../kernel/declarative-plugin-ui/app-order/PluginAppOrderProvider.js';
 import { CreatePluginAppEntry } from '../app-creation/CreatePluginAppEntry.js';
 import { usePluginAppCreation, type CreatePluginAppChat } from '../app-creation/usePluginAppCreation.js';
+import { NavigationVisibilityMenu } from '../sidebar/NavigationVisibilityMenu.js';
 import { SidebarUserMenu } from '../sidebar/SidebarUserMenu.js';
+import { useStoredSidebarIds } from '../sidebar/useStoredSidebarIds.js';
 import type { MainView } from '../types.js';
 import { AppNavigationIcon, type AppNavigationIconName } from './AppNavigationIcon.js';
 
@@ -40,7 +42,7 @@ export function AppNavigationRail({
   runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
   themeToggleTriggerRef: RefObject<HTMLButtonElement>;
   onOpenChat: () => void;
-  onOpenDesign?: () => void;
+  onOpenDesign: () => void;
   onOpenCapabilities: () => void;
   onOpenPullRequests: () => void;
   onOpenAutomation: () => void;
@@ -55,23 +57,29 @@ export function AppNavigationRail({
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const creation = usePluginAppCreation(onCreateApp, onFocusComposer);
+  const { ids: hiddenEntries, toggle: toggleHiddenEntry } = useStoredSidebarIds('setsuna-hidden-navigation-entries', 'sidebar.navigationSaveFailed');
+  const optionalRoutes: Omit<NavigationButtonProps, 'active'>[] = [
+    { icon: 'design', label: t('feature.design.workspace'), onClick: onOpenDesign },
+    { icon: 'pull-requests', label: 'Pull Request', commandId: 'app.openPullRequests', onClick: onOpenPullRequests },
+    { icon: 'automation', label: t('feature.automation.title'), commandId: 'app.openAutomation', onClick: onOpenAutomation },
+    { icon: 'capabilities', label: t('sidebar.plugins'), commandId: 'app.openCapabilities', onClick: onOpenCapabilities },
+  ];
   return (
     <div className="app-navigation">
       <div className="app-navigation__viewport" ref={scrollRef}>
         <nav className="app-navigation__routes">
           <NavigationButton icon="chat" label={t('sidebar.chats')} commandId="app.openChat" active={activeView === 'chat'} onClick={onOpenChat} />
-          {onOpenDesign ? (
-            <NavigationButton icon="design" label={t('feature.design.workspace')} active={activeView === 'design'} onClick={onOpenDesign} />
-          ) : null}
-          <NavigationButton icon="pull-requests" label="Pull Request" commandId="app.openPullRequests" active={activeView === 'pull-requests'} onClick={onOpenPullRequests} />
-          <NavigationButton icon="automation" label={t('feature.automation.title')} commandId="app.openAutomation" active={activeView === 'automation'} onClick={onOpenAutomation} />
-          <NavigationButton icon="capabilities" label={t('sidebar.plugins')} commandId="app.openCapabilities" active={activeView === 'capabilities'} onClick={onOpenCapabilities} />
+          {optionalRoutes.map((route) => !hiddenEntries.has(route.icon) && (
+            <NavigationButton key={route.icon} active={activeView === route.icon} {...route} />
+          ))}
+          <NavigationVisibilityMenu routes={optionalRoutes} hiddenEntries={hiddenEntries} onToggle={toggleHiddenEntry} />
           <div className="app-navigation__plugins" role="group" aria-label={t('sidebar.pluginFeatures')}>
-            <PluginAppOrderProvider>
+            <PluginAppOrderProvider hiddenEntryIds={hiddenEntries}>
               <RendererOwnedListSlot
                 slot={shellSidebarPluginEntrySlot}
                 props={{
                   activeViewKey: activeView === 'plugin' ? selectedPluginViewKey : null,
+                  hiddenEntryIds: hiddenEntries,
                   ...(activeProjectId ? { projectId: activeProjectId } : {}),
                   ...(activeThreadId ? { threadId: activeThreadId } : {}),
                   onOpen: onOpenPluginView,
@@ -97,19 +105,15 @@ export function AppNavigationRail({
   );
 }
 
-function NavigationButton({
-  active,
-  icon,
-  commandId,
-  label,
-  onClick,
-}: {
+type NavigationButtonProps = {
   active: boolean;
   icon: AppNavigationIconName;
   commandId?: KeyboardShortcutCommandId;
   label: string;
   onClick: () => void;
-}) {
+};
+
+function NavigationButton({ active, icon, commandId, label, onClick }: NavigationButtonProps) {
   const button = (
     <Button
       variant="ghost"

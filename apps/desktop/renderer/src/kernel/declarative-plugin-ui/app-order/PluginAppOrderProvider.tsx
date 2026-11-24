@@ -3,8 +3,8 @@ import { usePluginAppOrder } from './usePluginAppOrder.js';
 
 const PluginAppOrderContext = createContext<ReturnType<typeof usePluginAppOrder> | null>(null);
 
-export function PluginAppOrderProvider({ children }: { children: ReactNode }) {
-  const order = usePluginAppOrder();
+export function PluginAppOrderProvider({ children, hiddenEntryIds }: { children: ReactNode; hiddenEntryIds?: ReadonlySet<string> }) {
+  const order = usePluginAppOrder(hiddenEntryIds);
   return <PluginAppOrderContext.Provider value={order}>
     <div className="app-navigation__app-order" ref={order.rootRef}>{children}</div>
   </PluginAppOrderContext.Provider>;

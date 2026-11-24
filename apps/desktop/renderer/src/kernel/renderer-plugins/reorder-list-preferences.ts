@@ -10,6 +10,7 @@ export function reorderListPreferences(
   sourceId: string,
   targetId: string,
   position: ListDropPosition,
+  allEntryIds: readonly string[] = entryIds,
 ): RendererLayoutPreferencesV1 | null {
   if (sourceId === targetId || !entryIds.includes(sourceId) || !entryIds.includes(targetId)) return null;
   const moved = entryIds.filter((id) => id !== sourceId);
@@ -19,7 +20,7 @@ export function reorderListPreferences(
   const savedOrder = current?.order ?? [];
   const savedIds = new Set(savedOrder);
   const visibleIds = new Set(entryIds);
-  const order = [...savedOrder, ...entryIds.filter((id) => !savedIds.has(id))];
+  const order = [...savedOrder, ...allEntryIds.filter((id) => !savedIds.has(id))];
   let visibleIndex = 0;
   return {
     ...preferences,

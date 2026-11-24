@@ -27,6 +27,7 @@ import { DeclarativePluginSidebarEntry } from './DeclarativePluginSidebarEntry.j
 import { PresetAvatar } from '../../shared/ui/icon-avatars/PresetAvatar.js';
 import { usePluginAppAppearance } from './app-appearance/usePluginAppAppearance.js';
 import { DeclarativePluginUiView } from './DeclarativePluginUiView.js';
+import { rendererPluginIdentity, rendererPluginSidebarEntryId } from './plugin-identity.js';
 import { SandboxedPluginUiView } from './SandboxedPluginUiView.js';
 import { lazy, Suspense } from 'react';
 
@@ -230,13 +231,15 @@ function declarativeRendererPlugin(
           continue;
         }
         const viewKey = rendererPluginViewKey(plugin.id, contribution.id);
+        const navigationEntryId = rendererPluginSidebarEntryId(plugin.id, contribution.id);
         ui.list(shellSidebarPluginEntrySlot, {
-          id: `${entryId}.navigation`,
+          id: navigationEntryId,
           order: contribution.order ?? 0,
+          when: ({ hiddenEntryIds }) => !hiddenEntryIds?.has(navigationEntryId),
           render: ({ activeViewKey, onOpen, onRefresh, onViewPlugin, onModifyApp, projectId, threadId }) => (
             <DeclarativePluginSidebarEntry
               active={activeViewKey === viewKey}
-              entryId={`${entryId}.navigation`}
+              entryId={navigationEntryId}
               missingContext={missingContributionContext(contribution, projectId, threadId)}
               contribution={contribution}
               plugin={plugin}
@@ -279,11 +282,6 @@ function declarativeRendererPlugin(
       }
     },
   });
-}
-
-/** Plugin ids are path-safe, but Renderer identities intentionally use a narrower alphabet. */
-export function rendererPluginIdentity(pluginId: string): string {
-  return `p-${[...pluginId].map((character) => character.codePointAt(0)?.toString(16)).join('-')}`;
 }
 
 export function assertHostAllowedContribution(

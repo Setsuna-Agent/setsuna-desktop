@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useToast } from '../providers/ToastProvider.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import type { MessageKey } from '../../shared/i18n/messages.js';
 import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
 
-/** Local sidebar preferences retain absent IDs while data loads or items are archived. */
-export function usePinnedSidebarIds(storageKey: string) {
+export function useStoredSidebarIds(storageKey: string, saveError: MessageKey) {
   const [ids, setIds] = useState(() => readIds(storageKey));
   const { t } = useI18n();
   const toast = useToast();
@@ -17,15 +17,15 @@ export function usePinnedSidebarIds(storageKey: string) {
   }, [storageKey]);
 
   const toggle = useCallback((id: string) => {
-    // Merge against storage so a delayed event cannot erase another window's pins.
+    // Read the latest stored IDs in case another window's storage event is still pending.
     const current = readIds(storageKey);
     const next = current.has(id) ? new Set([...current].filter((item) => item !== id)) : new Set([id, ...current]);
     if (!writeBrowserStorageValue(storageKey, JSON.stringify([...next]))) {
-      toast.error(t('sidebar.pinSaveFailed'));
+      toast.error(t(saveError));
       return;
     }
     setIds(next);
-  }, [storageKey, t, toast]);
+  }, [saveError, storageKey, t, toast]);
 
   return { ids, toggle };
 }
