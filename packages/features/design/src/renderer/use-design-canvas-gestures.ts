@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type Dispatch, type PointerEvent, type RefObject, type SetStateAction } from 'react';
+import { useLayoutEffect, useRef, useState, type Dispatch, type PointerEvent, type SetStateAction } from 'react';
 import type Konva from 'konva';
 import type { DesignDocument, DesignEdit, DesignLayout, DesignNode, DesignPathAnchor, DesignText, DesignVector, DesignVectorGeometry } from '../contracts/index.js';
 import { isFreehandTool, type FreehandTool } from './canvas/design-drawing.js';
@@ -69,10 +69,10 @@ type Preview = Readonly<{
 }>;
 
 export function useDesignCanvasGestures({
-  stage, document, projected = document, scene, revision, tool, selectedIds, croppingId, layoutAdjustmentId, interaction, viewport, setViewport, onSelect, beginPick, onEditText, onAction,
+  hitTest, document, projected = document, scene, revision, tool, selectedIds, croppingId, layoutAdjustmentId, interaction, viewport, setViewport, onSelect, beginPick, onEditText, onAction,
   settings = defaultDesignCanvasSettings,
 }: Readonly<{
-  stage: RefObject<Konva.Stage>;
+  hitTest(point: Point): Konva.Shape | null;
   document: DesignDocument;
   projected?: DesignDocument;
   scene: DesignScene;
@@ -129,7 +129,7 @@ export function useDesignCanvasGestures({
     // Capture the draft caret before focusing the canvas. Only a completed pick consumes it.
     const pick = !handle && !wantsPan && tool === 'select' ? beginPick?.(event.shiftKey) : undefined;
     const start: Start = { pointerId: event.pointerId, revision, screen, world, viewport, pick };
-    const hit = handle ? undefined : stage.current?.getIntersection(screen);
+    const hit = handle || wantsPan ? null : hitTest(screen);
     const hitId = handle?.id ?? hit?.findAncestor('.design-hit-layer', true)?.id();
     const layerId = hitId && Object.hasOwn(document.nodes, hitId) && canSelectLayer(scene[hitId]) ? hitId : null;
     if (handle && (!canEdit || wantsPan || tool !== 'select' || layerId === null)) return;
@@ -342,7 +342,7 @@ export function useDesignCanvasGestures({
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
     const active = gesture.current;
     if (!active) {
-      const hit = tool === 'select' && !space && canEdit ? stage.current?.getIntersection(pointer(event)) : null;
+      const hit = tool === 'select' && !space && canEdit && selectedIds.length ? hitTest(pointer(event)) : null;
       const index = designAnchors.findIndex((_, index) => hit?.hasName(`design-anchor-${index}`));
       const anchor = designAnchors[index];
       const pose = selectedIds.length === 1 ? scene[selectedIds[0]] : undefined;

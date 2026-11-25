@@ -15,9 +15,9 @@ afterEach(cleanup);
 
 function mountGestures(design: DesignDocument, scene: DesignScene, selected: readonly string[],
   { handle, scale = 1, tool = 'select' }: Readonly<{ handle?: string; scale?: number; tool?: DesignTool }> = {}) {
-  const stage = { current: {
-    getIntersection: () => selected.length ? { hasName: (name: string) => name === handle, findAncestor: () => ({ id: () => selected[0] }) } : null,
-  } as unknown as Konva.Stage };
+  const hitTest = (() => selected.length ? {
+    hasName: (name: string) => name === handle, findAncestor: () => ({ id: () => selected[0] }),
+  } : null) as unknown as Konva.Stage['getIntersection'];
   const commit = vi.fn<(action: CanvasAction, revision: string) => Promise<boolean>>().mockResolvedValue(true);
   const editText = vi.fn();
   const pick = vi.fn();
@@ -27,7 +27,7 @@ function mountGestures(design: DesignDocument, scene: DesignScene, selected: rea
     const [selectedIds, onSelect] = useState<readonly string[]>(selected);
     const [viewport, setViewport] = useState<CanvasViewport>({ x: 0, y: 0, scale });
     const controls = useDesignCanvasGestures({
-      stage, document: design, scene, revision: 'base', tool, selectedIds,
+      hitTest, document: design, scene, revision: 'base', tool, selectedIds,
       interaction: 'edit', viewport, setViewport, onSelect, beginPick: () => pick, onEditText: editText, onAction: commit,
     });
     useLayoutEffect(() => { preview = controls.preview; }, [controls.preview]);

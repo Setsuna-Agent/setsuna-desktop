@@ -21,9 +21,16 @@ import { readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
 import type { FileWorkspaceProjectStore } from './file-workspace-project-store.js';
 import { createWorkspaceFile, resolveEntryParent, resolveExistingWorkspaceEntry } from './workspace-entry-mutations.js';
 import { walkWorkspaceFiles } from './workspace-file-walk.js';
+import { isWorkspaceDirectoryUnavailable, WorkspaceDirectoryUnavailableError } from './workspace-project-roots.js';
 import type { DesignConversationRelocation } from './design-conversation-relocation.js';
 
 const designAssetDirectory = 'design-assets';
+
+function designProjectDirectoryUnavailable() {
+  return new FeatureOperationFailure({
+    code: 'DESIGN_PROJECT_DIRECTORY_UNAVAILABLE', message: 'The project source folder is unavailable.', retryable: true,
+  });
+}
 
 export function createDesignWorkspaceFiles(
   projects: Pick<FileWorkspaceProjectStore, 'resolveWorkspaceRoot' | 'listBoundWorkspaceRoots' | 'listProjects'>, dataDir: string,
@@ -40,7 +47,10 @@ export function createDesignWorkspaceFiles(
 
   async function listDesignFiles<T extends { path: string }>(scope: DesignWorkspace, signal: AbortSignal,
     read: (file: string, relativePath: string, readCatalogFile: ReturnType<typeof startCatalogScan>['read']) => Promise<T | undefined>) {
-    const root = await storage.resolve(scope);
+    const root = await storage.resolve(scope).catch((error: unknown) => {
+      if (error instanceof WorkspaceDirectoryUnavailableError) throw designProjectDirectoryUnavailable();
+      throw error;
+    });
     const scan = startCatalogScan(signal);
     const entries: T[] = [];
     await walkWorkspaceFiles(root, async (file) => {
@@ -50,7 +60,12 @@ export function createDesignWorkspaceFiles(
         if (entry) entries.push(entry);
       }
       return true;
-    }, { signal });
+    }, { signal, onReadError: (directory, error) => {
+      // A root can disappear after resolution. Unreadable descendants still leave a partial list.
+      if (scope.projectId !== undefined && directory === root && isWorkspaceDirectoryUnavailable(error)) {
+        throw designProjectDirectoryUnavailable();
+      }
+    } });
     signal.throwIfAborted();
     scan.finish();
     return entries.sort((a, b) => a.path.localeCompare(b.path));

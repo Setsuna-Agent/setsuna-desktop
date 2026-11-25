@@ -45,7 +45,7 @@ vi.mock('react-konva', async () => {
   const StageImages = createContext<Map<string, HTMLImageElement> | undefined>(undefined);
   type Mount = { data: string; strokeWidth?: number };
   const mountedPaths = new Map<string, Set<Mount>>();
-  const Container = ({ children }: PropsWithChildren) => <>{children}</>;
+  const Container = forwardRef(function Container({ children }: PropsWithChildren, _ref) { return <>{children}</>; });
   const Stage = forwardRef(function Stage({ children }: PropsWithChildren, ref) {
     const stageImages = useMemo(() => new Map<string, HTMLImageElement>(), []);
     useImperativeHandle(ref, () => ({
@@ -65,13 +65,14 @@ vi.mock('react-konva', async () => {
     }), [stageImages]);
     return <StageImages.Provider value={stageImages}>{children}</StageImages.Provider>;
   });
-  function Group({ id, x = 0, offsetX = 0, listening = true, children }: PropsWithChildren<{ id?: string; x?: number; offsetX?: number; listening?: boolean }>) {
+  const Group = forwardRef(function Group({ id, x = 0, offsetX = 0, listening = true, children }:
+    PropsWithChildren<{ id?: string; x?: number; offsetX?: number; listening?: boolean }>, _ref) {
     if (!id) return <>{children}</>;
     if (listening) drawing.nonListening.delete(id);
     else drawing.nonListening.add(id);
     drawing.localX.set(id, x - offsetX);
     return <LayerId.Provider value={id}>{children}</LayerId.Provider>;
-  }
+  });
   function Rect({ name, fill }: { name?: string; fill?: string }) {
     const id = useContext(LayerId);
     if (id && name === 'design-frame-interior' && fill) drawing.frameFills.set(id, fill);

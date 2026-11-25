@@ -47,6 +47,12 @@
   white-space: nowrap;
 }
 
+.desktop-project-editor__directory-row > .desktop-project-editor__directory-warning {
+  display: flex;
+  flex: 0 0 auto;
+  color: var(--app-warning);
+}
+
 .desktop-project-editor__directory-row + .desktop-project-editor__choose-directory {
   border-top: 1px solid var(--desktop-agent-subtle-divider);
 }

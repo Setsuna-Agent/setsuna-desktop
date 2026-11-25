@@ -7,6 +7,7 @@ import type { DesignDocumentRef } from '../../contracts/index.js';
 import { DesignThumbnail } from '../canvas/DesignThumbnail.js';
 import type { DesignClient } from '../client.js';
 import { useDesignViewPreference } from '../context/use-design-view-preference.js';
+import { designImportSource, type DesignImportSource } from '../import/design-import.js';
 import { DesignCatalogEmpty } from './DesignCatalogEmpty.js';
 import { DesignProjectIcon } from './DesignProjectIcon.js';
 import type { DesignProject } from './DesignScopeFields.js';
@@ -28,7 +29,7 @@ const recentLimit = 5;
 const timeUnits = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]] as const;
 
 export function DesignWorkspaceHome({
-  client, scopeControls, createAction, files, fileRevision, showEmptyState, onOpen, renderFileAction, visible, locale, translate: t,
+  client, scopeControls, createAction, files, fileRevision, showEmptyState, onOpen, onImportDrop, renderFileAction, visible, locale, translate: t,
 }: Readonly<{
   client: DesignClient;
   scopeControls: ReactNode;
@@ -39,6 +40,7 @@ export function DesignWorkspaceHome({
   fileRevision(ref: DesignDocumentRef): string | undefined;
   showEmptyState: boolean;
   onOpen(ref: DesignDocumentRef): void;
+  onImportDrop(source: DesignImportSource): void;
   renderFileAction(file: DesignCatalogFile, section: DesignCatalogSection): ReactNode;
   translate: RendererTranslate;
 }>) {
@@ -65,7 +67,24 @@ export function DesignWorkspaceHome({
     return unit ? relativeTime.format(-Math.floor(seconds / unit[1]), unit[0]) : t('feature.design.catalog.justNow');
   }
 
-  return <main ref={scroll} className="design-workspace-home" data-view={view}>
+  return <main ref={scroll} className="design-workspace-home" data-view={view}
+    onDragOver={(event) => {
+      // The file names in a native drag become readable only on drop.
+      if (!visible || !event.dataTransfer.types.includes('Files')) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+    }}
+    onDrop={(event) => {
+      if (!visible || !event.dataTransfer.types.includes('Files')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      for (const file of event.dataTransfer.files) {
+        const source = designImportSource(file);
+        if (!source) continue;
+        onImportDrop(source);
+        break;
+      }
+    }}>
     <div className="design-workspace-home__content" data-empty={showEmptyState ? '' : undefined}>
       <header className="design-workspace-home__header">
         <h1 className="design-workspace-home__title">{t('feature.design.workspace')}</h1>

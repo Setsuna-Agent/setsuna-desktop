@@ -7,8 +7,8 @@ import type { DesignLibraryColorScheme } from '../contracts/design-library-prese
 import { isFeatureOperationCancelled } from '@setsuna-desktop/feature-core/operation';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { ConfirmDialog, IconButton, useToast } from '@setsuna-desktop/renderer-ui';
-import type { DesignDocumentListEntry, DesignDocumentRef, DesignWorkspace as DesignScope } from '../contracts/index.js';
-import { DesignCreateDocument } from './catalog/DesignCreateDocument.js';
+import type { CreateDesignDocumentInput, DesignDocumentListEntry, DesignDocumentRef, DesignWorkspace as DesignScope } from '../contracts/index.js';
+import { DesignCreateDocument, type DesignCreateDocumentHandle } from './catalog/DesignCreateDocument.js';
 import { DesignDocumentMenu } from './catalog/DesignDocumentMenu.js';
 import { DesignDraftMenu } from './catalog/DesignDraftMenu.js';
 import { DesignMoveForm } from './catalog/DesignMoveForm.js';
@@ -54,6 +54,7 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
   const latestWorkspace = useRef({ location, visible });
   latestWorkspace.current = { location, visible };
   const resolvingSource = useRef<AbortController>();
+  const createDocument = useRef<DesignCreateDocumentHandle>(null);
   const creatingDraft = useRef(false);
   const [draftCreationPending, setDraftCreationPending] = useState(false);
   const [actionRequest, setActionRequest] = useState<DocumentActionRequest>();
@@ -243,8 +244,9 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
     return chosen;
   }
 
-  async function create(scope: DesignScope, name: string, linkedProjectId?: string) {
-    const entry = await client.create({ ...scope, parentPath: '.', name, ...(linkedProjectId ? { linkedProjectId } : {}) });
+  async function create(scope: DesignScope, draft: Pick<CreateDesignDocumentInput, 'name' | 'linkedProjectId' | 'initialLayers'>) {
+    const { linkedProjectId } = draft;
+    const entry = await client.create({ ...scope, parentPath: '.', ...draft });
     if (!mounted.current) return;
     refreshLists();
     if (linkedProjectId) void refreshCatalog();
@@ -378,12 +380,14 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
     const root = scopeFor(ref)?.root.path;
     return root ? revisions.get(workspaceFilePathKey(root, ref.path)) : undefined;
   }, [revisions, scopeFor]);
-  const showEmptyState = visible && !path && !emptyProjectId && files.length === 0 && catalogReady && !scopes.some((listing) => {
-    if (lists.has(designListingKey(listing))) return false;
+  const emptyStateListingKeys = useMemo(() => scopes.filter((listing) => {
     if (!selectedProjectIds.size) return true;
     if (filterRootId) return listing.scope.projectId === filteredProjectId && listing.scope.rootId === filterRootId;
     return mayContainProjectDrafts(listing, selectedProjectIds);
-  });
+  }).map(designListingKey), [scopes, selectedProjectIds, filteredProjectId, filterRootId, mayContainProjectDrafts]);
+  const showEmptyState = visible && !path && !emptyProjectId && files.length === 0 && catalogReady
+    && emptyStateListingKeys.every((key) => lists.has(key))
+    && (emptyStateListingKeys.length === 0 || emptyStateListingKeys.some((key) => lists.get(key) != null));
   const toolbar = documentRef || emptyProjectId ? <nav className="design-workspace__bar" aria-label={t('feature.design.documents')}>
     <IconButton size="small" label={t('feature.design.backToDocuments')} onClick={backToDocuments}>
       <ArrowLeft size={17} />
@@ -415,9 +419,10 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
     {emptyProjectId ? <DesignEmptyProjectCanvas toolbar={toolbar} showEmptyState={projectDrafts?.length === 0} translate={t} /> : null}
     {!documentRef && !emptyProjectId && <DesignWorkspaceHome client={client} files={files} fileRevision={fileRevision} showEmptyState={showEmptyState}
       onOpen={openListedDocument} renderFileAction={documentMenu} visible={visible} locale={props.locale} translate={t}
+      onImportDrop={(source) => createDocument.current?.openImport(source)}
       scopeControls={<DesignScopeFields projects={catalog} scope={homeFilter} onChange={onLocationChange} translate={t} />}
-      createAction={<DesignCreateDocument key={JSON.stringify(homeFilter)} projects={catalog} defaultProjectId={homeFilter?.projectId}
-        chooseDirectory={chooseDirectory} onCreate={create} translate={t} />} />}
+      createAction={<DesignCreateDocument ref={createDocument} key={JSON.stringify(homeFilter)} projects={catalog} defaultProjectId={homeFilter?.projectId}
+        chooseDirectory={chooseDirectory} fonts={client.fonts} onCreate={create} translate={t} />} />}
   </div>;
 }
 

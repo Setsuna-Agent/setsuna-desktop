@@ -8,7 +8,7 @@ import {
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { defineFeatureOperation } from '@setsuna-desktop/feature-core/operation';
 import { parseDesignScriptName, parseDesignScriptPath, parseDesignScriptSource } from './design-content-source.js';
-import { designDocumentCodec, parseAssetPath, parseDesignEdit, type DesignDocument, type DesignEdit } from './document.js';
+import { designDocumentCodec, designDocumentVersion, parseAssetPath, parseDesignEdit, type DesignDocument, type DesignEdit } from './document.js';
 import { designLibraryPresets, findBundledDesignLibrary, type DesignLibraryPresetId } from './design-library-presets.js';
 import { isDesignDocumentPath } from './design-resource-id.js';
 import { parseDesignScriptInputs, parseDesignScriptParameters, type DesignScriptInputs } from './design-script-parameters.js';
@@ -30,6 +30,7 @@ export type ListDesignDocumentEntriesInput = DesignWorkspace & Readonly<{ includ
 export type DesignDocumentListEntry = Readonly<{ path: string; modifiedAt?: string; revision?: string; libraryPreset?: true }>;
 export type CreateDesignDocumentInput = DesignWorkspace & Readonly<{
   parentPath: string; name: string; autoNumber?: boolean; linkedProjectId?: string; command?: DesignCommandKey;
+  initialLayers?: Pick<DesignDocument, 'rootIds' | 'nodes'>;
 }>;
 export type PrepareDesignLibraryPresetInput = Readonly<{ ref: DesignDocumentRef; presetId: DesignLibraryPresetId }>;
 export type MoveDesignDocumentInput = Readonly<{ ref: DesignDocumentRef; destination: DesignWorkspace; command?: DesignCommandKey; expectedRevision?: string }>;
@@ -72,8 +73,12 @@ const createCodec = defineRuntimeCodec<CreateDesignDocumentInput>((input) => {
   if (!isValidWorkspaceEntryName(name) || !isDesignDocumentPath(name)) throw new Error('Invalid design file name.');
   if (typeof value.parentPath !== 'string') throw new Error('Design parent path is required.');
   if (value.autoNumber !== undefined && typeof value.autoNumber !== 'boolean') throw new Error('Invalid design numbering option.');
+  const initialLayers = value.initialLayers === undefined ? undefined : record(value.initialLayers);
+  const imported = initialLayers && designDocumentCodec.parse({ schemaVersion: designDocumentVersion, documentId: 'new-design',
+    rootIds: initialLayers.rootIds, nodes: initialLayers.nodes });
   return { ...workspace(value), parentPath: value.parentPath, name, command: readDesignCommandKey(value.command),
     ...(value.autoNumber ? { autoNumber: true } : {}),
+    ...(imported ? { initialLayers: { rootIds: imported.rootIds, nodes: imported.nodes } } : {}),
     ...(value.linkedProjectId === undefined ? {} : { linkedProjectId: requiredString(value.linkedProjectId) }) };
 });
 
@@ -116,6 +121,7 @@ const documentErrors = { INVALID_DESIGN_DOCUMENT: { status: 422 }, DESIGN_NOT_FO
 const resourceRootErrors = { DESIGN_RESOURCE_ROOT_AMBIGUOUS: { status: 409 }, DESIGN_RESOURCE_ROOT_UNAVAILABLE: { status: 409 } } as const;
 const scriptErrors = { DESIGN_SCRIPT_FAILED: { status: 422 } } as const;
 const documentsRoute = '/v1/features/design/documents';
+const designListingErrors = { DESIGN_PROJECT_DIRECTORY_UNAVAILABLE: { status: 409 } } as const;
 
 export const listDesignDocuments = defineFeatureOperation({
   id: 'design.document.list', path: `${documentsRoute}/list`, method: 'GET',
@@ -124,7 +130,7 @@ export const listDesignDocuments = defineFeatureOperation({
     if (!Array.isArray(input)) throw new Error('Expected a list of design files.');
     return input.map(designPath);
   }),
-  errors: {}, idempotency: 'safe',
+  errors: designListingErrors, idempotency: 'safe',
 });
 
 export const listDesignDocumentEntries = defineFeatureOperation({
@@ -146,7 +152,7 @@ export const listDesignDocumentEntries = defineFeatureOperation({
         ...(libraryPreset === true ? { libraryPreset: true } : {}) };
     });
   }),
-  errors: {}, idempotency: 'safe',
+  errors: designListingErrors, idempotency: 'safe',
 });
 
 export const importDesignImage = defineFeatureOperation({

@@ -103,7 +103,8 @@ text({sourceId:source.ids[0], instanceIds:batch.ids, revision:batch.revision});
 ```
 
 - **改一处内容。** 用 `design_inspect({mode:"index",ids:[instanceId],name:"kpi.value"})` 找到实例里的文本。将返回的图层 ID 去掉开头的 `instanceId + "/"` 就是 `path`，嵌套实例保留余下的完整路径。对实例本身调用 `design_edit({action:"override",revision,ids:[instanceId],fields:{path,text:"136"}})`。换图片用 `{path,assetPath}`，恢复继承用 `{path,value:null}`。
-- **改共性或状态。** 所有卡片一起调间距、字重或底色时，编辑任务范围内的主组件或它绑定的变量。重复指标卡的涨跌标签可把文字和语义色一起做成变体，再按指标含义选择，例如退款率上升和营收上升应使用不同状态。制作可复用状态时，在本稿主组件上用 `createVariant` 和 `fields:{name:"Loading"}`，编辑返回的变体，再对实例用 `action:"variant",mode:variantId` 切换。只有需要独立改造某个实例结构时才用 `detach`。
+- **改共性或状态。** 所有卡片一起调间距、字重或底色时，编辑任务范围内的主组件或它绑定的变量。重复指标卡的涨跌标签可把文字和语义色一起做成变体，再按指标含义选择，例如退款率上升和营收上升应使用不同状态。制作可复用状态时，在本稿主组件上用 `createVariant` 和 `fields:{name:"Loading"}`，编辑返回的变体，再对实例用 `action:"variant",mode:variantId` 切换。
+- **改造已链接的组件。** 需要调整继承的配色、排版或结构时，对实例根层调用 `design_edit({action:"detach",revision,ids:[instanceId]})`。用回执的版本和 `inserted` 中的可编辑子层 ID 继续修改，更多子层可从同一个根层 ID 往下查。分离后仍可能绑定库变量，改色时可用 `bindTokens` 绑定本稿变量，或替换填充、描边并省略共享 `styleId`。需要重复使用时，把改好的画框转成本稿主组件。需求与现有稿件已确定方向时，直接复用合适的库组件，只分离需要改造的实例。
 
 ## 参数化画布脚本
 

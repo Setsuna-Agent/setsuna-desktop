@@ -62,6 +62,12 @@ export async function handleRuntimeWorkspaceRequest(
     return true;
   }
 
+  const unavailableRootsMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/unavailable-roots$/u);
+  if (unavailableRootsMatch && request.method === 'GET') {
+    sendJson(response, 200, await runtime.workspaceProjects.listUnavailableProjectRootIds(decodeURIComponent(unavailableRootsMatch[1])));
+    return true;
+  }
+
   const projectUpdateMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)$/u);
   if (projectUpdateMatch && request.method === 'PATCH') {
     sendJson(

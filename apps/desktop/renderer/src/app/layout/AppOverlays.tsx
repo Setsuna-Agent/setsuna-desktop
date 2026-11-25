@@ -66,6 +66,7 @@ export function AppOverlays({
           key={projectEditorProject?.id ?? 'new-project'}
           project={projectEditorProject}
           projects={projects}
+          listUnavailableRootIds={client.listUnavailableProjectRootIds}
           onClose={navigation.closeProjectEditor}
           onRemove={navigation.removeProject}
           onSave={navigation.saveProject}

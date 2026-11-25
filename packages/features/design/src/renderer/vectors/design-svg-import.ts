@@ -154,7 +154,7 @@ export function insertDesignSvg(asset: SvgAsset, parentId: string | null, center
   return { id, edits };
 }
 
-function svgPathBounds(path: DesignSvgPath): Bounds {
+export function svgPathBounds(path: DesignSvgPath): Bounds {
   const shape = new Path({ data: path.data });
   try {
     const bounds = shape.getSelfRect();

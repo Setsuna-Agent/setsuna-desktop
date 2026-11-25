@@ -36,6 +36,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import {
   lstat,
   mkdir,
+  opendir,
   readdir,
   readFile,
   realpath,
@@ -69,7 +70,8 @@ import { applyWorkspaceFileChanges } from './workspace-file-changes.js';
 import { readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
 import { walkWorkspaceFiles } from './workspace-file-walk.js';
 
-import { assertProjectRootsAvailable, findGitRoot, normalizeProjectPath, normalizeProjectRoots, projectWithRoots } from './workspace-project-roots.js';
+import { assertProjectRootsAvailable, findGitRoot, isWorkspaceDirectoryUnavailable, normalizeProjectPath,
+  normalizeProjectRoots, projectWithRoots, WorkspaceDirectoryUnavailableError } from './workspace-project-roots.js';
 
 const MAX_LIST_ENTRIES = 200;
 export { MAX_WORKSPACE_IMAGE_BYTES } from '@setsuna-desktop/contracts';
@@ -113,6 +115,20 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         .filter((project) => !project.archivedAt)
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     };
+  }
+
+  async listUnavailableProjectRootIds(projectId: string): Promise<string[]> {
+    const project = (await this.readIndex()).projects.find(({ id }) => id === projectId);
+    const results = await Promise.all(workspaceProjectRoots(project).map(async ({ id, path }) => {
+      try {
+        const directory = await opendir(path);
+        await directory.close();
+      } catch (error) {
+        if (!isWorkspaceDirectoryUnavailable(error)) throw error;
+        return id;
+      }
+    }));
+    return results.filter((id) => id !== undefined);
   }
 
   async addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject> {
@@ -542,7 +558,13 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   async resolveWorkspaceRoot(projectId: WorkspaceProjectTarget): Promise<string> {
-    return realpath((await this.requireProject(projectId)).path);
+    const project = await this.requireProject(projectId);
+    try {
+      return await realpath(project.path);
+    } catch (error) {
+      if (isWorkspaceDirectoryUnavailable(error)) throw new WorkspaceDirectoryUnavailableError(error);
+      throw error;
+    }
   }
 
   async listBoundWorkspaceRoots() {

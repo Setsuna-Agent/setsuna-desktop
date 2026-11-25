@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { workspaceFilePathKey, type WorkspaceProjectRoot } from '@setsuna-desktop/contracts';
+import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { designDocumentFileExtension, type DesignDocumentListEntry, type DesignWorkspace } from '../../contracts/index.js';
 import type { DesignClient } from '../client.js';
 import type { WatchDesignDirectories } from '../design-images.js';
@@ -12,10 +13,11 @@ export function designListingKey({ root }: DesignListingScope): string {
 }
 
 const concurrentListings = 4;
+const emptyListing: readonly DesignDocumentListEntry[] = [];
 
 export function useDesignDocumentLists(client: DesignClient, scopes: readonly DesignListingScope[],
   watchDirectories: WatchDesignRootDirectories | undefined, onError: (error: unknown) => void) {
-  const [lists, setLists] = useState<ReadonlyMap<string, readonly DesignDocumentListEntry[]>>(() => new Map());
+  const [lists, setLists] = useState<ReadonlyMap<string, readonly DesignDocumentListEntry[] | null>>(() => new Map());
   const scheduleRefresh = useRef<() => void>();
   useEffect(() => {
     if (!scopes.length) return;
@@ -50,8 +52,18 @@ export function useDesignDocumentLists(client: DesignClient, scopes: readonly De
             }));
           }
         }).catch((error: unknown) => {
-          if (signal.aborted || failed.has(key)) return;
+          if (signal.aborted) return;
+          if (error instanceof FeatureOperationFailure && error.code === 'DESIGN_PROJECT_DIRECTORY_UNAVAILABLE') {
+            failed.delete(key);
+            watchers.get(key)?.();
+            watchers.delete(key);
+            setLists((current) => current.get(key) === emptyListing ? current : new Map(current).set(key, emptyListing));
+            return;
+          }
+          if (failed.has(key)) return;
           failed.add(key);
+          // Mark the first read as settled while preserving any previously loaded entries.
+          setLists((current) => current.has(key) ? current : new Map(current).set(key, null));
           onError(error);
         }).finally(() => {
           running.delete(key);
