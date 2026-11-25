@@ -89,7 +89,7 @@ function designParticipant(input: DesignSelectionTask, sourceId: string, agent?:
         const deleting = args.action === 'delete';
         const existing = plan.ids.filter((id) => Object.hasOwn(view.scene, id));
         const focus = deleting || plan.ids.length ? showTargets(view, existing.length ? existing : ids) : undefined;
-        const insertedIds = args.action === 'insert' || args.action === 'insertSvg'
+        const insertedIds = args.action === 'insert' || args.action === 'insertSvg' || args.action === 'detach'
           ? plan.edits.flatMap((e) => e.kind === 'insert' ? [e.nodeId] : []) : [];
         pendingEdit = { selection: plan.ids, deletion: deleting ? focus : undefined, insertedIds };
       }

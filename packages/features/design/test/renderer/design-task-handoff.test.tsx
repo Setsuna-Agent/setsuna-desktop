@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Util } from 'konva/lib/Util.js';
 import { useState } from 'react';
 import { expect, it, vi } from 'vitest';
-import { chatDesignResult, designDocumentVersion } from '../../src/contracts/index.js';
+import { chatDesignResult, designDocumentVersion, type DesignDocument } from '../../src/contracts/index.js';
 import { designSelectionMentionText, type DesignSelectionReference } from '../../src/contracts/design-selection-mention.js';
 import { createChatDesignTools } from '../../src/runtime/chat-design-tools.js';
 import DesignWorkspace, { type DesignWorkspaceLocation } from '../../src/renderer/DesignWorkspace.js';
@@ -597,4 +597,60 @@ it('updates nested targets, diagnoses the selected board and atomically binds it
     strip: { layout: { gap: 4 } }, group: { width: 200 }, swatch: { x: 20, width: 200 } }));
   fireEvent.click(undo);
   await waitFor(async () => expect((await read()).document.nodes).toMatchObject({ group: { width: 100 }, swatch: rect, other: { x: 50, width: 20 } }));
+});
+
+it('adapts one linked component with a draft token using the editable IDs returned by detach', async () => {
+  const frame = { kind: 'frame', x: 0, y: 0, width: 96, height: 40, childIds: [] } as const;
+  const libraryPath = 'controls.design.json';
+  const library: DesignDocument = {
+    schemaVersion: designDocumentVersion, documentId: 'controls', rootIds: ['button'],
+    styles: { accent: { name: 'Library accent', kind: 'color', color: '#18181b' } },
+    nodes: {
+      button: { ...frame, name: 'Primary button', component: true, childIds: ['face'] },
+      face: { kind: 'rectangle', x: 0, y: 0, width: 96, height: 40, fills: [{ color: '#18181b', styleId: 'accent' }] },
+    },
+  };
+  let chat!: DesignChatBinding;
+  let tasks!: DesignTasks;
+  const { read } = await mountEditor({
+    schemaVersion: designDocumentVersion, documentId: 'backoffice', rootIds: ['board'],
+    libraries: { controls: libraryPath },
+    styles: { accent: { name: 'Brand accent', kind: 'color', color: '#5b3bde' } },
+    nodes: {
+      board: { ...frame, width: 360, height: 240, childIds: ['existing'] },
+      existing: { ...frame, x: 12, y: 12, instanceOf: 'controls:button' },
+    },
+  }, undefined, {
+    libraries: { [libraryPath]: library },
+    renderChat: (bridge) => { chat = bridge; return null; },
+    tasks(service) { return tasks = new DesignTasks({ resolveOwnedRoot: async () => '/project', cancel: async () => undefined }, service); },
+  });
+  const signal = new AbortController().signal;
+  const call = async (name: Parameters<typeof tasks.execute>[1], args: Record<string, unknown>) =>
+    JSON.parse((await tasks.execute('library-edit', name, args, signal)).content);
+  try {
+    await waitFor(() => expect(chat).toBeDefined());
+    await act(() => chat.bind('library-edit', ['board']));
+    await act(async () => {
+      const { items } = await call('design_resources', { kind: 'components', query: 'Primary button' });
+      const placed = await call('design_edit', { action: 'insertInstance', ids: ['board'], mode: items[0].id, revision: (await read()).revision });
+      const [instanceId] = placed.ids;
+      const detached = await call('design_edit', { action: 'detach', ids: [instanceId], revision: placed.revision });
+      expect(detached).toMatchObject({ applied: true, ids: [instanceId], inserted: [{ parentId: instanceId }] });
+      const [{ id: faceId }] = detached.inserted;
+      const recolored = await call('design_edit', { action: 'bindTokens', ids: [faceId], revision: detached.revision,
+        fields: { bindings: [{ field: 'fills.0.color', tokenId: 'accent' }] } });
+      expect(await read()).toMatchObject({ revision: recolored.revision, document: {
+        libraries: { controls: libraryPath },
+        nodes: {
+          [instanceId]: { instanceOf: undefined, childIds: [faceId] },
+          [faceId]: { fills: [{ color: '#5b3bde', styleId: 'accent' }] },
+          existing: { instanceOf: 'controls:button', childIds: [] },
+        },
+      } });
+    });
+  } finally {
+    await act(() => chat?.release());
+    await tasks.dispose();
+  }
 });
