@@ -378,12 +378,14 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
     const root = scopeFor(ref)?.root.path;
     return root ? revisions.get(workspaceFilePathKey(root, ref.path)) : undefined;
   }, [revisions, scopeFor]);
-  const showEmptyState = visible && !path && !emptyProjectId && files.length === 0 && catalogReady && !scopes.some((listing) => {
-    if (lists.has(designListingKey(listing))) return false;
+  const emptyStateListingKeys = useMemo(() => scopes.filter((listing) => {
     if (!selectedProjectIds.size) return true;
     if (filterRootId) return listing.scope.projectId === filteredProjectId && listing.scope.rootId === filterRootId;
     return mayContainProjectDrafts(listing, selectedProjectIds);
-  });
+  }).map(designListingKey), [scopes, selectedProjectIds, filteredProjectId, filterRootId, mayContainProjectDrafts]);
+  const showEmptyState = visible && !path && !emptyProjectId && files.length === 0 && catalogReady
+    && emptyStateListingKeys.every((key) => lists.has(key))
+    && (emptyStateListingKeys.length === 0 || emptyStateListingKeys.some((key) => lists.get(key) != null));
   const toolbar = documentRef || emptyProjectId ? <nav className="design-workspace__bar" aria-label={t('feature.design.documents')}>
     <IconButton size="small" label={t('feature.design.backToDocuments')} onClick={backToDocuments}>
       <ArrowLeft size={17} />

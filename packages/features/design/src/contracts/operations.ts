@@ -116,6 +116,7 @@ const documentErrors = { INVALID_DESIGN_DOCUMENT: { status: 422 }, DESIGN_NOT_FO
 const resourceRootErrors = { DESIGN_RESOURCE_ROOT_AMBIGUOUS: { status: 409 }, DESIGN_RESOURCE_ROOT_UNAVAILABLE: { status: 409 } } as const;
 const scriptErrors = { DESIGN_SCRIPT_FAILED: { status: 422 } } as const;
 const documentsRoute = '/v1/features/design/documents';
+const designListingErrors = { DESIGN_PROJECT_DIRECTORY_UNAVAILABLE: { status: 409 } } as const;
 
 export const listDesignDocuments = defineFeatureOperation({
   id: 'design.document.list', path: `${documentsRoute}/list`, method: 'GET',
@@ -124,7 +125,7 @@ export const listDesignDocuments = defineFeatureOperation({
     if (!Array.isArray(input)) throw new Error('Expected a list of design files.');
     return input.map(designPath);
   }),
-  errors: {}, idempotency: 'safe',
+  errors: designListingErrors, idempotency: 'safe',
 });
 
 export const listDesignDocumentEntries = defineFeatureOperation({
@@ -146,7 +147,7 @@ export const listDesignDocumentEntries = defineFeatureOperation({
         ...(libraryPreset === true ? { libraryPreset: true } : {}) };
     });
   }),
-  errors: {}, idempotency: 'safe',
+  errors: designListingErrors, idempotency: 'safe',
 });
 
 export const importDesignImage = defineFeatureOperation({

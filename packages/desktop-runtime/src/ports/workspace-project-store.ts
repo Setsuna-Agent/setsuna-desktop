@@ -56,6 +56,7 @@ export type WorkspaceFileReadOptions = {
 
 export type WorkspaceProjectStore = {
   listProjects(): Promise<WorkspaceProjectList>;
+  listUnavailableProjectRootIds(projectId: string): Promise<string[]>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   updateProject(projectId: string, input: UpdateWorkspaceProjectInput): Promise<WorkspaceProject>;
   archiveProject(projectId: string): Promise<void>;

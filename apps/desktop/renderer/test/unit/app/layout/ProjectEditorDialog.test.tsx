@@ -13,6 +13,7 @@ vi.mock('../../../../src/composition/SkillsFeatureBoundary.js', () => ({ useSkil
   { id: 'review', name: 'Review', description: 'Inspect changes', enabled: true },
 ] }) }));
 afterEach(() => { cleanup(); vi.mocked(useConfiguredModelState).mockReturnValue(null); });
+const listUnavailableRootIds = async () => [];
 
 const modelState = {
   activeProviderId: 'provider',
@@ -31,7 +32,7 @@ describe('ProjectEditorDialog', () => {
     vi.mocked(useConfiguredModelState).mockReturnValue(modelState);
     const onSave = vi.fn(async () => true);
     const user = userEvent.setup();
-    render(<ProjectEditorDialog project={null} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
+    render(<ProjectEditorDialog project={null} listUnavailableRootIds={listUnavailableRootIds} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
     await user.type(screen.getByRole('textbox', { name: '项目名称' }), 'Configured');
     // Global model inheritance must still allow an independent thinking preference.
     expect(screen.getByRole('combobox', { name: '思考强度' }).hasAttribute('disabled')).toBe(false);
@@ -53,7 +54,7 @@ describe('ProjectEditorDialog', () => {
       conversationDefaults: { skillIds: ['skill', 'missing-skill'] } };
     const onSave = vi.fn(async () => true);
     const user = userEvent.setup();
-    render(<ProjectEditorDialog project={project} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
+    render(<ProjectEditorDialog project={project} listUnavailableRootIds={listUnavailableRootIds} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: '默认技能' }));
     const search = screen.getByRole('textbox', { name: '搜索 Skill...' });
     await user.type(search, 'INSPECT');
@@ -77,7 +78,8 @@ describe('ProjectEditorDialog', () => {
     // Keep the dialog open so both submissions exercise the same mode drafts.
     const onSave = vi.fn(async () => false);
     const user = userEvent.setup();
-    render(<ProjectEditorDialog project={project} projects={[project, source]} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
+    render(<ProjectEditorDialog project={project} projects={[project, source]} listUnavailableRootIds={listUnavailableRootIds}
+      onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: '跟随其他项目' }));
     expect(screen.getByRole('button', { name: '保存' }).hasAttribute('disabled')).toBe(true);
     await user.click(screen.getByRole('combobox', { name: '来源项目' }));
@@ -91,7 +93,7 @@ describe('ProjectEditorDialog', () => {
   });
 
   it('saves an unbound project and requires confirmation before removing an existing project', async () => {
-    const actions = { onClose: vi.fn(), onRemove: vi.fn(async () => true), onSave: vi.fn(async () => true) };
+    const actions = { listUnavailableRootIds, onClose: vi.fn(), onRemove: vi.fn(async () => true), onSave: vi.fn(async () => true) };
     const view = render(<ProjectEditorDialog {...actions} project={null} />);
     expect(screen.queryByRole('button', { name: '移除项目' })).toBeNull();
     fireEvent.change(screen.getByRole('textbox', { name: '项目名称' }), { target: { value: 'New project' } });
@@ -112,7 +114,7 @@ describe('ProjectEditorDialog', () => {
 
   it('saves the chosen project icon without a color override', async () => {
     const onSave = vi.fn(async () => true);
-    render(<ProjectEditorDialog project={null} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
+    render(<ProjectEditorDialog project={null} listUnavailableRootIds={listUnavailableRootIds} onSave={onSave} onClose={vi.fn()} onRemove={vi.fn()} />);
     fireEvent.change(screen.getByRole('textbox', { name: '项目名称' }), { target: { value: 'Travel' } });
     await userEvent.click(screen.getByRole('button', { name: '更换项目图标' }));
     await userEvent.click(await screen.findByRole('button', { name: '帆船' }));
@@ -129,7 +131,7 @@ describe('ProjectEditorDialog', () => {
       id: 'project_demo', name: 'demo', icon: { key: 'terminal', color: '#6f80d6' },
       createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-10T00:00:00.000Z',
     };
-    const actions = { onClose: vi.fn(), onRemove: vi.fn(), onSave: vi.fn(async () => true) };
+    const actions = { listUnavailableRootIds, onClose: vi.fn(), onRemove: vi.fn(), onSave: vi.fn(async () => true) };
     const view = render(<ProjectEditorDialog {...actions} project={project} />);
     await userEvent.click(screen.getByRole('button', { name: '更换项目图标' }));
     await userEvent.click(await screen.findByRole('button', { name: '山峰' }));

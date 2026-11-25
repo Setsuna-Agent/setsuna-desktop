@@ -3,6 +3,22 @@ import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { isNodeError } from '../../shared/node-errors.js';
+
+const unavailableDirectoryCodes = new Set([
+  'ENOENT', 'ENOTDIR', 'EACCES', 'EPERM', 'ELOOP', 'ENODEV', 'ENXIO', 'ESTALE', 'EIO', 'ENETUNREACH', 'EHOSTUNREACH',
+]);
+
+export function isWorkspaceDirectoryUnavailable(error: unknown): error is NodeJS.ErrnoException {
+  return isNodeError(error) && unavailableDirectoryCodes.has(error.code ?? '');
+}
+
+export class WorkspaceDirectoryUnavailableError extends Error {
+  constructor(cause: NodeJS.ErrnoException) {
+    super(cause.message, { cause });
+    this.name = 'WorkspaceDirectoryUnavailableError';
+  }
+}
 
 export async function normalizeProjectPath(inputPath: string): Promise<string> {
   if (typeof inputPath !== 'string' || !inputPath.trim()) throw new Error('Project path is required.');

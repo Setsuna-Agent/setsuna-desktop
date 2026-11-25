@@ -1,17 +1,19 @@
-import { ToastNotice, Button as UiButton, ConfirmDialogTrigger, Dialog } from '@setsuna-desktop/renderer-ui';
+import { ToastNotice, Button as UiButton, ConfirmDialogTrigger, Dialog, Tooltip } from '@setsuna-desktop/renderer-ui';
 import {
   WORKSPACE_PROJECT_NAME_MAX_CHARS,
   canFollowWorkspaceConversationDefaults,
   workspaceProjectRoots,
   workspaceRootName,
+  type DesktopRuntimeClient,
   type WorkspaceProjectRoot,
   type UpdateWorkspaceProjectInput,
   type WorkspaceProject,
   type WorkspaceProjectIcon,
   type WorkspaceConversationDefaults,
 } from '@setsuna-desktop/contracts';
-import { Folder, FolderPlus, Star, X } from 'lucide-react';
+import { Folder, FolderPlus, Star, TriangleAlert, X } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
+import { useProjectRootAvailability } from '../../features/workspace/hooks/useProjectRootAvailability.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, IconButton, TextField } from '../../shared/ui/primitives.js';
 import { ProjectConversationDefaultsFields } from './project-defaults/ProjectConversationDefaultsFields.js';
@@ -20,6 +22,7 @@ import { ProjectIconPicker } from './ProjectIconPicker.js';
 type ProjectEditorDialogProps = {
   project: WorkspaceProject | null;
   projects?: readonly WorkspaceProject[];
+  listUnavailableRootIds: DesktopRuntimeClient['listUnavailableProjectRootIds'];
   onClose: () => void;
   onRemove: (project: WorkspaceProject) => Promise<boolean>;
   onSave: (input: UpdateWorkspaceProjectInput) => Promise<boolean>;
@@ -28,6 +31,7 @@ type ProjectEditorDialogProps = {
 export function ProjectEditorDialog({
   project,
   projects = [],
+  listUnavailableRootIds,
   onClose,
   onRemove,
   onSave,
@@ -37,12 +41,15 @@ export function ProjectEditorDialog({
   const nameId = `${formId}-name`;
   const [name, setName] = useState(project?.name ?? '');
   const [icon, setIcon] = useState<WorkspaceProjectIcon | null>(project?.icon ?? null);
-  const [roots, setRoots] = useState<WorkspaceProjectRoot[]>(() => workspaceProjectRoots(project));
+  const savedRoots = workspaceProjectRoots(project);
+  const [roots, setRoots] = useState<WorkspaceProjectRoot[]>(savedRoots);
   const [conversationDefaults, setConversationDefaults] = useState<WorkspaceConversationDefaults>(project?.conversationDefaults ?? {});
   const validDefaults = conversationDefaults.sourceProjectId === undefined
     || canFollowWorkspaceConversationDefaults(project?.id, conversationDefaults.sourceProjectId, projects);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const rootStatus = useProjectRootAvailability(savedRoots.length ? project?.id : undefined, listUnavailableRootIds);
+  const feedback = error ?? (rootStatus.failed ? t('sidebar.projectDirectoryCheckFailed') : null);
 
   const chooseDirectory = async () => {
     const selectDirectory = window.setsunaDesktop?.desktop?.selectDirectory;
@@ -143,7 +150,9 @@ export function ProjectEditorDialog({
               <div className="desktop-project-editor__directory">
                 {roots.map((root, index) => (
                   <div className="desktop-project-editor__directory-row" key={root.id}>
-                    <Folder size={15} aria-hidden="true" />
+                    {rootStatus.unavailableRootIds.has(root.id)
+                      ? <UnavailableDirectoryIcon label={t('sidebar.projectDirectoryUnavailable', { path: root.path })} />
+                      : <Folder size={15} aria-hidden="true" />}
                     <span title={root.path}>{workspaceRootName(root)}</span>
                     {index === 0 ? <span className="desktop-project-editor__primary">{t('sidebar.primaryDirectory')}</span> : (
                       <IconButton label={t('sidebar.makePrimaryDirectory')} disabled={busy}
@@ -173,10 +182,18 @@ export function ProjectEditorDialog({
           <ProjectConversationDefaultsFields value={conversationDefaults} projects={projects} projectId={project?.id}
             disabled={busy} onChange={setConversationDefaults} />
         </div>
-        {error ? <ToastNotice message={error} /> : null}
+        {feedback ? <ToastNotice message={feedback} /> : null}
       </form>
     </Dialog>
   );
+}
+
+function UnavailableDirectoryIcon({ label }: { label: string }) {
+  return <Tooltip title={label}>
+    <span className="desktop-project-editor__directory-warning" role="img" aria-label={label} tabIndex={0}>
+      <TriangleAlert size={15} aria-hidden="true" />
+    </span>
+  </Tooltip>;
 }
 
 function directoryName(directoryPath: string): string {

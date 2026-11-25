@@ -1,11 +1,44 @@
-import { mkdir, readFile, readdir, realpath, symlink, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, realpath, rename, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
+import { workspaceProjectRoots, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { designDirectoryGrant, designDirectoryGrants } from '@setsuna-desktop/feature-design/contracts';
 import { writeJsonFile } from '../../../src/adapters/store/json-file.js';
 import { createRuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 import { ONE_PIXEL_PNG_BASE64 } from '../../support/runtime-server/rest-capabilities.js';
+
+it('identifies a moved project folder and keeps listing drafts from available folders', async () => {
+  const harness = await createRuntimeServerTestHarness();
+  try {
+    const source = path.join(harness.runtimeDataDir, 'source');
+    const other = path.join(harness.runtimeDataDir, 'other');
+    const moved = path.join(harness.runtimeDataDir, 'moved');
+    await Promise.all([mkdir(source), mkdir(other)]);
+    const post = (route: string, body: unknown) => harness.runtimeFetch(route, { method: 'POST', body: JSON.stringify(body) });
+    const project: WorkspaceProject = await post('/v1/projects', { name: 'Design project', roots: [{ path: source }, { path: other }] });
+    const [sourceRoot, otherRoot] = workspaceProjectRoots(project);
+    const documents = '/v1/features/design/documents';
+    const availability = () => harness.runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/unavailable-roots`);
+    const entries = (rootId: string) => harness.runtimeFetch(`${documents}/entries?${new URLSearchParams({ projectId: project.id, rootId })}`);
+    const name = 'board.design.json';
+    for (const { id: rootId } of [sourceRoot, otherRoot]) await post(documents, { projectId: project.id, rootId, parentPath: '.', name });
+
+    await rename(source, moved);
+    await Promise.all([
+      expect(availability()).resolves.toEqual([sourceRoot.id]),
+      expect(entries(sourceRoot.id)).rejects.toThrow('DESIGN_PROJECT_DIRECTORY_UNAVAILABLE'),
+      expect(entries(otherRoot.id)).resolves.toMatchObject([{ path: name }]),
+    ]);
+
+    await writeFile(source, 'A regular file replaced the directory.');
+    await expect(entries(sourceRoot.id)).rejects.toThrow('DESIGN_PROJECT_DIRECTORY_UNAVAILABLE');
+    await unlink(source);
+    await rename(moved, source);
+    await expect(availability()).resolves.toEqual([]);
+    await expect(entries(sourceRoot.id)).resolves.toMatchObject([{ path: name }]);
+  } finally { await harness.close(); }
+});
 
 it('keeps a local draft, imported image and conversation together through project changes, a move and a restart', async () => {
   const harness = await createRuntimeServerTestHarness();

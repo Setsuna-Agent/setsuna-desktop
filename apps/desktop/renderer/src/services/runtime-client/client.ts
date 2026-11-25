@@ -258,6 +258,9 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     listProjects() {
       return request<WorkspaceProjectList>({ path: '/v1/projects' });
     },
+    listUnavailableProjectRootIds(projectId) {
+      return request<string[]>({ path: `/v1/projects/${encodeURIComponent(projectId)}/unavailable-roots` });
+    },
     addProject(input: AddWorkspaceProjectInput) {
       return request<WorkspaceProject>({ path: '/v1/projects', method: 'POST', body: input });
     },

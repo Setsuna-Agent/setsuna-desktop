@@ -124,6 +124,7 @@ export type DesktopRuntimeClient = {
   getConfig(): Promise<RuntimeConfigState>;
   saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState>;
   listProjects(): Promise<WorkspaceProjectList>;
+  listUnavailableProjectRootIds(projectId: string): Promise<string[]>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   updateProject(projectId: string, input: UpdateWorkspaceProjectInput): Promise<WorkspaceProject>;
   archiveProject(projectId: string): Promise<void>;
