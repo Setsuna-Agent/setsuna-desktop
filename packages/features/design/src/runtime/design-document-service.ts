@@ -25,8 +25,9 @@ export class DesignDocumentService {
 
   constructor(private readonly files: Pick<DesignWorkspaceFiles, 'create' | 'withDocument'>) {}
 
-  create(input: CreateDesignDocumentInput, signal: AbortSignal, chat?: ChatDesignScope) {
-    const document: DesignDocument = { schemaVersion: designDocumentVersion, documentId: randomUUID(), rootIds: [], nodes: {} };
+  create({ initialLayers, ...input }: CreateDesignDocumentInput, signal: AbortSignal, chat?: ChatDesignScope) {
+    const { rootIds = [], nodes = {} } = initialLayers ?? {};
+    const document: DesignDocument = { schemaVersion: designDocumentVersion, documentId: randomUUID(), rootIds, nodes };
     return this.files.create(input, serializeDocument(document), signal, chat);
   }
 

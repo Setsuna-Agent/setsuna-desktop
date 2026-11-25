@@ -8,7 +8,7 @@ import {
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
 import { defineFeatureOperation } from '@setsuna-desktop/feature-core/operation';
 import { parseDesignScriptName, parseDesignScriptPath, parseDesignScriptSource } from './design-content-source.js';
-import { designDocumentCodec, parseAssetPath, parseDesignEdit, type DesignDocument, type DesignEdit } from './document.js';
+import { designDocumentCodec, designDocumentVersion, parseAssetPath, parseDesignEdit, type DesignDocument, type DesignEdit } from './document.js';
 import { designLibraryPresets, findBundledDesignLibrary, type DesignLibraryPresetId } from './design-library-presets.js';
 import { isDesignDocumentPath } from './design-resource-id.js';
 import { parseDesignScriptInputs, parseDesignScriptParameters, type DesignScriptInputs } from './design-script-parameters.js';
@@ -30,6 +30,7 @@ export type ListDesignDocumentEntriesInput = DesignWorkspace & Readonly<{ includ
 export type DesignDocumentListEntry = Readonly<{ path: string; modifiedAt?: string; revision?: string; libraryPreset?: true }>;
 export type CreateDesignDocumentInput = DesignWorkspace & Readonly<{
   parentPath: string; name: string; autoNumber?: boolean; linkedProjectId?: string; command?: DesignCommandKey;
+  initialLayers?: Pick<DesignDocument, 'rootIds' | 'nodes'>;
 }>;
 export type PrepareDesignLibraryPresetInput = Readonly<{ ref: DesignDocumentRef; presetId: DesignLibraryPresetId }>;
 export type MoveDesignDocumentInput = Readonly<{ ref: DesignDocumentRef; destination: DesignWorkspace; command?: DesignCommandKey; expectedRevision?: string }>;
@@ -72,8 +73,12 @@ const createCodec = defineRuntimeCodec<CreateDesignDocumentInput>((input) => {
   if (!isValidWorkspaceEntryName(name) || !isDesignDocumentPath(name)) throw new Error('Invalid design file name.');
   if (typeof value.parentPath !== 'string') throw new Error('Design parent path is required.');
   if (value.autoNumber !== undefined && typeof value.autoNumber !== 'boolean') throw new Error('Invalid design numbering option.');
+  const initialLayers = value.initialLayers === undefined ? undefined : record(value.initialLayers);
+  const imported = initialLayers && designDocumentCodec.parse({ schemaVersion: designDocumentVersion, documentId: 'new-design',
+    rootIds: initialLayers.rootIds, nodes: initialLayers.nodes });
   return { ...workspace(value), parentPath: value.parentPath, name, command: readDesignCommandKey(value.command),
     ...(value.autoNumber ? { autoNumber: true } : {}),
+    ...(imported ? { initialLayers: { rootIds: imported.rootIds, nodes: imported.nodes } } : {}),
     ...(value.linkedProjectId === undefined ? {} : { linkedProjectId: requiredString(value.linkedProjectId) }) };
 });
 

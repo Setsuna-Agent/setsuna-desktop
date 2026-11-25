@@ -36,6 +36,10 @@
   column-gap: 24px;
 }
 
+.design-workspace-home__actions {
+  flex-wrap: wrap;
+}
+
 .design-workspace-home__title {
   min-width: 0;
   color: var(--app-text);

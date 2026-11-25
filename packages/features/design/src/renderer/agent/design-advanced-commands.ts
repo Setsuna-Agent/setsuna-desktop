@@ -1,4 +1,3 @@
-import { createElement } from 'react';
 import { designBrushPresets, designPencilPresets, type DesignEdit } from '../../contracts/index.js';
 import { designTaskRecord, requestedDesignRootEdit } from '../../contracts/design-task.js';
 import { parseDesignEdit, parseDesignStrokeStack } from '../../contracts/document.js';
@@ -14,11 +13,11 @@ import { planDesignLayerInsertion } from './design-insert-layers.js';
 import { parseDesignClipboard, planClipboardPaste } from '../context/design-layer-clipboard.js';
 import { toWorld } from '../design-geometry.js';
 import { canDropDesignLayer, designLayerOrder } from '../design-layer-drop.js';
-import { designDefaultColor } from '../../contracts/design-color.js';
+import { readDesignLucideSource } from '../vectors/design-lucide-catalog.js';
 import { readDesignSvg, insertDesignSvg } from '../vectors/design-svg-import.js';
 import type { DesignSvgSource } from '../vectors/design-svg-source.js';
 import { planDesignCommand, type DesignCommandContext } from './design-command.js';
-import { lucideCatalog, textArg, type DesignEditorTools } from './design-editor-tools.js';
+import { textArg, type DesignEditorTools } from './design-editor-tools.js';
 
 type Args = Record<string, unknown>;
 function finite(value: unknown) {
@@ -40,11 +39,9 @@ function drawing(fields: Args) {
 
 async function svgSource(fields: Args): Promise<DesignSvgSource> {
   if (fields.icon === undefined) return { markup: textArg(fields.markup, 'SVG markup') };
-  const name = textArg(fields.icon, 'icon');
-  const catalog = await lucideCatalog();
-  if (!Object.hasOwn(catalog, name)) throw new Error('Unknown Lucide icon.');
-  const [{ default: Icon }, { renderToStaticMarkup }] = await Promise.all([catalog[name](), import('react-dom/server')]);
-  return { name, icon: name, color: designDefaultColor, markup: renderToStaticMarkup(createElement(Icon)) };
+  const source = await readDesignLucideSource(textArg(fields.icon, 'icon'));
+  if (!source) throw new Error('Unknown Lucide icon.');
+  return source;
 }
 
 async function planSvg(fields: Args, parent: string | null, center: { x: number; y: number }, box: DesignCommandContext['scene'][string] | undefined, inLayout: boolean) {

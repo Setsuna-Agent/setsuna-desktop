@@ -459,6 +459,35 @@ it('saves a homepage draft in the chosen directory and links it to the selected 
   expect(create).toHaveBeenCalledExactlyOnceWith({ storageId: directory.id, parentPath: '.', name: 'new.design.json', linkedProjectId: 'other' });
 });
 
+it('turns a PEN file dropped on the design home into a new editable draft', async () => {
+  const path = 'Dropped.design.json';
+  const create = vi.fn<DesignWorkspaceProps['client']['create']>().mockResolvedValue({ name: path, path, type: 'file' });
+  const navigate = vi.fn<DesignWorkspaceProps['onLocationChange']>();
+  const view = render(<ToastProvider><DesignWorkspace client={testClient({ create })} projects={[]} location={null}
+    onLocationChange={navigate} translate={(key) => key} watchDirectories={() => () => undefined} /></ToastProvider>);
+  const home = view.getByRole('main');
+  const source = JSON.stringify({ version: '2.22', children: [{ type: 'frame', id: 'board', name: 'Dropped board', width: 320, height: 180 }] });
+  const drag = { types: ['Files'], files: [], dropEffect: 'none' };
+  const drop = (name: string) => fireEvent.drop(home, { dataTransfer: { ...drag, files: [new File([source], name)] } });
+
+  drop('Dropped.pen.json');
+  expect(view.queryByRole('dialog')).toBeNull();
+  expect(create).not.toHaveBeenCalled();
+
+  expect(fireEvent.dragOver(home, { dataTransfer: drag })).toBe(false);
+  drop('Dropped.PEN');
+  const dialog = within(await view.findByRole('dialog'));
+  fireEvent.click(dialog.getByRole('button', { name: 'feature.design.catalog.importDocument' }));
+
+  await waitFor(() => expect(navigate).toHaveBeenCalledExactlyOnceWith({ storageId: 'local', path }));
+  expect(create).toHaveBeenCalledTimes(1);
+  const [[draft]] = create.mock.calls;
+  expect(draft).toMatchObject({ storageId: 'local', parentPath: '.', name: path });
+  const layers = draft.initialLayers;
+  if (!layers || layers.rootIds.length !== 1) throw new Error('Expected a single imported root layer.');
+  expect(layers.nodes[layers.rootIds[0]]).toMatchObject({ kind: 'frame', name: 'Dropped board' });
+});
+
 it.each([
   { label: 'the open draft folder', location: { projectId: 'project', rootId: 'secondary', path: 'screens/open.design.json' },
     rootId: 'secondary', parentPath: 'screens', path: 'screens/新建设计稿 2.design.json' },

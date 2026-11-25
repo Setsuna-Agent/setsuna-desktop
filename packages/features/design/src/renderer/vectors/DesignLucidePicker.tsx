@@ -6,12 +6,11 @@ import { designDefaultColor } from '../../contracts/design-color.js';
 import { designIconNames, type DesignVector } from '../../contracts/index.js';
 import { DesignUiHostContext } from '../context/design-ui-host.js';
 import { defaultDesignStroke } from '../design-paint.js';
+import { loadDesignLucideCatalog, type LucideIconLoader } from './design-lucide-catalog.js';
 import type { DesignLucideSource } from './design-svg-source.js';
 import './design-icon-picker.css';
 
-type IconLoader = () => Promise<{ default: LucideIcon }>;
-type LucideCatalog = Readonly<Record<string, IconLoader>>;
-type Entry = Readonly<{ name: string; label: string; search: string; load: IconLoader }>;
+type Entry = Readonly<{ name: string; label: string; search: string; load: LucideIconLoader }>;
 type IconActions = Readonly<{
   onPick(source: DesignLucideSource): void;
   preview?: Readonly<{
@@ -37,7 +36,7 @@ export function DesignLucidePicker({ selected, disabled, searchAction, onPick, p
   translate: RendererTranslate;
 }>) {
   const toast = useToast();
-  const [catalog, setCatalog] = useState<LucideCatalog>();
+  const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof loadDesignLucideCatalog>>>();
   const [query, setQuery] = useState('');
   const entries = useMemo(() => {
     if (!catalog) return [];
@@ -52,9 +51,8 @@ export function DesignLucidePicker({ selected, disabled, searchAction, onPick, p
 
   useEffect(() => {
     let active = true;
-    void import('lucide-react/dynamicIconImports.js').then(({ default: icons }) => {
-      // The installed version's declarations also admit a CommonJS default wrapper.
-      if (active) setCatalog((icons.default ?? icons) as LucideCatalog);
+    void loadDesignLucideCatalog().then((icons) => {
+      if (active) setCatalog(icons);
     }).catch(() => { if (active) toast.error(t('feature.design.loadIconsFailed')); });
     return () => { active = false; };
   }, [t, toast]);

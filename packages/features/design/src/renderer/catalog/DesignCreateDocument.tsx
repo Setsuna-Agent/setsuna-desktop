@@ -1,22 +1,33 @@
 import { Plus } from 'lucide-react';
-import { useId, useRef, useState, type FormEvent } from 'react';
-import { isValidWorkspaceEntryName, WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
+import { forwardRef, useId, useImperativeHandle, useRef, useState, type FormEvent } from 'react';
+import { isValidWorkspaceEntryName, WORKSPACE_ENTRY_EXISTS_ERROR_CODE, WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES } from '@setsuna-desktop/contracts';
 import { FeatureOperationFailure, isFeatureOperationCancelled } from '@setsuna-desktop/feature-core/operation';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Button, Dialog, SelectField, TextField, useToast } from '@setsuna-desktop/renderer-ui';
-import { designDocumentFileName, type DesignDirectory, type DesignWorkspace as DesignScope } from '../../contracts/index.js';
+import { designDocumentFileName, type CreateDesignDocumentInput, type DesignDirectory, type DesignWorkspace as DesignScope } from '../../contracts/index.js';
+import type { DesignFontClient } from '../client.js';
+import type { DesignImportSource } from '../import/design-import.js';
 import { DesignLocationField } from './DesignLocationField.js';
 import { DesignProjectIcon } from './DesignProjectIcon.js';
 import type { DesignProject } from './DesignScopeFields.js';
 
-export function DesignCreateDocument({ projects, defaultProjectId, onCreate, chooseDirectory, translate: t }: Readonly<{
+type NewDesignDraft = Pick<CreateDesignDocumentInput, 'name' | 'linkedProjectId' | 'initialLayers'>;
+
+export type DesignCreateDocumentHandle = Readonly<{ openImport(source: DesignImportSource): void }>;
+
+type DesignCreateDocumentProps = Readonly<{
   projects: readonly DesignProject[];
   defaultProjectId?: string;
   chooseDirectory(): Promise<DesignDirectory | null>;
-  onCreate(scope: DesignScope, name: string, linkedProjectId?: string): Promise<void>;
+  fonts: Pick<DesignFontClient, 'list' | 'read'>;
+  onCreate(scope: DesignScope, draft: NewDesignDraft): Promise<void>;
   translate: RendererTranslate;
-}>) {
-  const [open, setOpen] = useState(false);
+}>;
+
+export const DesignCreateDocument = forwardRef<DesignCreateDocumentHandle, DesignCreateDocumentProps>(function DesignCreateDocument({
+  projects, defaultProjectId, onCreate, chooseDirectory, fonts, translate: t,
+}, ref) {
+  const [draft, setDraft] = useState<{ source?: DesignImportSource }>();
   const [directory, setDirectory] = useState<DesignDirectory | null>(null);
   const [projectId, setProjectId] = useState('');
   const [name, setName] = useState('');
@@ -29,32 +40,49 @@ export function DesignCreateDocument({ projects, defaultProjectId, onCreate, cho
   const projectIdField = useId();
   const errorId = useId();
   const toast = useToast();
-  const label = t('feature.design.newDocument');
+  const newLabel = t('feature.design.newDocument');
+  const label = draft?.source ? t('feature.design.catalog.importDocument') : newLabel;
   const nameLabel = t('feature.design.name');
   const linkedProject = projects.find(({ id }) => id === projectId);
+  useImperativeHandle(ref, () => ({ openImport: open }));
 
-  function changeOpen(next: boolean) {
-    if (submitting.current) return;
-    if (next) { setDirectory(null); setName(''); setProjectId(defaultProjectId ?? ''); setError(undefined); }
-    setOpen(next);
+  function open(source?: DesignImportSource) {
+    if (draft || submitting.current) return;
+    if (source && source.size > WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES) {
+      toast.error(t('feature.design.catalog.importDocumentTooLarge'));
+      return;
+    }
+    setDirectory(null);
+    setName(source?.name ?? '');
+    setProjectId(defaultProjectId ?? '');
+    setError(undefined);
+    setDraft({ source });
+  }
+
+  function close() {
+    if (!submitting.current) setDraft(undefined);
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (submitting.current) return;
+    if (submitting.current || !draft) return;
     if (!isValidWorkspaceEntryName(name)) { setError(t('feature.design.invalidDocumentName')); return; }
     const fileName = designDocumentFileName(name);
     submitting.current = true;
     setPending(true);
     setError(undefined);
     try {
-      await onCreate({ storageId: directory?.id ?? 'local' }, fileName, linkedProject?.id);
-      setOpen(false);
+      const scope = { storageId: directory?.id ?? 'local' };
+      const next = { name: fileName, ...(linkedProject ? { linkedProjectId: linkedProject.id } : {}) };
+      await onCreate(scope, draft.source ? { ...next, initialLayers: await draft.source.read(fonts) } : next);
+      setDraft(undefined);
     } catch (cause: unknown) {
       if (cause instanceof FeatureOperationFailure && cause.code === WORKSPACE_ENTRY_EXISTS_ERROR_CODE) {
         setError(t('feature.design.documentExists', { name: fileName }));
       } else if (!isFeatureOperationCancelled(cause)) {
-        toast.error(t('feature.design.createDocumentFailed', { error: cause instanceof Error ? cause.message : String(cause) }));
+        toast.error(t(draft.source ? 'feature.design.catalog.importDocumentFailed' : 'feature.design.createDocumentFailed', {
+          error: cause instanceof Error ? cause.message : String(cause),
+        }));
       }
     } finally {
       submitting.current = false;
@@ -64,9 +92,9 @@ export function DesignCreateDocument({ projects, defaultProjectId, onCreate, cho
 
   return <>
     <Button variant="primary" size="large" icon={<Plus size={16} aria-hidden="true" />}
-      aria-haspopup="dialog" onClick={() => changeOpen(true)}>{label}</Button>
-    <Dialog open={open} title={label} width={420} onClose={() => changeOpen(false)} dismissible={!pending} footer={<>
-      <Button disabled={pending} onClick={() => changeOpen(false)}>{t('feature.design.cancel')}</Button>
+      aria-haspopup="dialog" onClick={() => open()}>{newLabel}</Button>
+    <Dialog open={Boolean(draft)} title={label} width={420} onClose={close} dismissible={!pending} footer={<>
+      <Button disabled={pending} onClick={close}>{t('feature.design.cancel')}</Button>
       <Button type="submit" variant="primary" form={formId} loading={pending} disabled={!name}>{label}</Button>
     </>}>
       <form id={formId} className="design-create-form" onSubmit={(event) => { void submit(event); }}>
@@ -95,4 +123,4 @@ export function DesignCreateDocument({ projects, defaultProjectId, onCreate, cho
       </form>
     </Dialog>
   </>;
-}
+});

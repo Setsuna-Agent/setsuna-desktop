@@ -12,6 +12,7 @@ import { designComponentDefinitions } from '../components/design-library.js';
 import { designLibraryVariableCollections, designStyleChoices } from '../components/design-library-resources.js';
 import type { DesignExportRequest } from '../export/use-design-exports.js';
 import { mergeDesignFontCatalog } from '../text/design-bundled-fonts.js';
+import { loadDesignLucideCatalog } from '../vectors/design-lucide-catalog.js';
 import type { DesignCommandContext } from './design-command.js';
 import { designResourcePage } from '../../contracts/design-task.js';
 import type { DesignCommandKey } from '../../contracts/design-command-key.js';
@@ -53,7 +54,7 @@ export async function readDesignResources(view: DesignCommandContext, editor: De
     case 'scripts': values = (await import('../canvas/design-script-presets.js')).designScriptPresets.map(({ name }) => name); break;
     case 'shaders': values = (await import('../shaders/design-shader-presets.js')).designShaderPresets.map(({ name }) => name); break;
     case 'devices': values = [...editor.client.assets.webPreview?.devices ?? []]; break;
-    case 'icons': values = Object.keys(await lucideCatalog()); break;
+    case 'icons': values = Object.keys(await loadDesignLucideCatalog()); break;
     default: throw new Error('Unknown resource collection.');
   }
   let filtered = values;
@@ -63,11 +64,6 @@ export async function readDesignResources(view: DesignCommandContext, editor: De
       : [...names.filter((name) => name === query), ...names.filter((name) => name !== query && name.includes(query))];
   }
   return designResourcePage(filtered, args);
-}
-
-export async function lucideCatalog() {
-  const { default: icons } = await import('lucide-react/dynamicIconImports.js');
-  return (icons.default ?? icons) as Record<string, () => Promise<{ default: import('lucide-react').LucideIcon }>>;
 }
 
 export async function importDesignResource(editor: DesignEditorTools, args: Args, wholeDocument: boolean, signal: AbortSignal, command: DesignCommandKey) {
