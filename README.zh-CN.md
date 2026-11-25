@@ -37,6 +37,14 @@
   <a href="assets/readme/chat-review.png"><img src="assets/readme/chat-review.png" alt="Setsuna Desktop 对话、代码审查与集成终端工作区" width="960"></a>
 </p>
 
+### AI 设计
+
+和 AI 一起搭建可编辑的设计稿，选中图层后继续调整布局和样式。支持复用组件和变量、预览原型交互，以及将选中的图层导出为 HTML、SVG 或 PNG。
+
+<p align="center">
+  <a href="assets/readme/design-canvas.webp"><img src="assets/readme/design-canvas.webp" alt="Setsuna Desktop 设计画布，展示 AI 对话、选中的后台看板和属性面板" width="960"></a>
+</p>
+
 ### Pull Request
 
 <p align="center">

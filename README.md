@@ -37,6 +37,14 @@
   <a href="assets/readme/chat-review.png"><img src="assets/readme/chat-review.png" alt="Setsuna Desktop conversation, code review, and integrated terminal" width="960"></a>
 </p>
 
+### AI design
+
+Create editable designs with AI, then select layers on the canvas to refine their layout and styling. Reuse components and variables, preview interactions, and export selected layers as HTML, SVG, or PNG.
+
+<p align="center">
+  <a href="assets/readme/design-canvas.webp"><img src="assets/readme/design-canvas.webp" alt="Setsuna Desktop design canvas with AI chat, a selected dashboard frame, and the properties panel" width="960"></a>
+</p>
+
 ### Pull requests
 
 <p align="center">
