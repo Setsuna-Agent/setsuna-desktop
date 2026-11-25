@@ -25,6 +25,9 @@ import type { DesignWebPreviewHost } from './client.js';
 import { projectDesignScriptLayers, type DesignScriptResults } from './canvas/design-script-layers.js';
 import { drawingPathNode, isDrawingInkTool, isFreehandTool, sampleDesignInk, type DrawingInk, type DrawingPreview } from './canvas/design-drawing.js';
 import { useDesignFreehand } from './canvas/use-design-freehand.js';
+import { useDesignCanvasHitTest } from './canvas/use-design-canvas-hit-test.js';
+import { designCanvasCullingPadding, useDesignCanvasRenderRange } from './canvas/use-design-canvas-render-range.js';
+import { DesignRasterInvalidationContext, useDesignNavigationRaster } from './canvas/use-design-navigation-raster.js';
 import { projectDesignComponents } from './components/design-components.js';
 import type { DesignLibraryResources } from './components/design-library-resources.js';
 import { dropDesignLayer, isFlowChild, planDesignLayerUpdate, previewDesignCanvasDrop, selectedBranches, transformDesignLayer, type LayerPlacement } from './design-canvas-edits.js';
@@ -132,6 +135,7 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
   const surface = useRef<HTMLDivElement>(null);
   const workArea = useRef<HTMLDivElement>(null);
   const stage = useRef<Konva.Stage>(null);
+  const { bind: bindLayer, hitTest } = useDesignCanvasHitTest(stage);
   const webGuest = useRef<DesignWebPreviewHandle>(null);
   const size = useCanvasSize(surface);
   const expandedSize = useCanvasSize(workArea, webSession?.mode === 'expanded');
@@ -148,7 +152,7 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
   const { scale } = viewport;
   const blocked = interaction !== 'edit';
   const navigationBlocked = interaction === 'disabled';
-  const controls = useDesignCanvasGestures({ stage, document, projected, scene, revision, tool, selectedIds, croppingId, layoutAdjustmentId,
+  const controls = useDesignCanvasGestures({ hitTest, document, projected, scene, revision, tool, selectedIds, croppingId, layoutAdjustmentId,
     interaction, viewport, setViewport, onSelect, beginPick, onEditText, onAction, settings });
   const pen = useDesignPen({ enabled: tool === 'pen', disabled: blocked, document: projected, scene, revision, viewport,
     snapToPixelGrid: settings.snapToPixelGrid, onAction });
@@ -165,7 +169,7 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
     return { id: 'pen-preview', parentId, node: { ...node, ...placement } };
   }, [ink, penAnchors, penClosed, penParentId, projected, scene, tool]);
   const draftStroke = freehand.preview ?? styledPen;
-  const drawingPreviews = draftStroke ? [draftStroke] : undefined;
+  const drawingPreviews = useMemo(() => draftStroke ? [draftStroke] : undefined, [draftStroke]);
   const layerDragEvents = useDesignCanvasLayerDrag({ surface, drag: layerDrag, componentDrag, document, projected, scene, revision, viewport,
     disabled: blocked, isGestureActive: (): boolean => controls.isActive() || Boolean(pen.preview) || pathEdit.isDragging() || freehand.isDrawing(),
     onDrop: onLayerDrop, onComponentDrop });
@@ -283,8 +287,10 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
     surface.current.style.cursor = '';
     if (croppingId || layoutAdjustmentId || pathEditingId) surface.current.focus({ preventScroll: true });
   }, [croppingId, layoutAdjustmentId, pathEditingId]);
-  const range: Bounds = { ...toCanvasWorld(viewport, { x: -96, y: -96 }),
-    width: (size.width + 192) / scale, height: (size.height + 192) / scale };
+  const padding = designCanvasCullingPadding;
+  const range: Bounds = { ...toCanvasWorld(viewport, { x: -padding, y: -padding }),
+    width: (size.width + 2 * padding) / scale, height: (size.height + 2 * padding) / scale };
+  const renderRange = useDesignCanvasRenderRange(range, scale);
   // Mount animated overlays only near the viewport, including a held cursor after its layer was deleted.
   const focus = agentFocus && externalFocus ? [...agentFocus, ...externalFocus] : agentFocus ?? externalFocus;
   const onscreenFocus = focus?.filter(({ ids, point }) => containsBounds(range, { ...point, width: 0, height: 0 })
@@ -297,6 +303,16 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
   };
   const shaders = useDesignCanvasShaders(stage, paintDocument, paintScene, screenRange, activePaint);
   const web = useDesignWebPreviews(webHost, projected, scene, screenRange, layoutId, webSession);
+  const paint = gradientEdit?.paintPreview ?? activePaint;
+  const inlineWebId = web.live?.mode === 'inline' ? web.live.id : undefined;
+  const inspect = interaction === 'inspect';
+  const canvasRender = useMemo(() => ({ range: renderRange, editingId, inspect, paintPreview: paint,
+    cropPreview: activeCrop, floating: hoverDrop, pathPreview: pathEdit.preview, drawingPreviews, inlineWebId, loadImage, translate: t }),
+  [activeCrop, drawingPreviews, editingId, hoverDrop, inlineWebId, inspect, loadImage, paint, pathEdit.preview, renderRange, t]);
+  const rasterContent = useMemo(() => ({ paintDocument, paintScene, canvasRender, webImages: web.images }),
+    [canvasRender, paintDocument, paintScene, web.images]);
+  const { bindArtwork, noteWheel, invalidateRaster } = useDesignNavigationRaster({ mounted: renderRange, content: rasterContent, panning: controls.panning,
+    enabled: !shaders && !editingId && !preview && !dropPreview && !paint && !drawingPreviews && !web.live });
   const webLayer = web.live && displayedDocument.nodes[web.live.id];
   function browserBox(id: string) {
     return moveBrowserBox(displayedScene[id], displayedScene, placements?.[id], hoverDrop?.id === id ? hoverDrop.center : undefined);
@@ -440,7 +456,7 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
         event.currentTarget.focus({ preventScroll: true });
         const point = { x: event.clientX, y: event.clientY };
         const screen = toCanvasScreen(event.currentTarget, point);
-        const hit = stage.current?.getIntersection(screen);
+        const hit = hitTest(screen);
         const id = hit?.findAncestor('.design-hit-layer', true)?.id()
           ?? (canvasLayoutHandle(hit) || hit?.hasName('design-rotate') || hit?.name().startsWith('design-anchor-') ? visibleIds[0] : undefined);
         onContextMenu({ point, world: toCanvasWorld(viewport, screen), id: id && Object.hasOwn(document.nodes, id) ? id : null });
@@ -452,7 +468,7 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
             event.preventDefault();
             event.currentTarget.focus({ preventScroll: true });
             const point = toCanvasScreen(event.currentTarget, { x: event.clientX, y: event.clientY });
-            const id = stage.current?.getIntersection(point)?.findAncestor('.design-hit-layer', true)?.id();
+            const id = hitTest(point)?.findAncestor('.design-hit-layer', true)?.id();
             const sample = id ? sampleDesignInk(displayedDocument.nodes[id]) : undefined;
             if (sample) drawingMode.onChangeInk(sample);
             return;
@@ -554,18 +570,21 @@ export const DesignCanvas = forwardRef<DesignCanvasHandle, DesignCanvasProps>(fu
           if (editingId || controls.isActive() || pen.isPlacingAnchor() || pathEdit.isDragging() || freehand.isDrawing()) return;
           const native = event.evt;
           const pointer = event.currentTarget.getStage()?.getPointerPosition();
+          noteWheel();
           setViewport((current) => {
             if ((native.ctrlKey || native.metaKey) && pointer) return zoomViewport(current, pointer, current.scale * Math.exp(-native.deltaY * 0.006));
             if (native.shiftKey) return { ...current, x: current.x - (native.deltaX || native.deltaY) };
             return { ...current, x: current.x - native.deltaX, y: current.y - native.deltaY };
           });
         }}>
-        <Layer>
+        <Layer ref={bindLayer}>
           <Group x={viewport.x} y={viewport.y} scaleX={scale} scaleY={scale}>
-            <DesignCanvasLayers document={paintDocument} scene={paintScene} placements={placements} shaders={shaders} webImages={web.images}
-              canvas={{ range, scale, editingId, inspect: interaction === 'inspect', paintPreview: gradientEdit?.paintPreview ?? activePaint, cropPreview: activeCrop,
-                floating: hoverDrop, pathPreview: pathEdit.preview, drawingPreviews,
-                inlineWebId: web.live?.mode === 'inline' ? web.live.id : undefined, loadImage, translate: t }} />
+            <Group ref={bindArtwork}>
+              <DesignRasterInvalidationContext.Provider value={invalidateRaster}>
+                <DesignCanvasLayers document={paintDocument} scene={paintScene} placements={placements} shaders={shaders} webImages={web.images}
+                  canvas={canvasRender} scale={scale} />
+              </DesignRasterInvalidationContext.Provider>
+            </Group>
             {settings.showPixelGrid && scale >= 4 ? <PixelGrid range={range} scale={scale} /> : null}
             {dropFrameId ? <DesignCanvasSelection projected={displayedDocument} scene={displayedScene}
               ids={[dropFrameId]} scale={scale} handles={false} /> : null}

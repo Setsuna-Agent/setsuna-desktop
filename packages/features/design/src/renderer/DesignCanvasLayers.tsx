@@ -1,3 +1,4 @@
+import { createContext, memo, useContext } from 'react';
 import { Ellipse, Group, Image, Label, Rect, Tag, Text } from 'react-konva';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { resolveDesignNodeStyles, type DesignDocument, type DesignPathGeometry } from '../contracts/index.js';
@@ -25,7 +26,6 @@ import { designMaskPath } from './vectors/design-shape-outline.js';
 
 type CanvasRender = Readonly<{
   range: Bounds;
-  scale: number;
   editingId: string | null;
   inspect?: boolean;
   paintPreview?: DesignPaintPreview;
@@ -38,8 +38,7 @@ type CanvasRender = Readonly<{
   translate: RendererTranslate;
 }>;
 type ExportRender = Readonly<{ rootIds: readonly string[]; images: ReadonlyMap<string, HTMLImageElement> }>;
-
-export function DesignCanvasLayers({ document, scene, placements, canvas, output, shaders, webImages }: Readonly<{
+type DesignCanvasLayersProps = Readonly<{
   document: DesignDocument;
   scene: DesignScene;
   placements?: LayerPlacements;
@@ -47,7 +46,16 @@ export function DesignCanvasLayers({ document, scene, placements, canvas, output
   output?: ExportRender;
   shaders?: DesignShaderRender;
   webImages?: DesignWebImages;
-}>) {
+}>;
+
+const ArtboardScaleContext = createContext(1);
+
+export function DesignCanvasLayers({ scale = 1, ...props }: DesignCanvasLayersProps & { scale?: number }) {
+  // Only artboard decorations use screen pixels. Zooming should not rebuild the document paint.
+  return <ArtboardScaleContext.Provider value={scale}><DesignCanvasLayerTree {...props} /></ArtboardScaleContext.Provider>;
+}
+
+const DesignCanvasLayerTree = memo(function DesignCanvasLayerTree({ document, scene, placements, canvas, output, shaders, webImages }: DesignCanvasLayersProps) {
   const floating = canvas?.floating;
   const drawings = new Map<string | null, DrawingPreview[]>();
   for (const stroke of canvas?.drawingPreviews ?? []) {
@@ -117,9 +125,11 @@ export function DesignCanvasLayers({ document, scene, placements, canvas, output
       {node.childIds.filter((id) => id !== mask?.id).map((childId) => renderLayer(childId, moving))}
       {drawingAt(id)}
     </> : null;
+    const maskedChildren = mask ? <Group clipFunc={() => designMaskPath(mask.node, { ...scene[mask.id], ...placements?.[mask.id] })}>
+      {children}
+    </Group> : children;
     const image = node.kind === 'image' ? output?.images.get(node.assetPath) : undefined;
     const imageNode = node.kind === 'image' && canvas?.cropPreview?.id === source ? { ...node, crop: canvas.cropPreview.value } : node;
-    const scale = canvas?.scale ?? 1;
     const frameTitle = canvas && node.kind === 'frame' && !node.group && box.parentId === null
       ? node.name || canvas.translate('feature.design.artboard') : undefined;
 
@@ -133,12 +143,10 @@ export function DesignCanvasLayers({ document, scene, placements, canvas, output
         {node.kind === 'frame' ? <>
           {fills.map((fill, index) => <Rect key={index} name="design-frame-interior" width={width} height={height}
             cornerRadius={radius} {...designCanvasFillProps(fill)} {...designPaintAt(paint, index, fills.length)} />)}
-          <Group listening={!node.instanceOf} clipFunc={clipsChildren ? (context) => {
+          {clipsChildren || node.instanceOf ? <Group listening={!node.instanceOf} clipFunc={clipsChildren ? (context) => {
             context.beginPath();
             context.roundRect(0, 0, width, height, radius);
-          } : undefined}>
-            {mask ? <Group clipFunc={() => designMaskPath(mask.node, { ...scene[mask.id], ...placements?.[mask.id] })}>{children}</Group> : children}
-          </Group>
+          } : undefined}>{maskedChildren}</Group> : maskedChildren}
         </> : null}
         {node.kind === 'rectangle' ? fills.map((fill, index) => <Rect key={index} width={width} height={height} cornerRadius={radius}
           {...designCanvasFillProps(fill)} {...designPaintAt(paint, index, fills.length)} />) : null}
@@ -172,23 +180,20 @@ export function DesignCanvasLayers({ document, scene, placements, canvas, output
     }
 
     const inspectRoot = canvas?.inspect && box.parentId === null;
+    const paintedLayer = canvas && paintPaths.length ? <DesignCanvasPaintImages paths={paintPaths} loadImage={canvas.loadImage}>
+      {renderPaint}
+    </DesignCanvasPaintImages> : renderPaint(output?.images ?? emptyDesignPaintImages);
+    // Shader samplers use this group to read the layer's paint without its artboard label.
+    const shaderPaint = shaders && 'fills' in paintNode && paintNode.fills?.some((fill) => fill.shader);
+    const groupPaint = inspectRoot || shaderPaint || (node.opacity ?? 1) !== 1;
     return <Group key={id} id={id} name="design-hit-layer"
       {...center} offsetX={width / 2} offsetY={height / 2} rotation={rotation}
       scaleX={scaleX} scaleY={scaleY} listening={(inspectRoot || !box.locked) && !floatingCenter && !isGeneratedScriptLayer(id)}>
       {/* Treat the entire locked sample as one canvas target, including transparent areas. */}
       {inspectRoot ? <Rect width={width} height={height} fill="transparent" /> : null}
-      <Group name="design-layer-paint" opacity={node.opacity ?? 1} listening={!inspectRoot}>
-        {canvas && paintPaths.length ? <DesignCanvasPaintImages paths={paintPaths} loadImage={canvas.loadImage}>
-          {renderPaint}
-        </DesignCanvasPaintImages> : renderPaint(output?.images ?? emptyDesignPaintImages)}
-      </Group>
-      {frameTitle ? <>
-        {!strokes.length ? <Rect width={width} height={height} cornerRadius={radius}
-          stroke="rgba(68,54,87,0.20)" strokeWidth={1 / scale} fillEnabled={false} listening={false} /> : null}
-        <Group {...unreflect(width, height, { scaleX, scaleY })}>
-          <ArtboardLabel title={frameTitle} width={width} scale={scale} />
-        </Group>
-      </> : null}
+      {groupPaint ? <Group name="design-layer-paint" opacity={node.opacity ?? 1} listening={!inspectRoot}>{paintedLayer}</Group> : paintedLayer}
+      {frameTitle ? <ArtboardDecoration title={frameTitle} width={width} height={height} radius={radius}
+        outline={!strokes.length} scaleX={scaleX} scaleY={scaleY} /> : null}
     </Group>;
   }
 
@@ -196,6 +201,19 @@ export function DesignCanvasLayers({ document, scene, placements, canvas, output
     {(output?.rootIds ?? document.rootIds).map((id) => renderLayer(id, false, Boolean(output)))}
     {floating ? renderLayer(floating.id, false, false, floating.center) : null}
     {drawingAt(null)}
+  </>;
+});
+
+function ArtboardDecoration({ title, width, height, radius, outline, scaleX, scaleY }: Readonly<{
+  title: string; width: number; height: number; radius: number | number[]; outline: boolean; scaleX: number; scaleY: number;
+}>) {
+  const scale = useContext(ArtboardScaleContext);
+  return <>
+    {outline ? <Rect width={width} height={height} cornerRadius={radius}
+      stroke="rgba(68,54,87,0.20)" strokeWidth={1 / scale} fillEnabled={false} listening={false} /> : null}
+    <Group {...unreflect(width, height, { scaleX, scaleY })}>
+      <ArtboardLabel title={title} width={width} scale={scale} />
+    </Group>
   </>;
 }
 

@@ -3,6 +3,7 @@ import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { useToast } from '@setsuna-desktop/renderer-ui';
 import { Image, Rect } from 'react-konva';
 import type { DesignImage } from '../contracts/index.js';
+import { useInvalidateRasterOnChange } from './canvas/use-design-navigation-raster.js';
 import { designImageFit } from './design-image-fit.js';
 import type { LayerPaint } from './design-paint.js';
 import type { LoadDesignImage } from './design-images.js';
@@ -16,6 +17,7 @@ export function DesignCanvasImage({ node, width, height, loadImage, paint, trans
   translate: RendererTranslate;
 }>) {
   const [image, setImage] = useState<HTMLImageElement>();
+  useInvalidateRasterOnChange(image);
   const toast = useToast();
   const path = node.assetPath;
 
