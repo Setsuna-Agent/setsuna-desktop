@@ -11,7 +11,7 @@ import {
   settingsPageExtensionSlot,
   settingsPageSlot,
 } from '@setsuna-desktop/renderer-contracts/settings';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -119,19 +119,19 @@ describe('SettingsSectionExtensionOutlet', () => {
     await screen.findByRole('heading', { name: 'Import data' });
     viewport.scrollTop = 120;
     fireEvent.scroll(viewport);
-    fireEvent.click(screen.getByRole('button', { name: '后退' }));
+    await clickHistoryArrow('后退');
     await screen.findByRole('heading', { name: 'Browser' });
     expect(viewport.scrollTop).toBe(240);
-    fireEvent.click(screen.getByRole('button', { name: '前进' }));
+    await clickHistoryArrow('前进');
     await screen.findByRole('heading', { name: 'Import data' });
     expect(viewport.scrollTop).toBe(120);
 
     // A subpage is a restorable destination even after its Feature has unmounted.
     fireEvent.click(screen.getByRole('button', { name: 'Open conversation' }));
     await screen.findByText('Conversation');
-    fireEvent.click(screen.getByRole('button', { name: '后退' }));
+    await clickHistoryArrow('后退');
     await screen.findByRole('heading', { name: 'Import data' });
-    fireEvent.click(screen.getByRole('button', { name: '后退' }));
+    await clickHistoryArrow('后退');
     await screen.findByRole('heading', { name: 'Browser' });
     const restoredViewport = view.container.querySelector<HTMLElement>('[data-settings-scroll-container]')!;
     expect(restoredViewport.scrollTop).toBe(240);
@@ -139,24 +139,24 @@ describe('SettingsSectionExtensionOutlet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Network proxy' }));
     await screen.findByText('Proxy settings');
 
-    fireEvent.click(screen.getByRole('button', { name: '后退' }));
+    await clickHistoryArrow('后退');
     await screen.findByRole('heading', { name: 'Browser' });
     expect(screen.queryByText('Conversation')).toBeNull();
     expect(restoredViewport.scrollTop).toBe(240);
-    fireEvent.click(screen.getByRole('button', { name: '前进' }));
+    await clickHistoryArrow('前进');
     await screen.findByText('Proxy settings');
-    fireEvent.click(screen.getByRole('button', { name: '后退' }));
+    await clickHistoryArrow('后退');
     await screen.findByRole('heading', { name: 'Browser' });
 
     // Sidebar selections use the same state and replace the old forward branch.
     fireEvent.click(screen.getByRole('button', { name: '键盘快捷键' }));
     await screen.findByText('Shortcut settings');
     expect(screen.getByRole<HTMLButtonElement>('button', { name: '前进' }).disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: '后退' }));
+    await clickHistoryArrow('后退');
     await screen.findByRole('heading', { name: 'Browser' });
-    fireEvent.click(screen.getByRole('button', { name: '后退' }));
+    await clickHistoryArrow('后退');
     await screen.findByText('Conversation');
-    fireEvent.click(screen.getByRole('button', { name: '前进' }));
+    await clickHistoryArrow('前进');
     await screen.findByRole('heading', { name: 'Browser' });
     fireEvent.click(screen.getByRole('button', { name: 'Import data' }));
     await screen.findByRole('heading', { name: 'Import data' });
@@ -205,6 +205,13 @@ describe('SettingsSectionExtensionOutlet', () => {
     void runtime.dispose();
   });
 });
+
+async function clickHistoryArrow(name: '后退' | '前进') {
+  const button = screen.getByRole<HTMLButtonElement>('button', { name });
+  // The destination can render before the prior navigation releases the history controls.
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
+}
 
 const translate: RendererTranslate = (key) => key;
 const translateBrowser: BrowserTranslate = (key) => translateBrowserMessage('en-US', key);
