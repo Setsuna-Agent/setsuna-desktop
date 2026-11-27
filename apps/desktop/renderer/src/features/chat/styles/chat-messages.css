@@ -302,6 +302,8 @@
 
 .chat-user-message-content {
   display: grid;
+  /* Let the track shrink with the bubble when attachments have a wider preferred size. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   min-width: 0;
   white-space: pre-wrap;

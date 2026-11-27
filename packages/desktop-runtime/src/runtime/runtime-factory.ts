@@ -59,6 +59,7 @@ import { UserInputToolHost } from '../adapters/tool/user-input-tool-host.js';
 import { WorkspaceImageToolHost } from '../adapters/tool/workspace-image-tool-host.js';
 import { RuntimeApiToolHost } from '../adapters/tool/runtime-api-tool-host.js';
 import { ThreadReadToolHost } from '../adapters/tool/thread-read-tool-host.js';
+import { ThreadMessageToolHost } from '../adapters/tool/thread-message-tool-host.js';
 import type { RuntimeApi } from '../ports/runtime-api.js';
 import { FileProjectInstructionLoader } from '../adapters/workspace/file-project-instruction-loader.js';
 import { FileProjectWorkflowResolver } from '../adapters/workspace/file-project-workflow-resolver.js';
@@ -257,6 +258,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
     new ThreadReadToolHost(threadStore),
+    new ThreadMessageToolHost(threadStore, (threadId, input) => agentLoop.deliverMailboxInput(threadId, input)),
     ...(options.runtimeApi ? [new RuntimeApiToolHost(options.runtimeApi, pluginStore)] : []),
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
     automationToolHost,
@@ -278,7 +280,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   ], async (context) => {
     if (context.features?.plugins !== false && context.selectedPluginIds?.some(isBuilderId)) await builtinPlugins.ensureReady();
   });
-  const agentLoop = new AgentLoop({
+  const agentLoop: AgentLoop = new AgentLoop({
     queuedInputEditor: designToolHost,
     toolProgramRuntime: new QuickJsToolProgramRuntime(),
     attachmentStore,

@@ -166,6 +166,7 @@ export const MessageItem = memo(function MessageItem({
   const showExtractedGuidance = Boolean(presentation !== 'messenger' && !steered && message.turnId && message.turnId !== activeTurnId && !item.guidanceProcessed && fallbackGuidanceMessages.length && !workHistoryExpanded);
   if (editor) return editor;
   const hasAttachments = Boolean(message.attachments?.length);
+  const canEdit = !steered && !message.threadMessage && message.inputKind !== 'goal' && message.inputKind !== 'subagent_task';
   return (
     <article data-message-id={chatDisplayItemRenderKey(item)} className={['chat-bubble-item', 'chat-bubble-item--user', selectionMode ? 'chat-bubble-item--selecting' : '', selected ? 'is-selected' : ''].filter(Boolean).join(' ')}>
       {selectionMode && onToggleSelection ? <MessageSelectionControl disabled={selectionDisabled} checked={selected} label={t('chat.selection.selectMessage')} onChange={(checked) => onToggleSelection(item.id, checked)} /> : null}
@@ -173,7 +174,18 @@ export const MessageItem = memo(function MessageItem({
         <MessageBubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
-          footer={pending ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || selectionMode} align="end" message={message} forkMessageId={presentation === 'messenger' || steered ? null : message.id} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onExport={onStartExport ? () => onStartExport(item.id) : undefined} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={presentation === 'messenger' || steered ? 'none' : 'before-actions'} />}
+          footer={pending ? undefined : (
+            <ChatMessageFooter
+              actionsDisabled={Boolean(activeTurnId) || selectionMode}
+              align="end"
+              message={message}
+              forkMessageId={presentation === 'messenger' || steered || message.threadMessage ? null : message.id}
+              onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)}
+              onExport={onStartExport ? () => onStartExport(item.id) : undefined}
+              onEdit={canEdit && onStartEdit ? () => onStartEdit(message) : undefined}
+              timePosition={presentation === 'messenger' || steered ? 'none' : 'before-actions'}
+            />
+          )}
           align="end"
           variant="soft"
         />

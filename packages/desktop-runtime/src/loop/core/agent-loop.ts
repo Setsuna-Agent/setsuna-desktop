@@ -24,14 +24,8 @@ import type {
 import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
 import type { ApprovalReviewControl } from '@setsuna-desktop/feature-approval-review/contracts';
 import { createNoopReviewControl, type ReviewTurnRequest, type WorkspaceTaskTurnRequest } from '@setsuna-desktop/feature-review/contracts';
-import {
-  type CollaborationControl,
-  type CollaborationRuntimeHost,
-} from '@setsuna-desktop/feature-collaboration/contracts';
-import {
-  type GoalControl,
-  type GoalRuntimeHost,
-} from '@setsuna-desktop/feature-goal/contracts';
+import type { CollaborationControl, CollaborationRuntimeHost } from '@setsuna-desktop/feature-collaboration/contracts';
+import type { GoalControl, GoalRuntimeHost } from '@setsuna-desktop/feature-goal/contracts';
 import {
   type MemoryControl,
   type MemoryRuntimeHost,
@@ -206,6 +200,7 @@ export class AgentLoop {
     this.turnInputs = new RuntimeTurnInputCoordinator({
       clock: options.clock,
       ids: options.ids,
+      mutateThread: (threadId, operation) => this.withThreadMutation(threadId, operation),
       inputGuard: this.inputGuard,
       claimAttachments: (threadId, attachments) => options.attachmentStore?.claimForThread(threadId, attachments) ?? Promise.resolve(attachments),
       normalizeAttachments,
@@ -213,7 +208,10 @@ export class AgentLoop {
       turnTasks: this.turnTasks,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
       createMailboxTriggeredRun: async (threadId, thread, turnId, content, execution, beforeRun) => {
-        const run = await this.turnRuns.createMailboxTriggered(threadId, thread, turnId, content, execution, beforeRun);
+        const run = await this.turnRuns.createMailboxTriggered(threadId, thread, turnId, content, execution, () => {
+          this.assertThreadAcceptingWork(threadId);
+          return beforeRun();
+        });
         this.observeRun(threadId, run.turnId, 'regular', run.done);
         return run;
       },

@@ -1,4 +1,4 @@
-import { applyRuntimeEventToThread, type RuntimeMessage, type RuntimeThread } from '@setsuna-desktop/contracts';
+import { applyRuntimeEventToThread, mailboxMessageId, threadMessageTranscriptId, type RuntimeMessage, type RuntimeThread } from '@setsuna-desktop/contracts';
 import { createRuntimeSideConversation } from '@setsuna-desktop/feature-side-conversation/runtime';
 import { execFile } from 'node:child_process';
 import { access, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
@@ -123,6 +123,35 @@ describe('conversation forks', () => {
     expect(nested.messages.every((message) => message.visibility !== 'transcript')).toBe(true);
     const fullCopy = await forkRuntimeThread(runtime, newFork.id, { messageId: postCompaction.id, target: 'workspace' });
     expect(fullCopy.messages).toEqual(newFork.messages);
+  });
+
+  it('removes the model copy of deleted peer messages in ordinary and historical forks', async () => {
+    const source = await runtime.threadStore.createThread();
+    const turnId = 'first';
+    const delivery = { id: 'peer_report', content: 'An earlier report.', threadMessage: { from: { id: 'peer', title: 'Planning' } } };
+    const visibleId = threadMessageTranscriptId(delivery.id);
+    const modelId = mailboxMessageId(delivery.id);
+    await append(source, 'question', 'user', { turnId });
+    await runtime.threadStore.appendEvent(source.id, {
+      id: 'peer_delivered', threadId: source.id, turnId, type: 'mailbox.delivered', createdAt: source.createdAt, payload: delivery,
+    });
+    await append(source, modelId, 'user', { turnId, visibility: 'model', promptSource: 'collaboration', threadMessage: delivery.threadMessage });
+    const answer = await append(source, 'answer', 'assistant', { turnId });
+
+    const fork = await forkRuntimeThread(runtime, source.id, { messageId: answer.id, target: 'workspace' });
+    expect(fork.messages.map((message) => message.id)).toContain(modelId);
+    const deletedInFork = await runtime.threadStore.deleteMessages(fork.id, { messageIds: [visibleId], scope: 'turns' });
+    expect(deletedInFork.messages.map((message) => message.id)).toEqual(['question', 'answer']);
+
+    const notice = { compactedMessageCount: 3, compactedTokens: 10, originalMessageCount: 4,
+      originalTokens: 100, keptRecentMessageCount: 0, maxContextTokensK: 16, transcriptAfterMessageId: answer.id };
+    await runtime.threadStore.appendEvent(source.id, {
+      id: 'compacted', threadId: source.id, type: 'thread.context_compacted', createdAt: source.createdAt,
+      payload: { notice, messages: [{ ...answer, id: 'summary', role: 'system', contextCompaction: notice }] },
+    });
+    await runtime.threadStore.deleteMessages(source.id, { messageIds: [visibleId] });
+    const historical = await forkRuntimeThread(runtime, source.id, { messageId: answer.id, target: 'workspace' });
+    expect(historical.messages.map((message) => message.id)).toEqual(['question', 'answer']);
   });
 
   it('preserves intermediate model windows across repeated forks and runtime recovery', async () => {

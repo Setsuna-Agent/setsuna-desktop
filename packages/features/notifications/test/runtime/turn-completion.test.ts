@@ -50,7 +50,7 @@ async function activate() {
   };
 }
 
-describe('automatic turn completion notifications', () => {
+describe('automatic conversation notifications', () => {
   it('uses only the completed turn’s visible final answer, and truncates without breaking emoji', () => {
     const later: RuntimeMessage = { ...answer, id: 'later', turnId: 'turn_2', content: '另一轮回答' };
     const source = thread({ messages: [
@@ -118,6 +118,18 @@ describe('automatic turn completion notifications', () => {
     await vi.waitFor(() => expect(retryHost.send).toHaveBeenCalledOnce());
     retryHost.publish(completed);
     await vi.waitFor(() => expect(retryHost.send).toHaveBeenCalledTimes(2));
+  });
+
+  it('sends a live peer message notification to the receiving conversation even before a turn starts', async () => {
+    const host = await activate();
+    const mailbox = { id: 'mail_1', content: '复核完成。\n测试通过。' };
+    const delivery: StoredThreadEvent = { ...completed, turnId: undefined, type: 'mailbox.delivered', payload: mailbox };
+    host.publish(delivery);
+    expect(host.getThread).not.toHaveBeenCalled();
+    host.publish({ ...delivery, payload: { ...mailbox, threadMessage: { from: { id: 'thread_2', title: '复核' } } } });
+    await vi.waitFor(() => expect(host.send).toHaveBeenCalledWith({
+      id: 'thread-message:thread_1:mail_1', threadId: 'thread_1', title: '复核 → 修复通知', body: '复核完成。 测试通过。',
+    }, expect.any(AbortSignal)));
   });
 
   it('does not send a delayed completion after shutdown while the source thread is being read', async () => {

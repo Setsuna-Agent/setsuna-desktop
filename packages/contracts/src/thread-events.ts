@@ -1,4 +1,5 @@
 import type { StoredThreadEvent } from './events.js';
+import { mailboxMessageId, threadMessageReceiptId, threadMessageTranscriptId } from './threads/mailbox.js';
 import { threadFileChangeKey } from './workspace.js';
 import { removeMessagesWithNativeCompaction } from './event-projections/native-compaction.js';
 import { normalizeLegacyAssistantPhasesForTurn } from './event-projections/assistant-phase.js';
@@ -172,6 +173,8 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
 
   if (event.type === 'thread.context_compacted') {
     delete next.contextUsageBaseline;
+    // Older checkpoints may only have a model receipt. Record it before replacing the window.
+    recordThreadMessageReceipts(next, next.messages);
     const pendingHookRuns = next.pendingHookRuns;
     next.contextCompaction = {
       seq: event.seq,
@@ -249,8 +252,12 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
     if (event.payload.queuedInputId) {
       next.queuedTurnInputs = next.queuedTurnInputs?.filter((input) => input.id !== event.payload.queuedInputId);
     }
+    const message = event.payload.message;
+    if (message.threadMessage && message.visibility === 'model') {
+      recordThreadMessageReceipts(next, [message]);
+    }
     draft.prepareMessageAppend();
-    appendCreatedMessage(next, event.payload.message, event.createdAt);
+    appendCreatedMessage(next, message, event.createdAt);
     return next;
   }
 
@@ -293,6 +300,15 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
         turnId: event.turnId,
       },
     ];
+    const { id, content, threadMessage } = event.payload;
+    if (threadMessage) {
+      // Show delivery immediately, including mail queued behind a turn that cannot receive input.
+      draft.prepareMessageAppend();
+      appendCreatedMessage(next, {
+        id: threadMessageTranscriptId(id), role: 'user', content, threadMessage,
+        promptSource: 'collaboration', visibility: 'transcript', status: 'complete', createdAt: event.createdAt,
+      }, event.createdAt);
+    }
     return next;
   }
 
@@ -674,7 +690,25 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
   return assertNeverRuntimeEvent(event);
 }
 
-function removeThreadMessages(thread: RuntimeThread, ids: ReadonlySet<string>): void {
+function recordThreadMessageReceipts(thread: RuntimeThread, messages: readonly RuntimeMessage[]): void {
+  const deliveries = thread.mailboxDeliveries;
+  if (!deliveries?.some((delivery) => delivery.threadMessage && !delivery.consumed)) return;
+  const receipts = new Set(messages.filter((message) => message.threadMessage && message.visibility === 'model').map(({ id }) => id));
+  if (!receipts.size) return;
+  thread.mailboxDeliveries = deliveries.map((delivery) => (
+    delivery.threadMessage && !delivery.consumed && receipts.has(mailboxMessageId(delivery.id))
+      ? { ...delivery, consumed: true }
+      : delivery
+  ));
+}
+
+function removeThreadMessages(thread: RuntimeThread, ids: Set<string>): void {
+  // Forks copy the peer messages without the mailbox ledger, so pair by the transcript ID.
+  for (const message of thread.messages) {
+    if (!message.threadMessage || !ids.has(message.id)) continue;
+    const receiptId = threadMessageReceiptId(message.id);
+    if (receiptId) ids.add(receiptId);
+  }
   if (thread.fileChangeGroups) {
     thread.fileChangeGroups = Object.fromEntries(Object.entries(thread.fileChangeGroups)
       .map(([turnId, operations]) => [turnId, operations.filter((operation) => !ids.has(operation.messageId))]));
@@ -730,6 +764,7 @@ function appendCreatedMessage(
   refreshThreadSummary(thread);
   if (
     isTranscriptVisibleMessage(source)
+    && !source.threadMessage
     && thread.title === DEFAULT_THREAD_TITLE
     && source.role === 'user'
   ) {

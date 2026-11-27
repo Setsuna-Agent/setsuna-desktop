@@ -15,6 +15,10 @@
 - 幂等 ID 绑定 thread/turn，同一完成事件重复投递只显示一次。只订阅实时发布，不在启动或 SSE 重连时重放历史完成通知。
 - 完成事件先落盘再异步发送，慢通知/权限失败不阻塞任务结束、事件推送或下轮输入；失败记录到 Feature health。关闭时取消请求并移除订阅，迟到的线程读取不会再次发送。
 
+### 对话间消息
+
+实时 `mailbox.delivered` 事件带有对话消息来源时，通知标题显示发件与收件对话，正文显示消息预览。通知点击后打开收件对话。应用在前台时也可收到此类通知，去重 ID 绑定收件对话和投递 ID。
+
 ### 显式发送
 
 `send_notification -> NotificationToolHost -> Feature runtime client -> 已认证 native bridge -> Feature main -> Electron Notification`。

@@ -13,6 +13,11 @@ import type {
 
 export type ToolExecutionEnvironment = RuntimeEnvironment;
 
+export type ThreadMessagingScope = {
+  recipients: ReadonlySet<string>;
+  replies: ReadonlyMap<string, string>;
+};
+
 export type ToolExecutionContext = {
   threadId: string;
   /** Persisted conversation ownership, including while its optional Feature is unavailable. */
@@ -23,6 +28,8 @@ export type ToolExecutionContext = {
   turnId?: string;
   /** Only the root conversation has a renderer listening for interactive canvas requests. */
   mainConversation?: boolean;
+  /** User-selected recipients and current-turn reply receipts resolved from persisted inputs. */
+  threadMessaging?: ThreadMessagingScope;
   /** Model tool policy is independent of the process sandbox used for review commands. */
   toolAccess?: 'all' | 'read-only' | 'none';
   inputClientId?: string;
