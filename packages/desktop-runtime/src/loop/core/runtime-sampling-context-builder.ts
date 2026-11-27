@@ -58,6 +58,7 @@ import {
 } from '../context/runtime-context-compactor.js';
 import { RuntimePromptContextAssembler } from '../context/runtime-prompt-context-assembler.js';
 import { isRuntimeReadOnlyTool } from '../context/runtime-read-only-tools.js';
+import { acceptsThreadMessages, THREAD_MESSAGE_TOOL_NAME, threadMessagingScope } from '../context/runtime-thread-messaging.js';
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import { READ_TOOL_RESULT_TOOL_NAME, RuntimeToolRouter } from '../tools/tool-router.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
@@ -155,6 +156,8 @@ export class RuntimeSamplingContextBuilder {
     samplingModel,
     turnModel,
     toolAccess = 'all',
+    threadMessageTurn,
+    regeneratedInputId,
     unattended,
     forceCompaction = false,
   }: {
@@ -174,6 +177,8 @@ export class RuntimeSamplingContextBuilder {
     samplingModel?: RuntimeResolvedTurnModel;
     turnModel?: RuntimeResolvedTurnModel;
     toolAccess?: 'all' | 'read-only' | 'none';
+    threadMessageTurn?: boolean;
+    regeneratedInputId?: string;
     unattended?: boolean;
     forceCompaction?: boolean;
   }): Promise<RuntimeSamplingStepContext> {
@@ -246,6 +251,12 @@ export class RuntimeSamplingContextBuilder {
           }
         : undefined,
     });
+    const threadMessaging = snapshotThread && !unattended && acceptsThreadMessages(thread)
+      && (taskKind === 'regular' || taskKind === 'goal') && (toolAccess === 'all' || threadMessageTurn)
+      ? threadMessagingScope(snapshotThread.messages, turnId, regeneratedInputId)
+      : undefined;
+    const readOnlyAllowsTool = (name: string) => isRuntimeReadOnlyTool(name)
+      || Boolean(threadMessageTurn && threadMessaging && name === THREAD_MESSAGE_TOOL_NAME);
     const toolContext: RuntimeToolExecutionContext = {
       verificationModel: { ...modelForSampling.request, ...thinkingOptions,
         contextWindowTokens: modelForSampling.model?.contextWindowTokens, maxOutputTokens: modelForSampling.model?.maxOutputTokens },
@@ -258,6 +269,7 @@ export class RuntimeSamplingContextBuilder {
       projectId: thread.projectId,
       featureId: thread.featureId,
       mainConversation: !thread.parentThreadId && thread.kind !== 'side',
+      ...(threadMessaging ? { threadMessaging } : {}),
       toolAccess,
       inputClientId: thread.featureId === 'design'
         ? conversationMessages.filter((message) => message.turnId === turnId && message.role === 'user' && message.clientId).at(-1)?.clientId : undefined,
@@ -274,7 +286,7 @@ export class RuntimeSamplingContextBuilder {
       features: runtimeToolFeatureFlags(stepRuntimeConfig?.features),
       signal,
     };
-    const dynamicTools = this.options.toolExecutor.dynamicToolsForThread(threadId);
+    const dynamicTools = toolAccess === 'all' ? this.options.toolExecutor.dynamicToolsForThread(threadId) : undefined;
     // Tool follow-ups must reflect Goal mutations committed earlier in the same turn.
     const goalControl = this.options.goalControl();
     const stepGoal = await goalControl.getGoal(threadId).catch((error) => {
@@ -298,7 +310,7 @@ export class RuntimeSamplingContextBuilder {
     const selectedPluginIds = selectedPluginIdsForInput(skillActivationText);
     const scopedPlugins = exclusiveTools?.includeSelectedPlugins && selectedPluginIds.length && toolContext.features?.plugins !== false
       ? new Set(selectedPluginIds) : undefined;
-    const allowTool = runtimeToolFilter(toolAccess, exclusiveTools, scopedPlugins);
+    const allowTool = runtimeToolFilter(toolAccess, exclusiveTools, scopedPlugins, readOnlyAllowsTool);
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
           toolHost: this.options.toolHost,
@@ -333,7 +345,7 @@ export class RuntimeSamplingContextBuilder {
       : availableTools;
     const tools = toolAccess === 'read-only'
       ? scopedTools?.filter((tool) => (
-          isRuntimeReadOnlyTool(tool.name) || tool.name === READ_TOOL_RESULT_TOOL_NAME || tool.name === SEARCH_TOOLS_TOOL_NAME || tool.name === RUN_CODE_TOOL_NAME
+          readOnlyAllowsTool(tool.name) || tool.name === READ_TOOL_RESULT_TOOL_NAME || tool.name === SEARCH_TOOLS_TOOL_NAME || tool.name === RUN_CODE_TOOL_NAME
           || (taskKind === 'subagent' && tool.name === 'send_input')
         ))
       : scopedTools;
@@ -603,10 +615,11 @@ function goalExecutionForTurn({
 function runtimeToolFilter(
   toolAccess: 'all' | 'read-only' | 'none',
   exclusiveTools: ExclusiveToolScope | null,
-  selectedPlugins?: ReadonlySet<string>,
+  selectedPlugins: ReadonlySet<string> | undefined,
+  readOnlyAllowsTool: (name: string) => boolean,
 ): ((tool: RuntimeToolDefinition) => boolean) | undefined {
   if (toolAccess !== 'read-only' && !exclusiveTools) return undefined;
-  return (tool) => (toolAccess !== 'read-only' || isRuntimeReadOnlyTool(tool.name)) && (
+  return (tool) => (toolAccess !== 'read-only' || readOnlyAllowsTool(tool.name)) && (
     !exclusiveTools || exclusiveTools.has(tool.name) || Boolean(tool.source?.plugins?.some(({ id }) => selectedPlugins?.has(id)))
   );
 }

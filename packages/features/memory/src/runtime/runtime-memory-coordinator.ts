@@ -788,7 +788,7 @@ function startupMemorySourceTurnId(messages: RuntimeMessage[]): string | undefin
 }
 
 function isPassiveMemoryExcludedMessage(message: RuntimeMessage): boolean {
-  return Boolean(message.contextCompaction)
+  return Boolean(message.contextCompaction || message.threadMessage)
     || (message.role === 'assistant' && message.phase === 'commentary')
     || (message.role === 'user' && isMemoryExcludedContextualUserFragment(message.content));
 }

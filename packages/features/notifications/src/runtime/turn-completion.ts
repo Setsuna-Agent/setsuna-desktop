@@ -34,7 +34,7 @@ export function completedTurnNotification(event: CompletedTurn, thread: RuntimeT
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 /** Preserve the answer text while fitting a compact native banner, without splitting emoji. */
-function notificationPreview(value: string, limit: number): string {
+export function notificationPreview(value: string, limit: number): string {
   const text = value.replace(/\s+/gu, ' ').trim();
   if (text.length <= limit) return text;
   let preview = '';

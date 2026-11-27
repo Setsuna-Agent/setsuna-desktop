@@ -213,7 +213,7 @@ export class RuntimeAgentTurnRunner {
         ...turnStartHooks.contextMessages,
       ];
       // 标题由 Feature 在后台生成并落盘，不阻塞主回答，也不绑定当前轮次的取消信号。
-      void this.options.threadTitleGeneration().start({
+      if (!options.threadMessageTurn) void this.options.threadTitleGeneration().start({
         attachmentCount: attachments.length,
         conversationModel: turnModel
           ? {
@@ -237,7 +237,7 @@ export class RuntimeAgentTurnRunner {
         : thread.messages.map((message) => message.id === userMessage.id ? modelUserMessage : message);
       // review turn 展示给用户的是简短文案，发给模型的是完整 review prompt，两者在这里分流。
       runtimeConfig = runtimeConfig ?? await this.options.configStore?.getConfig().catch(() => null);
-      let explicitMemoryUserContent = userMessage.content;
+      let explicitMemoryUserContent = options.threadMessageTurn ? '' : userMessage.content;
       const appendSteersToConversation = (steers: RuntimeQueuedSteer[]) => {
         if (!steers.length) return false;
         const messages = steers.map((steer) => steer.message);
@@ -303,7 +303,9 @@ export class RuntimeAgentTurnRunner {
           turnId,
           samplingModel,
           turnModel,
-          toolAccess: taskKind === 'review' ? 'read-only' : 'all',
+          toolAccess: taskKind === 'review' || options.threadMessageTurn ? 'read-only' : 'all',
+          threadMessageTurn: options.threadMessageTurn,
+          regeneratedInputId: options.userMessage?.id,
         });
         cleanupEnvironment = stepContext.toolContext.environment;
         settleCompactionUsage = stepContext.settleCompactionUsage ?? settleCompactionUsage;

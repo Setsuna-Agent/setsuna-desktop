@@ -25,7 +25,10 @@ import {
 } from './runtime-thread-model.js';
 
 export type RuntimeTurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
-export type RuntimeMailboxExecutionOptions = Pick<SendTurnInput, 'thinking' | 'thinkingEffort'> & { unattended?: boolean };
+export type RuntimeMailboxExecutionOptions = Pick<SendTurnInput, 'thinking' | 'thinkingEffort'> & {
+  unattended?: boolean;
+  threadMessageTurn?: boolean;
+};
 
 export type RuntimeTurnExecutionOptions = {
   userInitiated?: boolean;
@@ -44,6 +47,7 @@ export type RuntimeTurnExecutionOptions = {
   runtimeContextMessages?: RuntimeMessage[];
   taskKind?: RuntimeTaskKind;
   userMessage?: RuntimeMessage;
+  threadMessageTurn?: boolean;
 };
 
 export type RuntimeTurnExecutionInput = {
@@ -155,7 +159,7 @@ export class RuntimeTurnRunFactory {
         attachments: [],
         signal: task.controller.signal,
         skillIds: [],
-        text: `Mailbox message received: ${content.slice(0, 160)}`,
+        text: execution.threadMessageTurn ? 'Incoming conversation message.' : `Mailbox message received: ${content.slice(0, 160)}`,
         turnModel,
         thinkingOptions: execution.thinking === undefined ? undefined : turnThinkingOptions(execution),
         thread,
@@ -164,8 +168,9 @@ export class RuntimeTurnRunFactory {
         options: {
           unattended: execution.unattended,
           runtimeContextMessages: execution.unattended ? unattendedTurnContext(turnId, this.options.clock.now().toISOString()) : undefined,
-          includeUserMessageInModel: true,
+          includeUserMessageInModel: !execution.threadMessageTurn,
           publishUserMessage: false,
+          ...(execution.threadMessageTurn ? { threadMessageTurn: true, promptSource: 'collaboration' as const } : {}),
           ...(taskKind === 'subagent'
             ? { inputKind: 'subagent_task' as const, promptSource: 'collaboration' as const }
             : {}),
@@ -355,7 +360,9 @@ export class RuntimeTurnRunFactory {
     const originalThread = await this.requireThread(threadId);
     const originalMessage = originalThread.messages.find((message) => message.id === messageId);
     if (!originalMessage) throw new Error(`Message not found: ${messageId}`);
-    if (originalMessage.role !== 'user' || originalMessage.contextCompaction) throw new Error('Only user messages can be regenerated.');
+    if (originalMessage.role !== 'user' || originalMessage.contextCompaction || originalMessage.threadMessage) {
+      throw new Error('Only user messages can be regenerated.');
+    }
     if (originalMessage.inputKind === 'goal') {
       throw new Error('Goal messages cannot be regenerated as regular turns.');
     }

@@ -1,7 +1,7 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { parseBrowserAnnotationMessage } from '@setsuna-desktop/feature-browser/contracts';
 import { Button } from '@setsuna-desktop/renderer-ui';
-import { ChevronDown, ChevronUp, Goal as GoalIcon, Users } from 'lucide-react';
+import { ChevronDown, ChevronUp, Goal as GoalIcon, MessageSquare, Users } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
 import { useI18n } from '../../../../shared/i18n/I18nProvider.js';
 import { SkillReferenceText } from '../../skills/SkillReference.js';
@@ -15,7 +15,11 @@ export function UserMessageContent({ message, streaming }: {
 }) {
   const hasSemanticKind = message.inputKind === 'goal'
     || message.inputKind === 'subagent_task';
-  const annotations = parseBrowserAnnotationMessage(message.content);
+  const source = message.threadMessage?.from;
+  const annotations = source ? null : parseBrowserAnnotationMessage(message.content);
+  const content = source ? message.content
+    : annotations ? <BrowserAnnotationReference message={annotations} />
+      : <SkillReferenceText content={message.content || '...'} skillReferences={message.skillReferences} />;
   return (
     <div className={`chat-user-message-content${annotations ? ' chat-user-message-content--annotations' : ''}`}>
       {message.attachments?.length ? (
@@ -23,16 +27,23 @@ export function UserMessageContent({ message, streaming }: {
       ) : null}
       {message.content || streaming || hasSemanticKind ? (
         <div className="chat-user-message-content__text">
-          <UserMessageKindBadge kind={message.inputKind} />
+          {source ? <ThreadMessageSource title={source.title || source.id} /> : <UserMessageKindBadge kind={message.inputKind} />}
           {message.content || streaming ? (
-            <UserMessageBody key={message.id}>
-              {annotations ? <BrowserAnnotationReference message={annotations} />
-                : <SkillReferenceText content={message.content || '...'} skillReferences={message.skillReferences} />}
-            </UserMessageBody>
+            <UserMessageBody key={message.id}>{content}</UserMessageBody>
           ) : null}
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ThreadMessageSource({ title }: { title: string }) {
+  const { t } = useI18n();
+  return (
+    <span className="chat-user-message-kind">
+      <MessageSquare size={13} strokeWidth={1.9} aria-hidden="true" />
+      <span>{t('chat.message.fromThread', { title })}</span>
+    </span>
   );
 }
 

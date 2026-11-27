@@ -1,4 +1,4 @@
-import { applyRuntimeEventToThread, type RuntimeEvent, type RuntimeMessage, type RuntimeThread, type StoredThreadEvent } from '@setsuna-desktop/contracts';
+import { applyRuntimeEventToThread, threadMessageReceiptId, type RuntimeEvent, type RuntimeMessage, type RuntimeThread, type StoredThreadEvent } from '@setsuna-desktop/contracts';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { RuntimeUseCaseError } from './errors.js';
 
@@ -87,10 +87,12 @@ export async function runtimeMessagesThroughMessage(
     historical = applyRuntimeEventToThread(historical, event);
   }
   const currentMessages = new Map(source.messages.map((message) => [message.id, message]));
+  const retainedPeerReceipts = new Set(source.messages.filter((message) => message.threadMessage)
+    .map((message) => threadMessageReceiptId(message.id)));
   return historical.messages.flatMap((message) => {
     const current = currentMessages.get(message.id);
     // Keep historical model-only compaction checkpoints, but respect messages the user deleted.
-    if (!current) return message.visibility === 'model' ? [message] : [];
+    if (!current) return message.visibility === 'model' && (!message.threadMessage || retainedPeerReceipts.has(message.id)) ? [message] : [];
     return [{ ...current, visibility: message.visibility }];
   });
 }

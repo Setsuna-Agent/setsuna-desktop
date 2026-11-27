@@ -26,18 +26,11 @@ import type {
 import type { RuntimeUsage } from './usage.js';
 import type { WorkspaceFileChangeAction } from './workspace.js';
 import type { RuntimeContextUsageBaseline } from './thread-context.js';
+import type { RuntimeMailboxDelivery } from './threads/mailbox.js';
 
 export type RuntimeTaskKind = 'regular' | 'compact' | 'review' | 'goal' | 'user_shell' | 'subagent';
 
-export type RuntimeMailboxDelivery = {
-  id: string;
-  content: string;
-  deliveryMode?: 'queue_only' | 'trigger_turn';
-  fromAgentId?: string;
-  fromThreadId?: string;
-  toAgentId?: string;
-  triggerTurn?: boolean;
-};
+export type { RuntimeMailboxDelivery } from './threads/mailbox.js';
 
 export const RUNTIME_EVENT_TYPES = [
   'thread.created',

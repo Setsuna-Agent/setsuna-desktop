@@ -36,12 +36,14 @@ import type { RuntimeUsage } from './usage.js';
 import type { ThreadFileChangeState } from './workspace.js';
 import type { RuntimeFileChangeGroups } from './workspace/file-change-group-types.js';
 import type { RuntimeThreadMessagePageInfo } from './threads/message-page.js';
+import type { RuntimeMailboxDeliveryRecord, RuntimeThreadMessageOrigin } from './threads/mailbox.js';
 import { cloneRuntimeSkillReferences, type RuntimeSkillReference } from './threads/skill-references.js';
 import { visibleTextOutsideThinkTags } from './swe/think-tag-scanner.js';
 
 export type * from './message-metadata.js';
 export type * from './thread-context.js';
 export type * from './threads/message-page.js';
+export type { RuntimeMailboxDeliveryRecord } from './threads/mailbox.js';
 export * from './threads/skill-references.js';
 
 export type RuntimeMessage = {
@@ -54,6 +56,7 @@ export type RuntimeMessage = {
   /** 用户输入的领域类型；普通消息可省略，特殊任务由 transcript 使用独立标识展示。 */
   inputKind?: RuntimeMessageInputKind;
   promptSource?: RuntimeMessagePromptSource;
+  threadMessage?: RuntimeThreadMessageOrigin;
   content: string;
   /** 超限工具结果的本地引用；content 只保留有界首尾摘要，可用 read_tool_result 分页恢复。 */
   toolResultRef?: RuntimeToolResultRef;
@@ -380,18 +383,6 @@ function normalizeReviewFindingHeader(line: string): string {
 export type RuntimePlanModeNotice = {
   mode: 'plan';
   status: 'awaiting_confirmation' | 'accepted' | 'dismissed';
-};
-
-export type RuntimeMailboxDeliveryRecord = {
-  id: string;
-  content: string;
-  createdAt: string;
-  turnId?: string;
-  deliveryMode?: 'queue_only' | 'trigger_turn';
-  fromAgentId?: string;
-  fromThreadId?: string;
-  toAgentId?: string;
-  triggerTurn?: boolean;
 };
 
 export type RuntimeThreadTurnTaskKind = 'regular' | 'compact' | 'review' | 'goal' | 'user_shell' | 'subagent';

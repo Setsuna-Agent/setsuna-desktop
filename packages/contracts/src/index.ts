@@ -42,6 +42,7 @@ export { mergeCompactedMessages } from './thread-event-projection.js';
 export { restoreNativeCompactionHistory } from './event-projections/native-compaction.js';
 export * from './thread-title.js';
 export * from './threads/reference.js';
+export { mailboxMessageId, threadMessageReceiptId, threadMessageTranscriptId, type RuntimeThreadMessageOrigin } from './threads/mailbox.js';
 export * from './threads.js';
 export * from './threads/deletion.js';
 export * from './threads/file-preview-projection.js';

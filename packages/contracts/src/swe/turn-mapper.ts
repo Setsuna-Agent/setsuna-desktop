@@ -5,6 +5,7 @@ import type {
   RuntimeStreamItem,
 } from '../provider.js';
 import type { RuntimeMailboxDeliveryRecord, RuntimeMessage, RuntimeThreadTurn, RuntimeToolRun } from '../threads.js';
+import { mailboxMessageId } from '../threads/mailbox.js';
 import type { RuntimeUsage } from '../usage.js';
 import { isActiveToolRun } from '../thread-event-projection.js';
 import {
@@ -484,10 +485,10 @@ export function isRuntimeDynamicToolContentItem(value: unknown): value is Runtim
 export function collabToolCallItemFromMailbox(delivery: RuntimeMailboxDeliveryRecord, status: SweCollabToolCallStatus, receiverThreadId: string): SweThreadItem {
   return {
     type: 'collabToolCall',
-    id: `mailbox_${delivery.id}`,
+    id: mailboxMessageId(delivery.id),
     tool: delivery.triggerTurn || delivery.deliveryMode === 'trigger_turn' ? 'resume_agent' : 'send_input',
     status,
-    senderThreadId: delivery.fromThreadId ?? delivery.fromAgentId ?? 'unknown',
+    senderThreadId: delivery.threadMessage?.from.id ?? delivery.fromThreadId ?? delivery.fromAgentId ?? 'unknown',
     receiverThreadId,
     prompt: delivery.content,
   };

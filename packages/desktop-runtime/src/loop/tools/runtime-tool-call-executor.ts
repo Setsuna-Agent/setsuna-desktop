@@ -265,16 +265,20 @@ export class RuntimeToolCallExecutor {
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'success', programAttachments, toolRouter);
       }
       const collaborationCall = this.options.collaborationControl().isToolName(toolCall.name);
+      const goalCall = this.options.goalCoordinator().isToolName(toolCall.name);
+      const restricted = context.toolAccess === 'read-only' || context.toolAccess === 'none';
+      // These dispatch paths bypass the host's filtered catalog. Child reports are still allowed in read-only turns.
+      const childReport = context.toolAccess === 'read-only' && context.mainConversation === false && toolCall.name === 'send_input';
       const featureToolWithheld = collaborationCall ? toolRouter?.withholdsCollaborationTools : toolRouter?.withholdsRuntimeFeatureTools;
       if (
-        (collaborationCall || this.options.goalCoordinator().isToolName(toolCall.name))
-        && (featureToolWithheld || (await this.options.threadStore.getThread(context.threadId))?.kind === 'side')
+        (collaborationCall || goalCall)
+        && ((restricted && !childReport) || featureToolWithheld || (await this.options.threadStore.getThread(context.threadId))?.kind === 'side')
       ) {
         content = `Tool ${toolCall.name} is unavailable in this conversation.`;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, 'error');
       }
-      if (this.options.collaborationControl().isToolName(toolCall.name)) {
+      if (collaborationCall) {
         if (!this.options.collaborationControl().enabled(runtimeConfig)) {
           content = `Tool ${toolCall.name} failed: multi_agent feature is disabled.`;
           await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
@@ -283,11 +287,11 @@ export class RuntimeToolCallExecutor {
         const execution = await this.runCollaborationToolCall(toolCall, parsedArguments, context);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, 'success', undefined, toolRouter);
       }
-      if (this.options.goalCoordinator().isToolName(toolCall.name)) {
+      if (goalCall) {
         const execution = await this.runGoalToolCall(toolCall, parsedArguments, context);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, 'success', undefined, toolRouter);
       }
-      const dynamicTool = this.appServerDynamicToolForCall(context.threadId, toolCall.name, toolRouter);
+      const dynamicTool = restricted ? null : this.appServerDynamicToolForCall(context.threadId, toolCall.name, toolRouter);
       if (dynamicTool) {
         const execution = await this.runAppServerDynamicToolCall(toolCall, parsedArguments, context, dynamicTool.registration, dynamicTool.tool);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, execution.status, undefined, toolRouter);

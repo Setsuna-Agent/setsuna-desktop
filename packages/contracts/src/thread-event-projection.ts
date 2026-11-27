@@ -23,6 +23,7 @@ export function clearRunningContextCompaction(thread: RuntimeThread, turnId: str
 export function cloneMessage(message: RuntimeMessage): RuntimeMessage {
   return {
     ...message,
+    ...(message.threadMessage ? { threadMessage: { ...message.threadMessage, from: { ...message.threadMessage.from } } } : {}),
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
     toolResultRef: message.toolResultRef ? { ...message.toolResultRef } : undefined,
     streamParts: message.streamParts?.map((part) => ({ ...part })),

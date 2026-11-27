@@ -321,6 +321,7 @@ HTML 对话导出只激活最终答复中完整的顶层 OpenUI 围栏，复用 
 - Workspace mention 使用明确 parser，不从渲染后的 Markdown 反推。
 - `@` 同时提供当前会话打开的浏览器标签页，通过 Browser contract 序列化稳定 ID、标题和网址；候选、输入槽位和历史消息共用该引用格式。
 - 侧栏会话可拖入输入框。runtime 只在采样时解析模型历史中用户显式输入的会话引用，经 `ThreadStore.listMessages` 按需读取最近记录，最多解析最近引用的五个会话并限制正文总量。引用作为外部资料参与上下文预算，不复制思考、工具结果、model-only 消息或附件，也不递归展开其中的引用；会话删除或读取失败会标记不可用。需要补读时使用独立的内置 `read_thread` 工具分页读取历史，并按需包含工具输出，不依赖应用构建器插件。
+- 要与另一条对话协作，可从侧栏拖入目标会话，在当前消息中请助手把问题或进展发给它。后续可直接请助手继续发送或重试。对方的聊天记录会显示来源和正文，系统通知可打开收件对话。收件方可将结果发回原对话。投递与回复规则见 [对话间消息](../../core/runtime/tools-and-capabilities.md#对话间消息)。
 - 文件打开仍走 main/workspace API。
 - 文件选择器中的本地文件通过 preload 从 Electron `File` 提取可信路径并登记为 runtime 引用；renderer 和线程事件只保留不透明 attachment ID，不读取或复制文件字节。
 - runtime 将被引用的原文件作为该 turn 的 direct-tool-only readable root 暴露给 Agent，但不会把动态附件根加入 shell sandbox plan，也不会新增写权限；文件若本来位于 workspace 或已配置的 writable root 内，仍遵循原有 workspace 权限。文件移动或删除后引用变为不可用，不会生成第二份副本。

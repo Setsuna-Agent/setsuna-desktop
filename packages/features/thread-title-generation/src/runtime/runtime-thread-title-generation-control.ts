@@ -66,7 +66,7 @@ export class RuntimeThreadTitleGenerationControl implements ThreadTitleGeneratio
 
   async start(input: ThreadTitleGenerationStartInput): Promise<void> {
     if (input.taskKind !== 'regular' || input.thread.title !== DEFAULT_THREAD_TITLE) return;
-    if (input.thread.messages.some((message) => message.role === 'user' && message.visibility !== 'model')) {
+    if (input.thread.messages.some((message) => message.role === 'user' && message.visibility !== 'model' && !message.threadMessage)) {
       return;
     }
 
@@ -113,7 +113,7 @@ export class RuntimeThreadTitleGenerationControl implements ThreadTitleGeneratio
 
     const current = await this.host.getThread(threadId);
     const fallback = current?.messages.find((message) => (
-      message.role === 'user' && message.visibility !== 'model'
+      message.role === 'user' && message.visibility !== 'model' && !message.threadMessage
     ));
     if (
       !current
