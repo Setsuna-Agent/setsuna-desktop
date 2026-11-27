@@ -37,7 +37,9 @@ type CanvasRender = Readonly<{
   loadImage: LoadDesignImage;
   translate: RendererTranslate;
 }>;
-type ExportRender = Readonly<{ rootIds: readonly string[]; images: ReadonlyMap<string, HTMLImageElement> }>;
+type ExportRender = Readonly<{
+  rootIds: readonly string[]; images: ReadonlyMap<string, HTMLImageElement>; paintedLayerIds?: ReadonlySet<string>; neutralPlaceholder?: boolean;
+}>;
 type DesignCanvasLayersProps = Readonly<{
   document: DesignDocument;
   scene: DesignScene;
@@ -95,6 +97,8 @@ const DesignCanvasLayerTree = memo(function DesignCanvasLayerTree({ document, sc
     const moving = Boolean(move || floatingCenter) || ancestorMoving;
     const clipsChildren = node.kind === 'frame' && node.clip !== false;
     if (!box.visible || id === canvas?.editingId) return null;
+    const paintsLayer = !output?.paintedLayerIds || output.paintedLayerIds.has(id);
+    if (!paintsLayer && (node.kind !== 'frame' || clipsChildren)) return null;
     if (canvas && !moving && (node.kind !== 'frame' || clipsChildren)
       && (!box.visibleBounds || !intersectBounds(canvas.range, box.visibleBounds))) return null;
     const { x, y } = move ?? box;
@@ -110,7 +114,7 @@ const DesignCanvasLayerTree = memo(function DesignCanvasLayerTree({ document, sc
     const painted = draft ? resolveDesignNodeStyles(draft, paintStyles(id)) : node;
     const paintNode = painted.kind === 'text' && node.kind === 'text' && painted.text !== node.text
       ? { ...painted, text: node.text, runs: node.runs } : painted;
-    const strokes = visibleDesignStrokes(paintNode);
+    const strokes = paintsLayer ? visibleDesignStrokes(paintNode) : [];
     const [firstStroke] = strokes;
     const glyph = node.kind === 'text' || node.kind === 'vector';
     const liveWeb = canvas?.inlineWebId === id;
@@ -136,7 +140,7 @@ const DesignCanvasLayerTree = memo(function DesignCanvasLayerTree({ document, sc
     const paintPaths = canvas ? designPaintImagePaths(paintNode, true) : [];
     const shaderFill = shaders && { render: shaders, size: { width, height } };
     function renderPaint(images: DesignPaintImages) {
-      const fills = node.kind === 'frame' || node.kind === 'rectangle' || node.kind === 'ellipse' || node.kind === 'web' || node.kind === 'script'
+      const fills = paintsLayer && (node.kind === 'frame' || node.kind === 'rectangle' || node.kind === 'ellipse' || node.kind === 'web' || node.kind === 'script')
         ? designCanvasFills(paintNode, { x: node.kind === 'ellipse' ? -width / 2 : 0,
           y: node.kind === 'ellipse' ? -height / 2 : 0, width, height }, images, shaderFill) : [];
       return <>
@@ -158,7 +162,7 @@ const DesignCanvasLayerTree = memo(function DesignCanvasLayerTree({ document, sc
             context.roundRect(0, 0, width, height, radius);
           }}>
             <Image image={webImage.image} {...fitDesignWebDevice({ width, height }, webImage.device)} listening={false} />
-          </Group> : liveWeb ? null : <Text text={(node.kind === 'web' ? node.url && new URL(node.url).host : node.scriptPath?.split('/').at(-1)) ?? node.name}
+          </Group> : liveWeb || output?.neutralPlaceholder ? null : <Text text={(node.kind === 'web' ? node.url && new URL(node.url).host : node.scriptPath?.split('/').at(-1)) ?? node.name}
             width={width} height={height} align="center" verticalAlign="middle" wrap="none" ellipsis padding={8}
             fontFamily={designTextFont} fontSize={14} fill="#717b89" listening={false} />}
         </> : null}
@@ -184,7 +188,7 @@ const DesignCanvasLayerTree = memo(function DesignCanvasLayerTree({ document, sc
       {renderPaint}
     </DesignCanvasPaintImages> : renderPaint(output?.images ?? emptyDesignPaintImages);
     // Shader samplers use this group to read the layer's paint without its artboard label.
-    const shaderPaint = shaders && 'fills' in paintNode && paintNode.fills?.some((fill) => fill.shader);
+    const shaderPaint = paintsLayer && shaders && 'fills' in paintNode && paintNode.fills?.some((fill) => fill.shader);
     const groupPaint = inspectRoot || shaderPaint || (node.opacity ?? 1) !== 1;
     return <Group key={id} id={id} name="design-hit-layer"
       {...center} offsetX={width / 2} offsetY={height / 2} rotation={rotation}

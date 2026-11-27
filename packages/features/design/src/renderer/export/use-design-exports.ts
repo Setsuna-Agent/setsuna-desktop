@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { isValidWorkspaceEntryName } from '@setsuna-desktop/contracts';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { useToast } from '@setsuna-desktop/renderer-ui';
+import type { DesignLayerExport } from '../../contracts/design-export.js';
 import type { CaptureDesignWebImages } from '../canvas/use-design-web-previews.js';
 import type { DesignAssets } from '../client.js';
 import type { LoadDesignImage } from '../design-images.js';
@@ -10,6 +11,8 @@ import { DesignFontsContext } from '../text/use-design-fonts.js';
 import { designExportBounds, designExportFontRequests, designExportShaderPaths,
   loadExportImages, loadExportWebImages, type DesignExportSelection } from './design-export-scene.js';
 import type { DesignCodeFormat } from './export-design-html.js';
+import { DesignExportPreviewContext } from './DesignExportPreviewProvider.js';
+import { copyDesignLayerExport, saveDesignLayerExport } from './design-layer-export-actions.js';
 
 export type DesignPngScale = 1 | 2 | 3;
 export type DesignExportRequest =
@@ -24,6 +27,7 @@ export function useDesignExports(output: DesignAssets['output'], loadImage: Load
   const pending = useRef<AbortController>();
   useEffect(() => () => pending.current?.abort(), []);
   const toast = useToast();
+  const present = useContext(DesignExportPreviewContext);
   const fonts = useContext(DesignFontsContext);
   const shaderAssets = useContext(DesignShaderAssetsContext);
 
@@ -51,52 +55,35 @@ export function useDesignExports(output: DesignAssets['output'], loadImage: Load
     return { image: renderDesignPng(captured, bounds, images, ratio, sources), bounds };
   }
 
-  async function deliver(selection: DesignExportSelection, name: string, request: DesignExportRequest, signal: AbortSignal) {
+  async function generate(selection: DesignExportSelection, name: string, request: DesignExportRequest, signal: AbortSignal): Promise<DesignLayerExport> {
     signal.throwIfAborted();
     if (fonts?.loading) throw new Error('Fonts are loading.');
     const bounds = designExportBounds(selection);
     if (!bounds) throw new Error('No visible design layers to export.');
-    if (request.kind === 'image') {
-      const width = Math.ceil(bounds.width) * request.scale;
-      const height = Math.ceil(bounds.height) * request.scale;
-      if (width < 1 || height < 1 || Math.max(width, height) > 32_767 || width * height > 16_000_000) {
-        throw new Error(t('feature.design.imageExportTooLarge'));
-      }
-    }
     const { captured, images, sources, fontCss } = await prepare(selection, signal, request.kind !== 'image');
     if (request.kind === 'image') {
-      const { renderDesignPng } = await import('./export-design-png.js');
-      signal.throwIfAborted();
-      const dataUrl = renderDesignPng(captured, bounds, images, request.scale, sources);
-      const suffix = request.scale === 1 ? '' : `@${request.scale}x`;
-      const input = { name: exportFileName(name, `${suffix}.png`), dataUrl };
-      const result = await (request.action === 'copy' ? output.copyImageToClipboard(input) : output.saveImageAs(input));
-      if (!result.ok) throw new Error(result.error);
-      if (result.cancelled) return false;
-    } else {
-      const baked = sources ? await (await import('./export-design-png.js')).bakeDesignShaderFills(captured, bounds, images, sources) : { selection: captured, images };
-      if (request.kind === 'svg') {
-        const { renderDesignSvg } = await import('./export-design-svg.js');
-        signal.throwIfAborted();
-        const svg = renderDesignSvg(baked.selection, bounds, baked.images, name, fontCss);
-        signal.throwIfAborted();
-        const result = await output.saveDesignSvg({ name: exportFileName(name, '.svg'), svg });
-        if (!result.ok) throw new Error(result.error);
-        if (result.cancelled) return false;
-      } else {
-        const { renderDesignHtml } = await import('./export-design-html.js');
-        signal.throwIfAborted();
-        const html = renderDesignHtml(baked.selection, bounds, baked.images, name, request.format, fontCss);
-        signal.throwIfAborted();
-        if (request.action === 'copy') await output.copyText(html);
-        else {
-          const result = await output.saveDesignHtml({ name: exportFileName(name, '.html'), html });
-          if (!result.ok) throw new Error(result.error);
-          if (result.cancelled) return false;
-        }
-      }
+      const { renderDesignExportPng } = await import('./export-design-png.js');
+      const { dataUrl, scale, width, height } = await renderDesignExportPng(captured, bounds, images, request.scale, signal, sources);
+      const suffix = scale < request.scale ? `-${width}x${height}` : request.scale === 1 ? '' : `@${request.scale}x`;
+      return { kind: 'png', name: exportFileName(name, `${suffix}.png`), content: dataUrl };
     }
-    return true;
+    const baked = sources ? await (await import('./export-design-png.js')).bakeDesignShaderFills(captured, bounds, images, sources) : { selection: captured, images };
+    if (request.kind === 'svg') {
+      const { renderDesignSvg } = await import('./export-design-svg.js');
+      signal.throwIfAborted();
+      return { kind: 'svg', name: exportFileName(name, '.svg'), content: renderDesignSvg(baked.selection, bounds, baked.images, name, fontCss) };
+    }
+    const { renderDesignHtml } = await import('./export-design-html.js');
+    signal.throwIfAborted();
+    return { kind: 'html', name: exportFileName(name, '.html'),
+      content: renderDesignHtml(baked.selection, bounds, baked.images, name, request.format, fontCss, request.action === 'save' ? t : undefined) };
+  }
+
+  async function deliver(selection: DesignExportSelection, name: string, request: DesignExportRequest, signal: AbortSignal) {
+    if (request.action === 'save' && present) return present((previewSignal) => generate(selection, name, request, previewSignal), signal);
+    const file = await generate(selection, name, request, signal);
+    signal.throwIfAborted();
+    return request.action === 'copy' ? copyDesignLayerExport(output, file) : saveDesignLayerExport(output, file);
   }
 
   async function run(selection: DesignExportSelection, name: string, request: DesignExportRequest) {
@@ -107,7 +94,9 @@ export function useDesignExports(output: DesignAssets['output'], loadImage: Load
     setBusy(true);
     try {
       if (!await deliver(selection, name, request, signal)) return;
-      if (!signal.aborted) toast.success(t(request.action === 'copy' ? 'feature.design.copied' : 'feature.design.exportSaved'));
+      if (!signal.aborted && (request.action === 'copy' || !present)) {
+        toast.success(t(request.action === 'copy' ? 'feature.design.copied' : 'feature.design.exportSaved'));
+      }
     } catch (error) {
       if (!signal.aborted) toast.error(t('feature.design.exportFailed', { error: error instanceof Error ? error.message : String(error) }));
     } finally {

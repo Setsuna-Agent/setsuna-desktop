@@ -18,6 +18,7 @@ import { bindDesignResourcesForEdit, createDesignResourceOwnership, designResour
 import { readVerifiedDesignImport, readWorkspaceDesignSource } from './design-workspace-source.js';
 import { designStorageDirectories } from './design-storage-directories.js';
 import { readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
+import { stageDesignPackage } from './design-package.js';
 import type { FileWorkspaceProjectStore } from './file-workspace-project-store.js';
 import { createWorkspaceFile, resolveEntryParent, resolveExistingWorkspaceEntry } from './workspace-entry-mutations.js';
 import { walkWorkspaceFiles } from './workspace-file-walk.js';
@@ -133,6 +134,25 @@ export function createDesignWorkspaceFiles(
   }
 
   return {
+    async preparePackage(input, builtinRevision, signal) {
+      const source = await withDocumentSource(input.ref, signal, async (root, file, roots) => {
+        const target = await realpath(file.target);
+        const { document, revision } = await readDesignDocumentFile(target, input.ref.path);
+        if (revision !== input.expectedRevision || document.documentId !== input.documentId) throw designChanged();
+        const resourceRoot = await designResourceDirectory(root, target, document, roots, ownership, signal, { requireReadableDependencies: true });
+        return { root: resourceRoot, entry: path.relative(resourceRoot, target).split(path.sep).join('/') };
+      });
+      // Compression and dependency verification do not hold workspace mutation locks.
+      return stageDesignPackage(await realpath(dataDir), input, source, builtinRevision, signal);
+    },
+    async importPackage(input, signal) {
+      const { scope, linkedProjectId } = input.destination;
+      if (linkedProjectId && !(await projects.listProjects()).projects.some(({ id }) => id === linkedProjectId)) throw new Error('Unknown project.');
+      const [dataDirectory, root, { installDesignPackage }] = await Promise.all([
+        realpath(dataDir), storage.resolve(scope), import('./design-package-import.js'),
+      ]);
+      return installDesignPackage(dataDirectory, root, input, { storage, ownership }, signal);
+    },
     async catalog(signal) {
       // The local watcher needs a real directory before the first chat-created draft is saved.
       const localRoot = storage.resolve({ storageId: 'local' }).catch(() => undefined);

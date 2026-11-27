@@ -1,4 +1,5 @@
 import type { DesignFrame, DesignLayout, DesignNode, DesignStroke } from '../../contracts/index.js';
+import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { designFrameMask } from '../../contracts/design-references.js';
 import { toWorld, type Bounds } from '../design-geometry.js';
 import { designPadding, designSizeMode, participatesInDesignFlow, type DesignLayerBox } from '../design-layout.js';
@@ -11,6 +12,7 @@ import { defaultImageCrop } from '../design-image-fit.js';
 import { designVectorShape } from '../vectors/design-vector.js';
 import { designShapeOutline, positionedDesignOutline } from '../vectors/design-shape-outline.js';
 import { createDesignSvgDefs, escapeDesignMarkup as escapeHtml, svgAttributes, svgDesignTextOutlines } from './design-svg-markup.js';
+import { designHtmlViewer } from './design-html-viewer.js';
 
 export type DesignCodeFormat = 'html' | 'html-tailwind';
 type Styles = Record<string, string>;
@@ -44,7 +46,7 @@ const textStroke = (stroke: DesignStroke) => `${px(stroke.width)} ${colorWithOpa
 
 export function renderDesignHtml(
   { document, scene, ids, webImages }: DesignExportSelection, bounds: Bounds,
-  images: ReadonlyMap<string, HTMLImageElement>, title: string, format: DesignCodeFormat, fontCss = '',
+  images: ReadonlyMap<string, HTMLImageElement>, title: string, format: DesignCodeFormat, fontCss = '', viewer?: RendererTranslate,
 ): string {
   const used = new Set<Utility>();
   const defs = createDesignSvgDefs(images);
@@ -218,7 +220,9 @@ export function renderDesignHtml(
   const definitions = defs.markup();
   const svg = definitions ? `<svg aria-hidden="true" style="position:absolute;width:0;height:0">${definitions}</svg>\n` : '';
   const fallback = [...used].map((item) => `.${item}{${utilities[item]}}`).join('');
-  return `<!doctype html>\n<html>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${escapeHtml(title)}</title>\n<style>body{margin:0}*{box-sizing:border-box}${fontCss}${fallback}</style>\n</head>\n<body>\n${svg}${body}\n</body>\n</html>\n`;
+  const content = svg + body;
+  const view = viewer && designHtmlViewer(content, bounds, Boolean(responsiveRoot), viewer);
+  return `<!doctype html>\n<html>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${escapeHtml(title)}</title>\n<style>body{margin:0}*{box-sizing:border-box}${fontCss}${fallback}${view?.css ?? ''}</style>\n</head>\n<body>\n${view?.body ?? content}\n</body>\n</html>\n`;
 }
 
 function applyAppearance(style: Styles, node: DesignNode, box: DesignLayerBox, strokes: readonly DesignStroke[], layered: boolean) {

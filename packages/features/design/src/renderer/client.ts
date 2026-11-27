@@ -4,6 +4,7 @@ import { startDesignTask, replyDesignTask, bindDesignInput, watchDesignCommand, 
 import { defineCapability } from '@setsuna-desktop/feature-core/capability';
 import type { FeatureOperationTransport } from '@setsuna-desktop/feature-core/operation';
 import type { SetsunaDesktopBridge, WorkspaceEntry, WorkspaceFilePreview } from '@setsuna-desktop/contracts';
+import { renderDesignPreviewScript, type DesignPreviewScript, type DesignPublicationBridge } from '../contracts/design-publication.js';
 import { importDesignFont, listDesignFonts, readDesignFont, removeDesignFont, type DesignCustomFont } from '../contracts/design-fonts.js';
 import { prepareDesignLibraryPreset, type PrepareDesignLibraryPresetInput } from '../contracts/operations.js';
 import {
@@ -29,6 +30,7 @@ export type DesignWebPreviewHost = Readonly<{
 
 export type DesignAssets = Readonly<{
   chooseDirectory?: SetsunaDesktopBridge['desktop']['chooseDesignDirectory'];
+  publication?: DesignPublicationBridge;
   webPreview?: DesignWebPreviewHost;
   search(ref: DesignDocumentRef, query: string): Promise<readonly string[]>;
   read(ref: DesignDocumentRef, path: string): Promise<Extract<WorkspaceFilePreview, { kind: 'image' }> | null>;
@@ -63,6 +65,7 @@ export type DesignClient = Readonly<{
   readShader(input: ReadDesignShaderInput, signal?: AbortSignal): Promise<string>;
   readScriptParameters(input: ReadDesignScriptParametersInput, signal?: AbortSignal): Promise<readonly DesignScriptParameter[]>;
   renderScript(input: RenderDesignScriptInput, signal?: AbortSignal): Promise<DesignDocument>;
+  renderPreviewScript(input: RenderDesignScriptInput, signal?: AbortSignal): Promise<DesignPreviewScript>;
   read(ref: DesignDocumentRef, signal?: AbortSignal): Promise<DesignSnapshot>;
   commit(input: CommitDesignEditsInput): Promise<DesignSnapshot>;
   navigate(input: NavigateDesignHistoryInput): Promise<DesignSnapshot>;
@@ -124,6 +127,7 @@ export function createDesignClient(transport: FeatureOperationTransport, assets:
     readShader: (input, signal) => transport.call(readDesignShader, input, { signal }),
     readScriptParameters: (input, signal) => transport.call(readDesignScriptParameters, input, { signal }),
     renderScript: (input, signal) => transport.call(renderDesignScript, input, { signal }),
+    renderPreviewScript: (input, signal) => transport.call(renderDesignPreviewScript, input, { signal }),
     read: (ref, signal) => transport.call(readDesignDocument, ref, { signal }),
     commit: (input) => transport.call(commitDesignEdits, input),
     navigate: (input) => transport.call(navigateDesignHistory, input),

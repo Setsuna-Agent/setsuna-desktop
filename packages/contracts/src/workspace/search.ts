@@ -1,7 +1,9 @@
 const ignoredWorkspaceEntryNames = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', 'target', 'release-artifacts']);
+export const workspaceTemporaryDirectoryPrefix = '.setsuna-tmp-';
 
 export function isIgnoredWorkspaceEntryName(name: string): boolean {
-  return ignoredWorkspaceEntryNames.has(name);
+  return ignoredWorkspaceEntryNames.has(name)
+    || (name.startsWith(workspaceTemporaryDirectoryPrefix) && name.length === workspaceTemporaryDirectoryPrefix.length + 6);
 }
 
 /** Literal suffixes only: accepting globs here could override workspace ignore rules. */

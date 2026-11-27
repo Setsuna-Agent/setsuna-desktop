@@ -20,6 +20,7 @@ export function createDesignAssets(
   const browser = window.setsunaDesktop?.browser;
   return {
     chooseDirectory: window.setsunaDesktop?.desktop?.chooseDesignDirectory,
+    publication: window.setsunaDesktop?.designPublication,
     webPreview: typeof browser?.configureWebPreview === 'function'
       && typeof browser.captureWebPreview === 'function' && typeof browser.onWebPreviewEscape === 'function' ? {
       partition: DESKTOP_BROWSER_PREVIEW_PARTITION,

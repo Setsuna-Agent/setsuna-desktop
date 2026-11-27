@@ -55,6 +55,8 @@ const refCodec = defineRuntimeCodec<DesignDocumentRef>((input) => {
   return { ...workspace(value), path: designPath(value.path) };
 });
 
+export const parseDesignDocumentRef = refCodec.parse;
+
 const imageImportCodec = defineRuntimeCodec<ImportDesignImageInput>((input) => {
   const value = record(input);
   const name = requiredString(value.name);

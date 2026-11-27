@@ -1,0 +1,11 @@
+.sd-export-preview-surface:has(> .design-export-html) { overflow: clip; }
+.design-export-html { min-width: 0; min-height: 0; }
+
+.design-export-archive {
+  margin: 0;
+  list-style: none;
+  font-family: var(--app-font-mono, monospace);
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}

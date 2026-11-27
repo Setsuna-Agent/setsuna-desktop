@@ -19,6 +19,7 @@ export function designStorageDirectories(dataDir: string, projects: Pick<FileWor
     async remember(canonicalPath: string) {
       const grant = await designDirectoryGrant(canonicalPath);
       await writeJsonFile(path.join(grants, grant.id + '.json'), grant.path, { mode: 0o600 });
+      return grant;
     },
     async resolve(scope: DesignWorkspace) {
       if (scope.storageId === undefined) return projects.resolveWorkspaceRoot(workspaceTarget(scope.projectId, scope.rootId));

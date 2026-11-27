@@ -13,6 +13,8 @@ import {
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import type { WebContents } from 'electron';
+import { importDesignPackage, isDesignPackageTransferPath, prepareDesignPackage,
+  type DesignPackageReceipt, type ImportDesignPackageInput, type PrepareDesignPackageInput } from '@setsuna-desktop/feature-design/contracts';
 import { installLocalPlugin } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { KERNEL_FEATURE_OPERATION_ERRORS } from '@setsuna-desktop/feature-core/operation';
 import { randomUUID } from 'node:crypto';
@@ -111,6 +113,18 @@ export class RuntimeHost {
       body: input,
     }, installLocalPlugin.path);
     return installLocalPlugin.output.parse(result);
+  }
+
+  async prepareDesignPackage(input: PrepareDesignPackageInput, signal: AbortSignal): Promise<DesignPackageReceipt> {
+    const { path, method } = prepareDesignPackage;
+    const result = await this.sendRequest({ path, method, body: prepareDesignPackage.input.parse(input) }, path, signal);
+    return prepareDesignPackage.output.parse(result);
+  }
+
+  async importDesignPackage(input: ImportDesignPackageInput, signal: AbortSignal) {
+    const { path, method } = importDesignPackage;
+    const result = await this.sendRequest({ path, method, body: importDesignPackage.input.parse(input) }, path, signal);
+    return importDesignPackage.output.parse(result);
   }
 
   private async sendRequest<T>(
@@ -425,9 +439,8 @@ function normalizeRuntimePath(value: string): string {
   if (!normalized.pathname.startsWith('/v1/') && normalized.pathname !== '/health') {
     throw new Error('Runtime path is not allowed.');
   }
-  // Local bundle installation accepts an absolute filesystem path selected by
-  // main. Keep the typed Feature route unreachable through the renderer proxy.
-  if (normalized.pathname === installLocalPlugin.path) {
+  // Local file transfers are coordinated by Main and cannot use the renderer proxy.
+  if (normalized.pathname === installLocalPlugin.path || isDesignPackageTransferPath(normalized.pathname)) {
     throw new Error('Runtime path is not allowed.');
   }
   return `${normalized.pathname}${normalized.search}`;

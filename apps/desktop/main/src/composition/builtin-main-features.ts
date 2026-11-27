@@ -1,7 +1,8 @@
 import { notificationsMainFeature, notificationsMainHostCapability } from '@setsuna-desktop/feature-notifications/main';
 import { runtimeActivityMainFeature, runtimeActivityMainHostCapability } from '@setsuna-desktop/feature-runtime-activity/main';
 import { diagnosticsMainFeature, diagnosticsMainHostCapability } from '@setsuna-desktop/feature-diagnostics/main';
-import { designMainFeature, designMcpLifecycleCapability, designMcpMainHostCapability } from '@setsuna-desktop/feature-design/main';
+import { designMainFeature, designMcpLifecycleCapability, designMcpMainHostCapability, designPackageMainHostCapability,
+  type DesignPackageHost } from '@setsuna-desktop/feature-design/main';
 import { notificationChannels } from '@setsuna-desktop/feature-notifications/contracts';
 import type {
   RuntimeInterfaceLanguage,
@@ -116,6 +117,7 @@ export type ActivatedBuiltinMainFeatures = Readonly<{
 export async function activateBuiltinMainFeatures(input: Readonly<{
   diagnosticLogDirectory: string;
   designMcpDirectory: string;
+  designPackageHost: DesignPackageHost;
   credentialVault: CredentialVault;
   activeKeyboardShortcutBindings(senderId: number): ReadonlySet<string>;
   interfaceLanguage(): RuntimeInterfaceLanguage;
@@ -143,6 +145,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         windowFor: (senderId: number) => desktopWindows.get(senderId),
         onWindowAdded: desktopWindows.onWindowAdded.bind(desktopWindows),
       }),
+      provideHostCapability(designPackageMainHostCapability, input.designPackageHost),
       provideHostCapability(runtimeActivityMainHostCapability, {
         isRendererSender: (senderId: number) => Boolean(desktopWindows.get(senderId)),
       }),

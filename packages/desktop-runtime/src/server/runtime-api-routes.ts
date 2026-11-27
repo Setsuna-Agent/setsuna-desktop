@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RuntimeApiEventHistory } from '@setsuna-desktop/contracts';
 import { installLocalPlugin } from '@setsuna-desktop/feature-plugin-management/contracts';
+import { isDesignPackageTransferPath } from '@setsuna-desktop/feature-design/contracts';
 import type { RuntimeFactory } from './types.js';
 import { decodeRuntimeId, sendJson } from './http-utils.js';
 import { RuntimeHttpError } from './http-error.js';
@@ -31,7 +32,7 @@ export async function handleRuntimeApiRequest(
     sendJson(response, 200, {
       description: 'Trusted sidebar apps and extension handlers can call /v1 backend routes with {path, method, body}. These examples are not an allowlist. Local plugin import requires the native directory picker; conversation deletion requires desktop coordination via DELETE /v1/threads/:id. Responses are {ok, status, data}. Binary data is {mimeType, base64}. Runtime tokens stay in the host.',
       coreExamples: CORE_EXAMPLES,
-      featureOperations: runtime.featureRoutes.describe().filter((operation) => operation.path !== installLocalPlugin.path),
+      featureOperations: runtime.featureRoutes.describe().filter(({ path }) => path !== installLocalPlugin.path && !isDesignPackageTransferPath(path)),
     });
     return true;
   }

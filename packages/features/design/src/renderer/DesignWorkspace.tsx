@@ -7,7 +7,8 @@ import type { DesignLibraryColorScheme } from '../contracts/design-library-prese
 import { isFeatureOperationCancelled } from '@setsuna-desktop/feature-core/operation';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { ConfirmDialog, IconButton, useToast } from '@setsuna-desktop/renderer-ui';
-import type { CreateDesignDocumentInput, DesignDocumentListEntry, DesignDocumentRef, DesignWorkspace as DesignScope } from '../contracts/index.js';
+import type { CreateDesignDocumentInput, DesignDocumentListEntry, DesignDocumentRef,
+  DesignPackageDestination, DesignWorkspace as DesignScope } from '../contracts/index.js';
 import { DesignCreateDocument, type DesignCreateDocumentHandle } from './catalog/DesignCreateDocument.js';
 import { DesignDocumentMenu } from './catalog/DesignDocumentMenu.js';
 import { DesignDraftMenu } from './catalog/DesignDraftMenu.js';
@@ -24,6 +25,7 @@ import { DesignWorkspaceEditor } from './document/DesignWorkspaceEditor.js';
 import { DesignPresetLibraryPreview } from './document/DesignPresetLibraryPreview.js';
 import type { DesignLibraryPreviewTarget } from './DesignDocumentSurface.js';
 import { withPausedDesignEdits } from './document/pending-design-edits.js';
+import { DesignStopPreviewAction } from './publication/DesignStopPreviewAction.js';
 import './design.css';
 import './design-workspace.css';
 
@@ -250,8 +252,23 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
     if (!mounted.current) return;
     refreshLists();
     if (linkedProjectId) void refreshCatalog();
+    openCreatedDesign({ ...scope, path: entry.path }, linkedProjectId);
+  }
+
+  const importFromDisk = client.assets.publication?.importPackage;
+  async function importPackage(file: File, destination: DesignPackageDestination) {
+    if (!importFromDisk) throw new Error(t('feature.design.catalog.packageImportUnavailable'));
+    const ref = await importFromDisk(file, destination);
+    if (!mounted.current) return;
+    await refreshCatalog();
+    if (!mounted.current) return;
+    refreshLists();
+    refreshProjectDrafts();
+    openCreatedDesign(ref, destination.linkedProjectId);
+  }
+
+  function openCreatedDesign(ref: DesignDocumentRef, linkedProjectId?: string) {
     if (latestWorkspace.current.location !== location || !latestWorkspace.current.visible) return;
-    const ref = { ...scope, path: entry.path };
     onLocationChange(linkedProjectId ? documentLocation(ref, { projectId: linkedProjectId }, true) : documentLocation(ref, homeFilter));
   }
 
@@ -388,6 +405,8 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
   const showEmptyState = visible && !path && !emptyProjectId && files.length === 0 && catalogReady
     && emptyStateListingKeys.every((key) => lists.has(key))
     && (emptyStateListingKeys.length === 0 || emptyStateListingKeys.some((key) => lists.get(key) != null));
+  const publication = client.assets.publication;
+  const stopPreview = visible && !documentRef && publication ? <DesignStopPreviewAction bridge={publication} translate={t} /> : null;
   const toolbar = documentRef || emptyProjectId ? <nav className="design-workspace__bar" aria-label={t('feature.design.documents')}>
     <IconButton size="small" label={t('feature.design.backToDocuments')} onClick={backToDocuments}>
       <ArrowLeft size={17} />
@@ -397,6 +416,7 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
         onSelect={openProject} translate={t} />
       <DesignDraftMenu drafts={draftChoices} documentRef={documentRef} selected={selectedDraft} creating={draftCreationPending}
         onCreate={() => { void createCanvasDraft(); }} onOpen={openListedDocument} translate={t} />
+      {stopPreview}
     </div>
   </nav> : null;
   const openDocuments = new Map(busyDocuments);
@@ -421,8 +441,9 @@ export default function DesignWorkspace(props: DesignWorkspaceProps) {
       onOpen={openListedDocument} renderFileAction={documentMenu} visible={visible} locale={props.locale} translate={t}
       onImportDrop={(source) => createDocument.current?.openImport(source)}
       scopeControls={<DesignScopeFields projects={catalog} scope={homeFilter} onChange={onLocationChange} translate={t} />}
-      createAction={<DesignCreateDocument ref={createDocument} key={JSON.stringify(homeFilter)} projects={catalog} defaultProjectId={homeFilter?.projectId}
-        chooseDirectory={chooseDirectory} fonts={client.fonts} onCreate={create} translate={t} />} />}
+      createAction={<>{stopPreview}<DesignCreateDocument ref={createDocument} key={JSON.stringify(homeFilter)} projects={catalog}
+        defaultProjectId={homeFilter?.projectId} chooseDirectory={chooseDirectory} fonts={client.fonts}
+        onCreate={create} onImportPackage={importFromDisk ? importPackage : undefined} translate={t} /></>} />}
   </div>;
 }
 

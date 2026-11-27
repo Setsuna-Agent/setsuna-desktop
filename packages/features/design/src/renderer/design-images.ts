@@ -112,7 +112,7 @@ export async function importLocalDesignImage(file: File, options: DesignImageImp
   return storePreparedDesignImage(await prepareLocalDesignImage(file, options.signal, options.translate), options);
 }
 
-async function decodeDesignImage(source: string): Promise<HTMLImageElement> {
+export async function decodeDesignImage(source: string): Promise<HTMLImageElement> {
   const image = new Image();
   image.src = source;
   await image.decode();

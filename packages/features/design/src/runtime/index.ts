@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { detectWorkspacePreviewImageMimeType, MAX_WORKSPACE_IMAGE_BYTES } from '@setsuna-desktop/contracts';
 import { declareCapabilityProvider, requiredCapability } from '@setsuna-desktop/feature-core/capability';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
@@ -7,7 +8,7 @@ import {
   designScriptSandboxCapability, designWorkspaceFilesCapability, importDesignImage, importDesignScript,
   importDesignShader, listDesignDocumentEntries, listDesignDocuments, maxDesignScriptBytes, maxDesignShaderBytes, moveDesignDocument, navigateDesignHistory,
   parseDesignShaderSource, readDesignDocument, readDesignScriptParameters, readDesignShader, renderDesignScript, resolveDesignDocumentRoot,
-  type DesignDocumentRef, type DesignScriptParameter,
+  type DesignDocumentRef, type DesignScriptParameter, type RenderDesignScriptInput,
 } from '../contracts/index.js';
 import { importDesignFont, listDesignFonts, readDesignFont, removeDesignFont } from '../contracts/design-fonts.js';
 import { designScriptParameterValue } from '../contracts/design-script-parameters.js';
@@ -15,6 +16,8 @@ import { designToolsCapability, designTurnHostCapability, startDesignTask, reply
 import { createDesignConversation, listDesignConversations } from '../contracts/design-conversations.js';
 import { designCommandFromQuery } from '../contracts/design-command-key.js';
 import { prepareDesignLibraryPreset } from '../contracts/operations.js';
+import { importDesignPackage, prepareDesignPackage } from '../contracts/design-package.js';
+import { renderDesignPreviewScript } from '../contracts/design-publication.js';
 import { createChatDesignTools } from './chat-design-tools.js';
 import { DesignTasks } from './design-tasks.js';
 import { DesignDocumentService } from './design-document-service.js';
@@ -86,11 +89,17 @@ export const designRuntimeFeature = defineRuntimeFeature({
     }
     routes.register(scope, readDesignScriptParameters, ({ scriptPath, ...ref }, { signal }) =>
       withScript(ref, scriptPath, signal, (_, parameters) => parameters));
-    routes.register(scope, renderDesignScript, ({ ref, scriptPath, width, height, inputs }, { signal }) =>
-      withScript(ref, scriptPath, signal, async (source, parameters) => {
-        const input = Object.fromEntries(parameters.map((parameter) => [parameter.name, designScriptParameterValue(parameter, inputs)]));
-        return parseDesignScriptOutput(await scripts.evaluate(source, { width, height, input }, signal));
-      }));
+    async function evaluateScript(source: string, parameters: readonly DesignScriptParameter[],
+      { width, height, inputs }: RenderDesignScriptInput, signal: AbortSignal) {
+      const input = Object.fromEntries(parameters.map((parameter) => [parameter.name, designScriptParameterValue(parameter, inputs)]));
+      return parseDesignScriptOutput(await scripts.evaluate(source, { width, height, input }, signal));
+    }
+    routes.register(scope, renderDesignScript, (input, { signal }) =>
+      withScript(input.ref, input.scriptPath, signal, (source, parameters) => evaluateScript(source, parameters, input, signal)));
+    routes.register(scope, renderDesignPreviewScript, (input, { signal }) =>
+      withScript(input.ref, input.scriptPath, signal, async (source, parameters) => ({
+        document: await evaluateScript(source, parameters, input, signal), sourceRevision: createHash('sha256').update(source).digest('hex'),
+      })));
     routes.register(scope, listProjectDesigns, ({ projectId }, { signal }) => files.projectDesigns(projectId, signal));
     routes.register(scope, getDesignCatalog, (_, { signal }) => files.catalog(signal));
     routes.register(scope, setDesignProject, async ({ ref, documentId, projectId }, { signal }) => {
@@ -105,6 +114,9 @@ export const designRuntimeFeature = defineRuntimeFeature({
     routes.register(scope, prepareDesignLibraryPreset, async ({ ref, presetId }, { signal }) =>
       documents.prepareLibraryPreset(await files.resolveResourceRoot(ref, signal), presetId, signal));
     routes.register(scope, moveDesignDocument, (input, { signal }) => files.move(input, tasks.fileOperationSignal(input.command, signal)));
+    routes.register(scope, prepareDesignPackage, (input, { signal }) => files.preparePackage(input, async (path) =>
+      (await documents.read({ ...input.ref, path }, signal)).revision, signal));
+    routes.register(scope, importDesignPackage, (input, { signal }) => files.importPackage(input, signal));
     routes.register(scope, deleteDesignDocument, async (ref, { signal }) => {
       await files.delete(ref, tasks.fileOperationSignal(designCommandFromQuery(ref), signal));
       return null;

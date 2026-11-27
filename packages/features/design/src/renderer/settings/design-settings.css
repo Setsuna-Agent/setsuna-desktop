@@ -1,55 +1,5 @@
 .design-settings.sd-dialog {
-  --sd-dialog-gutter: 26px;
-  --design-settings-header-padding: 12px;
-  --design-settings-header-control-size: 32px;
   block-size: 560px;
-}
-
-.design-settings > .sd-dialog__header {
-  padding: var(--design-settings-header-padding) var(--sd-dialog-gutter);
-}
-
-.design-settings .sd-dialog__header-row {
-  display: grid;
-  /* Equal side columns center the tabs and reserve space for the close button. */
-  grid-template-columns:
-    minmax(var(--design-settings-header-control-size), 1fr)
-    minmax(0, max-content)
-    minmax(var(--design-settings-header-control-size), 1fr);
-  block-size: var(--design-settings-header-control-size);
-  gap: 12px;
-}
-
-.design-settings .sd-dialog__header-actions {
-  margin: 0;
-}
-
-.design-settings__title {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 15px;
-  font-weight: 650;
-  line-height: 20px;
-}
-
-.design-settings__title-icon {
-  flex: none;
-}
-
-.design-settings__title-text {
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.design-settings > .sd-dialog__close {
-  inset-block: var(--design-settings-header-padding) auto;
-  inset-inline: auto var(--sd-dialog-gutter);
-  inline-size: var(--design-settings-header-control-size);
-  block-size: var(--design-settings-header-control-size);
-  border-radius: var(--app-radius-full);
 }
 
 .design-settings > .sd-dialog__body {
@@ -58,14 +8,6 @@
   flex-direction: column;
   padding: 0;
   overflow: hidden;
-}
-
-.design-settings__nav[data-variant='segment'] .sd-tabs__list {
-  border-radius: var(--app-radius-control);
-}
-
-.design-settings__nav[data-variant='segment'] .sd-tabs__trigger {
-  gap: 6px;
 }
 
 .design-settings__scroll-area {

@@ -8,6 +8,7 @@ import type { DesignClient } from './client.js';
 import type { WatchDesignRootDirectories } from './catalog/use-design-document-lists.js';
 import type { WatchDesignDirectories } from './design-images.js';
 import { loadDesignLayoutEngine } from './canvas/design-layout-engine.js';
+import { DesignExportPreviewProvider } from './export/DesignExportPreviewProvider.js';
 
 const LazyDesignEditor = lazy(async () => {
   const [{ default: DesignEditor }, layoutEngine] = await Promise.all([import('./DesignEditor.js'), loadDesignLayoutEngine()]);
@@ -40,5 +41,8 @@ export type DesignDocumentSurfaceProps = Readonly<{
 }>;
 
 export function DesignDocumentSurface(props: DesignDocumentSurfaceProps) {
-  return <Suspense fallback={null}><LazyDesignEditor key={designFileKey(props.documentRef)} {...props} /></Suspense>;
+  return <DesignExportPreviewProvider key={designFileKey(props.documentRef)} assets={props.client.assets}
+    visible={props.visible !== false} translate={props.translate}>
+    <Suspense fallback={null}><LazyDesignEditor {...props} /></Suspense>
+  </DesignExportPreviewProvider>;
 }

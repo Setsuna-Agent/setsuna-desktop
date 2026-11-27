@@ -10,6 +10,7 @@ import { designClipboardCommand } from '../context/design-layer-shortcuts.js';
 import { DesignUiHostContext, type DesignShortcutSettingsProps } from '../context/design-ui-host.js';
 import { DesignMcpSettings } from './DesignMcpSettings.js';
 import { designShortcutCommands } from './design-shortcuts.js';
+import '../styles/design-tabbed-dialog.css';
 import './design-settings.css';
 
 const sections = [
@@ -35,7 +36,7 @@ export default function DesignSettingsDialog({ onClose, translate: t }: Translat
   const scrollRef = useRef<HTMLDivElement>(null);
   const id = useId();
   const title = t('feature.design.settings.title');
-  const tabs = <Tabs className="design-settings__nav" variant="segment" value={section} onValueChange={setSection}>
+  const tabs = <Tabs className="design-tabbed-dialog__nav" variant="segment" value={section} onValueChange={setSection}>
     <TabsList aria-label={title}>
       {sections.filter(({ id }) => (id !== 'shortcuts' || ShortcutSettings) && (id !== 'mcp' || mcp)).map(({ id: item, icon: Icon }) =>
         <TabsTrigger key={item} id={`${id}-${item}`} aria-controls={`${id}-panel`} value={item}>
@@ -45,10 +46,10 @@ export default function DesignSettingsDialog({ onClose, translate: t }: Translat
       )}
     </TabsList>
   </Tabs>;
-  return <Dialog title={<span className="design-settings__title">
-    <Settings className="design-settings__title-icon" size={15} aria-hidden="true" />
-    <span className="design-settings__title-text">{title}</span>
-  </span>} headerActions={tabs} width={720} className="design-settings" onClose={onClose}>
+  return <Dialog title={<span className="design-tabbed-dialog__title">
+    <Settings size={15} aria-hidden="true" />
+    <span className="design-tabbed-dialog__title-text">{title}</span>
+  </span>} headerActions={tabs} width={720} className="design-tabbed-dialog design-settings" onClose={onClose}>
     <div className="design-settings__scroll-area" key={section}>
       <div className="design-settings__panel" ref={scrollRef} id={`${id}-panel`} role="tabpanel"
         data-section={section} aria-labelledby={`${id}-${section}`}>

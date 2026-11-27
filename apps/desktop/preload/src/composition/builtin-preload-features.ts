@@ -2,7 +2,7 @@ import { notificationsPreloadFeature } from '@setsuna-desktop/feature-notificati
 import { runtimeActivityPreloadFeature } from '@setsuna-desktop/feature-runtime-activity/preload';
 import { diagnosticsPreloadFeature } from '@setsuna-desktop/feature-diagnostics/preload';
 import { designPreloadFeature } from '@setsuna-desktop/feature-design/preload';
-import type { DesignMcpPreloadContribution } from '@setsuna-desktop/feature-design/contracts';
+import type { DesignMcpPreloadContribution, DesignPublicationPreloadContribution } from '@setsuna-desktop/feature-design/contracts';
 import type { DiagnosticsPreloadContribution } from '@setsuna-desktop/feature-diagnostics/contracts';
 import type { RuntimeActivityPreloadContribution } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import type { NotificationsPreloadContribution } from '@setsuna-desktop/feature-notifications/contracts';
@@ -31,6 +31,7 @@ import { windowsSandboxPreloadFeature } from '@setsuna-desktop/feature-windows-s
 
 export type DesktopPreloadBridge = SetsunaDesktopBridge
   & DesignMcpPreloadContribution
+  & DesignPublicationPreloadContribution
   & DiagnosticsPreloadContribution
   & NotificationsPreloadContribution
   & RuntimeActivityPreloadContribution
@@ -49,6 +50,7 @@ const desktopPreloadBridgeKeys = [
   'computerUse',
   'dataRoot',
   'designMcp',
+  'designPublication',
   'desktop',
   'desktopReview',
   'diagnostics',
