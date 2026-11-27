@@ -3,7 +3,7 @@
 import type { DesktopRuntimeClient, RuntimeMessage, RuntimeMessagePage, RuntimeThread } from '@setsuna-desktop/contracts';
 import type { RendererOwnedSlotRenderer } from '@setsuna-desktop/feature-core/renderer';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useState, type ReactNode } from 'react';
+import { StrictMode, useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ChatWorkspace } from '../../../../src/features/chat/ChatWorkspace.js';
 import { RendererPluginTestHost } from '../../support/RendererPluginTestHost.js';
@@ -37,9 +37,10 @@ afterEach(() => {
 
 it('loads earlier pages as the reader scrolls up and keeps the latest reading position', async () => {
   const page = deferredPage();
+  const oldest = deferredPage();
   const load = vi.fn<DesktopRuntimeClient['listThreadMessages']>()
     .mockImplementationOnce(page.load)
-    .mockResolvedValueOnce({ messages: [message('oldest', 'first question')], nextBefore: null, total: 4 });
+    .mockImplementationOnce(oldest.load);
   const thread = { ...snapshot, messagePage: { nextBefore: 2, total: 4 } };
   render(<Harness loadOlder={load} thread={thread} />);
   const viewport = screen.getByLabelText('对话消息');
@@ -60,8 +61,59 @@ it('loads earlier pages as the reader scrolls up and keeps the latest reading po
   expect(load).toHaveBeenCalledOnce();
 
   scrollUpTo(viewport);
-  await waitFor(() => expect(screen.getByText('first question')).toBeTruthy());
   expect(load).toHaveBeenLastCalledWith(thread.id, { before: 1, limit: 160 });
+  fireEvent.click(screen.getByRole('button', { name: '滚动到底部' }));
+  await act(async () => { oldest.resolve({ messages: [message('oldest', 'first question')], nextBefore: null, total: 4 }); });
+  expect(screen.getByText('first question')).toBeTruthy();
+  await waitFor(() => expect(viewport.scrollTop).toBe(1600));
+});
+
+it('restores each conversation independently, including a reading position in a reloaded page', async () => {
+  const reopening = deferredPage();
+  const older = { messages: [message('oldest', 'first question'), message('reader', 'reading here')], nextBefore: null, total: 4 };
+  const loadOlder = vi.fn<DesktopRuntimeClient['listThreadMessages']>()
+    .mockResolvedValueOnce(older)
+    .mockImplementationOnce(reopening.load)
+    .mockResolvedValueOnce(older);
+  const first = { ...snapshot, messagePage: { nextBefore: 2, total: 4 } };
+  const second = { ...snapshot, id: 'thread-2', messages: [...snapshot.messages, message('third', 'third question')], messagePage: undefined };
+  let rowHeight = 500;
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.querySelectorAll('[data-message-id]').length * rowHeight;
+  });
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    if (this.classList.contains('chat-messages')) return new DOMRect(0, 0, 600, 400);
+    const viewport = this.closest('.chat-messages');
+    if (!viewport || !this.dataset.messageId) return new DOMRect();
+    const index = Array.from(viewport.querySelectorAll('[data-message-id]')).indexOf(this);
+    return new DOMRect(0, index * rowHeight - viewport.scrollTop, 600, rowHeight);
+  });
+  const chat = (thread: RuntimeThread) => <StrictMode><Harness loadOlder={loadOlder} thread={thread} /></StrictMode>;
+  const view = render(chat(first));
+  const viewport = () => screen.getByLabelText('对话消息');
+  await waitFor(() => expect(viewport().scrollTop).toBe(600));
+  scrollUpTo(viewport(), 80);
+  const readingMessage = await screen.findByText('reading here');
+  scrollUpTo(viewport(), 550);
+  const readingOffset = readingMessage.closest('[data-message-id]')!.getBoundingClientRect().top;
+
+  view.rerender(chat(second));
+  await waitFor(() => expect(viewport().scrollTop).toBe(1100));
+  scrollUpTo(viewport(), 350);
+
+  view.rerender(chat(first));
+  await waitFor(() => expect(reopening.load).toHaveBeenCalledOnce());
+  view.rerender(chat(second));
+  expect(viewport().scrollTop).toBe(350);
+  await act(async () => { reopening.resolve(older); });
+  expect(viewport().scrollTop).toBe(350);
+  expect(screen.queryByText('reading here')).toBeNull();
+
+  rowHeight = 550;
+  view.rerender(chat(first));
+  const restored = await screen.findByText('reading here');
+  expect(restored.closest('[data-message-id]')!.getBoundingClientRect().top).toBe(readingOffset);
+  expect(viewport().scrollTop).toBe(600);
 });
 
 it('keeps a cached message in place when the loading row disappears below it', async () => {

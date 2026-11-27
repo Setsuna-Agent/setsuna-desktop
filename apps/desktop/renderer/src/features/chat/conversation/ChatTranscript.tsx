@@ -44,6 +44,7 @@ import { ChatTurnStartWork } from './activity/ChatTurnStartWork.js';
 import { runtimeHookUsesByTurn, type RuntimeHookUse } from './activity/runtimeHookUsage.js';
 import { usePinnedChatScroll } from './ChatWorkspaceScroll.js';
 import { readHistoryScrollAnchor, restoredHistoryScrollTop, type HistoryScrollAnchor } from './chatHistoryScrollAnchor.js';
+import { useChatReadingPosition, type ChatReadingPosition, type ChatReadingPositionScope } from './useChatReadingPosition.js';
 import { ChatMessageRail } from './navigation/ChatMessageRail.js';
 import { useChatTurnNavigation } from './navigation/useChatTurnNavigation.js';
 import { ChatFindBar } from './search/ChatFindBar.js';
@@ -92,6 +93,7 @@ type ChatTranscriptMutationProps =
 
 type ChatTranscriptProps = ChatTranscriptMutationProps & {
   presentation?: ChatPresentation;
+  readingPositionScope?: ChatReadingPositionScope;
   turnNavigationRequest?: ChatTurnNavigationRequest;
   findRequest?: number;
   onFindRequestConsumed?(requestId: number): void;
@@ -123,6 +125,7 @@ type ChatTranscriptProps = ChatTranscriptMutationProps & {
  */
 export function ChatTranscript({
   presentation = 'workspace',
+  readingPositionScope,
   turnNavigationRequest,
   findRequest = 0,
   onFindRequestConsumed,
@@ -151,6 +154,7 @@ export function ChatTranscript({
   scrollToBottomRef,
 }: ChatTranscriptProps) {
   const { t } = useI18n();
+  const threadId = currentThread?.id ?? null;
   const messenger = presentation === 'messenger';
   const contextCompactionRunning = !messenger && compactionRunning;
   const attachContent = useCallback((node: HTMLDivElement | null) => {
@@ -180,6 +184,8 @@ export function ChatTranscript({
   const mutableDisplayItems = useMemo(() => displayItems.filter((item) => !pendingMessageIds.has(item.id)), [displayItems, pendingMessageIds]);
   const historyScrollAnchorRef = useRef<HistoryScrollAnchor | null>(null);
   const historyLoadingRowRef = useRef<HTMLDivElement | null>(null);
+  const pendingReadingPositionRef = useRef<ChatReadingPosition>();
+  const cancelReadingPositionRestore = useCallback(() => { pendingReadingPositionRef.current = undefined; }, []);
   useLayoutEffect(() => { historyScrollAnchorRef.current = null; }, [currentThread?.id]);
   const pluginUsesByTurnIdRef = useRef<ReturnType<typeof runtimePluginUsesByTurn>>(new Map());
   const pluginUsesByTurnId = useMemo(
@@ -218,7 +224,9 @@ export function ChatTranscript({
     readOnly,
   });
   const selectingMessages = selection.mode !== null;
-  const [showFullHistory, setShowFullHistory] = useState(false);
+  const [fullHistoryThreadId, setFullHistoryThreadId] = useState<string | null>(null);
+  const showFullHistory = fullHistoryThreadId !== null && fullHistoryThreadId === threadId;
+  const revealFullHistory = useCallback(() => setFullHistoryThreadId(threadId), [threadId]);
   const [scrollLoadBoundary, setScrollLoadBoundary] = useState<{
     threadId: string;
     beforeMessageId?: string;
@@ -233,10 +241,10 @@ export function ChatTranscript({
   }, [currentThread?.id, findRequest]);
   const [expandedWorkHistoryItemIds, setExpandedWorkHistoryItemIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
-    setShowFullHistory(false);
+    setFullHistoryThreadId((current) => current === threadId ? current : null);
     setScrollLoadBoundary(null);
     setExpandedWorkHistoryItemIds(new Set());
-  }, [currentThread?.id]);
+  }, [threadId]);
   useEffect(() => {
     onSelectionModeChange?.(readOnly ? false : selectingMessages);
     // A new empty chat can unmount this transcript while selection is still active.
@@ -276,7 +284,8 @@ export function ChatTranscript({
         onToggleSelection: selection.toggle,
       };
   const navigatingToTurn = Boolean(turnNavigationRequest && turnNavigationRequest.threadId === currentThread?.id);
-  const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !selectingMessages && !showFullHistory && !findOpen && !navigatingToTurn }), [activeTurnId, selectingMessages, displayItems, findOpen, navigatingToTurn, showFullHistory]);
+  const windowingEnabled = !selectingMessages && !showFullHistory && !findOpen && !navigatingToTurn;
+  const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: windowingEnabled }), [activeTurnId, displayItems, windowingEnabled]);
   const renderedDisplayItems = renderWindow.items;
   const firstRenderedItem = renderedDisplayItems[0];
   const firstRenderedMessageId = firstRenderedItem && ('messageIds' in firstRenderedItem
@@ -315,27 +324,27 @@ export function ChatTranscript({
   const captureHistoryScrollAnchor = useCallback((node: HTMLDivElement, expandingWindow = false) => {
     historyScrollAnchorRef.current = readHistoryScrollAnchor(node, historyLoadingRowRef.current, expandingWindow);
   }, []);
-  const requestEarlierMessages = useCallback((node: HTMLDivElement | null, expandingWindow = false) => {
+  const requestEarlierMessages = useCallback((node: HTMLDivElement | null, expandingWindow = false, stopBefore?: number) => {
     if (node) captureHistoryScrollAnchor(node, expandingWindow);
-    if (hasEarlierMessages) void loadOlder();
+    if (hasEarlierMessages) void loadOlder(stopBefore);
   }, [captureHistoryScrollAnchor, hasEarlierMessages, loadOlder]);
   const loadHistoryOnScrollUp = useCallback((node: HTMLDivElement) => {
-    const threadId = currentThread?.id;
     if (!threadId || showEmptyStarter || historyLoading || node.scrollTop > earlierHistoryThresholdPx
       || (!hasHiddenHistory && !hasEarlierMessages)) return;
     if (hasEarlierMessages) setScrollLoadBoundary({ threadId, beforeMessageId: firstRenderedMessageId });
-    setShowFullHistory(true);
+    revealFullHistory();
     requestEarlierMessages(node, hasHiddenHistory);
-  }, [currentThread?.id, firstRenderedMessageId, hasEarlierMessages, hasHiddenHistory, historyLoading, requestEarlierMessages, showEmptyStarter]);
+  }, [firstRenderedMessageId, hasEarlierMessages, hasHiddenHistory, historyLoading, requestEarlierMessages, revealFullHistory, showEmptyStarter, threadId]);
   const {
     handleScroll, handleScrollPointerDown, handleScrollKeyDown, handleScrollTouchStart, handleScrollTouchMove,
-    handleScrollWheel, listRef, scrollRef: scrollRefInternal, scrollToBottom, scrollToOffset, showScrollBottom,
+    handleScrollWheel, isFollowingBottom, listRef, scrollRef: scrollRefInternal, scrollToBottom, scrollToOffset, showScrollBottom,
   } = usePinnedChatScroll({
     contentRef,
+    onScrollIntent: cancelReadingPositionRestore,
     onScrollUp: loadHistoryOnScrollUp,
     scrollSignal,
     showEmptyStarter,
-    threadId: currentThread?.id ?? null,
+    threadId,
   });
   useLayoutEffect(() => {
     if (scrollToBottomRef) scrollToBottomRef.current = scrollToBottom;
@@ -344,11 +353,12 @@ export function ChatTranscript({
     };
   }, [scrollToBottom, scrollToBottomRef]);
   const scrollToReadingOffset = useCallback((top: number, behavior: ScrollBehavior = 'smooth') => {
+    cancelReadingPositionRestore();
     scrollToOffset(top, behavior);
     // A search/rail jump during pagination supersedes the position at request start.
     const node = scrollRefInternal.current;
     if (historyScrollAnchorRef.current && node) captureHistoryScrollAnchor(node);
-  }, [captureHistoryScrollAnchor, scrollRefInternal, scrollToOffset]);
+  }, [cancelReadingPositionRestore, captureHistoryScrollAnchor, scrollRefInternal, scrollToOffset]);
   const handleTranscriptScroll = useCallback(() => {
     const node = scrollRefInternal.current;
     if (historyScrollAnchorRef.current && node) captureHistoryScrollAnchor(node);
@@ -367,22 +377,41 @@ export function ChatTranscript({
     },
   }), [findOpen, scrollRefInternal, scrollToReadingOffset]);
   const loadEarlierMessages = useCallback(() => {
+    cancelReadingPositionRestore();
     setScrollLoadBoundary(null);
     const scrollNode = scrollRefInternal.current;
     if (scrollNode) scrollToOffset(scrollNode.scrollTop, 'auto');
     requestEarlierMessages(scrollNode);
-  }, [requestEarlierMessages, scrollRefInternal, scrollToOffset]);
+  }, [cancelReadingPositionRestore, requestEarlierMessages, scrollRefInternal, scrollToOffset]);
 
   useLayoutEffect(() => {
     const anchor = historyScrollAnchorRef.current;
     const scrollNode = scrollRefInternal.current;
     if (!anchor || !scrollNode) return;
+    if (isFollowingBottom()) {
+      historyScrollAnchorRef.current = null;
+      return;
+    }
     const loadingRow = activeScrollLoadBoundary ? historyLoadingRowRef.current : null;
     const top = restoredHistoryScrollTop(scrollNode, anchor, loadingRow);
     if (top !== scrollNode.scrollTop) scrollToOffset(top, 'auto');
     if (historyLoading) captureHistoryScrollAnchor(scrollNode);
     else historyScrollAnchorRef.current = null;
-  }, [activeScrollLoadBoundary, captureHistoryScrollAnchor, historyLoading, messageHistory.nextBefore, messages.length, scrollRefInternal, scrollToOffset, showFullHistory]);
+  }, [activeScrollLoadBoundary, captureHistoryScrollAnchor, historyLoading, isFollowingBottom, messageHistory.nextBefore, messages.length, scrollRefInternal, scrollToOffset, showFullHistory]);
+
+  useChatReadingPosition({
+    scope: readingPositionScope,
+    pendingPositionRef: pendingReadingPositionRef,
+    scrollRef: scrollRefInternal,
+    isFollowingBottom,
+    scrollToOffset,
+    history: messageHistory,
+    hasHiddenHistory,
+    expandedHistory: !windowingEnabled,
+    revealHistory: revealFullHistory,
+    requestEarlierMessages,
+    navigatingToTurn,
+  });
 
   useChatTurnNavigation({
     request: turnNavigationRequest,
