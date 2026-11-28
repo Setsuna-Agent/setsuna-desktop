@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, rename, symlink, unlink } from 'node:fs/promises';
+import path from 'node:path';
 import { expect, it } from 'vitest';
 import { createRuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 
@@ -23,6 +24,14 @@ it('keeps one usable copy of a font after concurrent imports and restart, and re
     await expect(harness.runtimeFetch(`${route}?${query}&sessionId=expired&commandId=old`, { method: 'DELETE' }))
       .rejects.toThrow('OPERATION_CANCELLED');
     await expect(harness.runtimeFetch(`${route}/data?${query}`)).resolves.toEqual({ base64 });
+    const directory = path.join(harness.runtimeDataDir, 'runtime', 'features', 'design', 'fonts');
+    const outside = path.join(harness.runtimeDataDir, 'external-fonts');
+    await rename(directory, outside);
+    await symlink(outside, directory, 'junction');
+    await expect(harness.runtimeFetch(`${route}?${query}`, { method: 'DELETE' })).rejects.toThrow();
+    expect(await readFile(path.join(outside, first.id, 'font'), 'base64')).toBe(base64);
+    await unlink(directory);
+    await rename(outside, directory);
     await harness.runtimeFetch(`${route}?${query}`, { method: 'DELETE' });
     await expect(harness.runtimeFetch(route)).resolves.toEqual([]);
     await expect(harness.runtimeFetch(`${route}/data?${query}`)).rejects.toThrow('DESIGN_FONT_NOT_FOUND');

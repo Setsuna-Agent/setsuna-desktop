@@ -50,7 +50,7 @@ it('opens search through the built-in shell and navigates to settings and instal
     },
   });
   const actions: SidebarSearchActionHandlers = {
-    onNewChat: vi.fn(), onAddProject: vi.fn(), onOpenChat: vi.fn(), onOpenAutomation: vi.fn(),
+    onNewChat: vi.fn(), onAddProject: vi.fn(), onOpenChat: vi.fn(), onOpenDesign: vi.fn(), onOpenAutomation: vi.fn(),
     onOpenCapabilities: vi.fn(), onOpenPullRequests: vi.fn(), onOpenPlugin: vi.fn(), onOpenSettings: vi.fn(),
   };
   const features = await activateBuiltinRendererFeatures();
@@ -69,6 +69,12 @@ it('opens search through the built-in shell and navigates to settings and instal
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '笔记' } });
     fireEvent.click(await screen.findByRole('option', { name: '项目笔记' }));
     await waitFor(() => expect(actions.onOpenPlugin).toHaveBeenCalledWith('notes/page'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '打开搜索' }));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'design' } });
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
+    await waitFor(() => expect(actions.onOpenDesign).toHaveBeenCalledOnce());
     expect(screen.queryByRole('dialog')).toBeNull();
   } finally {
     cleanup();
@@ -115,7 +121,7 @@ it('opens text search for the current project and preserves the target line when
 
 const noop = () => undefined;
 const defaultActions: SidebarSearchActionHandlers = {
-  onNewChat: noop, onAddProject: noop, onOpenChat: noop, onOpenAutomation: noop,
+  onNewChat: noop, onAddProject: noop, onOpenChat: noop, onOpenDesign: noop, onOpenAutomation: noop,
   onOpenCapabilities: noop, onOpenPullRequests: noop, onOpenPlugin: noop, onOpenSettings: noop,
 };
 

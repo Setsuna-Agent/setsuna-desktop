@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { zipSync } from 'fflate';
 import { afterEach, expect, it, vi } from 'vitest';
-import { WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
+import { workspaceTemporaryDirectoryPrefix, WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
 import { createDesignDocument, designDirectoryGrant, designDirectoryGrants, designPackageImportStagingPrefix, designPackageStagingFile, designPackageStagingPrefix,
   type DesignWorkspace } from '@setsuna-desktop/feature-design/contracts';
 import { installDesignPackage } from '../../../src/adapters/workspace/design-package-import.js';
@@ -14,6 +14,7 @@ import { moveDesignWorkspaceDocument } from '../../../src/adapters/workspace/des
 import { createDesignResourceOwnership } from '../../../src/adapters/workspace/design-workspace-resource-root.js';
 import { FileWorkspaceProjectStore } from '../../../src/adapters/workspace/file-workspace-project-store.js';
 import { systemClock } from '../../../src/ports/clock.js';
+import { ONE_PIXEL_PNG_BASE64 } from '../../support/runtime-server/rest-capabilities.js';
 
 const temporary: string[] = [];
 afterEach(async () => { await Promise.all(temporary.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))); });
@@ -106,6 +107,67 @@ it('returns a watchable local directory before the first draft is saved', async 
   const { directories } = await files.catalog(signal);
   expect(directories).toContainEqual({ id: 'local', path: root });
   expect((await stat(root)).isDirectory()).toBe(true);
+});
+
+it('keeps package assets when their saved resource directory loses its grant after review', async () => {
+  const { data, projects, signal } = await workspace();
+  const files = createDesignWorkspaceFiles(projects, data);
+  const ticket = randomUUID();
+  const incoming = path.join(data, designPackageImportStagingPrefix + ticket);
+  const board = { schemaVersion: 1, documentId: 'board', libraries: { library: 'A.design.json' }, rootIds: ['photo'],
+    nodes: { photo: { kind: 'image', x: 0, y: 0, width: 1, height: 1, fit: 'contain', assetPath: 'photo.png' } } };
+  const png = Buffer.from(ONE_PIXEL_PNG_BASE64, 'base64');
+  await mkdir(incoming, { recursive: true });
+  await writeFile(path.join(incoming, designPackageStagingFile), zipSync({
+    'manifest.json': Buffer.from(JSON.stringify({ formatVersion: 1, resourceRoot: 'content', entry: 'content/Z.design.json' })),
+    'content/Z.design.json': Buffer.from(JSON.stringify(board)), 'content/A.design.json': Buffer.from(draft('library')),
+    'content/photo.png': png,
+  }));
+  const ref = await files.importPackage({ ticket, destination: { scope: { storageId: 'local' }, name: 'Copy' } }, signal);
+  const content = path.join(data, 'designs', 'Copy', 'content');
+  await writeFile(path.join(content, 'later.png'), png);
+  const inventory = await files.listLocalFiles(signal);
+  expect(inventory.incomplete).toBe(false);
+  expect(inventory.files).toContainEqual(expect.objectContaining({ path: 'Copy/content/Z.design.json', libraryPaths: ['Copy/content/A.design.json'] }));
+  const candidates = inventory.files.filter((file) => file.kind === 'asset');
+  expect(candidates.map((file) => file.path)).toEqual(['Copy/content/later.png']);
+
+  await writeFile(path.join(content, 'A.design.json'), draft('replacement'));
+  const replaced = (await files.listLocalFiles(signal)).files.find((file) => file.path === 'Copy/content/Z.design.json');
+  expect(replaced).toBeDefined();
+  expect(replaced).not.toHaveProperty('libraryPaths');
+  board.nodes.photo.assetPath = 'later.png';
+  await writeFile(path.join(content, ref.path), JSON.stringify(board));
+  await rm(path.join(data, designDirectoryGrants, ref.storageId + '.json'));
+  const next = await files.listLocalFiles(signal);
+  expect(next.incomplete).toBe(true);
+  expect(next.files.filter((file) => file.kind === 'asset')).toEqual([]);
+  await expect(files.removeUnusedAssets(candidates, signal)).resolves.toEqual(['Copy/content/later.png']);
+  expect(await readFile(path.join(content, 'later.png'))).toEqual(png);
+});
+
+it('excludes unpublished import files from both the inventory and deletion recheck', async () => {
+  const { data, projects, signal } = await workspace();
+  const files = createDesignWorkspaceFiles(projects, data);
+  const local = path.join(data, 'designs');
+  const source = path.join(local, 'images');
+  await mkdir(source, { recursive: true });
+  await writeFile(path.join(source, 'photo.png'), 'unpacked image');
+  await writeFile(path.join(source, 'board.design.json'), draft('unpublished'));
+  const { files: inventory } = await files.listLocalFiles(signal);
+  const asset = inventory.find((file) => file.kind === 'asset')!;
+  const document = inventory.find((file) => file.kind === 'document')!;
+  const staging = await mkdtemp(path.join(local, workspaceTemporaryDirectoryPrefix));
+  // Moving the containing directory preserves the reviewed asset's identity and revision.
+  await rename(source, path.join(staging, 'images'));
+  const stagedAsset = path.basename(staging) + '/' + asset.path;
+  const stagedDraft = path.basename(staging) + '/' + document.path;
+  await expect(files.listLocalFiles(signal)).resolves.toEqual({ files: [], incomplete: false });
+  await expect(files.removeUnusedAssets([{ path: stagedAsset, revision: asset.revision }], signal)).resolves.toEqual([stagedAsset]);
+  await expect(files.delete({ storageId: 'local', path: stagedDraft, expectedRevision: document.revision }, signal))
+    .rejects.toMatchObject({ code: 'REVISION_CONFLICT' });
+  expect(await readFile(path.join(local, stagedAsset), 'utf8')).toBe('unpacked image');
+  expect(await readFile(path.join(local, stagedDraft), 'utf8')).toBe(draft('unpublished'));
 });
 
 it('keeps healthy drafts accessible while reporting and excluding invalid directory grants', async ({ onTestFinished }) => {

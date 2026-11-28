@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
-import { DESKTOP_STORAGE_CATEGORY_IDS, type DesktopStorageUsage, type RuntimeThreadSummary } from '@setsuna-desktop/contracts';
+import { DESKTOP_STORAGE_CATEGORY_IDS, type DesktopStorageUsage, type RuntimeThreadSummary, type SetsunaDesktopBridge } from '@setsuna-desktop/contracts';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readStorageUsageCache } from '../../../../../src/features/settings/storage/storageUsageCache.js';
 import { useStorageManagement } from '../../../../../src/features/settings/storage/useStorageManagement.js';
 
 const { getStorageUsage, listThreads, deleteThread } = vi.hoisted(() => ({
-  getStorageUsage: vi.fn<() => Promise<DesktopStorageUsage>>(),
+  getStorageUsage: vi.fn<SetsunaDesktopBridge['dataRoot']['getStorageUsage']>(),
   listThreads: vi.fn<() => Promise<{ threads: RuntimeThreadSummary[] }>>(),
   deleteThread: vi.fn<() => Promise<void>>(),
 }));
@@ -124,5 +124,17 @@ describe('storage page loading', () => {
 
     await act(async () => { recount.resolve(usage(200)); inventory.resolve({ threads: [thread('keep')] }); });
     expect(result.current).toMatchObject({ working: false, loading: false, usage: usage(200), threads: [thread('keep')] });
+  });
+
+  it('recounts after a design cleanup even when the main process is still serving the old scan', async () => {
+    const firstScan = deferred(usage(500));
+    getStorageUsage.mockReturnValueOnce(firstScan.promise).mockResolvedValueOnce(usage(20));
+    const { result } = renderHook(() => useStorageManagement('/data/current'));
+    await act(() => result.current.refreshAfterCleanup());
+    expect(getStorageUsage).toHaveBeenLastCalledWith({ afterCleanup: true });
+    expect(result.current.usage).toEqual(usage(20));
+    await act(async () => { firstScan.resolve(usage(500)); });
+    expect(result.current.usage).toEqual(usage(20));
+    expect(readStorageUsageCache('/data/current')).toEqual(usage(20));
   });
 });

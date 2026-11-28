@@ -2,7 +2,7 @@ import { listLinkedDesigns } from './design-project-catalog.js';
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { isValidWorkspaceEntryName, WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
+import { isValidWorkspaceEntryName, isWorkspaceTemporaryDirectoryName, WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
 import { canAccessChatDesign, designDocumentCodec, designDocumentFileExtension, designImageFileExtensions, isDesignDocumentPath, isDesignLibraryPresetDocumentId, maxDesignShaderBytes,
   type DesignDocumentRef, type DesignImageExtension, type DesignWorkspace, type DesignWorkspaceFiles } from '@setsuna-desktop/feature-design/contracts';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
@@ -17,6 +17,7 @@ import { deleteDesignWorkspaceDocument, moveDesignWorkspaceDocument, removeUncha
 import { bindDesignResourcesForEdit, createDesignResourceOwnership, designResourceDirectory, designResourceRootUnavailable, readDraftId, resolveDesignResourceRoot } from './design-workspace-resource-root.js';
 import { readVerifiedDesignImport, readWorkspaceDesignSource } from './design-workspace-source.js';
 import { designStorageDirectories } from './design-storage-directories.js';
+import { localDesignCleanup } from './design-local-cleanup.js';
 import { readWorkspaceFilePreview } from './workspace-file-preview-reader.js';
 import { stageDesignPackage } from './design-package.js';
 import type { FileWorkspaceProjectStore } from './file-workspace-project-store.js';
@@ -134,6 +135,7 @@ export function createDesignWorkspaceFiles(
   }
 
   return {
+    ...localDesignCleanup(() => storage.resolve({ storageId: 'local' }), boundRoots, ownership),
     async preparePackage(input, builtinRevision, signal) {
       const source = await withDocumentSource(input.ref, signal, async (root, file, roots) => {
         const target = await realpath(file.target);
@@ -271,10 +273,12 @@ export function createDesignWorkspaceFiles(
       return { ...destination, path: name };
     },
     async delete(ref, signal) {
+      if (ref.storageId === 'local' && ref.path.split('/').some(isWorkspaceTemporaryDirectoryName)) throw designChanged();
       const [root, roots] = await Promise.all([
         storage.resolve(ref), boundRoots(),
       ]);
-      await deleteDesignWorkspaceDocument(root, ref.path, roots.all, ownership, signal, ref.expectedRevision, relocateChats);
+      await deleteDesignWorkspaceDocument(root, ref.path, roots.all, ownership, signal,
+        { expectedRevision: ref.expectedRevision, relocateChats, includeIgnored: ref.storageId === 'local' });
     },
     async resolveResourceRoot(ref, signal) {
       const [root, listing, directories] = await Promise.all([

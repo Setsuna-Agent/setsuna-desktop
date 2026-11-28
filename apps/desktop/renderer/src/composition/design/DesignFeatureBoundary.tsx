@@ -13,6 +13,8 @@ export {
 } from '@setsuna-desktop/feature-design/renderer';
 
 export { DesignFeatureServiceBoundary, useDesignClient } from './DesignClientContext.js';
+export { listDesignStorageResources, cleanDesignStorageResources, designStorageResourceKey, type DesignStorageResource, type DesignClient }
+  from '@setsuna-desktop/feature-design/renderer';
 
 export function WorkspaceDesignFile({ file, workspaceRoot }: Readonly<{ file: WorkspaceFileRead; workspaceRoot?: string }>) {
   const client = useDesignClient();

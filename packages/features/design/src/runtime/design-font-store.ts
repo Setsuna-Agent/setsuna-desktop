@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import { designCustomFontCodec, isDesignFontId, maxDesignFontBytes, type DesignCustomFont } from '../contracts/design-fonts.js';
@@ -8,11 +8,12 @@ import { inspectDesignFont } from './inspect-design-font.js';
 export class DesignFontStore {
   private readonly directory: string;
 
-  constructor(dataDir: string) {
+  constructor(private readonly dataDir: string) {
     this.directory = path.join(dataDir, 'features', 'design', 'fonts');
   }
 
   async list(signal: AbortSignal): Promise<readonly DesignCustomFont[]> {
+    if (!await this.managedDirectory()) return [];
     const entries = await readdir(this.directory, { withFileTypes: true }).catch((error: unknown) => {
       if (missing(error)) return [];
       throw error;
@@ -30,14 +31,14 @@ export class DesignFontStore {
     const bytes = Buffer.from(base64, 'base64');
     if (!bytes.length || bytes.length > maxDesignFontBytes || bytes.toString('base64') !== base64) throw invalidFont();
     const id = createHash('sha256').update(bytes).digest('hex');
-    const previous = await this.metadata(id, signal);
+    const previous = await this.managedDirectory() && await this.metadata(id, signal);
     if (previous) return previous;
     let font: DesignCustomFont;
     try {
       font = designCustomFontCodec.parse({ id, ...await inspectDesignFont(bytes) });
     } catch { throw invalidFont(); }
     signal.throwIfAborted();
-    await mkdir(this.directory, { recursive: true });
+    await this.managedDirectory(true);
     const staging = await mkdtemp(path.join(this.directory, '.import-'));
     try {
       await writeFile(path.join(staging, 'font'), bytes, { signal });
@@ -56,13 +57,14 @@ export class DesignFontStore {
   }
 
   async read(id: string, signal: AbortSignal): Promise<{ base64: string }> {
-    const bytes = await this.readEntry(id, 'font', maxDesignFontBytes, signal);
+    const bytes = await this.managedDirectory() ? await this.readEntry(id, 'font', maxDesignFontBytes, signal) : undefined;
     if (!bytes?.length) throw new FeatureOperationFailure({ code: 'DESIGN_FONT_NOT_FOUND', message: 'Design font not found.', retryable: false });
     return { base64: bytes.toString('base64') };
   }
 
   async remove(id: string, signal: AbortSignal): Promise<null> {
     const target = this.fontPath(id);
+    if (!await this.managedDirectory()) return null;
     const staging = await mkdtemp(path.join(this.directory, '.remove-')).catch((error: unknown) => {
       if (missing(error)) return null;
       throw error;
@@ -82,6 +84,24 @@ export class DesignFontStore {
   private fontPath(id: string) {
     if (!isDesignFontId(id)) throw new Error('Invalid design font ID.');
     return path.join(this.directory, id);
+  }
+
+  private async managedDirectory(create = false): Promise<boolean> {
+    // An ancestor link must not redirect cleanup or staging into a user-owned font directory.
+    let directory = await realpath(this.dataDir);
+    for (const name of ['features', 'design', 'fonts']) {
+      directory = path.join(directory, name);
+      if (create) await mkdir(directory).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'EEXIST') throw error;
+      });
+      const stats = await lstat(directory).catch((error: unknown) => {
+        if (missing(error)) return null;
+        throw error;
+      });
+      if (!stats) return false;
+      if (!stats.isDirectory()) throw new Error('The design font directory has changed.');
+    }
+    return true;
   }
 
   private async metadata(id: string, signal: AbortSignal) {

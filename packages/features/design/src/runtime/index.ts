@@ -17,6 +17,7 @@ import { createDesignConversation, listDesignConversations } from '../contracts/
 import { designCommandFromQuery } from '../contracts/design-command-key.js';
 import { prepareDesignLibraryPreset } from '../contracts/operations.js';
 import { importDesignPackage, prepareDesignPackage } from '../contracts/design-package.js';
+import { listLocalDesignFiles, removeUnusedDesignAssets } from '../contracts/design-cleanup.js';
 import { renderDesignPreviewScript } from '../contracts/design-publication.js';
 import { createChatDesignTools } from './chat-design-tools.js';
 import { DesignTasks } from './design-tasks.js';
@@ -102,6 +103,8 @@ export const designRuntimeFeature = defineRuntimeFeature({
       })));
     routes.register(scope, listProjectDesigns, ({ projectId }, { signal }) => files.projectDesigns(projectId, signal));
     routes.register(scope, getDesignCatalog, (_, { signal }) => files.catalog(signal));
+    routes.register(scope, listLocalDesignFiles, (_, { signal }) => files.listLocalFiles(signal));
+    routes.register(scope, removeUnusedDesignAssets, ({ assets }, { signal }) => files.removeUnusedAssets(assets, signal));
     routes.register(scope, setDesignProject, async ({ ref, documentId, projectId }, { signal }) => {
       await files.setProject(ref, documentId, projectId, signal);
       return null;

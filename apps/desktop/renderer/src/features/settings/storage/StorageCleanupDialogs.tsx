@@ -69,7 +69,7 @@ export function StorageCachesDialog({ usage, working, error, onCleanup, onClose 
   </Dialog>;
 }
 
-function StorageCleanupActions({ working, disabled, label, description, onConfirm, onClose }: {
+export function StorageCleanupActions({ working, disabled, label, description, onConfirm, onClose }: {
   working: boolean;
   disabled: boolean;
   label: string;

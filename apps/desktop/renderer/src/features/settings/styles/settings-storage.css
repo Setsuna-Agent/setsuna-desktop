@@ -5,6 +5,7 @@
 [data-storage-category="projects_capabilities"] { --storage-color: #636366; }
 [data-storage-category="memories"] { --storage-color: #bf5af2; }
 [data-storage-category="attachments_images"] { --storage-color: #ff9f0a; }
+[data-storage-category="design_resources"] { --storage-color: #30add0; }
 [data-storage-category="runtime_dependencies"] { --storage-color: #5e5ce6; }
 [data-storage-category="desktop_browser"] { --storage-color: #8e8e93; }
 [data-storage-category="cache"] { --storage-color: #aeaeb2; }
@@ -237,6 +238,24 @@
 
 .storage-threads__filters {
   margin-bottom: 14px;
+}
+
+.storage-design-list {
+  display: grid;
+  gap: 12px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.storage-design-list fieldset {
+  min-width: 0;
+  margin: 0;
+}
+
+.storage-design-list legend {
+  padding: 0 4px;
+  color: var(--app-text-muted);
+  font-size: 12px;
 }
 
 .storage-filter-row {

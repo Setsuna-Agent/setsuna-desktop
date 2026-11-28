@@ -1,4 +1,5 @@
 import { designCommandQuery, type DesignCommandKey } from '../contracts/design-command-key.js';
+import { listLocalDesignFiles, removeUnusedDesignAssets, type LocalDesignInventory, type DesignCleanupSelection } from '../contracts/design-cleanup.js';
 import { createDesignConversation, listDesignConversations, type DesignConversationOwner, type DesignConversation } from '../contracts/design-conversations.js';
 import { startDesignTask, replyDesignTask, bindDesignInput, watchDesignCommand, stopDesignTask, type DesignTaskClient } from '../contracts/design-task.js';
 import { defineCapability } from '@setsuna-desktop/feature-core/capability';
@@ -42,6 +43,8 @@ export type DesignAssets = Readonly<{
 }>;
 
 export type DesignClient = Readonly<{
+  listLocalFiles(signal?: AbortSignal): Promise<LocalDesignInventory>;
+  removeUnusedAssets(assets: readonly DesignCleanupSelection[], signal?: AbortSignal): Promise<readonly string[]>;
   projectDesigns(projectId: string, signal?: AbortSignal): Promise<ProjectDesignEntry[]>;
   catalog(signal?: AbortSignal): Promise<DesignCatalog>;
   setProject(owner: DesignConversationOwner, projectId: string | null): Promise<null>;
@@ -90,6 +93,8 @@ export const designAssetsCapability = defineCapability<DesignAssets>({
 
 export function createDesignClient(transport: FeatureOperationTransport, assets: DesignAssets): DesignClient {
   return {
+    listLocalFiles: (signal) => transport.call(listLocalDesignFiles, undefined, { signal }),
+    removeUnusedAssets: (assets, signal) => transport.call(removeUnusedDesignAssets, { assets: [...assets] }, { signal }),
     assets: { ...assets,
       read: (ref, path) => ref.storageId ? transport.call(readDesignImage, { ref, path }) : assets.read(ref, path),
       search: (ref, query) => ref.storageId ? transport.call(searchDesignImages, { ref, query }) : assets.search(ref, query),

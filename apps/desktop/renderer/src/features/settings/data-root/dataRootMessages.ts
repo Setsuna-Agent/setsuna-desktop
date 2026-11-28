@@ -23,6 +23,7 @@ export const dataRootCategoryMessageKey: Record<
   projects_capabilities: 'dataRoot.category.projects_capabilities',
   memories: 'dataRoot.category.memories',
   attachments_images: 'dataRoot.category.attachments_images',
+  design_resources: 'dataRoot.category.design_resources',
   runtime_dependencies: 'dataRoot.category.runtime_dependencies',
   desktop_browser: 'dataRoot.category.desktop_browser',
 };

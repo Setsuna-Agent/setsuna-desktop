@@ -10,6 +10,8 @@ export type StorageCacheSession = Pick<Electron.Session, 'clearCache' | 'clearCo
 /** All I/O is requested by the storage panel; construction never scans or initializes a session. */
 export class DesktopStorageService {
   private scan: Promise<DesktopStorageUsage> | null = null;
+  private reading: Promise<DesktopStorageUsage> | null = null;
+  private rescan = false;
   private cleanup: Promise<DesktopStorageCleanupResult> | null = null;
 
   constructor(
@@ -17,13 +19,29 @@ export class DesktopStorageService {
     private readonly cacheSessions: () => StorageCacheSession[],
   ) {}
 
-  getUsage(): Promise<DesktopStorageUsage> {
-    if (this.scan) return this.scan;
-    this.scan = (async () => {
-      await this.cleanup;
-      return scanDesktopStorage(this.activeRoot());
-    })().finally(() => { this.scan = null; });
-    return this.scan;
+  getUsage(afterCleanup = false): Promise<DesktopStorageUsage> {
+    if (afterCleanup) this.rescan = true;
+    return this.scan ??= Promise.resolve().then(() => this.readCurrentUsage());
+  }
+
+  private async readCurrentUsage(): Promise<DesktopStorageUsage> {
+    try {
+      for (;;) {
+        while (this.cleanup) await this.cleanup;
+        this.rescan = false;
+        this.reading = scanDesktopStorage(this.activeRoot());
+        try {
+          const usage = await this.reading;
+          if (!this.rescan) return usage;
+        } catch (error) {
+          if (!this.rescan) throw error;
+        } finally {
+          this.reading = null;
+        }
+      }
+    } finally {
+      this.scan = null;
+    }
   }
 
   clear(categories: unknown): Promise<DesktopStorageCleanupResult> {
@@ -32,8 +50,10 @@ export class DesktopStorageService {
     }
     if (this.cleanup) return Promise.reject(new Error('Storage cleanup is already running.'));
     const selected = [...new Set(categories)] as DesktopStorageCleanupCategory[];
+    this.rescan = true;
     this.cleanup = (async () => {
-      await this.scan?.catch(() => undefined);
+      // Wait only for the active disk walk. Its callers wait for cleanup and share the new result.
+      await this.reading?.catch(() => undefined);
       const root = this.activeRoot();
       const failedCategories: DesktopStorageCleanupCategory[] = [];
       for (const category of selected) {

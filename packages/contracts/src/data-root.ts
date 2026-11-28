@@ -4,6 +4,7 @@ export const DESKTOP_DATA_MIGRATION_CATEGORY_IDS = [
   'projects_capabilities',
   'memories',
   'attachments_images',
+  'design_resources',
   'runtime_dependencies',
   'desktop_browser',
 ] as const;

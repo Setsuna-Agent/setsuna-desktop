@@ -752,7 +752,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
             <AppOverlays
               onOpenSearchFile={openSearchFile}
               searchActions={{
-                onNewChat: startNewChat, onAddProject: navigation.openCreateProject, onOpenChat: openChat,
+                onNewChat: startNewChat, onAddProject: navigation.openCreateProject, onOpenChat: openChat, onOpenDesign: openDesign,
                 onOpenAssistant: assistantEntry.available ? assistantEntry.open : undefined,
                 onOpenAutomation: openAutomation, onOpenCapabilities: openCapabilities, onOpenPullRequests: openPullRequests,
                 onOpenPlugin: openPluginView, onOpenSettings: browserSettingsNavigation.openSettings,
