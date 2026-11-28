@@ -1,10 +1,11 @@
-import { mkdir, readdir, realpath } from 'node:fs/promises';
+import { lstat, mkdir, readdir, realpath, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { workspaceTarget } from '@setsuna-desktop/contracts';
 import { designDirectoryGrant, designDirectoryGrants, type DesignDirectory, type DesignWorkspace } from '@setsuna-desktop/feature-design/contracts';
 import type { FileWorkspaceProjectStore } from './file-workspace-project-store.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 import { isNodeError } from '../../shared/node-errors.js';
+import { createWorkspaceFile } from './workspace-entry-mutations.js';
 
 export function designStorageDirectories(dataDir: string, projects: Pick<FileWorkspaceProjectStore, 'resolveWorkspaceRoot'>) {
   const grants = path.join(dataDir, designDirectoryGrants);
@@ -20,6 +21,23 @@ export function designStorageDirectories(dataDir: string, projects: Pick<FileWor
       const grant = await designDirectoryGrant(canonicalPath);
       await writeJsonFile(path.join(grants, grant.id + '.json'), grant.path, { mode: 0o600 });
       return grant;
+    },
+    async withNewDirectoryGrant(canonicalPath: string, install: () => Promise<void>) {
+      const grant = await designDirectoryGrant(canonicalPath);
+      const file = path.join(grants, grant.id + '.json');
+      await mkdir(grants, { recursive: true });
+      const created = await createWorkspaceFile(file, JSON.stringify(grant.path) + '\n', 0o600);
+      try {
+        // Publishing the content is the last commit step. A grant failure can never remove user files.
+        await install();
+        return grant;
+      } catch (error) {
+        const current = await lstat(file).catch(() => undefined);
+        if (current?.dev === created.dev && current.ino === created.ino && current.ctimeMs === created.ctimeMs) {
+          await unlink(file).catch(() => undefined);
+        }
+        throw error;
+      }
     },
     async resolve(scope: DesignWorkspace) {
       if (scope.storageId === undefined) return projects.resolveWorkspaceRoot(workspaceTarget(scope.projectId, scope.rootId));

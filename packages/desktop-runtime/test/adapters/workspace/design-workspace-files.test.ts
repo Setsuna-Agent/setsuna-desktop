@@ -1,11 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, realpath, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { zipSync } from 'fflate';
 import { afterEach, expect, it, vi } from 'vitest';
 import { WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
-import { createDesignDocument, designDirectoryGrant, designDirectoryGrants, designPackageStagingFile, designPackageStagingPrefix,
+import { createDesignDocument, designDirectoryGrant, designDirectoryGrants, designPackageImportStagingPrefix, designPackageStagingFile, designPackageStagingPrefix,
   type DesignWorkspace } from '@setsuna-desktop/feature-design/contracts';
+import { installDesignPackage } from '../../../src/adapters/workspace/design-package-import.js';
+import { designStorageDirectories } from '../../../src/adapters/workspace/design-storage-directories.js';
 import { createDesignWorkspaceFiles } from '../../../src/adapters/workspace/design-workspace-files.js';
 import { moveDesignWorkspaceDocument } from '../../../src/adapters/workspace/design-workspace-document-mutations.js';
 import { createDesignResourceOwnership } from '../../../src/adapters/workspace/design-workspace-resource-root.js';
@@ -63,6 +66,36 @@ it('releases the workspace lock during export and discards an archive when an al
   }
   await conflict;
   await expect(stat(path.join(staging, designPackageStagingFile))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('leaves a replacement import directory intact and removes the unused grant and bindings', async () => {
+  const { root, data, projects, projectId, signal } = await workspace();
+  const ticket = randomUUID();
+  const incoming = path.join(data, designPackageImportStagingPrefix + ticket);
+  const entry = 'board.design.json';
+  const folder = path.join(root, 'Copy');
+  const content = path.join(folder, 'content');
+  await mkdir(incoming, { recursive: true });
+  await writeFile(path.join(incoming, designPackageStagingFile), zipSync({
+    'manifest.json': Buffer.from(JSON.stringify({ formatVersion: 1, resourceRoot: 'content', entry: 'content/' + entry })),
+    ['content/' + entry]: Buffer.from(draft('board')),
+  }));
+  const storage = designStorageDirectories(data, projects);
+  const ownership = createDesignResourceOwnership(data);
+  const withGrant = storage.withNewDirectoryGrant;
+  vi.spyOn(storage, 'withNewDirectoryGrant').mockImplementationOnce((target, install) => withGrant(target, async () => {
+    // A project sync renames the reserved folder after registration but before publication.
+    await rename(folder, path.join(root, 'Moved'));
+    await mkdir(folder);
+    await writeFile(path.join(folder, 'notes.txt'), 'keep');
+    await install();
+  }));
+  await expect(installDesignPackage(data, root, { ticket, destination: { scope: { projectId }, name: 'Copy' } },
+    { storage, ownership }, signal)).rejects.toThrow('directory has changed');
+  expect(await readdir(folder)).toEqual(['notes.txt']);
+  expect(await readFile(path.join(folder, 'notes.txt'), 'utf8')).toBe('keep');
+  expect(await storage.list()).not.toContainEqual(await designDirectoryGrant(content));
+  expect(await ownership.project(path.join(content, entry), 'board')).toBeUndefined();
 });
 
 it('returns a watchable local directory before the first draft is saved', async () => {

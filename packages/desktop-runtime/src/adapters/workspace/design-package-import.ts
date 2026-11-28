@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, open, readFile, rm, rmdir } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, open, readFile, realpath, rm, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { workspaceFilePathKey, workspaceTemporaryDirectoryPrefix } from '@setsuna-desktop/contracts';
 import { designPackageContentPrefix, designPackageImportStagingPrefix, designPackageManifestFile, designPackageResourceRoot,
@@ -25,12 +25,12 @@ export async function installDesignPackage(dataDirectory: string, root: string, 
   if (!source.stats.isFile() || !source.stats.size) throw invalidDesignPackage();
   if (source.stats.size > maxDesignPackageArchiveBytes) throw designPackageTooLarge();
   signal.throwIfAborted();
-  const staging = await mkdtemp(path.join(root, workspaceTemporaryDirectoryPrefix));
+  const staging = await importDirectory(await mkdtemp(path.join(root, workspaceTemporaryDirectoryPrefix)));
   try {
-    const restored = await unpackPackage(source.target, staging, signal);
+    const restored = await unpackPackage(source.target, staging.path, signal);
     return await withFileStateUpdate(root, () => commitPackage(root, staging, input.destination, restored, host, signal));
   } finally {
-    await rm(staging, { recursive: true, force: true, maxRetries: 5 }).catch(() => undefined);
+    await assertImportDirectory(staging).then(() => rm(staging.path, { recursive: true, force: true, maxRetries: 5 })).catch(() => undefined);
   }
 }
 
@@ -39,6 +39,8 @@ async function unpackPackage(source: string, staging: string, signal: AbortSigna
     const manifestPath = path.join(staging, designPackageManifestFile);
     await archive.extract(designPackageManifestFile, manifestPath, maxDesignPackageManifestBytes);
     const manifest = JSON.parse(await readFile(manifestPath, { encoding: 'utf8', signal })) as Partial<DesignPackageManifest> | null;
+    // Only the content tree is moved into the project.
+    await unlink(manifestPath);
     const archiveEntry = manifest?.entry;
     if (manifest?.formatVersion !== 1 || manifest.resourceRoot !== designPackageResourceRoot || typeof archiveEntry !== 'string'
       || !archiveEntry.startsWith(designPackageContentPrefix) || !isDesignDocumentPath(archiveEntry)) throw invalidDesignPackage();
@@ -48,7 +50,7 @@ async function unpackPackage(source: string, staging: string, signal: AbortSigna
     // Extract only the dependency graph, keeping the original bytes and paths intact.
     for (const dependency of dependencies.files.values()) {
       const archivePath = designPackageContentPrefix + dependency.path;
-      const target = path.join(staging, archivePath);
+      const target = path.join(staging, dependency.path);
       await mkdir(path.dirname(target), { recursive: true });
       const size = await archive.extract(archivePath, target, designPackageFileLimits[dependency.kind]);
       if (dependency.kind === 'image') {
@@ -68,13 +70,13 @@ async function unpackPackage(source: string, staging: string, signal: AbortSigna
   });
 }
 
-async function commitPackage(root: string, staging: string, { name, linkedProjectId }: ImportDesignPackageInput['destination'],
+async function commitPackage(root: string, staging: ImportDirectory, { name, linkedProjectId }: ImportDesignPackageInput['destination'],
   { entry, documents }: Awaited<ReturnType<typeof unpackPackage>>, { storage, ownership }: ImportHost, signal: AbortSignal) {
   const knownRoots = new Set((await storage.list()).map(({ path }) => workspaceFilePathKey(path, '.')));
+  await assertImportDirectory(staging);
   const container = await reserveImportDirectory(root, name, knownRoots, signal);
-  const resourceRoot = path.join(container, designPackageResourceRoot);
+  const resourceRoot = path.join(container.path, designPackageResourceRoot);
   const bindings = new Map<string, string>();
-  let installed = false;
   try {
     for (const [relative, id] of documents) {
       signal.throwIfAborted();
@@ -83,15 +85,23 @@ async function commitPackage(root: string, staging: string, { name, linkedProjec
       else await ownership.remember(target, id, resourceRoot);
       bindings.set(target, id);
     }
-    // Expose the whole resource tree at once, after validation and root binding.
-    await renameWithRetry(path.join(staging, designPackageResourceRoot), resourceRoot, { beforeRename: async () => signal.throwIfAborted() });
-    installed = true;
-    const directory = await storage.remember(resourceRoot);
+    async function checkDestination() {
+      // Even an empty directory added during registration belongs to its creator.
+      const occupied = await lstat(resourceRoot).catch((error: unknown) => {
+        if (isNodeError(error) && error.code === 'ENOENT') return undefined;
+        throw error;
+      });
+      if (occupied) throw new Error('The design package destination is already occupied.');
+      await Promise.all([assertImportDirectory(container), assertImportDirectory(staging)]);
+      signal.throwIfAborted();
+    }
+    await checkDestination();
+    const directory = await storage.withNewDirectoryGrant(resourceRoot,
+      () => renameWithRetry(staging.path, resourceRoot, { beforeRename: checkDestination }));
     return { storageId: directory.id, path: entry };
   } catch (error) {
-    if (installed) await rm(resourceRoot, { recursive: true, force: true, maxRetries: 5 }).catch(() => undefined);
     for (const [target, id] of bindings) await ownership.forget(target, id).catch(() => undefined);
-    await rmdir(container).catch(() => undefined);
+    await assertImportDirectory(container).then(() => rmdir(container.path)).catch(() => undefined);
     throw error;
   }
 }
@@ -103,9 +113,24 @@ async function reserveImportDirectory(root: string, name: string, knownRoots: Re
     if (knownRoots.has(workspaceFilePathKey(folder, designPackageResourceRoot))) continue;
     try {
       await mkdir(folder, { mode: 0o700 });
-      return folder;
+      return importDirectory(folder);
     } catch (error) {
       if (!isNodeError(error) || error.code !== 'EEXIST') throw error;
     }
+  }
+}
+
+type ImportDirectory = Awaited<ReturnType<typeof importDirectory>>;
+
+async function importDirectory(directory: string) {
+  const [canonical, stats] = await Promise.all([realpath(directory), lstat(directory, { bigint: true })]);
+  if (path.relative(directory, canonical) || !stats.isDirectory()) throw new Error('The design package directory has changed.');
+  return { path: directory, dev: stats.dev, ino: stats.ino, birthtime: stats.birthtimeNs };
+}
+
+async function assertImportDirectory(expected: ImportDirectory) {
+  const current = await importDirectory(expected.path);
+  if (current.dev !== expected.dev || current.ino !== expected.ino || current.birthtime !== expected.birthtime) {
+    throw new Error('The design package directory has changed.');
   }
 }
