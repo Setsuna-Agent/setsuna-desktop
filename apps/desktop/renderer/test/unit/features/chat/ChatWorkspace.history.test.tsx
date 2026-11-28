@@ -68,9 +68,12 @@ it('loads earlier pages as the reader scrolls up and keeps the latest reading po
   await waitFor(() => expect(viewport.scrollTop).toBe(1600));
 });
 
-it('restores each conversation independently, including a reading position in a reloaded page', async () => {
+it.each(['message', 'standalone review'] as const)('restores a paged %s independently for each conversation', async (kind) => {
   const reopening = deferredPage();
-  const older = { messages: [message('oldest', 'first question'), message('reader', 'reading here')], nextBefore: null, total: 4 };
+  const reader: RuntimeMessage = kind === 'message' ? message('reader', 'reading here') : {
+    ...message('review', ''), role: 'system', turnId: 'interrupted', reviewMode: { kind: 'exited', review: 'reading here' },
+  };
+  const older = { messages: [message('oldest', 'first question'), reader], nextBefore: null, total: 4 };
   const loadOlder = vi.fn<DesktopRuntimeClient['listThreadMessages']>()
     .mockResolvedValueOnce(older)
     .mockImplementationOnce(reopening.load)
@@ -78,14 +81,15 @@ it('restores each conversation independently, including a reading position in a 
   const first = { ...snapshot, messagePage: { nextBefore: 2, total: 4 } };
   const second = { ...snapshot, id: 'thread-2', messages: [...snapshot.messages, message('third', 'third question')], messagePage: undefined };
   let rowHeight = 500;
+  const rows = '[data-message-id], .chat-review-summary-card';
   vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
-    return this.querySelectorAll('[data-message-id]').length * rowHeight;
+    return this.querySelectorAll(rows).length * rowHeight;
   });
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     if (this.classList.contains('chat-messages')) return new DOMRect(0, 0, 600, 400);
     const viewport = this.closest('.chat-messages');
-    if (!viewport || !this.dataset.messageId) return new DOMRect();
-    const index = Array.from(viewport.querySelectorAll('[data-message-id]')).indexOf(this);
+    if (!viewport || !this.matches(rows)) return new DOMRect();
+    const index = Array.from(viewport.querySelectorAll(rows)).indexOf(this);
     return new DOMRect(0, index * rowHeight - viewport.scrollTop, 600, rowHeight);
   });
   const chat = (thread: RuntimeThread) => <StrictMode><Harness loadOlder={loadOlder} thread={thread} /></StrictMode>;
@@ -95,7 +99,7 @@ it('restores each conversation independently, including a reading position in a 
   scrollUpTo(viewport(), 80);
   const readingMessage = await screen.findByText('reading here');
   scrollUpTo(viewport(), 550);
-  const readingOffset = readingMessage.closest('[data-message-id]')!.getBoundingClientRect().top;
+  const readingOffset = readingMessage.closest(rows)!.getBoundingClientRect().top;
 
   view.rerender(chat(second));
   await waitFor(() => expect(viewport().scrollTop).toBe(1100));
@@ -112,7 +116,7 @@ it('restores each conversation independently, including a reading position in a 
   rowHeight = 550;
   view.rerender(chat(first));
   const restored = await screen.findByText('reading here');
-  expect(restored.closest('[data-message-id]')!.getBoundingClientRect().top).toBe(readingOffset);
+  expect(restored.closest(rows)!.getBoundingClientRect().top).toBe(readingOffset);
   expect(viewport().scrollTop).toBe(600);
 });
 

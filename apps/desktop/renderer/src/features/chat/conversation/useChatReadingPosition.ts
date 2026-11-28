@@ -81,12 +81,12 @@ export function useChatReadingPosition({
       return;
     }
     const target = findChatMessageAnchorTarget(viewport, position.message);
-    if (hasHiddenHistory && position.message && (!target || position.expandedHistory)) {
+    if (hasHiddenHistory && (position.expandedHistory || (position.message && !target))) {
       revealHistory();
       return;
     }
-    if (!target && position.message && nextBefore !== null && nextBefore > position.before && !error) {
-      // Suspend bottom follow while the saved row is outside the current page.
+    if (!target && nextBefore !== null && nextBefore > position.before && !error) {
+      // A pixel offset is only meaningful after restoring the pages it was measured against.
       scrollToOffset(0, 'auto');
       if (!loading) requestEarlierMessages(viewport, false, position.before);
       return;

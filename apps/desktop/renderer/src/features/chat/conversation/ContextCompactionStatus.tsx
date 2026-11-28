@@ -6,10 +6,11 @@ import { RuntimeHookRuns } from '../tool-runs/RuntimeHookRunDetails.js';
 type ContextCompactionStatusProps = {
   active?: boolean;
   message?: RuntimeMessage;
+  messageId?: string;
 };
 
 /** 压缩始终是正文中的带图标状态行，包括首条助手消息出现前的压缩。 */
-export function ContextCompactionStatus({ active = false, message }: ContextCompactionStatusProps) {
+export function ContextCompactionStatus({ active = false, message, messageId }: ContextCompactionStatusProps) {
   const { t } = useI18n();
   const notice = message?.contextCompaction;
   if (!active && !notice) return null;
@@ -22,7 +23,7 @@ export function ContextCompactionStatus({ active = false, message }: ContextComp
       : t('chat.context.compacted');
 
   return (
-    <div className="chat-tool-runs">
+    <div data-message-id={messageId} className="chat-tool-runs">
       <div className={`chat-tool-run chat-tool-run--flat chat-tool-run--${active ? 'running' : 'success'}`}>
         <div className="chat-tool-run__summary" role={active ? 'status' : undefined}>
           <span className="chat-tool-run__icon">
