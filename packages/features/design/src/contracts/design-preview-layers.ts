@@ -1,5 +1,6 @@
 import { parseDesignColor } from './design-color.js';
 import { maxDesignFills, maxDesignStrokes, maxDesignTreeDepth, maxExpandedDesignLayers } from './document.js';
+import { parseDesignSvgPathData } from './vector-geometry.js';
 
 const layerKinds = ['artboard', 'frame', 'group', 'component', 'instance', 'rectangle', 'ellipse', 'text',
   'image', 'web', 'script', 'path', 'polygon', 'svg', 'icon'] as const;
@@ -15,6 +16,7 @@ export type DesignPreviewLayer = Readonly<{
   rotation: number;
   opacity: number;
   outline: readonly (readonly [x: number, y: number])[];
+  outlinePath?: string;
   pickable?: false;
   fills: readonly string[];
   strokes: readonly Readonly<{ color: string; width: number }>[];
@@ -29,7 +31,7 @@ export function createDesignPreviewLayerParser() {
     const layer = value as Partial<DesignPreviewLayer> | null;
     if (depth > maxDesignTreeDepth || ++count > maxExpandedDesignLayers) throw new Error('The design preview has too many layers.');
     if (!layer?.kind || !layerKinds.includes(layer.kind)) throw new Error('Invalid design preview layer.');
-    const { kind, key, name, bounds, rotation, opacity, outline, pickable, fills, strokes, typography, children } = layer;
+    const { kind, key, name, bounds, rotation, opacity, outline, outlinePath, pickable, fills, strokes, typography, children } = layer;
     if (key !== undefined && (!Number.isSafeInteger(key) || key < 0)) throw new Error('Invalid design preview layer key.');
     const [x, y, width, height] = array(bounds, 4, 4);
     return {
@@ -39,6 +41,7 @@ export function createDesignPreviewLayerParser() {
         const [x, y] = array(value, 2, 2);
         return [number(x, 0, 1), number(y, 0, 1)];
       }),
+      outlinePath: outlinePath === undefined ? undefined : parseDesignSvgPathData(outlinePath),
       pickable: pickable === false ? false : undefined,
       fills: Array.from(array(fills, maxDesignFills), parseDesignColor),
       strokes: Array.from(array(strokes, maxDesignStrokes), (value) => {

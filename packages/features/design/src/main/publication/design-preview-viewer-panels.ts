@@ -244,6 +244,9 @@ function previewPanelIcon(data) {
   return svg;
 }
 
+const previewHitPaths = new WeakMap();
+let previewHitContext;
+
 function previewLayerHit(layer, point) {
   // A non-clipping parent can have visible children outside its own outline.
   for (let index = layer.children.length - 1; index >= 0; index -= 1) {
@@ -259,6 +262,16 @@ function previewLayerHit(layer, point) {
     const [bx, by] = outline[index];
     if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) inside = !inside;
   }
-  return inside ? [layer] : undefined;
+  if (!inside) return;
+  if (layer.outlinePath) {
+    let path = previewHitPaths.get(layer);
+    if (!path) {
+      path = new Path2D(layer.outlinePath);
+      previewHitPaths.set(layer, path);
+    }
+    previewHitContext ??= document.createElement('canvas').getContext('2d');
+    if (!previewHitContext?.isPointInPath(path, x, y, 'evenodd')) return;
+  }
+  return [layer];
 }
 `;

@@ -3,7 +3,7 @@ function createPreviewCanvas(stage, onPick, onZoomChange) {
   const fitArea = document.getElementById('fit-area');
   const artwork = document.getElementById('artwork');
   const outline = document.getElementById('selection-outline');
-  const polygon = outline.querySelector('polygon');
+  const selectionPath = outline.querySelector('path');
   const select = document.getElementById('select-tool');
   const hand = document.getElementById('hand-tool');
   const pointers = new Map();
@@ -183,13 +183,13 @@ function createPreviewCanvas(stage, onPick, onZoomChange) {
       minScale = Math.min(scale, 0.02, fittedScale(canvasBounds, workArea()));
       zoomChanged();
     },
-    showOutline(index, points) {
+    showOutline(index, points, path) {
       const board = artboards[index];
       selectionBounds = board && !board.frame.hidden && points.length >= 3 ? previewBounds(points.map(board.world)) : undefined;
       outline.toggleAttribute('hidden', !selectionBounds);
       if (selectionBounds) {
         board.element.append(outline);
-        polygon.setAttribute('points', points.map((pair) => pair.join(',')).join(' '));
+        selectionPath.setAttribute('d', path || 'M' + points.map((pair) => pair.join(',')).join('L') + 'Z');
       }
       zoomChanged();
     },

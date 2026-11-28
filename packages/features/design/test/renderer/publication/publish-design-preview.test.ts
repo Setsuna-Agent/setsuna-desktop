@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import paper from 'paper';
 import { designDocumentVersion, type DesignDocument, type DesignSnapshot } from '../../../src/contracts/index.js';
 import { parseBeginDesignPreview, type DesignPublicationBridge } from '../../../src/contracts/design-publication.js';
 import { loadDesignLayoutEngine } from '../../../src/renderer/canvas/design-layout-engine.js';
@@ -88,6 +89,44 @@ it('publishes all visible artboards with clipped, artboard-local layer data and 
   expect(client.assets.read).not.toHaveBeenCalled();
   expect(client.readShader).not.toHaveBeenCalled();
   expect(client.renderPreviewScript).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ scriptPath: 'visible.js' }), signal);
+});
+
+it('omits layers outside nested vector masks and preserves the hole in a partially visible layer', async () => {
+  const square = { x: 0, y: 0, width: 100, height: 100 };
+  const rect = { kind: 'rectangle' as const, ...square, cornerRadius: 0 };
+  const vectorMask = (data: string): DesignDocument['nodes'][string] => ({
+    ...square, kind: 'vector', geometry: { kind: 'svg', viewBox: square, paths: [{ data, fillRule: 'evenodd' }] },
+  });
+  const line = (name: string, data: string): DesignDocument['nodes'][string] => ({
+    ...square, kind: 'vector', name, strokes: [{ color: '#112233', width: 2 }],
+    geometry: { kind: 'svg', viewBox: square, paths: [{ data }] },
+  });
+  const saved: DesignSnapshot = { ...snapshot, document: { ...snapshot.document, rootIds: ['board'], nodes: {
+    board: { ...frame, ...square, x: 300, rotation: 90, flipX: true, maskId: 'triangle', childIds: ['group', 'triangle'] },
+    triangle: vectorMask('M0 0H100L0 100Z'),
+    group: { ...frame, ...square, cornerRadius: 15, maskId: 'ring', childIds: ['visible', 'outside', 'hole', 'corner', 'outsideLine', 'line', 'ring'] },
+    ring: vectorMask('M0 0H100V100H0Z M20 20H40V40H20Z'),
+    visible: { ...rect, name: 'Artwork' },
+    outside: { ...rect, name: 'Behind triangle', x: 75, y: 75, width: 10, height: 10 },
+    hole: { ...rect, name: 'Behind hole', x: 25, y: 25, width: 10, height: 10 },
+    corner: { ...rect, name: 'Outside rounded frame', width: 2, height: 2 },
+    outsideLine: line('Outside stroke', 'M25 100L100 25'),
+    line: line('Visible stroke', 'M5 50H35'),
+  } } };
+  const { client, bridge } = fixture(saved);
+  render.mockReset().mockResolvedValue(new Blob(['png']));
+  await publishDesignPreview(client, bridge, ref, saved, await loadDesignLayoutEngine(), { kind: 'link' }, signal, translate);
+  const { boards } = parseBeginDesignPreview(bridge.beginPreview.mock.calls[0][0]);
+  const children = boards[0].layers.children[0].children;
+  expect(children.map((layer) => layer.name)).toEqual(['Artwork', 'Visible stroke']);
+  const scope = new paper.PaperScope();
+  scope.setup(new scope.Size(1, 1));
+  try {
+    const published = scope.PathItem.create(children[0].outlinePath!);
+    expect(published.contains(new scope.Point(0.1, 0.1))).toBe(true);
+    expect(published.contains(new scope.Point(0.3, 0.3))).toBe(false);
+    expect(published.contains(new scope.Point(0.8, 0.8))).toBe(false);
+  } finally { scope.remove(); }
 });
 
 it('captures each combination that affects an artboard, resolving linked aliases, layout and visibility from the published inputs', async () => {

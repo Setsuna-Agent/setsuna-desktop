@@ -35,7 +35,7 @@ export function designViewerHtml(theme: DesignViewerTheme) {
           <div id="fit-area" aria-hidden="true"></div>
           <div id="artwork" hidden>
             <svg id="selection-outline" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true" hidden>
-              <polygon vector-effect="non-scaling-stroke"></polygon>
+              <path vector-effect="non-scaling-stroke"></path>
             </svg>
           </div>
         </main>
@@ -125,7 +125,7 @@ unlockButton.textContent = zh ? '解锁' : 'Unlock';
 let permission = 'Bearer ' + window.location.hash.slice(1);
 const canvas = createPreviewCanvas(stage, (board, point) => panels.pick(board, point), (state) => zoom.update(state));
 const panels = createPreviewPanels(zh, (board, layer) => {
-  canvas.showOutline(board, layer?.outline ?? []);
+  canvas.showOutline(board, layer?.outline ?? [], layer?.outlinePath);
   boardModes.select(layer?.kind === 'artboard' ? board : undefined);
 });
 const zoom = createPreviewZoomControls({

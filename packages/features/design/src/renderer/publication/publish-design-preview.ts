@@ -20,6 +20,7 @@ import { designArtboardPaintLayerIds, designExportFontRequests, designExportImag
 import { designPrototypeBoards } from '../prototype/design-prototype.js';
 import { createDesignPreviewFontLoader } from '../text/design-font-loader.js';
 import { designPreviewLayerTree } from './design-preview-layer-tree.js';
+import { createDesignPreviewGeometry, type DesignPreviewGeometry } from './design-preview-geometry.js';
 import { createPreviewVariableCatalog, designPreviewBoardModes, designPreviewModeVariants } from './design-preview-variables.js';
 
 const maxDecodedImagePixels = 64_000_000;
@@ -40,6 +41,7 @@ export async function publishDesignPreview(client: PreviewClient, bridge: Previe
   const roots = projected.rootIds.filter((id) => isDesignPrototypeBoard(projected.nodes[id]) && !projected.nodes[id].hidden);
   if (!roots.length) throw new Error(t('feature.design.publication.noBoards'));
   if (roots.length > maxDesignPreviewBoards) throw new Error(t('feature.design.publication.previewTooLarge'));
+  const geometry = await createDesignPreviewGeometry();
   const fonts = createDesignPreviewFontLoader(client.fonts);
   const scriptCache: ScriptCache = { rendered: new Map(), revisions: new Map() };
 
@@ -68,7 +70,7 @@ export async function publishDesignPreview(client: PreviewClient, bridge: Previe
     const base = await captureScene(projected, ids, scene);
     const boards = ids.map((id, index) => {
       const name = projected.nodes[id].name?.trim().slice(0, maxDesignPreviewLayerNameLength) || t('feature.design.artboard');
-      const frame = previewFrame(projected, base.scene, id, name, layerKeys[index]);
+      const frame = previewFrame(projected, base.scene, id, name, geometry, layerKeys[index]);
       if (frame.hidden) throw new Error(t('feature.design.publication.emptyBoard'));
       return { name, ...frame, modes: plans[index] };
     });
@@ -108,7 +110,7 @@ export async function publishDesignPreview(client: PreviewClient, bridge: Previe
         await fonts.load(designExportFontRequests({ document: variantDocument, ids: [id] }), signal);
         const variantScene = resolveDesignScene(layout, variantDocument, measureDesignText, { rootIds: [id] });
         const captured = await captureScene(variantDocument, [id], variantScene);
-        const frame = previewFrame(variantDocument, captured.scene, id, board.name, layerKeys[index]);
+        const frame = previewFrame(variantDocument, captured.scene, id, board.name, geometry, layerKeys[index]);
         await bridge.appendPreviewVariant(publication, index, variant, frame, await renderFrame(captured, id, frame));
       }
     }
@@ -126,6 +128,7 @@ export async function publishDesignPreview(client: PreviewClient, bridge: Previe
     return published;
   } finally {
     signal.removeEventListener('abort', cancel);
+    geometry.dispose();
     fonts.dispose();
     await cancel();
   }
@@ -163,12 +166,12 @@ async function renderScripts(client: Pick<PreviewClient, 'renderPreviewScript'>,
 }
 
 function previewFrame(document: DesignDocument, scene: DesignScene, id: string, name: string,
-  keys?: Map<string, number>): DesignPreviewFrame {
+  geometry: DesignPreviewGeometry, keys?: Map<string, number>): DesignPreviewFrame {
   const box = scene[id];
   const hidden = !box.visible || box.width <= 0 || box.height <= 0;
   return { ...(hidden ? { width: 1, height: 1 } : previewSize(box)),
     flipX: box.scaleX < 0 ? true : undefined, flipY: box.scaleY < 0 ? true : undefined, hidden: hidden ? true : undefined,
-    layers: designPreviewLayerTree(document, scene, id, name, keys) };
+    layers: designPreviewLayerTree(document, scene, id, name, geometry, keys) };
 }
 
 function previewSize(bounds: { width: number; height: number }) {
