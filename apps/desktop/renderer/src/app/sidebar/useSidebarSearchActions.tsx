@@ -1,6 +1,6 @@
 import { rendererPluginViewKey, shellPluginPageSlot } from '@setsuna-desktop/renderer-contracts/shell';
 import { settingsPageSlot } from '@setsuna-desktop/renderer-contracts/settings';
-import { Blocks, Bot, Clock3, FolderPlus, GitPullRequest, MessageCircle, Settings, SquarePen } from 'lucide-react';
+import { Blocks, Bot, Clock3, FolderPlus, GitPullRequest, MessageCircle, PenTool, Settings, SquarePen } from 'lucide-react';
 import { usePluginManagementFeatureSnapshot } from '../../composition/PluginManagementFeatureBoundary.js';
 import { usePluginAppCatalog } from '../../kernel/declarative-plugin-ui/app-appearance/usePluginAppCatalog.js';
 import { useRendererOwnedKeyedEntries } from '../../kernel/renderer-plugins/RendererKernelProvider.js';
@@ -13,6 +13,7 @@ export type SidebarSearchActionHandlers = {
   onNewChat(): void | Promise<unknown>;
   onAddProject(): void;
   onOpenChat(): void;
+  onOpenDesign(): void;
   onOpenAssistant?: () => void | Promise<unknown>;
   onOpenAutomation(): void;
   onOpenCapabilities(): void;
@@ -32,6 +33,7 @@ export function useSidebarSearchActions(handlers: SidebarSearchActionHandlers): 
     { id: 'new-chat', title: t('sidebar.newChat'), keywords: 'new chat', icon: <SquarePen size={15} />, shortcut: 'app.newChat', run: handlers.onNewChat },
     { id: 'add-project', title: t('sidebar.createProject'), keywords: 'open folder project', icon: <FolderPlus size={15} />, shortcut: 'app.addProject', run: handlers.onAddProject },
     { id: 'chat', title: t('sidebar.chats'), keywords: 'chat', icon: <MessageCircle size={15} />, shortcut: 'app.openChat', run: handlers.onOpenChat },
+    { id: 'design', title: t('search.openDesign'), keywords: '打开设计 设计稿 画布 open design canvas', icon: <PenTool size={15} />, run: handlers.onOpenDesign },
     { id: 'automation', title: t('feature.automation.title'), keywords: '自动化 automation schedule', icon: <Clock3 size={15} />, shortcut: 'app.openAutomation', run: handlers.onOpenAutomation },
     { id: 'plugins', title: t('sidebar.plugins'), keywords: 'plugins capabilities', icon: <Blocks size={15} />, shortcut: 'app.openCapabilities', run: handlers.onOpenCapabilities },
     { id: 'pull-requests', title: 'Pull Request', keywords: 'pr 拉取请求', icon: <GitPullRequest size={15} />, shortcut: 'app.openPullRequests', run: handlers.onOpenPullRequests },

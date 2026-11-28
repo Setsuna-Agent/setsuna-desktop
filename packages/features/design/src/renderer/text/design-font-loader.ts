@@ -11,7 +11,7 @@ type Registration = {
 };
 
 export type DesignFontRequest = Readonly<{ family: string; weight: number; style: DesignFontStyle }>;
-export const designFontCatalogChannel = 'setsuna-design-fonts';
+export { designFontCatalogChannel } from './design-font-catalog-events.js';
 
 export function matchDesignFontFaces(fonts: readonly DesignCustomFont[], requests: readonly DesignFontRequest[]) {
   const chosen = new Set<string>();

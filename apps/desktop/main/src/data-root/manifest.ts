@@ -249,6 +249,13 @@ export function migrationCategory(relativePath: string): DesktopDataMigrationCat
     normalized.startsWith('runtime/attachments/')
     || normalized.startsWith('runtime/generated-images/')
   ) return 'attachments_images';
+  if (
+    normalized.startsWith('runtime/designs/')
+    || normalized.startsWith('runtime/features/design/')
+    || normalized.startsWith('runtime/design-directories/')
+    || normalized.startsWith('runtime/design-resource-roots/')
+    || /^runtime\/\.design-package-(?:import-)?[0-9a-f-]{36}\//u.test(normalized)
+  ) return 'design_resources';
   if (normalized.startsWith('runtime/workspace-dependencies/')) return 'runtime_dependencies';
   if (
     normalized.startsWith('runtime/projects')

@@ -178,6 +178,7 @@ export function createEditorFixture(source: FixtureDocument, saveGate = Promise.
   const signal = new AbortController().signal;
   const commit = vi.fn<DesignClient['commit']>((input) => service.commit(commitDesignEdits.input.parse(input), signal));
   const client: DesignClient = {
+    listLocalFiles: vi.fn(), removeUnusedAssets: vi.fn(),
     projectDesigns: async () => [], catalog: async () => ({ directories: [], associations: [] }), setProject: vi.fn(),
     tasks: options.tasks?.(service),
     fonts: options.fonts ?? { list: vi.fn().mockResolvedValue([]), read: vi.fn(), import: vi.fn(), remove: vi.fn() },

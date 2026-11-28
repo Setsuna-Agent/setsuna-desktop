@@ -211,7 +211,7 @@ export type SetsunaDesktopBridge = {
   };
   dataRoot: {
     getState(): Promise<DesktopDataRootState>;
-    getStorageUsage(): Promise<DesktopStorageUsage>;
+    getStorageUsage(options?: { afterCleanup?: boolean }): Promise<DesktopStorageUsage>;
     clearStorage(categories: DesktopStorageCleanupCategory[]): Promise<DesktopStorageCleanupResult>;
     scanTarget(targetRoot: string): Promise<DesktopDataMigrationPlan>;
     beginMigration(planId: string): Promise<DesktopDataRootActionResult>;

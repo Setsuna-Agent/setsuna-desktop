@@ -3,10 +3,64 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { workspaceProjectRoots, type WorkspaceProject } from '@setsuna-desktop/contracts';
-import { designDirectoryGrant, designDirectoryGrants } from '@setsuna-desktop/feature-design/contracts';
+import { designDirectoryGrant, designDirectoryGrants, type LocalDesignInventory } from '@setsuna-desktop/feature-design/contracts';
 import { writeJsonFile } from '../../../src/adapters/store/json-file.js';
 import { createRuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 import { ONE_PIXEL_PNG_BASE64 } from '../../support/runtime-server/rest-capabilities.js';
+
+it('rechecks local assets against saved drafts and file replacements before cleaning a reviewed selection', async () => {
+  const harness = await createRuntimeServerTestHarness();
+  try {
+    const api = '/v1/features/design';
+    const route = api + '/storage/local-files';
+    const post = (url: string, body: unknown) => harness.runtimeFetch(url, { method: 'POST', body: JSON.stringify(body) });
+    const list = (): Promise<LocalDesignInventory> => harness.runtimeFetch(route);
+    const ref = { storageId: 'local', path: 'board.design.json' };
+    await post(api + '/documents', { ...ref, name: ref.path, parentPath: '.' });
+    const assets = await Promise.all(['placed', 'replaced', 'unused', 'shared'].map((name) =>
+      post(api + '/images', { ref, name: name + '.png', base64: ONE_PIXEL_PNG_BASE64 })));
+    const [placed, replaced, unused, shared] = assets;
+    const { files, incomplete } = await list();
+    expect(incomplete).toBe(false);
+    const reviewed = files.filter((file) => file.kind === 'asset');
+    expect(reviewed.map((file) => file.path).sort()).toEqual([...assets].sort());
+    const revision = files.find((file) => file.path === ref.path)!.revision;
+    const saved = await post(api + '/documents/edits', { ref, expectedRevision: revision, edits: [
+      { kind: 'insert', nodeId: 'picture', parentId: null,
+        node: { kind: 'image', x: 0, y: 0, width: 1, height: 1, assetPath: placed, fit: 'contain' } },
+    ] });
+    const local = path.join(harness.runtimeDataDir, 'runtime', 'designs');
+    const nested = path.join(local, 'build');
+    await mkdir(nested);
+    const board = saved.document;
+    await writeFile(path.join(nested, 'dependent.design.json'), JSON.stringify({
+      ...board, documentId: randomUUID(), libraries: { [board.documentId]: ref.path },
+      nodes: { picture: { ...board.nodes.picture, assetPath: shared } },
+    }));
+    await writeFile(path.join(local, replaced), 'replacement');
+    const external = path.join(harness.runtimeDataDir, 'project-assets');
+    await mkdir(external);
+    await writeFile(path.join(external, 'original.png'), 'external original');
+    await symlink(external, path.join(local, 'linked'), 'junction');
+
+    await expect(post(route + '/remove-unused-assets', { assets: [
+      ...reviewed, { path: 'linked/original.png', revision: 'foreign' },
+    ] })).resolves.toEqual(expect.arrayContaining([placed, replaced, shared, 'linked/original.png']));
+    await expect(readFile(path.join(local, unused))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(path.join(local, placed), 'base64')).toBe(ONE_PIXEL_PNG_BASE64);
+    expect(await readFile(path.join(local, shared), 'base64')).toBe(ONE_PIXEL_PNG_BASE64);
+    expect(await readFile(path.join(local, replaced), 'utf8')).toBe('replacement');
+    expect(await readFile(path.join(external, 'original.png'), 'utf8')).toBe('external original');
+    await expect(harness.runtimeFetch(api + '/documents?' + new URLSearchParams({ ...ref, expectedRevision: revision }), { method: 'DELETE' }))
+      .rejects.toThrow('REVISION_CONFLICT');
+    await expect(harness.runtimeFetch(api + '/documents?' + new URLSearchParams({ ...ref, expectedRevision: saved.revision }), { method: 'DELETE' }))
+      .rejects.toThrow('DESIGN_LIBRARY_IN_USE');
+    await writeFile(path.join(local, 'broken.design.json'), '{');
+    const partial = await list();
+    expect(partial.incomplete).toBe(true);
+    expect(partial.files.some((file) => file.kind === 'asset')).toBe(false);
+  } finally { await harness.close(); }
+});
 
 it('identifies a moved project folder and keeps listing drafts from available folders', async () => {
   const harness = await createRuntimeServerTestHarness();

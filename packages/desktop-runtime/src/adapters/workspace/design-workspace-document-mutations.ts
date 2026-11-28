@@ -19,13 +19,14 @@ type MoveOptions = { sourceProject?: string | null; expectedRevision?: string; p
   relocateChats?: DesignConversationRelocation; allowPresetLibraries?: boolean };
 
 export function deleteDesignWorkspaceDocument(root: string, relativePath: string, boundRoots: readonly string[],
-  ownership: DesignResourceOwnership, signal: AbortSignal, expectedRevision?: string, relocateChats?: DesignConversationRelocation) {
+  ownership: DesignResourceOwnership, signal: AbortSignal,
+  { expectedRevision, relocateChats, includeIgnored }: { expectedRevision?: string; relocateChats?: DesignConversationRelocation; includeIgnored?: boolean }) {
   return withDesignSource(root, relativePath, boundRoots, undefined, signal, async (source, roots) => {
     // A damaged draft can still be removed. It cannot serve resources to another draft.
     const original = await readDependency(relativePath, () => readValidDesignDocument(source.target, relativePath));
     if (expectedRevision !== undefined && original?.revision !== expectedRevision) throw designChanged();
     const canonical = await realpath(source.target);
-    if (original) await assertLibraryNotUsed(roots, boundRoots, canonical, original.document.documentId, ownership, signal);
+    if (original) await assertLibraryNotUsed(roots, boundRoots, canonical, original.document.documentId, ownership, signal, includeIgnored);
     const remove = () => removeUnchangedFile({ ...source, root, relativePath, revision: original?.revision }, signal);
     if (relocateChats) await relocateChats({ source: canonical, target: null }, remove);
     else await remove();
@@ -212,7 +213,7 @@ async function copyDependencies(root: string, document: DesignDocument, imports:
 }
 
 async function assertLibraryNotUsed(roots: readonly string[], boundRoots: readonly string[], canonical: string, id: string,
-  ownership: DesignResourceOwnership, signal: AbortSignal) {
+  ownership: DesignResourceOwnership, signal: AbortSignal, includeIgnored = false) {
   const seen = new Set<string>();
   for (const root of roots) {
     await walkWorkspaceFiles(root, async (target) => {
@@ -236,7 +237,7 @@ async function assertLibraryNotUsed(roots: readonly string[], boundRoots: readon
       throw new FeatureOperationFailure({
         code: 'DESIGN_LIBRARY_IN_USE', message: `The design is linked as a library by "${relativePath}".`, retryable: false,
       });
-    }, { signal, onReadError: (directory) => { throw dependencyUnavailable(path.relative(root, directory) || '.'); } });
+    }, { signal, includeIgnored, onReadError: (directory) => { throw dependencyUnavailable(path.relative(root, directory) || '.'); } });
   }
 }
 

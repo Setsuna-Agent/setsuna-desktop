@@ -41,9 +41,9 @@ export function registerDataRootIpc(
     if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');
     return coordinator.getState();
   });
-  ipcMain.handle('desktop-data-root:storage-usage', (event) => {
+  ipcMain.handle('desktop-data-root:storage-usage', (event, options) => {
     if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');
-    return storage.getUsage();
+    return storage.getUsage(options?.afterCleanup === true);
   });
   ipcMain.handle('desktop-data-root:clear-storage', (event, categories) => {
     if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');

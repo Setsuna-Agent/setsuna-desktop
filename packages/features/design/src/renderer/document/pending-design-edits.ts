@@ -23,7 +23,7 @@ export async function withPausedDesignEdits(client: DesignClient, keys: Readonly
   const paused = operation.catch(() => false);
   for (const key of keys) pending.set(key, paused);
   try {
-    await operation;
+    return await operation;
   } finally {
     for (const key of keys) if (pending.get(key) === paused) pending.delete(key);
   }

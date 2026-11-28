@@ -124,7 +124,7 @@ const desktop: SetsunaDesktopBridge['desktop'] = {
 
 const dataRoot: SetsunaDesktopBridge['dataRoot'] = {
   getState: () => ipcRenderer.invoke('desktop-data-root:get-state'),
-  getStorageUsage: () => ipcRenderer.invoke('desktop-data-root:storage-usage'),
+  getStorageUsage: (options) => ipcRenderer.invoke('desktop-data-root:storage-usage', options),
   clearStorage: (categories) => ipcRenderer.invoke('desktop-data-root:clear-storage', categories),
   scanTarget: (targetRoot) => ipcRenderer.invoke('desktop-data-root:scan-target', targetRoot),
   beginMigration: (planId) => ipcRenderer.invoke('desktop-data-root:begin-migration', planId),

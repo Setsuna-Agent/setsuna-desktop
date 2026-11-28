@@ -4,7 +4,8 @@ import { useToast } from '@setsuna-desktop/renderer-ui';
 import { designFontNameKey, type DesignCustomFont } from '../../contracts/design-fonts.js';
 import type { DesignDocument } from '../../contracts/index.js';
 import type { DesignFontClient } from '../client.js';
-import { DesignFontLoader, designFontCatalogChannel, designFontRule, encodeDesignFont, matchDesignFontFaces, type DesignFontRequest } from './design-font-loader.js';
+import { DesignFontLoader, designFontRule, encodeDesignFont, matchDesignFontFaces, type DesignFontRequest } from './design-font-loader.js';
+import { designFontCatalogChannel, notifyDesignFontCatalogChanged } from './design-font-catalog-events.js';
 import { mergeDesignFontCatalog, readBundledDesignFont } from './design-bundled-fonts.js';
 import { collectDesignTextFonts } from './design-typography.js';
 
@@ -100,11 +101,7 @@ export function useDesignFonts(client: DesignFontClient, document: DesignDocumen
   }, [loader, needed]);
 
   const updateCatalog = useCallback(async () => {
-    if (typeof BroadcastChannel === 'function') {
-      const channel = new BroadcastChannel(designFontCatalogChannel);
-      channel.postMessage(null);
-      channel.close();
-    }
+    notifyDesignFontCatalogChanged();
     await refresh();
   }, [refresh]);
 

@@ -2,7 +2,7 @@ import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:f
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearDesktopLogs, scanDesktopStorage } from '../../../src/data-root/storage-files.js';
+import * as storageFiles from '../../../src/data-root/storage-files.js';
 import { DesktopStorageService, type StorageCacheSession } from '../../../src/data-root/storage.js';
 
 const roots: string[] = [];
@@ -43,14 +43,21 @@ describe('desktop storage management', () => {
       fixture(root, 'runtime/user-skills/my-skill/cache/file', '12345678'),
       fixture(root, 'runtime/workspace-dependencies/cache/corepack/pnpm', '123456789'),
       fixture(root, 'Local Storage/leveldb/log', '12'),
+      fixture(root, 'runtime/designs/package/content/design-assets/photo.png', '1234'),
+      fixture(root, 'runtime/features/design/fonts/id/font', '123456'),
+      fixture(root, 'runtime/design-directories/grant.json', '12'),
+      fixture(root, 'runtime/design-resource-roots/binding.json', '123'),
+      fixture(root, 'runtime/.design-package-import-12345678-1234-1234-1234-123456789abc/package.zip', '12345'),
+      fixture(root, 'runtime/designs-backup/note', '1'),
       fixture(outside, 'private.txt', 'not application data'),
     ]);
     await symlink(outside, path.join(root, 'linked-workspace'), 'junction');
-    const usage = await scanDesktopStorage(root);
+    await symlink(outside, path.join(root, 'runtime/designs/linked-project'), 'junction');
+    const usage = await storageFiles.scanDesktopStorage(root);
     const sizes = Object.fromEntries(usage.categories.map((item) => [item.id, item.totalBytes]));
     expect(sizes).toMatchObject({ conversations: 10, attachments_images: 5, cache: 7, logs: 5,
-      projects_capabilities: 8, runtime_dependencies: 9, desktop_browser: 2 });
-    expect(usage.totalBytes).toBe(46);
+      projects_capabilities: 8, runtime_dependencies: 9, desktop_browser: 2, design_resources: 20, settings_credentials: 1 });
+    expect(usage.totalBytes).toBe(67);
     expect(usage.incomplete).toBe(false);
   });
 
@@ -67,7 +74,7 @@ describe('desktop storage management', () => {
       fixture(root, 'Local Storage/leveldb/000003.log', 'draft'),
     ]);
     await symlink(outside, path.join(root, 'runtime/logs/external'), 'junction');
-    await clearDesktopLogs(root);
+    await storageFiles.clearDesktopLogs(root);
     await expect(access(log)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(access(rootLog)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(access(path.dirname(log))).resolves.toBeUndefined();
@@ -80,7 +87,7 @@ describe('desktop storage management', () => {
     const outside = await temporaryRoot();
     const original = await fixture(outside, 'logs/file.log', 'keep');
     await symlink(outside, path.join(root, 'runtime'), 'junction');
-    await expect(clearDesktopLogs(root)).rejects.toThrow('could not be removed');
+    await expect(storageFiles.clearDesktopLogs(root)).rejects.toThrow('could not be removed');
     expect(await readFile(original, 'utf8')).toBe('keep');
   });
 
@@ -129,5 +136,38 @@ describe('desktop storage management', () => {
     release();
     await clear;
     expect((await scan).totalBytes).toBe(0);
+  });
+
+  it.each(['design', 'logs'])('returns a fresh snapshot to every waiting window after %s cleanup', async (category) => {
+    const root = await temporaryRoot();
+    const file = await fixture(root, category === 'design' ? 'runtime/designs/old.png' : 'runtime/logs/old.log', '12345');
+    const service = new DesktopStorageService(() => root, () => []);
+    let captured!: (bytes: number) => void;
+    let resume!: () => void;
+    const capturedSnapshot = new Promise<number>((resolve) => { captured = resolve; });
+    const released = new Promise<void>((resolve) => { resume = resolve; });
+    const read = storageFiles.scanDesktopStorage;
+    const scan = vi.spyOn(storageFiles, 'scanDesktopStorage').mockImplementationOnce(async (directory) => {
+      const before = await read(directory);
+      captured(before.totalBytes);
+      await released;
+      return before;
+    });
+    const firstWindow = service.getUsage();
+    try {
+      expect(await capturedSnapshot).toBe(5);
+      // Design cleanup runs in runtime. Log cleanup belongs to main and waits for the disk walk.
+      const clear = category === 'logs' ? service.clear(['logs']) : await rm(file);
+      const secondWindow = service.getUsage(category === 'design');
+      const thirdWindow = service.getUsage(category === 'design');
+      resume();
+      await clear;
+      const snapshots = await Promise.all([firstWindow, secondWindow, thirdWindow]);
+      expect(snapshots.map(({ totalBytes }) => totalBytes)).toEqual([0, 0, 0]);
+      expect(scan).toHaveBeenCalledTimes(2);
+    } finally {
+      resume();
+      await firstWindow.finally(() => scan.mockRestore());
+    }
   });
 });

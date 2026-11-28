@@ -16,8 +16,7 @@ export function useStorageManagement(dataRoot?: string) {
   const requestVersion = useRef(0);
   const running = useRef(false);
   const mounted = useRef(false);
-
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (afterCleanup = false) => {
     if (!dataRoot || !mounted.current) return;
     const version = ++requestVersion.current;
     setLoading(true);
@@ -26,7 +25,7 @@ export function useStorageManagement(dataRoot?: string) {
       try {
         const api = window.setsunaDesktop?.dataRoot;
         if (!api?.getStorageUsage) throw new Error(t('storage.unavailable'));
-        const next = await refreshStorageUsageCache(dataRoot, () => api.getStorageUsage());
+        const next = await refreshStorageUsageCache(dataRoot, () => api.getStorageUsage({ afterCleanup }));
         if (!current()) return;
         setUsage(next);
       } catch (reason) {
@@ -47,6 +46,8 @@ export function useStorageManagement(dataRoot?: string) {
     await Promise.all([loadUsage(), loadThreads()]);
   }, [dataRoot, t]);
 
+  const refreshAfterCleanup = () => refresh(true);
+
   useEffect(() => {
     mounted.current = true;
     void refresh();
@@ -66,7 +67,7 @@ export function useStorageManagement(dataRoot?: string) {
         setError(t('storage.cleanupError'));
       }
       // Deletion has completed; recount in the background without keeping the dialog locked.
-      void refresh();
+      void refreshAfterCleanup();
       return result;
     } catch (reason) {
       if (mounted.current) setError(reason instanceof Error ? reason.message : t('storage.cleanupError'));
@@ -77,6 +78,6 @@ export function useStorageManagement(dataRoot?: string) {
     }
   };
 
-  return { usage, threads: threads ?? [], threadsReady: threads !== null, loading, working, error, cleanup,
+  return { usage, threads: threads ?? [], threadsReady: threads !== null, loading, working, error, cleanup, refreshAfterCleanup,
     refresh: () => { setError(null); void refresh(); } };
 }

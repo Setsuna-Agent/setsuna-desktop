@@ -3,6 +3,7 @@ import { defineCapability } from '@setsuna-desktop/feature-core/capability';
 import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 import type { ChatDesignScope, ProjectDesignEntry } from './chat-design.js';
 import type { DesignStorage } from './design-storage.js';
+import type { DesignCleanupSelection, LocalDesignInventory } from './design-cleanup.js';
 import type { DesignDocument } from './document.js';
 import type { CreateDesignDocumentInput, DesignDocumentListEntry, DesignDocumentRef, DesignImageExtension, DesignWorkspace, ListDesignDocumentEntriesInput, MoveDesignDocumentInput } from './operations.js';
 import type { DesignScriptCanvas } from './design-script-parameters.js';
@@ -10,6 +11,7 @@ import type { DesignPackageReceipt, ImportDesignPackageInput, PrepareDesignPacka
 
 export * from './design-mcp.js';
 export * from './design-package.js';
+export * from './design-cleanup.js';
 export * from './design-export.js';
 export * from './design-publication.js';
 export {
@@ -73,6 +75,8 @@ export type DesignWorkspaceDocument = Readonly<{
 export { designDirectoryGrant, designDirectoryGrants, getDesignCatalog, setDesignProject, searchDesignImages, readDesignImage, type DesignDirectory, type DesignCatalog } from './design-storage.js';
 
 export interface DesignWorkspaceFiles extends DesignStorage {
+  listLocalFiles(signal: AbortSignal): Promise<LocalDesignInventory>;
+  removeUnusedAssets(assets: readonly DesignCleanupSelection[], signal: AbortSignal): Promise<readonly string[]>;
   projectDesigns(projectId: string, signal: AbortSignal): Promise<ProjectDesignEntry[]>;
   list(workspace: DesignWorkspace, signal: AbortSignal, chat?: ChatDesignScope): Promise<readonly string[]>;
   listEntries(workspace: ListDesignDocumentEntriesInput, signal: AbortSignal): Promise<readonly DesignDocumentListEntry[]>;
