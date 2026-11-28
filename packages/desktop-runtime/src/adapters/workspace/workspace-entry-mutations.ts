@@ -125,8 +125,8 @@ export async function resolveExistingWorkspaceEntry(root: string, relativePath: 
   return { target, stats };
 }
 
-export async function createWorkspaceFile(target: string, content: string | Uint8Array) {
-  const file = await open(target, 'wx+');
+export async function createWorkspaceFile(target: string, content: string | Uint8Array, mode?: number) {
+  const file = await open(target, 'wx+', mode);
   try {
     try {
       await file.writeFile(content);

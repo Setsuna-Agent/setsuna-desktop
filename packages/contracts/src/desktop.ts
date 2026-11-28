@@ -70,6 +70,8 @@ export const WORKSPACE_ENTRIES_WATCH_CHANNELS = {
   changed: 'desktop:workspace-entries-changed',
 } as const;
 
+export const MAX_DESKTOP_IMAGE_BYTES = 20 * 1024 ** 2;
+
 export type DesktopImageActionResult =
   | { ok: true; cancelled?: boolean }
   | { ok: false; error: string };

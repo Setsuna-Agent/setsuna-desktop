@@ -9,6 +9,7 @@ export { TextField, TextArea, type TextFieldProps, type TextAreaProps } from './
 export { parseNumberExpression } from './fields/number-expression.js';
 export { Checkbox, CheckField, SegmentedControl, Switch, type CheckboxProps } from './selection-controls.js';
 export { Dialog, type DialogProps } from './dialog.js';
+export { ExportPreviewDialog, type ExportPreviewAction } from './export-preview/export-preview-dialog.js';
 export {
   KEYBOARD_SHORTCUT_PLATFORMS, captureKeyboardShortcut, formatKeyboardShortcutBinding, formatKeyboardShortcutBindingParts,
   keyboardEventMatchesBinding, keyboardShortcutFromEvent, normalizeKeyboardShortcutBinding,

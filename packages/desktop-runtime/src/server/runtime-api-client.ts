@@ -1,5 +1,6 @@
 import { parseRuntimeApiRequest, parseThreadDeletionOptions, RUNTIME_API_MAX_BYTES, type RuntimeApiResponse } from '@setsuna-desktop/contracts';
 import { installLocalPlugin } from '@setsuna-desktop/feature-plugin-management/contracts';
+import { isDesignPackageTransferPath } from '@setsuna-desktop/feature-design/contracts';
 import type { RuntimeApi } from '../ports/runtime-api.js';
 import type { DesktopNativeBridge } from '../ports/secret-store.js';
 import { decodeRuntimeId } from './http-utils.js';
@@ -17,6 +18,7 @@ export function createRuntimeApiClient(options: {
       if (pathname === installLocalPlugin.path) {
         throw new Error('Local plugin import requires the desktop native directory picker.');
       }
+      if (isDesignPackageTransferPath(pathname)) throw new Error('Design package transfers require the desktop host.');
       if (/\/renderer-ui\/runtime-request$/u.test(pathname)) {
         throw new Error('Runtime API requests cannot target the runtime bridge itself.');
       }

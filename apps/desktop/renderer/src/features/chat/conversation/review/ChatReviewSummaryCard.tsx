@@ -13,9 +13,11 @@ import { MarkdownRenderer } from '../../markdown/MarkdownRenderer.js';
 
 /** Completed review output: optional summary plus one compact row per finding. */
 export function ChatReviewSummaryCard({
+  messageId,
   notice,
   onOpenFile,
 }: {
+  messageId?: string;
   notice: RuntimeReviewModeNotice;
   onOpenFile?: DesktopReviewOpenHandler;
 }) {
@@ -26,7 +28,7 @@ export function ChatReviewSummaryCard({
     || (!findings.length ? normalizedNotice.review : '');
 
   return (
-    <section className="chat-review-summary-card" aria-label={t('chat.review.completed')}>
+    <section data-message-id={messageId} className="chat-review-summary-card" aria-label={t('chat.review.completed')}>
       {summary ? (
         <MarkdownRenderer
           content={summary}

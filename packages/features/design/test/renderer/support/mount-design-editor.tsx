@@ -10,6 +10,7 @@ import DesignEditor from '../../../src/renderer/DesignEditor.js';
 import type { DesignDocumentSurfaceProps } from '../../../src/renderer/DesignDocumentSurface.js';
 import type { DesignAssets, DesignClient } from '../../../src/renderer/client.js';
 import type { Bounds, Point } from '../../../src/renderer/design-geometry.js';
+import { DesignExportPreviewProvider } from '../../../src/renderer/export/DesignExportPreviewProvider.js';
 import { DesignDocumentService } from '../../../src/runtime/design-document-service.js';
 
 const drawing = vi.hoisted(() => ({
@@ -17,6 +18,8 @@ const drawing = vi.hoisted(() => ({
   localX: new Map<string, number>(),
   images: new Map<string, { image: HTMLImageElement; name?: string; crop?: Bounds }>(),
   exportedImages: new Map<string, HTMLImageElement>(),
+  encodePng: vi.fn((_size: { width: number; height: number }) =>
+    new Blob([Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10)], { type: 'image/png' })),
   paths: new Map<string, string>(),
   pathStrokeWidths: new Map<string, number>(),
   handles: new Set<string>(),
@@ -49,9 +52,11 @@ vi.mock('react-konva', async () => {
   const Stage = forwardRef(function Stage({ children }: PropsWithChildren, ref) {
     const stageImages = useMemo(() => new Map<string, HTMLImageElement>(), []);
     useImperativeHandle(ref, () => ({
-      getLayers: () => [{ toCanvas() {
+      getLayers: () => [{ toCanvas({ width, height, pixelRatio }: { width: number; height: number; pixelRatio: number }) {
         drawing.exportedImages = new Map(stageImages);
-        return { toDataURL: () => 'data:image/png;base64,AA==' };
+        const raster = { width: Math.floor(width * pixelRatio), height: Math.floor(height * pixelRatio) };
+        return { ...raster, toDataURL: () => 'data:image/png;base64,AA==',
+          toBlob: (callback: BlobCallback) => callback(drawing.encodePng(raster)) };
       } }],
       getIntersection() {
         const hit = drawing.hit;
@@ -127,6 +132,7 @@ afterEach(() => {
   drawing.localX.clear();
   drawing.images.clear();
   drawing.exportedImages.clear();
+  drawing.encodePng.mockReset();
   drawing.paths.clear();
   drawing.pathStrokeWidths.clear();
   drawing.handles.clear();
@@ -148,6 +154,7 @@ type EditorFixtureOptions = Readonly<{
   readScriptParameters?: DesignClient['readScriptParameters'];
   renderScript?: DesignClient['renderScript'];
   webPreview?: DesignAssets['webPreview'];
+  publication?: DesignAssets['publication'];
   requestClipboardPaste?: DesignAssets['requestClipboardPaste'];
   readDesignLayers?: DesignAssets['output']['readDesignLayers'];
   output?: Partial<DesignAssets['output']>;
@@ -176,6 +183,7 @@ export function createEditorFixture(source: FixtureDocument, saveGate = Promise.
     fonts: options.fonts ?? { list: vi.fn().mockResolvedValue([]), read: vi.fn(), import: vi.fn(), remove: vi.fn() },
     assets: {
       webPreview: options.webPreview,
+      publication: options.publication,
       search: options.searchImages ?? (async () => []), read: options.readImage ?? vi.fn(), readLinkedImage: vi.fn(),
       requestClipboardPaste: options.requestClipboardPaste ?? vi.fn().mockResolvedValue({ kind: 'unavailable' }),
       output: { saveDesignHtml: vi.fn(), saveDesignSvg: vi.fn(), saveImageAs: vi.fn(), copyImageToClipboard: vi.fn(), copyDesignLayers: vi.fn(),
@@ -188,6 +196,7 @@ export function createEditorFixture(source: FixtureDocument, saveGate = Promise.
     prepareLibraryPreset: vi.fn(),
     readScriptParameters: options.readScriptParameters ?? vi.fn().mockResolvedValue([]),
     renderScript: options.renderScript ?? vi.fn(),
+    renderPreviewScript: vi.fn(),
     read: (ref, readSignal) => {
       const library = options.libraries?.[ref.path];
       return library ? Promise.resolve({ document: library, revision: '0', canUndo: false, canRedo: false }) : service.read(ref, readSignal ?? signal);
@@ -200,8 +209,11 @@ export function createEditorFixture(source: FixtureDocument, saveGate = Promise.
 export async function mountEditor(source: FixtureDocument, saveGate = Promise.resolve(), options: EditorFixtureOptions = {}) {
   const { client, documentRef, commit, replace, revision, read } = createEditorFixture(source, saveGate, options);
   const layoutEngine = await loadYoga();
+  const translate = options.translate ?? ((key: string) => key);
   const view = (chatActivity?: DesignDocumentSurfaceProps['chatActivity']) => <UiProvider locale="en-US"><ToastProvider>
-    <DesignEditor chatActivity={chatActivity} renderChat={options.renderChat} client={client} documentRef={documentRef} layoutEngine={layoutEngine} translate={options.translate ?? ((key) => key)} />
+    <DesignExportPreviewProvider assets={client.assets} visible translate={translate}>
+      <DesignEditor chatActivity={chatActivity} renderChat={options.renderChat} client={client} documentRef={documentRef} layoutEngine={layoutEngine} translate={translate} />
+    </DesignExportPreviewProvider>
   </ToastProvider></UiProvider>;
   const mounted = render(view());
   return { showChatCanvas: (chatActivity: DesignDocumentSurfaceProps['chatActivity']) => mounted.rerender(view(chatActivity)),

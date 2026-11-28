@@ -3,8 +3,10 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Util } from 'konva/lib/Util.js';
+import { runInNewContext } from 'node:vm';
 import { expect, it, vi } from 'vitest';
-import { designDocumentVersion, type DesignDocument } from '../../src/contracts/index.js';
+import { MAX_DESKTOP_IMAGE_BYTES } from '@setsuna-desktop/contracts';
+import { designDocumentVersion, type DesignDocument, type DesignPublicationBridge } from '../../src/contracts/index.js';
 import type { DesignClient } from '../../src/renderer/client.js';
 import { drawing, mountEditor } from './support/mount-design-editor.js';
 
@@ -18,6 +20,13 @@ function prototypeWebImage(preview: ReturnType<typeof within>, board: string) {
   const image = preview.getByAltText<HTMLImageElement>(board);
   const svg = new DOMParser().parseFromString(decodeURIComponent(image.src.slice(image.src.indexOf(',') + 1)), 'image/svg+xml');
   return svg.querySelector('image')?.getAttribute('href');
+}
+
+function publicationForExports(prepareExport: DesignPublicationBridge['prepareExport'],
+  useExportFile: DesignPublicationBridge['useExportFile'] = async () => 'saved'): DesignPublicationBridge {
+  return { prepareExport, useExportFile, closeExport: vi.fn().mockResolvedValue(undefined),
+    previewStatus: vi.fn().mockResolvedValue(null), beginPreview: vi.fn(), appendPreviewBoard: vi.fn(), appendPreviewVariant: vi.fn(),
+    publishPreview: vi.fn(), cancelPreview: vi.fn(), stopPreview: vi.fn() };
 }
 
 it('loads a saved web address automatically and only reports snapshot failures on manual refresh', async () => {
@@ -54,22 +63,27 @@ it('loads a saved web address automatically and only reports snapshot failures o
   expect(capture).toHaveBeenCalledWith(2);
 });
 
-it('includes the captured web page in the board prototype and its PNG, SVG and HTML exports', async () => {
+it('previews every design export before saving, using the same captured web page for each layer format', async () => {
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640);
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(480);
   vi.spyOn(HTMLImageElement.prototype, 'decode').mockResolvedValue(undefined);
   const snapshot = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1X8AAAAASUVORK5CYII=';
-  const saveImageAs = vi.fn().mockResolvedValue({ ok: true, cancelled: false });
-  const saveDesignSvg = vi.fn().mockResolvedValue({ ok: true, cancelled: false });
-  const saveDesignHtml = vi.fn().mockResolvedValue({ ok: true, cancelled: false });
+  const prepareExport = vi.fn<DesignPublicationBridge['prepareExport']>(async (_, input) => input.kind === 'zip'
+    ? { name: 'test.zip', archive: { entries: ['manifest.json', 'content/test.design.json'], remaining: 0 } }
+    : { name: input.name });
+  const useExportFile = vi.fn<DesignPublicationBridge['useExportFile']>(async () => 'saved');
+  const publication = publicationForExports(prepareExport, useExportFile);
+  const directSave = vi.fn();
   const capture = vi.fn().mockResolvedValue(snapshot);
-  await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'web-export', rootIds: ['board'], nodes: {
+  await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'web-export', rootIds: ['board', 'secondary', 'draft'], nodes: {
     board: { kind: 'frame', name: 'Dashboard', x: 0, y: 0, width: 360, height: 220, childIds: ['browser'] },
     browser: { kind: 'web', url: 'https://example.test/', x: 20, y: 20, width: 300, height: 170 },
+    secondary: { kind: 'frame', name: 'Secondary board', x: 420, y: 0, width: 240, height: 200, childIds: [] },
+    draft: { kind: 'frame', name: 'Private draft', x: 740, y: 0, width: 240, height: 200, childIds: [], hidden: true },
   } }, undefined, {
     webPreview: { partition: 'test-preview', devices: [], configure: vi.fn().mockResolvedValue(true),
       capture, onEscape: () => () => undefined },
-    output: { saveImageAs, saveDesignSvg, saveDesignHtml },
+    publication, output: { saveImageAs: directSave, saveDesignSvg: directSave, saveDesignHtml: directSave },
   });
   const guest = await waitFor(() => {
     const guest = document.querySelector('webview');
@@ -81,26 +95,208 @@ it('includes the captured web page in the board prototype and its PNG, SVG and H
   await waitFor(() => expect(drawing.images.get('browser')?.image.src).toBe(snapshot));
 
   const user = userEvent.setup();
+  async function savePreview() {
+    const dialog = within(await screen.findByRole('dialog', { name: 'feature.design.exportPreview.title' }));
+    const save = await dialog.findByRole('button', { name: 'feature.design.exportPreview.saveAs' });
+    const [id, input] = prepareExport.mock.lastCall!;
+    expect(useExportFile).not.toHaveBeenCalledWith(id, 'save');
+    await user.click(save);
+    await waitFor(() => expect(useExportFile).toHaveBeenCalledWith(id, 'save'));
+    await user.click(dialog.getByRole('button', { name: 'Close' }));
+    return input;
+  }
   await user.click(await screen.findByRole('button', { name: 'Dashboard' }));
   await user.click(screen.getByRole('button', { name: 'feature.design.prototype.previewBoard' }));
   const preview = within(await screen.findByRole('dialog', { name: 'feature.design.prototype.preview' }));
   await waitFor(() => expect(prototypeWebImage(preview, 'Dashboard')).toBe(snapshot));
   await user.click(preview.getByRole('button', { name: 'feature.design.prototype.exit' }));
   await user.click(screen.getByRole('button', { name: 'feature.design.exportLayer' }));
-  await waitFor(() => expect(saveImageAs).toHaveBeenCalledOnce());
+  expect(await savePreview()).toMatchObject({ kind: 'png', name: 'Dashboard.png' });
   expect(drawing.exportedImages.get('browser')?.src).toBe(snapshot);
   await user.click(screen.getByRole('combobox', { name: 'feature.design.exportImageFormat' }));
   await user.click(await screen.findByRole('option', { name: 'SVG' }));
   await user.click(screen.getByRole('button', { name: 'feature.design.exportLayer' }));
-  await waitFor(() => expect(saveDesignSvg).toHaveBeenCalledOnce());
-  const svg = new DOMParser().parseFromString(saveDesignSvg.mock.calls[0][0].svg, 'image/svg+xml');
+  const vector = await savePreview();
+  if (vector.kind !== 'svg') throw new Error('Expected a prepared SVG.');
+  const svg = new DOMParser().parseFromString(vector.content, 'image/svg+xml');
   expect(svg.querySelector('image')?.getAttribute('href')).toBe(snapshot);
   await user.click(screen.getByRole('button', { name: 'feature.design.saveHtml' }));
-  await waitFor(() => expect(saveDesignHtml).toHaveBeenCalledOnce());
-  const html = new DOMParser().parseFromString(saveDesignHtml.mock.calls[0][0].html, 'text/html');
-  expect(html.querySelector('img')?.getAttribute('src')).toBe(snapshot);
+  const tailwind = await savePreview();
+  await user.click(screen.getByRole('combobox', { name: 'feature.design.codeFormat' }));
+  await user.click(await screen.findByRole('option', { name: 'HTML', exact: true }));
+  await user.click(screen.getByRole('button', { name: 'feature.design.saveHtml' }));
+  const plain = await savePreview();
+  if (tailwind.kind !== 'html' || plain.kind !== 'html') throw new Error('Expected prepared HTML exports.');
+  for (const { content } of [tailwind, plain]) {
+    const html = new DOMParser().parseFromString(content, 'text/html');
+    expect(html.querySelector('img')?.getAttribute('src')).toBe(snapshot);
+  }
+  expect(plain.content).not.toBe(tailwind.content);
+
+  await user.click(screen.getByRole('button', { name: 'feature.design.publication.share' }));
+  const share = within(await screen.findByRole('dialog', { name: 'feature.design.publication.share' }));
+  await user.click(share.getByRole('tab', { name: 'feature.design.layerExport' }));
+  const startDocumentExport = (name: string) => user.click(share.getByRole('button', { name, exact: true }));
+  const pendingPackage = Promise.withResolvers<Awaited<ReturnType<DesignPublicationBridge['prepareExport']>>>();
+  const packagingStarted = Promise.withResolvers<string>();
+  prepareExport.mockImplementationOnce((id) => {
+    packagingStarted.resolve(id);
+    return pendingPackage.promise;
+  });
+  try {
+    await startDocumentExport('feature.design.publication.sourcePackage');
+    await screen.findByRole('dialog', { name: 'feature.design.exportPreview.title' });
+    const cancelledId = await packagingStarted.promise;
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(publication.closeExport).toHaveBeenCalledWith(cancelledId));
+    expect(useExportFile).not.toHaveBeenCalledWith(cancelledId, 'save');
+    await act(async () => pendingPackage.resolve({ name: 'late.zip' }));
+    expect(screen.queryByRole('dialog', { name: 'feature.design.exportPreview.title' })).toBeNull();
+  } finally {
+    pendingPackage.resolve(null);
+  }
+  await startDocumentExport('feature.design.publication.sourcePackage');
+  expect(await savePreview()).toMatchObject({ kind: 'zip', version: { documentId: 'web-export' } });
+  await startDocumentExport('HTML');
+  const manuscript = await savePreview();
+  if (manuscript.kind !== 'html') throw new Error('Expected a prepared document HTML export.');
+  expect(manuscript.name).toBe('test.html');
+  const html = new DOMParser().parseFromString(manuscript.content, 'text/html');
+  expect(html.querySelector('[data-layer="Dashboard"] img')?.getAttribute('src')).toBe(snapshot);
+  expect(html.querySelector('[data-layer="Secondary board"]')).not.toBeNull();
+  expect(html.querySelector('[data-layer="Private draft"]')).toBeNull();
+  await user.click(share.getByRole('combobox', { name: 'feature.design.exportScale' }));
+  await user.click(await screen.findByRole('option', { name: '2×' }));
+  await startDocumentExport('PNG');
+  expect(await savePreview()).toMatchObject({ kind: 'png', name: 'test@2x.png' });
+  expect(drawing.exportedImages.get('browser')?.src).toBe(snapshot);
+  expect(publication.beginPreview).not.toHaveBeenCalled();
+  expect(directSave).not.toHaveBeenCalled();
   expect(capture).toHaveBeenCalledExactlyOnceWith(1);
 });
+
+it('navigates both HTML exports and saves a fitted PNG of a wide canvas', async () => {
+  const prepare = vi.fn<DesignPublicationBridge['prepareExport']>(async (_, input) => ({
+    name: input.kind === 'zip' ? 'test.zip' : input.name,
+  }));
+  const useExportFile = vi.fn<DesignPublicationBridge['useExportFile']>(async () => 'saved');
+  const board = { kind: 'frame' as const, y: 0, width: 800, height: 640, childIds: [] };
+  await mountEditor({ schemaVersion: designDocumentVersion, documentId: 'wide-export', rootIds: ['first', 'last'], nodes: {
+    first: { ...board, x: 0, name: 'First board' }, last: { ...board, x: 39_200, name: 'Last board' },
+  } }, undefined, { publication: publicationForExports(prepare, useExportFile),
+    translate: (key, params) => key === 'feature.design.zoomTo' ? `${params?.percent}%` : key });
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'feature.design.publication.share' }));
+  const share = within(await screen.findByRole('dialog', { name: 'feature.design.publication.share' }));
+  await user.click(share.getByRole('tab', { name: 'feature.design.layerExport' }));
+  const startExport = (name: string) => user.click(share.getByRole('button', { name, exact: true }));
+
+  for (const format of ['HTML', 'HTML + Tailwind']) {
+    await startExport(format);
+    const dialog = await screen.findByRole('dialog', { name: 'feature.design.exportPreview.title' });
+    const frame = await waitFor(() => {
+      const frame = dialog.querySelector('iframe');
+      if (!frame) throw new Error('Expected the HTML preview to open.');
+      return frame;
+    });
+    const input = prepare.mock.lastCall?.[1];
+    if (input?.kind !== 'html') throw new Error('Expected HTML for the full canvas.');
+    const saved = new DOMParser().parseFromString(input.content, 'text/html');
+    expect([...saved.querySelectorAll('[data-layer]')].map((layer) => layer.getAttribute('data-layer'))).toEqual(['First board', 'Last board']);
+    exerciseHtmlExportCanvas(saved);
+    const embedded = new DOMParser().parseFromString(frame.getAttribute('srcdoc')!, 'text/html');
+    const nonce = embedded.querySelector('script')?.getAttribute('nonce');
+    expect(nonce).toBeTruthy();
+    expect(embedded.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute('content')).toContain(`script-src 'nonce-${nonce}'`);
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+  }
+  const oversized = new Blob(['oversized encoder output'], { type: 'image/png' });
+  Object.defineProperty(oversized, 'size', { value: MAX_DESKTOP_IMAGE_BYTES * 2 });
+  drawing.encodePng.mockReturnValueOnce(oversized);
+  await startExport('PNG');
+  const dialog = within(await screen.findByRole('dialog', { name: 'feature.design.exportPreview.title' }));
+  await user.click(await dialog.findByRole('button', { name: 'feature.design.exportPreview.saveAs' }));
+  const attempts = drawing.encodePng.mock.calls;
+  expect(attempts).toHaveLength(2);
+  const [first] = attempts[0];
+  const [saved] = attempts[1];
+  expect(first.width).toBeLessThanOrEqual(32_767);
+  expect(first.width * first.height).toBeLessThanOrEqual(16_000_000);
+  expect(saved.width).toBeLessThan(first.width);
+  expect(saved.height).toBeLessThan(first.height);
+  expect(prepare.mock.lastCall?.[1]).toMatchObject({
+    kind: 'png', name: `test-${saved.width}x${saved.height}.png`, content: 'data:image/png;base64,iVBORw0KGgo=',
+  });
+  expect(useExportFile).toHaveBeenCalledWith(prepare.mock.lastCall?.[0], 'save');
+});
+
+function exerciseHtmlExportCanvas(html: Document) {
+  const viewport = html.querySelector('main')!;
+  const stage = html.getElementById('setsuna-export-stage')!;
+  const level = html.getElementById('zoom-level')!;
+  const menu = html.getElementById('zoom-menu')!;
+  const script = html.querySelector('script')!;
+  let viewportWidth = 832;
+  let resize!: () => void;
+  let captured: number | undefined;
+  Object.defineProperties(viewport, { clientWidth: { get: () => viewportWidth }, clientHeight: { value: 512 } });
+  Object.assign(viewport, { setPointerCapture: (id: number) => { captured = id; },
+    hasPointerCapture: (id: number) => captured === id, releasePointerCapture: () => { captured = undefined; } });
+  runInNewContext(script.textContent!, {
+    document: html,
+    window: new EventTarget(),
+    getComputedStyle: () => ({ paddingLeft: '16px', paddingRight: '16px', paddingTop: '16px', paddingBottom: '56px' }),
+    ResizeObserver: class { constructor(callback: () => void) { resize = callback; } observe() {} },
+  }, { timeout: 1_000 });
+  const current = () => level.textContent;
+  const position = () => stage.style.transform;
+  const press = (key: string, code: string, shiftKey = false) =>
+    viewport.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key, code, shiftKey }));
+  const pointer = (type: string, clientX: number, clientY: number) => viewport.dispatchEvent(
+    new PointerEvent(type, { cancelable: true, bubbles: true, pointerId: 1, pointerType: 'mouse', button: 0, clientX, clientY }));
+  function dragCanvas() {
+    pointer('pointerdown', 100, 100);
+    pointer('pointermove', 220, 180);
+    pointer('pointerup', 220, 180);
+  }
+  function wheelCanvas(ctrlKey: boolean) {
+    // happy-dom's WheelEvent lacks its browser MouseEvent fields.
+    const wheel = new MouseEvent('wheel', { ctrlKey, cancelable: true, clientX: 400, clientY: 240 });
+    Object.defineProperties(wheel, { deltaX: { value: 0 }, deltaY: { value: 100 } });
+    viewport.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+  }
+
+  const fitted = position();
+  expect(current()).toBe('2%');
+  dragCanvas();
+  const panned = position();
+  expect(panned).not.toBe(fitted);
+  expect(current()).toBe('2%');
+  press('v', 'KeyV');
+  dragCanvas();
+  expect(position()).toBe(panned);
+  wheelCanvas(false);
+  expect(position()).not.toBe(panned);
+  expect(current()).toBe('2%');
+
+  level.click();
+  within(menu).getByRole('menuitemradio', { name: '100%' }).click();
+  expect(current()).toBe('100%');
+  press('+', 'Equal', true);
+  expect(current()).toBe('125%');
+  press('-', 'Minus');
+  expect(current()).toBe('100%');
+  wheelCanvas(true);
+  expect(current()).toBe('55%');
+  press('!', 'Digit1', true);
+  expect(position()).toBe(fitted);
+
+  viewportWidth = 1632;
+  resize();
+  expect(current()).toBe('4%');
+}
 
 it('keeps the board capture running when opening a prototype overlay with another web page', async () => {
   vi.spyOn(HTMLImageElement.prototype, 'decode').mockResolvedValue(undefined);

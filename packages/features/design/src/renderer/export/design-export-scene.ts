@@ -3,21 +3,24 @@ import { designFrameMask } from '../../contracts/design-references.js';
 import { designFontNameKey } from '../../contracts/design-fonts.js';
 import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import type { CaptureDesignWebImages, DesignWebImages, DesignWebLayer } from '../canvas/use-design-web-previews.js';
-import { intersectBounds, transformedLocalBounds, unionBounds, type Bounds } from '../design-geometry.js';
+import { directionOfRotation, intersectBounds, toLocal, transformedLocalBounds, unionBounds, type Bounds } from '../design-geometry.js';
 import { designLayerImagePaths, type LoadDesignImage } from '../design-images.js';
 import type { DesignLayerBox, DesignScene } from '../design-layout.js';
-import { designStrokeBounds, designStrokeOutset, visibleDesignStrokes } from '../design-paint.js';
+import { designFills, designStrokeBounds, designStrokeOutset, visibleDesignStrokes } from '../design-paint.js';
 import type { DesignFontRequest } from '../text/design-font-loader.js';
 import { designTextSegments } from '../text/design-rich-text.js';
 import { designArrowInkBounds } from '../vectors/design-vector.js';
 
-export type DesignExportSelection = Readonly<{ document: DesignDocument; scene: DesignScene; ids: readonly string[]; networkAccess?: boolean; webImages?: DesignWebImages }>;
+export type DesignExportSelection = Readonly<{
+  document: DesignDocument; scene: DesignScene; ids: readonly string[]; paintedLayerIds?: ReadonlySet<string>;
+  networkAccess?: boolean; webImages?: DesignWebImages;
+}>;
 
-function visitDesignExportLayers({ document, scene, ids }: DesignExportSelection, apply: (node: DesignNode, id: string) => void) {
+function visitDesignExportLayers({ document, scene, ids, paintedLayerIds }: DesignExportSelection, apply: (node: DesignNode, id: string) => void) {
   function visit(id: string) {
     if (!scene[id]?.visible) return;
     const node = document.nodes[id];
-    apply(node, id);
+    if (!paintedLayerIds || paintedLayerIds.has(id)) apply(node, id);
     if (node.kind === 'frame') node.childIds.forEach(visit);
   }
   ids.forEach(visit);
@@ -80,24 +83,55 @@ export function designExportFontRequests({ document, scene, ids }: Pick<DesignEx
   return [...requests.values()];
 }
 
+export function designArtboardPaintLayerIds(selection: DesignExportSelection): ReadonlySet<string> {
+  const painted = new Set<string>();
+  visitDesignExportPaint(selection, (node, box, id, clip) => {
+    if (clip && intersectBounds(clip, paintedBounds(node, box))) painted.add(id);
+  }, true);
+  return painted;
+}
+
 function visitDesignExportPaint({ document, scene, ids }: DesignExportSelection,
   apply: (node: DesignNode, box: DesignLayerBox, id: string, clip?: Bounds) => void,
+  cropArtboards = false,
 ) {
-  function visit(id: string, clip?: Bounds | null) {
-    const box = scene[id];
-    if (!box.visible || clip === null) return;
+  function visit(id: string, clip?: Bounds | null, artboard?: DesignLayerBox) {
     const node = document.nodes[id];
+    if (!scene[id].visible || clip === null || (artboard && node.opacity === 0)) return;
+    const box = artboard ? boxInArtboard(node, scene[id], artboard) : scene[id];
     apply(node, box, id, clip);
     if (node.kind === 'frame') {
-      const childClip = node.clip === false ? clip : clip ? intersectBounds(clip, box.paintBounds) : box.paintBounds;
+      let childClip = node.clip === false ? clip : clip ? intersectBounds(clip, box.paintBounds) : box.paintBounds;
+      // An object sampler reads the frame's own raster, including pixels outside the published crop.
+      if (artboard && clip && samplesOwnContent(node) && intersectBounds(clip, paintedBounds(node, box))) {
+        childClip = node.clip === false && childClip ? unionBounds([childClip, box.paintBounds]) : box.paintBounds;
+      }
       const mask = designFrameMask(document, node);
-      const maskBounds = mask && scene[mask.id].paintBounds;
+      const maskBounds = mask && (artboard ? boxInArtboard(mask.node, scene[mask.id], artboard) : scene[mask.id]).paintBounds;
       const maskedClip = maskBounds && childClip !== null
         ? childClip ? intersectBounds(childClip, maskBounds) : maskBounds : childClip;
-      node.childIds.forEach((child) => { if (child !== mask?.id) visit(child, maskedClip); });
+      node.childIds.forEach((child) => { if (child !== mask?.id) visit(child, maskedClip, artboard); });
     }
   }
-  ids.forEach((id) => visit(id));
+  for (const id of ids) {
+    const artboard = cropArtboards ? scene[id] : undefined;
+    visit(id, artboard && { x: 0, y: 0, width: artboard.width, height: artboard.height }, artboard);
+  }
+}
+
+function boxInArtboard(node: DesignNode, box: DesignLayerBox, artboard: DesignLayerBox): DesignLayerBox {
+  // Capture strips the artboard's rotation and reflections before clipping.
+  const { x, y } = toLocal(artboard, { x: box.absoluteX, y: box.absoluteY });
+  const pose = { absoluteX: x, absoluteY: y, angle: (box.angle - artboard.angle) * directionOfRotation(artboard),
+    scaleX: box.scaleX * artboard.scaleX, scaleY: box.scaleY * artboard.scaleY };
+  const { width, height } = box;
+  const arrow = node.kind === 'vector' ? designArrowInkBounds(node, width, height) : undefined;
+  return { ...box, ...pose, paintBounds: transformedLocalBounds(arrow ?? { x: 0, y: 0, width, height }, pose) };
+}
+
+function samplesOwnContent(node: DesignNode): boolean {
+  return designFills(node).some(({ hidden, opacity, shader }) => !hidden && opacity !== 0
+    && Object.values(shader?.uniforms ?? {}).some((value) => typeof value === 'object' && 'kind' in value && value.kind === 'object'));
 }
 
 export function designExportBounds(selection: DesignExportSelection): Bounds | undefined {

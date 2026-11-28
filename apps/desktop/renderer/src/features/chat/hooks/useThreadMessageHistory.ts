@@ -39,21 +39,24 @@ export function useThreadMessageHistory(
     setState((current) => reconcileThreadSnapshot(current, thread));
   }, [thread]);
 
-  const loadOlder = useCallback(async () => {
+  const loadOlder = useCallback(async (stopBefore?: number) => {
     const current = stateRef.current;
     if (!current.threadId || current.nextBefore === null || current.loading) return;
     const requestedThreadId = current.threadId;
     const before = current.nextBefore;
+    const limit = stopBefore === undefined ? MESSAGE_PAGE_SIZE : Math.min(MESSAGE_PAGE_SIZE, before - stopBefore);
+    if (limit <= 0) return;
     const windowRevision = current.windowRevision;
     // Several scroll events can arrive before React commits the loading state.
     const pending = pendingPageRef.current;
     if (pending?.threadId === requestedThreadId && pending.windowRevision === windowRevision) return;
     pendingPageRef.current = current;
-    setState((value) => ({ ...value, error: null, loading: true }));
+    // A newly selected thread can request a page before the snapshot effect runs.
+    setState({ ...current, error: null, loading: true });
     try {
       const page = await client.listThreadMessages(requestedThreadId, {
         before,
-        limit: MESSAGE_PAGE_SIZE,
+        limit,
       });
       setState((value) => {
         if (

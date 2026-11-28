@@ -288,6 +288,8 @@ importers:
       '@setsuna-desktop/feature-vision-recognition': workspace:*
       '@setsuna-desktop/feature-windows-sandbox': workspace:*
       '@setsuna-desktop/feature-workspace-dependencies': workspace:*
+      '@types/yauzl': ^3.4.0
+      fflate: ^0.8.3
       node-pty: ^1.1.0
       quickjs-emscripten-core: 0.32.0
       sharp: 0.35.5
@@ -295,6 +297,7 @@ importers:
       undici: 7.30.2
       vite: ^6.4.4
       yaml: ^2.8.1
+      yauzl: ^3.4.0
       zod: 4.6.7
     dependencies:
       '@setsuna-desktop/contracts': link:../contracts
@@ -325,15 +328,18 @@ importers:
       '@setsuna-desktop/feature-vision-recognition': link:../features/vision-recognition
       '@setsuna-desktop/feature-windows-sandbox': link:../features/windows-sandbox
       '@setsuna-desktop/feature-workspace-dependencies': link:../features/workspace-dependencies
+      fflate: 0.8.3
       node-pty: 1.1.0_ehtrmlw75n3v2ehcvwsdrctske
       sharp: 0.35.5
       tar: 7.5.22
       undici: 7.30.2
       vite: 6.4.5_yaml@2.9.0
       yaml: 2.9.0
+      yauzl: 3.4.0
       zod: 4.6.7
     devDependencies:
       '@jitl/quickjs-singlefile-cjs-release-sync': 0.32.0
+      '@types/yauzl': 3.4.0
       quickjs-emscripten-core: 0.32.0
 
   packages/feature-core:
@@ -5813,6 +5819,12 @@ packages:
       '@types/node': 22.20.1
     dev: true
 
+  /@types/yauzl/3.4.0:
+    resolution: {integrity: sha512-NRPn5w6h8dhcnmx3YIRQcqMywY/+nND/uOkJessedcrowO3C0AssHp3tMJpxKAwOhFOo0OV1y9VtsC5hbKKBAw==}
+    dependencies:
+      '@types/node': 22.20.1
+    dev: true
+
   /@typescript-eslint/eslint-plugin/8.66.0_awm2yd4gzxviprrpbift6dvdy4:
     resolution: {integrity: sha512-p088eaGrzYz1s+7cov0aMOCkNGTJlVxF4jgubf28c8L0Cv9Rloj8YBHnv4hXLq6IIEE1AsjNWavO+k+8kP2Y0A==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
@@ -9797,6 +9809,10 @@ packages:
     engines: {node: '>=12', npm: '>=6'}
     dev: true
 
+  /pend/1.2.0:
+    resolution: {integrity: sha512-F3asv42UuXchdzt+xXqfW1OGlVBe+mxa2mqI0pg5yAHZPvFmY3Y6drSf/GQ1A86WgWEN9Kzh/WrgKa6iGcHXLg==}
+    dev: false
+
   /picocolors/1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
@@ -11679,6 +11695,13 @@ packages:
       y18n: 5.0.8
       yargs-parser: 22.0.0
     dev: true
+
+  /yauzl/3.4.0:
+    resolution: {integrity: sha512-jIH9yLR9wqr0wOS0TpBvo/g/2UgZH5qePVbjgRliiF0BYvOZyaBknKsF+x9Iht0O6sqgnB93rCICdOZFecJuDw==}
+    engines: {node: '>=12'}
+    dependencies:
+      pend: 1.2.0
+    dev: false
 
   /yocto-queue/0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}

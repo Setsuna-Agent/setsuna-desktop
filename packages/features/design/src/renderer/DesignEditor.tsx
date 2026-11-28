@@ -9,7 +9,7 @@ import { bindDesignVariable, defaultDesignImageCrop } from '../contracts/design-
 import { isStraightDesignPath } from '../contracts/vector-geometry.js';
 import { defaultDrawingWidths, drawingInkTool, drawingPathNode, isDrawingInkTool, isFreehandTool, type DrawingInk, type DrawingInkTool, type DrawingPreview } from './canvas/design-drawing.js';
 import { drawnDesignLayer } from './canvas/design-shape-drawing.js';
-import { convertDesignScript, projectDesignScriptLayers, withDesignScriptInput } from './canvas/design-script-layers.js';
+import { convertDesignScript, projectDesignScriptOutput, withDesignScriptInput } from './canvas/design-script-layers.js';
 import { readDesignScriptFile, type DesignScriptSource } from './canvas/design-script-source.js';
 import { useDesignScriptParameters } from './canvas/use-design-script-parameters.js';
 import { useDesignScriptResults, type DesignScriptParameterPreview } from './canvas/use-design-script-results.js';
@@ -225,11 +225,8 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
     { document: canvasDocument, scene: canvasScene, preview: activeScriptPreview },
   );
   useDesignScriptFonts(renderedScripts);
-  const projectOutput = useCallback(() => {
-    const output = projectDesignScriptLayers(projected, currentScripts);
-    const outputScene = output === projected ? scene : resolveDesignScene(layoutEngine, output, measureDesignText);
-    return { document: output, scene: outputScene };
-  }, [currentScripts, layoutEngine, projected, scene]);
+  const projectOutput = useCallback(() => projectDesignScriptOutput(projected, scene, currentScripts, layoutEngine),
+    [currentScripts, layoutEngine, projected, scene]);
   const prototypeOutput = useMemo(() => prototypeStart ? projectOutput() : undefined, [projectOutput, prototypeStart]);
   const scriptParameters = useDesignScriptParameters(client, documentRef, scriptPath, watchAssetDirectories);
   const webHost = client.assets.webPreview;
@@ -288,6 +285,7 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
   const exportScripts = designExportScriptIds({ document: projected, scene, ids: branches });
   const exportDisabled = controlsDisabled || exportActions.busy || Boolean(activeScriptPreview)
     || exportScripts.some((id) => pendingScripts.has(id)) || !branches.some((id) => scene[id].visible);
+  const documentExportIds = useMemo(() => projected.rootIds.filter((id) => scene[id]?.visible), [projected.rootIds, scene]);
   function changeTool(next: DesignTool) {
     if (next !== 'select') setWebMode(undefined);
     if (drawingMode && isDrawingInkTool(next)) lastDrawingTool.current = next;
@@ -342,17 +340,16 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
     setLayerMenu({ ...target, revision });
   }
 
-  function exportSelection(request: DesignExportRequest) {
-    if (exportDisabled) return;
-    if (exportScripts.some((id) => !currentScripts.has(id))) {
-      toast.error(t('feature.design.scriptFailed'));
-      return;
+  function exportSelection(request: DesignExportRequest, scope: 'selection' | 'document' = 'selection') {
+    if (scope === 'selection' ? exportDisabled : controlsDisabled || exportActions.busy || !documentExportIds.length) return;
+    const layerName = scope === 'selection' ? node?.name?.trim() || (node?.kind === 'text' ? node.text.trim().split('\n', 1)[0] : '') : undefined;
+    const name = layerName || documentRef.path.split('/').at(-1)?.replace(/\.design\.json$/iu, '') || t('feature.design.layers');
+    try {
+      const selection = projectExport(scope === 'document' ? documentExportIds : branches);
+      void exportActions.run(selection, name, request);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
     }
-    const ids = orderDesignBranches(document, branches);
-    const name = node?.name?.trim() || (node?.kind === 'text' ? node.text.trim().split('\n', 1)[0] : '')
-      || documentRef.path.split('/').at(-1)?.replace(/\.design\.json$/iu, '') || t('feature.design.layers');
-    const selection = { ...projectOutput(), ids };
-    void exportActions.run(selection, name, request);
   }
 
   async function commitInsertion(nodeId: string, edits: readonly DesignEdit[], base: string, keepTool = false) {
@@ -775,12 +772,12 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
       : toolPanel?.kind === 'icon' ? <DesignIconPicker translate={t} onInsert={(source) => importSvg(source, toolPanel.target)}
         onClose={() => changeToolPanel('icon', false)} /> : imagePicker;
 
-  function taskOutput(ids: readonly string[], networkAccess: boolean) {
+  function projectExport(ids: readonly string[], networkAccess?: boolean) {
     if (designExportScriptIds({ document: projected, scene, ids }).some((id) => !currentScripts.has(id))) throw new Error(t('feature.design.scriptFailed'));
     return { ...projectOutput(), networkAccess, ids: orderDesignBranches(projected, ids) };
   }
   const designView = { document, projected, resources, scene, layoutEngine,
-    preview: (ids: readonly string[], signal: AbortSignal, network = false) => exportActions.preview(taskOutput(ids, network), signal) };
+    preview: (ids: readonly string[], signal: AbortSignal, network = false) => exportActions.preview(projectExport(ids, network), signal) };
   const mcp = useDesignMcpCanvas(visible, { ...designView, name: documentRef.path.split('/').at(-1)!, selection: selectedIds });
   const bridge = !libraryPreview && (renderChat || chatActivity) && client.tasks ? <DesignChatBridge client={client.tasks}
     canvasRequest={chatActivity?.request} renderChat={renderChat && ((binding) => renderChat(binding, linkedProjectId))}
@@ -790,7 +787,7 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
     view={{ ...designView, showFocus, setNetworkAccess: setAgentNetworkAccess,
       editor: { client, ref: documentRef, projects, settings, toggleSetting, completeFileAction: onFileAction, scripts: currentScripts,
         translate: t, canvas: () => canvas.current, select: selectLayers, refreshFonts: () => fontCatalog?.updateCatalog() ?? Promise.resolve(),
-        deliver: (ids, request, signal, network) => exportActions.deliver(taskOutput(ids, network), document.nodes[ids[0]]?.name ?? documentRef.path.split('/').at(-1)!, request, signal) },
+        deliver: (ids, request, signal, network) => exportActions.deliver(projectExport(ids, network), document.nodes[ids[0]]?.name ?? documentRef.path.split('/').at(-1)!, request, signal) },
     }} /> : undefined;
 
   function playPrototype(board: string) {
@@ -803,6 +800,8 @@ function OpenDesignEditor({ client, documentRef, translate: t, snapshot, busy: d
     ungroup: actions.ungroup, duplicate: () => { void duplicate(); }, delete: actions.delete } : undefined;
   const toolbarActions = <DesignToolbarActions visible={visible} shortcuts={shortcuts} disabled={controlsDisabled}
     history={{ undo: canUndo, redo: canRedo }} onHistory={history} translate={t}
+    publication={libraryPreview ? undefined : { client, documentRef, documentId: document.documentId, layout: layoutEngine, synchronize,
+      exportDocument: !exportActions.busy && documentExportIds.length ? (request) => exportSelection(request, 'document') : undefined }}
     prototype={{ interactive: prototypeInteractive, play: startBoard ? () => playPrototype(startBoard) : undefined }} />;
   return <DesignStyleContext.Provider value={styleCatalog}><DesignGradientSessionProvider>
     <section className="design-editor" aria-label={t('feature.design.workspace')} aria-busy={busy || importingAsset}

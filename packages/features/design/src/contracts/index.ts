@@ -6,8 +6,12 @@ import type { DesignStorage } from './design-storage.js';
 import type { DesignDocument } from './document.js';
 import type { CreateDesignDocumentInput, DesignDocumentListEntry, DesignDocumentRef, DesignImageExtension, DesignWorkspace, ListDesignDocumentEntriesInput, MoveDesignDocumentInput } from './operations.js';
 import type { DesignScriptCanvas } from './design-script-parameters.js';
+import type { DesignPackageReceipt, ImportDesignPackageInput, PrepareDesignPackageInput } from './design-package.js';
 
 export * from './design-mcp.js';
+export * from './design-package.js';
+export * from './design-export.js';
+export * from './design-publication.js';
 export {
   designBlendModes, designDocumentCodec, designDocumentVersion, designFillImageFits, designFontFamilies, designGradientKinds, designImageFits, designTextAlignments,
   indexDesignParents, maxDesignFills, maxDesignGradientStops, maxDesignStrokes, parseAssetPath, validateDesignComponents,
@@ -16,7 +20,7 @@ export {
   type DesignPaint, type DesignQuad, type DesignRectangle, type DesignScript, type DesignShadow, type DesignSizeMode, type DesignStroke, type DesignStyle, type DesignText,
   type DesignTextRun, type DesignTypography, type DesignVector, type DesignWeb,
 } from './document.js';
-export { maxDesignScriptBytes, parseDesignScriptPath, parseDesignWebUrl } from './design-content-source.js';
+export { maxDesignScriptBytes, parseDesignScriptPath, parseDesignScriptSource, parseDesignWebUrl } from './design-content-source.js';
 export type { DesignScriptCanvas, DesignScriptInputs, DesignScriptParameter, DesignScriptValue } from './design-script-parameters.js';
 export { designFontWeights } from './design-fonts.js';
 export { designTypographyOf, resolveDesignNodeStyles } from './design-styles.js';
@@ -76,6 +80,8 @@ export interface DesignWorkspaceFiles extends DesignStorage {
   move(input: MoveDesignDocumentInput, signal: AbortSignal): Promise<DesignDocumentRef>;
   delete(ref: DesignDocumentRef & { expectedRevision?: string }, signal: AbortSignal): Promise<void>;
   resolveResourceRoot(ref: DesignDocumentRef, signal: AbortSignal): Promise<DesignDocumentRef>;
+  preparePackage(input: PrepareDesignPackageInput, builtinRevision: (path: string) => Promise<string>, signal: AbortSignal): Promise<DesignPackageReceipt>;
+  importPackage(input: ImportDesignPackageInput, signal: AbortSignal): Promise<DesignDocumentRef>;
   importImage(ref: DesignDocumentRef, image: Readonly<{ name: string; extension: DesignImageExtension; bytes: Uint8Array }>,
     signal: AbortSignal): Promise<string>;
   importSource(ref: DesignDocumentRef, asset: Readonly<{ name: string; source: string; extension: 'js' | 'glsl' }>, signal: AbortSignal): Promise<string>;

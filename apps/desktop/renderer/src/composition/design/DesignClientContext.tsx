@@ -15,9 +15,11 @@ const mcpPromptModelIcon = <BrandIconMark brand={resolveBrandIcon({ type: 'prese
 
 export function DesignFeatureServiceBoundary({ client, children }: Readonly<{ client: DesignClient | null; children: ReactNode }>) {
   const mcp = window.setsunaDesktop?.designMcp;
+  const openExternal = window.setsunaDesktop?.links?.openExternal;
   const designUiHost = useMemo(() => ({
-    ShortcutSettings: DesignShortcutsSettings, ScrollOverlay, ProjectIcon, copyText: copyTextToClipboard, mcp, mcpPromptModelIcon,
-  }), [mcp]);
+    ShortcutSettings: DesignShortcutsSettings, ScrollOverlay, ProjectIcon, copyText: copyTextToClipboard,
+    openExternal, mcp, mcpPromptModelIcon,
+  }), [mcp, openExternal]);
   return <DesignClientContext.Provider value={client}>
     <DesignUiHostContext.Provider value={designUiHost}>{children}</DesignUiHostContext.Provider>
   </DesignClientContext.Provider>;

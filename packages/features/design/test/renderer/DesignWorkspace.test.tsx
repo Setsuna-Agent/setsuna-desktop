@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import DesignWorkspace, { type DesignWorkspaceLocation, type DesignWorkspaceProps } from '../../src/renderer/DesignWorkspace.js';
 import { designDocumentVersion, type DesignSnapshot, type ProjectDesignEntry } from '../../src/contracts/index.js';
+import type { DesignPublicationBridge, DesignPublishedPreview } from '../../src/contracts/design-publication.js';
 import { useDesignDocument } from '../../src/renderer/use-design-document.js';
 
 vi.mock('../../src/renderer/DesignDocumentSurface.js', () => ({ DesignDocumentSurface: () => null }));
@@ -26,12 +27,31 @@ function testClient(operations: Partial<DesignWorkspaceProps['client']>): Design
     } },
     list, listEntries: async (...args) => (await list(...args)).map((path) => ({ path })),
     create: vi.fn(), move: vi.fn(), delete: vi.fn(), importImage: vi.fn(), read: vi.fn(), commit: vi.fn(), navigate: vi.fn(),
-    importScript: vi.fn(), readScriptParameters: vi.fn(), renderScript: vi.fn(), importShader: vi.fn(), readShader: vi.fn(),
+    importScript: vi.fn(), readScriptParameters: vi.fn(), renderScript: vi.fn(), renderPreviewScript: vi.fn(), importShader: vi.fn(), readShader: vi.fn(),
     resolveResourceRoot: async (ref) => ref,
     prepareLibraryPreset: vi.fn(),
     ...operations,
   };
 }
+
+it('can revoke a published snapshot from the catalog when its source draft is gone', async () => {
+  let active: DesignPublishedPreview | null = { id: 'published', designKey: 'original-draft', documentId: 'draft',
+    revision: '1', urls: ['http://192.0.2.10:45670/#published'], access: 'link' };
+  const publication: DesignPublicationBridge = {
+    previewStatus: async () => active,
+    stopPreview: vi.fn(async () => { active = null; }),
+    beginPreview: vi.fn(), appendPreviewBoard: vi.fn(), appendPreviewVariant: vi.fn(), publishPreview: vi.fn(), cancelPreview: vi.fn(),
+    importPackage: vi.fn(), prepareExport: vi.fn(), useExportFile: vi.fn(), closeExport: vi.fn(),
+  };
+  const client = testClient({});
+  const view = render(<ToastProvider><DesignWorkspace projects={[]} client={{ ...client, assets: { ...client.assets, publication } }}
+    location={null} onLocationChange={vi.fn()} watchDirectories={() => () => undefined} translate={(key) => key} /></ToastProvider>);
+
+  const stop = { name: 'feature.design.publication.stop' };
+  fireEvent.click(await view.findByRole('button', stop));
+  await waitFor(() => expect(publication.stopPreview).toHaveBeenCalledExactlyOnceWith('published'));
+  await waitFor(() => expect(view.queryByRole('button', stop)).toBeNull());
+});
 
 it('restores the locally selected catalog view after reopening the workspace', async () => {
   const catalogViewKey = 'setsuna.design.catalog-view';

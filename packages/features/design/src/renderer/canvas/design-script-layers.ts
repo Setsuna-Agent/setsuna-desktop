@@ -1,5 +1,8 @@
 import type { DesignDocument, DesignEdit, DesignFrame, DesignScript, DesignScriptInputs, DesignScriptParameter, DesignScriptValue } from '../../contracts/index.js';
 import { designScriptParameterValue } from '../../contracts/design-script-parameters.js';
+import type { Yoga } from 'yoga-layout/load';
+import { resolveDesignScene, type DesignScene } from '../design-layout.js';
+import { measureDesignText } from '../design-text.js';
 
 export type DesignScriptResults = ReadonlyMap<string, DesignDocument>;
 const scriptChildSegment = '/~script/';
@@ -33,6 +36,11 @@ export function projectDesignScriptLayers(document: DesignDocument, results: Des
     }
   }
   return { ...document, nodes };
+}
+
+export function projectDesignScriptOutput(document: DesignDocument, scene: DesignScene, results: DesignScriptResults, layout: Yoga) {
+  const output = projectDesignScriptLayers(document, results);
+  return { document: output, scene: output === document ? scene : resolveDesignScene(layout, output, measureDesignText) };
 }
 
 export function convertDesignScript(id: string, node: DesignScript, parentId: string | null, result: DesignDocument) {

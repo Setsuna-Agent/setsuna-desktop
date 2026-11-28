@@ -4,6 +4,7 @@ import { designChatMessages } from './agent/design-chat-messages.js';
 import { designContentMessages } from './canvas/design-content-messages.js';
 import { designCatalogMessages } from './catalog/design-catalog-messages.js';
 import { designPrototypeMessages } from './prototype/design-prototype-messages.js';
+import { designPublicationMessages } from './publication/design-publication-messages.js';
 import { designSettingsMessages } from './settings/design-settings-messages.js';
 import { designLibraryMessages } from './styles/design-library-messages.js';
 
@@ -306,6 +307,7 @@ export const designMessages = defineRendererMessageBundle({
       'feature.design.inlineBold': '加粗所选文字',
       'feature.design.clearInlineStyle': '清除所选样式',
       ...designPrototypeMessages['zh-CN'],
+      ...designPublicationMessages['zh-CN'],
       'feature.design.mask': '蒙版',
       'feature.design.createMask': '用顶层形状做蒙版',
       'feature.design.removeMask': '移除蒙版',
@@ -428,7 +430,6 @@ export const designMessages = defineRendererMessageBundle({
       'feature.design.exportLayer': '导出图层',
       'feature.design.exportSaved': '已保存导出文件',
       'feature.design.exportFailed': '导出失败。{error}',
-      'feature.design.imageExportTooLarge': '图层尺寸超过 PNG 导出上限。请降低导出倍率或分开导出。',
       'feature.design.copyLayers': '复制',
       'feature.design.copyAs': '复制为',
       'feature.design.pasteHere': '粘贴到此处',
@@ -744,6 +745,7 @@ export const designMessages = defineRendererMessageBundle({
       'feature.design.inlineBold': 'Bold selected text',
       'feature.design.clearInlineStyle': 'Clear selected style',
       ...designPrototypeMessages['en-US'],
+      ...designPublicationMessages['en-US'],
       'feature.design.mask': 'Mask',
       'feature.design.createMask': 'Mask with top shape',
       'feature.design.removeMask': 'Remove mask',
@@ -866,7 +868,6 @@ export const designMessages = defineRendererMessageBundle({
       'feature.design.exportLayer': 'Export layers',
       'feature.design.exportSaved': 'Export saved',
       'feature.design.exportFailed': 'Export failed. {error}',
-      'feature.design.imageExportTooLarge': 'The selected layers are too large for PNG export. Reduce the scale or export them separately.',
       'feature.design.copyLayers': 'Copy',
       'feature.design.copyAs': 'Copy as',
       'feature.design.pasteHere': 'Paste here',

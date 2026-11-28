@@ -325,6 +325,9 @@ async function createWindow(): Promise<void> {
     activatedMainFeatures = await activateBuiltinMainFeatures({
       diagnosticLogDirectory: bootstrapLayout.diagnosticLogsRoot,
       designMcpDirectory: bootstrapLayout.designMcpRoot,
+      designPackageHost: { runtimeDirectory: dataLayout.runtimeRoot,
+        prepareDesignPackage: (input, signal) => requireRuntimeHost().prepareDesignPackage(input, signal),
+        importDesignPackage: (input, signal) => requireRuntimeHost().importDesignPackage(input, signal) },
       credentialVault,
       activeKeyboardShortcutBindings: (senderId) => activeKeyboardShortcutBindings.get(senderId) ?? new Set<string>(),
       interfaceLanguage: () => interfaceLanguage,

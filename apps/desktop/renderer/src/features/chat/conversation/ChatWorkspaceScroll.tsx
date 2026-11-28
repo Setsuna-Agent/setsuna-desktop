@@ -32,13 +32,15 @@ const keyboardScrollIntentKeys = new Set([
  * @param showEmptyStarter 当前是否处于空线程 starter 页面。
  * @param threadId 当前线程 ID，切换线程时用于重置滚动状态。
  * @param onScrollUp 用户向上滚动，或已在顶部时继续尝试上滚。
+ * @param onScrollIntent 用户手势或显式回到底部。
  */
-export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter, threadId, onScrollUp }: {
+export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter, threadId, onScrollUp, onScrollIntent }: {
   contentRef: RefObject<HTMLDivElement | null>;
   scrollSignal: string;
   showEmptyStarter: boolean;
   threadId: string | null;
   onScrollUp?: (viewport: HTMLDivElement) => void;
+  onScrollIntent?: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -156,11 +158,12 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
   }, [onScrollUp, syncScrollBottomState]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    onScrollIntent?.();
     userScrollIntentRef.current = false;
     shouldStickToBottomRef.current = true;
     setShowScrollBottom(false);
     schedulePinnedScroll(behavior !== 'smooth');
-  }, [schedulePinnedScroll]);
+  }, [onScrollIntent, schedulePinnedScroll]);
 
   const scrollToOffset = useCallback((top: number, behavior: ScrollBehavior = 'smooth') => {
     cancelScheduledScroll();
@@ -175,20 +178,22 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
   }, [cancelScheduledScroll, scrollDistanceToBottom, setScrollPosition]);
 
   const markUserScrollIntent = useCallback(() => {
-    if (!showEmptyStarter) userScrollIntentRef.current = true;
-  }, [showEmptyStarter]);
+    if (showEmptyStarter) return;
+    onScrollIntent?.();
+    userScrollIntentRef.current = true;
+  }, [onScrollIntent, showEmptyStarter]);
 
   const releasePinnedScrollForUser = useCallback(() => {
     if (showEmptyStarter) return;
     cancelScheduledScroll();
     // 用户主动滚动后保持当前位置，直到用户点击“滚动到底部”或真的回到底部。
-    userScrollIntentRef.current = true;
+    markUserScrollIntent();
     shouldStickToBottomRef.current = false;
     const node = scrollRef.current;
     if (!node) return;
     lastScrollTopRef.current = node.scrollTop;
     setShowScrollBottom(scrollDistanceToBottom(node) > scrollBottomThresholdPx);
-  }, [cancelScheduledScroll, scrollDistanceToBottom, showEmptyStarter]);
+  }, [cancelScheduledScroll, markUserScrollIntent, scrollDistanceToBottom, showEmptyStarter]);
 
   const handleScrollPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const node = scrollRef.current;
@@ -335,6 +340,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
   }, [contentRef, schedulePinnedScroll, showEmptyStarter, syncScrollBottomState, threadId]);
 
   useEffect(() => cancelScheduledScroll, [cancelScheduledScroll]);
+  const isFollowingBottom = useCallback(() => shouldStickToBottomRef.current, []);
 
   return {
     contentRef,
@@ -344,6 +350,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
     handleScrollTouchStart,
     handleScrollTouchMove,
     handleScrollWheel,
+    isFollowingBottom,
     listRef,
     scrollRef,
     scrollToBottom,

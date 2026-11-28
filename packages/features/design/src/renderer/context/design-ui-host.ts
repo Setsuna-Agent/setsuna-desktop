@@ -1,4 +1,4 @@
-import type { WorkspaceProjectIcon } from '@setsuna-desktop/contracts';
+import type { SetsunaDesktopBridge, WorkspaceProjectIcon } from '@setsuna-desktop/contracts';
 import { createContext, type ComponentType, type ReactNode, type RefObject } from 'react';
 import type { DesignMcpBridge } from '../../contracts/design-mcp.js';
 import type { useDesignShortcutSettings } from './design-canvas-settings.js';
@@ -15,6 +15,7 @@ type DesignUiHost = Readonly<{
   ScrollOverlay: ComponentType<{ scrollRef: RefObject<HTMLDivElement | null> }>;
   ProjectIcon: ComponentType<DesignProjectIconProps>;
   copyText(value: string): Promise<void>;
+  openExternal?: SetsunaDesktopBridge['links']['openExternal'];
   mcp?: DesignMcpBridge;
   mcpPromptModelIcon?: ReactNode;
 }>;

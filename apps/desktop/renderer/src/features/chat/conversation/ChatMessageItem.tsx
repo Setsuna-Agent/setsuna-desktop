@@ -145,15 +145,13 @@ export const MessageItem = memo(function MessageItem({
     );
   }
   if (item.type === 'context') {
-    return <ContextCompactionStatus message={item.message} />;
+    return <ContextCompactionStatus message={item.message} messageId={chatDisplayItemRenderKey(item)} />;
   }
   if (item.type === 'review') {
-    return (
-      <ReviewModeMarker
-        message={item.message}
-        onOpenFileReview={onOpenFileReview}
-      />
-    );
+    const notice = item.message.reviewMode;
+    return notice?.kind === 'exited'
+      ? <ChatReviewSummaryCard messageId={chatDisplayItemRenderKey(item)} notice={notice} onOpenFile={onOpenFileReview} />
+      : null;
   }
   const { message } = item;
   const streaming = message.status === 'streaming';
@@ -270,19 +268,6 @@ function MessageSelectionControl({ checked, disabled, label, onChange }: { check
       onClick={(event) => event.stopPropagation()}
     />
   );
-}
-
-function ReviewModeMarker({
-  message,
-  onOpenFileReview,
-}: {
-  message: RuntimeMessage;
-  onOpenFileReview?: DesktopReviewOpenHandler;
-}) {
-  const notice = message.reviewMode;
-  return notice?.kind === 'exited'
-    ? <ChatReviewSummaryCard notice={notice} onOpenFile={onOpenFileReview} />
-    : null;
 }
 
 function AssistantRunContent({

@@ -357,7 +357,9 @@ export function ChatWorkspace({
             </div>
           ) : conversation(() => (
             <ChatTranscript
+              key={surfaceInstanceId}
               presentation={presentation}
+              readingPositionScope={currentThread && variant === 'main' ? { client, threadId: currentThread.id } : undefined}
               turnNavigationRequest={turnNavigationRequest}
               findRequest={findInChatRequest}
               onFindRequestConsumed={onFindInChatRequestConsumed}

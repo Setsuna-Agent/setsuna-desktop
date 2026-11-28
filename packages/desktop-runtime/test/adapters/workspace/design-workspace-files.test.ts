@@ -1,9 +1,14 @@
-import { mkdir, mkdtemp, readFile, realpath, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { zipSync } from 'fflate';
 import { afterEach, expect, it, vi } from 'vitest';
 import { WORKSPACE_ENTRY_EXISTS_ERROR_CODE } from '@setsuna-desktop/contracts';
-import { createDesignDocument, designDirectoryGrant, designDirectoryGrants, type DesignWorkspace } from '@setsuna-desktop/feature-design/contracts';
+import { createDesignDocument, designDirectoryGrant, designDirectoryGrants, designPackageImportStagingPrefix, designPackageStagingFile, designPackageStagingPrefix,
+  type DesignWorkspace } from '@setsuna-desktop/feature-design/contracts';
+import { installDesignPackage } from '../../../src/adapters/workspace/design-package-import.js';
+import { designStorageDirectories } from '../../../src/adapters/workspace/design-storage-directories.js';
 import { createDesignWorkspaceFiles } from '../../../src/adapters/workspace/design-workspace-files.js';
 import { moveDesignWorkspaceDocument } from '../../../src/adapters/workspace/design-workspace-document-mutations.js';
 import { createDesignResourceOwnership } from '../../../src/adapters/workspace/design-workspace-resource-root.js';
@@ -26,6 +31,72 @@ async function workspace() {
 
 const draft = (documentId: string, libraries?: Record<string, string>) =>
   JSON.stringify({ schemaVersion: 1, documentId, rootIds: [], nodes: {}, libraries });
+
+it('releases the workspace lock during export and discards an archive when an already-copied dependency changes', async () => {
+  const { root, data, projects, projectId, signal } = await workspace();
+  const ticket = randomUUID();
+  const staging = path.join(data, designPackageStagingPrefix + ticket);
+  const ref = { projectId, path: 'board.design.json' };
+  const documentId = 'board';
+  const source = draft(documentId, { first: 'first.design.json', second: 'second.design.json' });
+  const expectedRevision = createHash('sha256').update(source).digest('hex');
+  await mkdir(staging, { recursive: true });
+  await Promise.all([
+    writeFile(path.join(root, ref.path), source),
+    writeFile(path.join(root, 'first.design.json'), draft('first')),
+    writeFile(path.join(root, 'second.design.json'), draft('second', { 'setsuna-library-beui-bundled': 'builtin:beui' })),
+  ]);
+  const files = createDesignWorkspaceFiles(projects, data);
+  let markEntered!: () => void;
+  let releaseArchive!: () => void;
+  const entered = new Promise<void>((resolve) => { markEntered = resolve; });
+  const released = new Promise<void>((resolve) => { releaseArchive = resolve; });
+  const preparation = files.preparePackage({ ref, documentId, expectedRevision, ticket }, async () => {
+    markEntered();
+    await released;
+    return 'builtin-revision';
+  }, signal);
+  const conflict = expect(preparation).rejects.toMatchObject({ code: 'REVISION_CONFLICT' });
+  try {
+    await entered;
+    await expect(files.withDocument(ref, signal, (file) => file.read())).resolves.toMatchObject({ revision: expectedRevision });
+    await writeFile(path.join(root, 'first.design.json'), draft('first') + '\n');
+  } finally {
+    releaseArchive();
+  }
+  await conflict;
+  await expect(stat(path.join(staging, designPackageStagingFile))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('leaves a replacement import directory intact and removes the unused grant and bindings', async () => {
+  const { root, data, projects, projectId, signal } = await workspace();
+  const ticket = randomUUID();
+  const incoming = path.join(data, designPackageImportStagingPrefix + ticket);
+  const entry = 'board.design.json';
+  const folder = path.join(root, 'Copy');
+  const content = path.join(folder, 'content');
+  await mkdir(incoming, { recursive: true });
+  await writeFile(path.join(incoming, designPackageStagingFile), zipSync({
+    'manifest.json': Buffer.from(JSON.stringify({ formatVersion: 1, resourceRoot: 'content', entry: 'content/' + entry })),
+    ['content/' + entry]: Buffer.from(draft('board')),
+  }));
+  const storage = designStorageDirectories(data, projects);
+  const ownership = createDesignResourceOwnership(data);
+  const withGrant = storage.withNewDirectoryGrant;
+  vi.spyOn(storage, 'withNewDirectoryGrant').mockImplementationOnce((target, install) => withGrant(target, async () => {
+    // A project sync renames the reserved folder after registration but before publication.
+    await rename(folder, path.join(root, 'Moved'));
+    await mkdir(folder);
+    await writeFile(path.join(folder, 'notes.txt'), 'keep');
+    await install();
+  }));
+  await expect(installDesignPackage(data, root, { ticket, destination: { scope: { projectId }, name: 'Copy' } },
+    { storage, ownership }, signal)).rejects.toThrow('directory has changed');
+  expect(await readdir(folder)).toEqual(['notes.txt']);
+  expect(await readFile(path.join(folder, 'notes.txt'), 'utf8')).toBe('keep');
+  expect(await storage.list()).not.toContainEqual(await designDirectoryGrant(content));
+  expect(await ownership.project(path.join(content, entry), 'board')).toBeUndefined();
+});
 
 it('returns a watchable local directory before the first draft is saved', async () => {
   const { data, projects, signal } = await workspace();

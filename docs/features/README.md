@@ -35,7 +35,7 @@ packages/features/<feature>/
 | `collaboration` | `collaboration` | O | — | — | O | 子任务/协作线程状态、投影与 spawn result |
 | `computer-use` | `computer-use` | R | R | B | R | 独立会话授权、受监督主桌面截图/基础输入与急停 |
 | `conversation-debug` | `conversation-debug` | O | — | — | O | 调试设置、事件/trace 查询与时间线面板 |
-| [`design`](design.md) | `design` | O | O | B | O | 原生图层画布、编辑与撤销重做、外部设计 MCP |
+| [`design`](design.md) | `design` | O | O | B | O | 原生图层画布、编辑与撤销重做、源包导出、局域网只读预览、外部设计 MCP |
 | `diagnostics` | `diagnostics` | — | O | B | O | 本机诊断日志、限量轮转、固定目录访问与设置入口 |
 | `goal` | `goal` | O | — | — | O | 持久 Goal、自动续轮、用量/状态与 UI |
 | `image-generation` | `image-generation` | O | — | — | O | 图片生成配置、服务、资产结果与 Plugin 详情贡献 |

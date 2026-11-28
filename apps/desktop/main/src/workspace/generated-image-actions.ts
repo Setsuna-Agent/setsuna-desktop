@@ -1,11 +1,10 @@
-import type { DesktopImageActionResult, DesktopImageDataResult, DesktopImageInput } from '@setsuna-desktop/contracts';
+import { MAX_DESKTOP_IMAGE_BYTES, type DesktopImageActionResult, type DesktopImageDataResult, type DesktopImageInput } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import { mkdir, open, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { desktopDataLayout } from '../data-root/layout.js';
 
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-const MAX_ENCODED_IMAGE_CHARS = Math.ceil((MAX_IMAGE_BYTES * 4) / 3) + 1_024;
+const MAX_ENCODED_IMAGE_CHARS = Math.ceil((MAX_DESKTOP_IMAGE_BYTES * 4) / 3) + 1_024;
 const SAFE_IMAGE_DATA_URL = /^data:image\/(?:gif|jpeg|png|webp);base64,/iu;
 const SAFE_ASSET_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/u;
 
@@ -154,7 +153,7 @@ async function validatedGeneratedImagePath(assetDirectory: string, fileName: str
     const imagePath = await realpath(path.join(assetDirectory, fileName));
     const imageStat = await stat(imagePath);
     if (path.dirname(imagePath) !== assetDirectory || !imageStat.isFile()) return null;
-    if (!imageStat.size || imageStat.size > MAX_IMAGE_BYTES) return null;
+    if (!imageStat.size || imageStat.size > MAX_DESKTOP_IMAGE_BYTES) return null;
 
     const handle = await open(imagePath, 'r');
     try {
@@ -177,7 +176,7 @@ export async function readGeneratedImageAsset(
   try {
     const imagePath = await resolveGeneratedImageAssetPath(userDataDir, assetId);
     const data = await readFile(imagePath);
-    if (!data.byteLength || data.byteLength > MAX_IMAGE_BYTES) {
+    if (!data.byteLength || data.byteLength > MAX_DESKTOP_IMAGE_BYTES) {
       throw new GeneratedImageActionError('Generated image is invalid or too large.');
     }
     const type = detectImageType(data);
@@ -227,7 +226,7 @@ async function resolveChatImageInput(value: unknown, readAttachment?: Attachment
     // Read through the runtime's thread-scoped asset boundary, never a renderer-supplied path.
     const result = await readAttachment(attachment.threadId, attachment.assetId);
     if (!result.ok) throw new GeneratedImageActionError(result.error);
-    if (result.data.byteLength > MAX_IMAGE_BYTES) throw new GeneratedImageActionError('Image data is too large.');
+    if (result.data.byteLength > MAX_DESKTOP_IMAGE_BYTES) throw new GeneratedImageActionError('Image data is too large.');
     const source = `data:${result.type};base64,${Buffer.from(result.data).toString('base64')}`;
     decodeSafeImageDataUrl(source);
     return { dataUrl: source, name };
@@ -251,7 +250,7 @@ function decodeSafeImageDataUrl(dataUrl: string): { data: Buffer; extension: str
   const match = /^data:image\/(gif|jpeg|png|webp);base64,([A-Za-z0-9+/]*={0,2})$/iu.exec(dataUrl);
   if (!match) throw new GeneratedImageActionError('Image data is invalid or too large.');
   const data = Buffer.from(match[2]!, 'base64');
-  if (!data.byteLength || data.byteLength > MAX_IMAGE_BYTES) {
+  if (!data.byteLength || data.byteLength > MAX_DESKTOP_IMAGE_BYTES) {
     throw new GeneratedImageActionError('Image data is invalid or too large.');
   }
   const declaredType = match[1]!.toLowerCase();
